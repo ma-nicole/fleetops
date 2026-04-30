@@ -1,17 +1,17 @@
 :root {
-  /* Modern Dark Theme */
-  --primary: #00b4d8;
-  --primary-dark: #0096c7;
-  --secondary: #90e0ef;
-  --bg-dark: #0f1419;
-  --bg-card: #1a2332;
-  --text: #e0e0e0;
-  --text-secondary: #90a4ae;
-  --border: #2c3e50;
-  --success: #52b788;
-  --warning: #ffd60a;
-  --error: #ef476f;
-  --accent: #00b4d8;
+  /* Minimalist Logistics Theme */
+  --primary: #1A1A1A;
+  --primary-dark: #0D0D0D;
+  --secondary: #FFFFFF;
+  --bg-dark: #F5F5F5;
+  --bg-card: #FFFFFF;
+  --text: #2A2A2A;
+  --text-secondary: #666666;
+  --border: #E0E0E0;
+  --success: #4CAF50;
+  --warning: #FF9800;
+  --error: #F44336;
+  --accent: #FF9800;
 }
 
 * {
@@ -22,9 +22,9 @@
 
 html,
 body {
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
   color: var(--text);
-  background: linear-gradient(135deg, #0f1419 0%, #1a2332 100%);
+  background: #FAFAFA;
   min-height: 100vh;
   line-height: 1.6;
 }
@@ -41,26 +41,24 @@ a {
 }
 
 .card {
-  background: rgba(26, 35, 50, 0.6);
-  border: 1px solid rgba(0, 180, 216, 0.2);
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E8E8E8;
+  border-radius: 8px;
   padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
 }
 
- 
-  body {
-    color: var(--text);
-  }
+body {
+  color: var(--text);
+}
+
 .card:hover {
-  border-color: rgba(0, 180, 216, 0.4);
-  box-shadow: 0 12px 48px rgba(0, 180, 216, 0.15);
+  border-color: #FF9800;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.08);
 }
 
- 
-  .nav-search {
+.nav-search {
     display: grid;
     gap: 0.4rem;
     min-width: 0;
@@ -79,11 +77,11 @@ a {
     top: calc(100% + 0.5rem);
     left: 0;
     right: 0;
-    background: rgba(15, 20, 25, 0.98);
-    border: 1px solid rgba(0, 180, 216, 0.25);
-    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     z-index: 200;
   }
  
@@ -101,7 +99,7 @@ a {
   }
  
   .nav-search-result:hover {
-    background: rgba(0, 180, 216, 0.08);
+    background: #F5F5F5;
   }
  
   .nav-search-result span:last-child,
@@ -136,11 +134,13 @@ a {
   }
  
   .breadcrumb-link {
-    color: var(--primary);
+    color: #FF9800;
+    font-weight: 500;
   }
  
   .breadcrumb-current {
     color: var(--text);
+    font-weight: 500;
   }
  
   .breadcrumb-separator {
@@ -158,17 +158,17 @@ a {
     display: inline-flex;
     align-items: center;
     padding: 0.5rem 0.85rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(0, 180, 216, 0.15);
+    border-radius: 6px;
+    background: #F5F5F5;
+    border: 1px solid #E0E0E0;
     color: var(--text-secondary);
     font-size: 0.9rem;
   }
  
   .booking-step.is-active {
-    background: rgba(0, 180, 216, 0.14);
-    color: var(--text);
-    border-color: rgba(0, 180, 216, 0.4);
+    background: #FF9800;
+    color: #FFFFFF;
+    border-color: #FF9800;
   }
  
   .booking-tip-grid,
@@ -181,9 +181,9 @@ a {
   .booking-tip-card,
   .quick-action-card {
     min-height: 44px;
-    border-radius: 12px;
-    border: 1px solid rgba(0, 180, 216, 0.18);
-    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid #E8E8E8;
+    background: #FAFAFA;
     padding: 0.9rem 1rem;
     display: grid;
     gap: 0.35rem;
@@ -205,31 +205,31 @@ a {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
-    border: 1px solid rgba(0, 180, 216, 0.2);
-    border-radius: 8px;
-    color: var(--primary);
+    background: #F5F5F5;
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    color: #FF9800;
     font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.2s ease;
   }
 
   .navbar-hamburger:hover {
-    background: rgba(0, 180, 216, 0.1);
-    border-color: rgba(0, 180, 216, 0.4);
+    background: #EEEEEE;
+    border-color: #FF9800;
   }
 
   .navbar-hamburger:active {
-    background: rgba(0, 180, 216, 0.15);
+    background: #E8E8E8;
   }
  
   .booking-progress {
     display: grid;
     gap: 0.5rem;
     padding: 1rem;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(0, 180, 216, 0.15);
+    border-radius: 8px;
+    background: #FAFAFA;
+    border: 1px solid #E8E8E8;
   }
  
   .booking-progress p {
@@ -238,17 +238,17 @@ a {
   }
  
   .booking-progress-bar {
-    height: 10px;
+    height: 8px;
     border-radius: 999px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.08);
+    background: #E8E8E8;
   }
  
   .booking-progress-bar span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    background: #FF9800;
   }
  
   .booking-slot-strip {
@@ -262,19 +262,19 @@ a {
     display: inline-flex;
     align-items: center;
     padding: 0.5rem 0.85rem;
-    border-radius: 999px;
-    border: 1px solid rgba(0, 180, 216, 0.18);
+    border-radius: 6px;
+    border: 1px solid #E0E0E0;
     color: var(--text-secondary);
-    background: rgba(255, 255, 255, 0.03);
+    background: #FAFAFA;
   }
  
   .booking-placeholder {
     min-height: 92px;
     display: grid;
     place-items: center;
-    border-radius: 12px;
-    border: 1px dashed rgba(0, 180, 216, 0.25);
-    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 2px dashed #E0E0E0;
+    background: #FAFAFA;
     text-align: center;
     padding: 1rem;
   }
@@ -291,13 +291,13 @@ a {
   }
  
   .field-help {
-    background: rgba(0, 180, 216, 0.15);
-    color: var(--primary);
+    background: #FFF3E0;
+    color: #FF9800;
   }
  
   .field-valid {
-    background: rgba(82, 183, 136, 0.15);
-    color: var(--success);
+    background: #E8F5E9;
+    color: #4CAF50;
   }
  
   .status-chip {
@@ -305,27 +305,27 @@ a {
     display: inline-flex;
     align-items: center;
     padding: 0.5rem 0.85rem;
-    border-radius: 999px;
+    border-radius: 6px;
     border: 1px solid transparent;
     font-size: 0.9rem;
   }
  
   .status-chip.good {
-    background: rgba(82, 183, 136, 0.14);
-    border-color: rgba(82, 183, 136, 0.35);
-    color: #8ef0bb;
+    background: #E8F5E9;
+    border-color: #4CAF50;
+    color: #2E7D32;
   }
  
   .status-chip.warning {
-    background: rgba(255, 214, 10, 0.12);
-    border-color: rgba(255, 214, 10, 0.28);
-    color: #ffe56d;
+    background: #FFF3E0;
+    border-color: #FF9800;
+    color: #E65100;
   }
  
   .status-chip.alert {
-    background: rgba(239, 71, 111, 0.14);
-    border-color: rgba(239, 71, 111, 0.3);
-    color: #ff9db2;
+    background: #FFEBEE;
+    border-color: #F44336;
+    color: #C62828;
   }
  
   .alert-row {
@@ -345,24 +345,24 @@ a {
     gap: 0.7rem;
     min-height: 44px;
     padding: 0.45rem 0.75rem;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(0, 180, 216, 0.1);
+    border-radius: 8px;
+    background: #FAFAFA;
+    border: 1px solid #E8E8E8;
   }
  
   .timeline-dot {
     width: 10px;
     height: 10px;
     border-radius: 999px;
-    background: var(--primary);
-    box-shadow: 0 0 0 4px rgba(0, 180, 216, 0.15);
+    background: #FF9800;
+    box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.1);
   }
  
   button:focus-visible,
   a:focus-visible,
   input:focus-visible,
   select:focus-visible {
-    outline: 3px solid rgba(144, 224, 239, 0.75);
+    outline: 3px solid rgba(255, 152, 0, 0.5);
     outline-offset: 2px;
   }
 .grid {
@@ -376,53 +376,20 @@ a {
 .button {
     min-height: 44px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 0.8rem 1.5rem;
-  background: linear-gradient(135deg, #00b4d8 0%, #0096c7 100%);
-  color: white;
+  background: #FF9800;
+  color: #FFFFFF;
   cursor: pointer;
- 
-  @media (max-width: 768px) {
-    .navbar {
-      grid-template-columns: 1fr;
-    }
- 
-    .navbar-links {
-      justify-content: flex-start;
-    }
- 
-    .nav-shortcuts {
-      display: none;
-    }
- 
-    .nav-search-results {
-      position: static;
-      margin-top: 0.35rem;
-    }
- 
-    .booking-stepper,
-    .alert-row {
-      flex-direction: column;
-    }
- 
-    .quick-action-grid,
-    .booking-tip-grid {
-      grid-template-columns: 1fr;
-    }
- 
-    .grid.kpi-grid {
-      grid-template-columns: 1fr;
-    }
-  }
   font-weight: 600;
   font-size: 1rem;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 180, 216, 0.4);
+  background: #F57C00;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
 }
 
 .button:active {
@@ -431,21 +398,23 @@ a {
 
 .sign-in-button {
   display: inline-block;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 1.2rem;
   font-size: 0.9rem;
-  background: linear-gradient(135deg, #00b4d8 0%, #0096c7 100%);
+  background: #FF9800;
   color: white;
   border-radius: 6px;
   font-weight: 600;
   transition: all 0.2s ease;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #FF9800;
 }
 
 .sign-in-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 180, 216, 0.4);
+  background: #F57C00;
+  border-color: #F57C00;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
 }
 
 /* Navigation Styling */
@@ -456,10 +425,7 @@ a {
 .navbar-logo {
   font-size: 1.5rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #0f3460 0%, #00b4d8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #1A1A1A;
   text-decoration: none;
   letter-spacing: -0.5px;
 }
@@ -476,7 +442,7 @@ a {
 .navbar-link {
   padding: 0.6rem 1rem;
   text-decoration: none;
-  color: #ffffff;
+  color: #666666;
   border-radius: 6px;
   transition: all 0.2s ease;
   font-size: 0.95rem;
@@ -486,73 +452,74 @@ a {
 }
 
 .navbar-link:hover {
-  background: rgba(0, 180, 216, 0.2);
-  color: #00ffff;
+  background: #F5F5F5;
+  color: #FF9800;
 }
 
 /* CTA Button Styles */
 .cta-button-primary {
   display: inline-block;
-  background: linear-gradient(135deg, #00b4d8 0%, #0096c7 100%);
+  background: #FF9800;
   color: white;
   padding: 1rem 2rem;
-  border-radius: 8px;
+  border-radius: 6px;
   text-decoration: none;
   font-weight: 600;
   font-size: 1rem;
   border: none;
-  box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
-  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+  transition: all 0.2s ease;
   cursor: pointer;
 }
 
 .cta-button-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 180, 216, 0.4);
+  background: #F57C00;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
 }
 
 .cta-button-secondary {
   display: inline-block;
-  background: rgba(0, 180, 216, 0.1);
-  color: #00b4d8;
+  background: transparent;
+  color: #FF9800;
   padding: 1rem 2rem;
-  border-radius: 8px;
+  border-radius: 6px;
   text-decoration: none;
   font-weight: 600;
   font-size: 1rem;
-  border: 2px solid #00b4d8;
-  transition: all 0.3s ease;
+  border: 2px solid #FF9800;
+  transition: all 0.2s ease;
   cursor: pointer;
 }
 
 .cta-button-secondary:hover {
-  background: rgba(0, 180, 216, 0.2);
+  background: #FF9800;
+  color: white;
 }
 
 /* Module Card Styles */
 .module-card {
-  background: linear-gradient(135deg, rgba(0,180,216,0.1), rgba(0,150,199,0.05));
-  border: 1px solid rgba(0, 180, 216, 0.2);
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E8E8E8;
+  border-radius: 8px;
   padding: 2rem;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
   cursor: pointer;
 }
 
 .module-card:hover {
-  border-color: rgba(0, 180, 216, 0.5);
-  background: linear-gradient(135deg, rgba(0,180,216,0.15), rgba(0,150,199,0.1));
-  box-shadow: 0 8px 20px rgba(0, 180, 216, 0.15);
+  border-color: #FF9800;
+  background: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.1);
 }
 
 .input,
 .select {
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid #E8E8E8;
+  border-radius: 6px;
   padding: 0.75rem 1rem;
-  background: rgba(26, 35, 50, 0.5);
+  background: #FFFFFF;
   color: var(--text);
   font-family: inherit;
   font-size: 1rem;
@@ -562,9 +529,9 @@ a {
 .input:focus,
 .select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
-  background: rgba(26, 35, 50, 0.8);
+  border-color: #FF9800;
+  box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.1);
+  background: #FFFFFF;
 }
 
 .input::placeholder {
@@ -614,14 +581,14 @@ a {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 180, 216, 0.05);
+  background: rgba(255, 152, 0, 0.05);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 180, 216, 0.3);
+  background: rgba(255, 152, 0, 0.3);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 180, 216, 0.5);
+  background: rgba(255, 152, 0, 0.5);
 }

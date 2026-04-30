@@ -168,10 +168,10 @@ export default function CostCalculator({
               placeholder="e.g., Manhattan"
               value={pickup}
               onChange={(e) => setPickup(e.target.value)}
-              style={errors.pickup_location ? { borderColor: "#ef476f" } : {}}
+              style={errors.pickup_location ? { borderColor: "#F44336" } : {}}
             />
             {errors.pickup_location && (
-              <p style={{ color: "#ef476f", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
+              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
                 ⚠️ {errors.pickup_location}
               </p>
             )}
@@ -188,10 +188,10 @@ export default function CostCalculator({
               placeholder="e.g., Newark"
               value={dropoff}
               onChange={(e) => setDropoff(e.target.value)}
-              style={errors.dropoff_location ? { borderColor: "#ef476f" } : {}}
+              style={errors.dropoff_location ? { borderColor: "#F44336" } : {}}
             />
             {errors.dropoff_location && (
-              <p style={{ color: "#ef476f", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
+              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
                 ⚠️ {errors.dropoff_location}
               </p>
             )}
@@ -214,10 +214,10 @@ export default function CostCalculator({
               placeholder="1"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
-              style={errors.cargo_weight_tons ? { borderColor: "#ef476f" } : {}}
+              style={errors.cargo_weight_tons ? { borderColor: "#F44336" } : {}}
             />
             {errors.cargo_weight_tons && (
-              <p style={{ color: "#ef476f", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
+              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
                 ⚠️ {errors.cargo_weight_tons}
               </p>
             )}
@@ -250,10 +250,10 @@ export default function CostCalculator({
               value={date}
               onChange={(e) => setDate(e.target.value)}
               min={today}
-              style={errors.scheduled_date ? { borderColor: "#ef476f" } : {}}
+              style={errors.scheduled_date ? { borderColor: "#F44336" } : {}}
             />
             {errors.scheduled_date && (
-              <p style={{ color: "#ef476f", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
+              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
                 ⚠️ {errors.scheduled_date}
               </p>
             )}
@@ -283,25 +283,25 @@ export default function CostCalculator({
           >
             <div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Fuel</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#52b788" }}>
+              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
                 ${cost.estimated_fuel.toFixed(2)}
               </p>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Toll</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#52b788" }}>
+              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
                 ${cost.estimated_toll.toFixed(2)}
               </p>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Labor</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#52b788" }}>
+              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
                 ${cost.estimated_labor.toFixed(2)}
               </p>
             </div>
-            <div style={{ borderLeft: "2px solid rgba(82, 183, 136, 0.3)", paddingLeft: "1rem" }}>
+            <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#52b788" }}>
+              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
                 ${cost.estimated_total.toFixed(2)}
               </p>
             </div>
@@ -337,9 +337,9 @@ export default function CostCalculator({
             style={{
               padding: "1rem",
               borderRadius: "8px",
-              background: messageType === "success" ? "rgba(82, 183, 136, 0.1)" : "rgba(239, 71, 111, 0.1)",
-              border: `1px solid ${messageType === "success" ? "#52b788" : "#ef476f"}`,
-              color: messageType === "success" ? "#52b788" : "#ef476f",
+              background: messageType === "success" ? "rgba(76, 175, 80, 0.1)" : "rgba(244, 67, 54, 0.1)",
+              border: `1px solid ${messageType === "success" ? "#4CAF50" : "#F44336"}`,
+              color: messageType === "success" ? "#4CAF50" : "#F44336",
               fontSize: "0.95rem",
             }}
           >

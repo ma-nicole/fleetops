@@ -7,12 +7,12 @@ type StatusBadgeProps = {
 
 export function StatusBadge({ status, label }: StatusBadgeProps) {
   const statusConfig = {
-    pending: { icon: "⏳", color: "#ffd60a", bg: "rgba(255, 214, 10, 0.1)", label: "Pending" },
-    confirmed: { icon: "✓", color: "#52b788", bg: "rgba(82, 183, 136, 0.1)", label: "Confirmed" },
-    "in-transit": { icon: "🚚", color: "#00b4d8", bg: "rgba(0, 180, 216, 0.1)", label: "In Transit" },
-    delivered: { icon: "📍", color: "#52b788", bg: "rgba(82, 183, 136, 0.1)", label: "Delivered" },
-    completed: { icon: "✅", color: "#52b788", bg: "rgba(82, 183, 136, 0.1)", label: "Completed" },
-    cancelled: { icon: "✗", color: "#ef476f", bg: "rgba(239, 71, 111, 0.1)", label: "Cancelled" },
+    pending: { icon: "⏳", color: "#FF9800", bg: "rgba(255, 152, 0, 0.1)", label: "Pending" },
+    confirmed: { icon: "✓", color: "#4CAF50", bg: "rgba(76, 175, 80, 0.1)", label: "Confirmed" },
+    "in-transit": { icon: "🚚", color: "#FF9800", bg: "rgba(255, 152, 0, 0.1)", label: "In Transit" },
+    delivered: { icon: "📍", color: "#4CAF50", bg: "rgba(76, 175, 80, 0.1)", label: "Delivered" },
+    completed: { icon: "✅", color: "#4CAF50", bg: "rgba(76, 175, 80, 0.1)", label: "Completed" },
+    cancelled: { icon: "✗", color: "#F44336", bg: "rgba(244, 67, 54, 0.1)", label: "Cancelled" },
   };
 
   const config = statusConfig[status];
@@ -55,9 +55,9 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       style={{
         textAlign: "center",
         padding: "3rem 1rem",
-        background: "rgba(26, 35, 50, 0.4)",
-        border: "2px dashed rgba(0, 180, 216, 0.2)",
-        borderRadius: "12px",
+        background: "#FAFAFA",
+        border: "2px dashed #E8E8E8",
+        borderRadius: "8px",
         display: "grid",
         gap: "1rem",
       }}
@@ -74,9 +74,9 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
             style={{
               display: "inline-block",
               padding: "0.75rem 1.5rem",
-              background: "linear-gradient(135deg, #00b4d8 0%, #0096c7 100%)",
+              background: "#FF9800",
               color: "white",
-              borderRadius: "8px",
+              borderRadius: "6px",
               textDecoration: "none",
               fontWeight: 600,
               marginTop: "0.5rem",
@@ -89,10 +89,10 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
             onClick={action.onClick}
             style={{
               padding: "0.75rem 1.5rem",
-              background: "linear-gradient(135deg, #00b4d8 0%, #0096c7 100%)",
+              background: "#FF9800",
               color: "white",
               border: "none",
-              borderRadius: "8px",
+              borderRadius: "6px",
               fontWeight: 600,
               cursor: "pointer",
               marginTop: "0.5rem",

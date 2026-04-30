@@ -182,7 +182,7 @@ export default function RoleDashboardPage() {
                     padding: "0.75rem 1.25rem",
                     borderRadius: "8px",
                     border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
-                    background: isActive ? "rgba(0, 180, 216, 0.12)" : "transparent",
+                    background: isActive ? "rgba(255, 152, 0, 0.12)" : "transparent",
                     color: isActive ? "var(--primary)" : "var(--text)",
                     textDecoration: "none",
                     cursor: "pointer",
@@ -253,7 +253,7 @@ export default function RoleDashboardPage() {
                         borderRadius: "6px",
                         fontSize: "0.85rem",
                         fontWeight: "600",
-                        background: order.status === "In Transit" ? "rgba(0, 180, 216, 0.15)" : "rgba(82, 183, 136, 0.15)",
+                        background: order.status === "In Transit" ? "rgba(255, 152, 0, 0.15)" : "rgba(76, 175, 80, 0.15)",
                         color: order.status === "In Transit" ? "var(--primary)" : "var(--success)",
                       }}
                     >
@@ -282,7 +282,7 @@ export default function RoleDashboardPage() {
                     <div
                       style={{
                         height: "6px",
-                        background: "rgba(0, 180, 216, 0.1)",
+                        background: "rgba(255, 152, 0, 0.1)",
                         borderRadius: "3px",
                         overflow: "hidden",
                       }}
@@ -317,27 +317,89 @@ export default function RoleDashboardPage() {
 
           {/* Quick Booking + Account Summary - Right */}
           <div style={{ display: "grid", gap: "1.5rem" }}>
-            {/* Quick Booking Card */}
+            {/* Quick Booking Card - Action Buttons */}
             <div className="card" style={{ display: "grid", gap: "1rem" }}>
-              <h2 style={{ margin: 0 }}>Quick Booking</h2>
+              <h2 style={{ margin: 0 }}>Quick Actions</h2>
 
-              <button
-                style={{
-                  padding: "1rem",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "linear-gradient(135deg, #0096c7, #00b4d8)",
-                  color: "white",
-                  fontSize: "1rem",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
-                onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
-              >
-                New Booking
-              </button>
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                <a
+                  href="/booking/trucks"
+                  style={{
+                    padding: "1rem",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "linear-gradient(135deg, #F57C00, #FF9800)",
+                    color: "white",
+                    fontSize: "0.95rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    textDecoration: "none",
+                    textAlign: "center",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+                >
+                  📱 Book Service
+                </a>
+
+                <a
+                  href="/booking/trucks"
+                  style={{
+                    padding: "0.75rem",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--primary)",
+                    fontSize: "0.9rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    textDecoration: "none",
+                    textAlign: "center",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  🚚 View Available Trucks
+                </a>
+
+                <a
+                  href="/booking/status"
+                  style={{
+                    padding: "0.75rem",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--primary)",
+                    fontSize: "0.9rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    textDecoration: "none",
+                    textAlign: "center",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  📋 View Booking Status
+                </a>
+
+                <a
+                  href="/modules/customer/support"
+                  style={{
+                    padding: "0.75rem",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border)",
+                    background: "transparent",
+                    color: "var(--primary)",
+                    fontSize: "0.9rem",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    textDecoration: "none",
+                    textAlign: "center",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  📞 Contact Us
+                </a>
+              </div>
             </div>
 
             {/* Account Summary Card */}

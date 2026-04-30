@@ -2,8 +2,27 @@
 
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CostCalculator from "@/components/CostCalculator";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
 
 export default function BookingPage() {
+  const router = useRouter();
+  const [serviceType, setServiceType] = useState("Standard");
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
+  const [load, setLoad] = useState("");
+  const [error, setError] = useState("");
+
+  const createBooking = () => {
+    const booking = CustomerDataFlowService.createBooking(serviceType, pickup, dropoff, load);
+    if (!booking) {
+      setError("Please login first to create a booking.");
+      return;
+    }
+    router.push("/order-confirmation");
+  };
+
   return (
     <main className="container" style={{ display: "grid", gap: "1.5rem", padding: "2rem 1rem" }}>
       <section className="card" style={{ maxWidth: "900px", margin: "0 auto", display: "grid", gap: "1rem" }}>
@@ -38,6 +57,24 @@ export default function BookingPage() {
         </div>
 
         <CostCalculator />
+
+        <div style={{ borderTop: "1px solid #E8E8E8", paddingTop: "1rem", display: "grid", gap: "0.6rem" }}>
+          <h3 style={{ margin: 0 }}>Customer Data Flow Booking</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+            <select value={serviceType} onChange={(e) => setServiceType(e.target.value)} style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}>
+              <option>Standard</option>
+              <option>Express</option>
+              <option>Heavy Load</option>
+            </select>
+            <input value={load} onChange={(e) => setLoad(e.target.value)} placeholder="Load details" style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }} />
+            <input value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="Pickup" style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }} />
+            <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} placeholder="Dropoff" style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }} />
+          </div>
+          {error && <p style={{ margin: 0, color: "#DC2626" }}>{error}</p>}
+          <button onClick={createBooking} style={{ width: "fit-content", border: "none", borderRadius: "6px", background: "#10B981", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
+            Continue to Order Confirmation
+          </button>
+        </div>
       </section>
 
       {/* Info Cards */}

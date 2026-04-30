@@ -25,7 +25,7 @@ type KPICardProps = {
 };
 
 function KPICard({ icon, title, value, unit = "", trend, status }: KPICardProps) {
-  const statusColor = status === "good" ? "#52b788" : status === "warning" ? "#ffd60a" : status === "alert" ? "#ef476f" : "#00b4d8";
+  const statusColor = status === "good" ? "#4CAF50" : status === "warning" ? "#FF9800" : status === "alert" ? "#F44336" : "#999999";
   const trendSymbol = trend === "up" ? "↗" : trend === "down" ? "↘" : "→";
 
   return (
@@ -75,17 +75,17 @@ function SimpleChart({ data }: { data: { label: string; value: number }[] }) {
           <div
             style={{
               height: `${(item.value / maxValue) * 150}px`,
-              background: "linear-gradient(180deg, #00b4d8 0%, #0096c7 100%)",
+              background: "linear-gradient(180deg, #FF9800 0%, #F57C00 100%)",
               borderRadius: "8px 8px 0 0",
               transition: "all 0.3s ease",
               cursor: "pointer",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "linear-gradient(180deg, #52b788 0%, #2d6a4f 100%)";
+              (e.currentTarget as HTMLElement).style.background = "linear-gradient(180deg, #FFB74D 0%, #FF9800 100%)";
               (e.currentTarget as HTMLElement).style.transform = "scaleY(1.05)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "linear-gradient(180deg, #00b4d8 0%, #0096c7 100%)";
+              (e.currentTarget as HTMLElement).style.background = "linear-gradient(180deg, #FF9800 0%, #F57C00 100%)";
               (e.currentTarget as HTMLElement).style.transform = "scaleY(1)";
             }}
           />

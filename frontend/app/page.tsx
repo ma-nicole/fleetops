@@ -12,7 +12,7 @@ const modules = [
 
 export default function Home() {
   return (
-    <main style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f1419 0%, #1a2332 100%)" }}>
+    <main style={{ minHeight: "100vh", background: "#FAFAFA" }}>
       {/* Hero Section */}
       <section
         className="container"
@@ -33,10 +33,7 @@ export default function Home() {
                 margin: 0,
                 fontSize: "3rem",
                 fontWeight: 900,
-                background: "linear-gradient(135deg, #00b4d8 0%, #0096c7 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
+                color: "#1A1A1A",
                 lineHeight: 1.2,
               }}
             >
@@ -47,7 +44,7 @@ export default function Home() {
                 margin: "1rem 0 0 0",
                 fontSize: "1.1rem",
                 lineHeight: 1.6,
-                color: "#b0bec5",
+                color: "#666666",
               }}
             >
               Automate booking, scheduling, fleet operations, and decision-making with predictive analytics. Built for trucking teams to reduce delays, cut costs, and improve reliability.
@@ -80,15 +77,16 @@ export default function Home() {
               <div
                 key={stat.label}
                 style={{
-                  background: "rgba(0, 180, 216, 0.05)",
-                  border: "1px solid rgba(0, 180, 216, 0.2)",
+                  background: "#FFFFFF",
+                  border: "1px solid #E8E8E8",
                   borderRadius: "8px",
                   padding: "1rem",
                   textAlign: "center",
+                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
                 }}
               >
-                <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "#00b4d8" }}>{stat.value}</div>
-                <div style={{ fontSize: "0.85rem", color: "#90a4ae", marginTop: "0.5rem" }}>{stat.label}</div>
+                <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "#FF9800" }}>{stat.value}</div>
+                <div style={{ fontSize: "0.85rem", color: "#666666", marginTop: "0.5rem" }}>{stat.label}</div>
               </div>
             ))}
           </div>
@@ -106,16 +104,15 @@ export default function Home() {
             <div
               key={mod.title}
               style={{
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(0, 180, 216, 0.2)",
+                background: "#FAFAFA",
+                border: "1px solid #E8E8E8",
                 borderRadius: "8px",
                 padding: "1.2rem",
-                backdropFilter: "blur(10px)",
               }}
             >
               <div style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>{mod.icon}</div>
-              <div style={{ fontWeight: 600, color: "#e0e0e0" }}>{mod.title}</div>
-              <div style={{ fontSize: "0.9rem", color: "#90a4ae", marginTop: "0.3rem" }}>{mod.desc}</div>
+              <div style={{ fontWeight: 600, color: "#2A2A2A" }}>{mod.title}</div>
+              <div style={{ fontSize: "0.9rem", color: "#666666", marginTop: "0.3rem" }}>{mod.desc}</div>
             </div>
           ))}
         </div>
@@ -124,9 +121,9 @@ export default function Home() {
       {/* Features Section */}
       <section
         style={{
-          background: "rgba(0, 180, 216, 0.03)",
+          background: "#FAFAFA",
           padding: "4rem 2rem",
-          borderTop: "1px solid rgba(0, 180, 216, 0.1)",
+          borderTop: "1px solid #E8E8E8",
         }}
       >
         <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -136,7 +133,7 @@ export default function Home() {
               fontSize: "2rem",
               fontWeight: 800,
               textAlign: "center",
-              color: "#e0e0e0",
+              color: "#1A1A1A",
             }}
           >
             Core Modules
@@ -145,8 +142,8 @@ export default function Home() {
             {modules.map((mod) => (
               <div key={mod.title} className="module-card">
                 <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>{mod.icon}</div>
-                <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.2rem", color: "#00b4d8" }}>{mod.title}</h3>
-                <p style={{ margin: "0.5rem 0 0 0", color: "#90a4ae", lineHeight: 1.5 }}>{mod.desc}</p>
+                <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.2rem", color: "#1A1A1A" }}>{mod.title}</h3>
+                <p style={{ margin: "0.5rem 0 0 0", color: "#666666", lineHeight: 1.5 }}>{mod.desc}</p>
               </div>
             ))}
           </div>
@@ -199,14 +196,14 @@ export default function Home() {
       {/* Footer CTA */}
       <section
         style={{
-          background: "linear-gradient(135deg, rgba(0,180,216,0.05), rgba(0,150,199,0.02))",
+          background: "linear-gradient(135deg, rgba(255,152,0,0.05), rgba(255,152,0,0.02))",
           padding: "3rem 2rem",
           textAlign: "center",
-          borderTop: "1px solid rgba(0, 180, 216, 0.1)",
+          borderTop: "1px solid #E8E8E8",
         }}
       >
-        <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.5rem", color: "#e0e0e0" }}>Ready to optimize your fleet?</h3>
-        <p style={{ margin: "0 0 2rem 0", color: "#90a4ae" }}>Start with a booking or explore a role dashboard</p>
+        <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.5rem", color: "#1A1A1A" }}>Ready to optimize your fleet?</h3>
+        <p style={{ margin: "0 0 2rem 0", color: "#666666" }}>Start with a booking or explore a role dashboard</p>
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
           <Link href="/booking" className="cta-button-primary">
             Start Now

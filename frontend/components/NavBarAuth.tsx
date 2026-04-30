@@ -19,9 +19,19 @@ export default function NavBarAuth() {
 
   const handleSignOut = () => {
     if (typeof window !== "undefined") {
+      // Clear all authentication tokens
       window.localStorage.removeItem("authToken");
+      window.localStorage.removeItem("token");
+      window.localStorage.removeItem("userRole");
+      
+      // Clear booking flow data
+      window.localStorage.removeItem("selectedTruck");
+      window.localStorage.removeItem("selectedService");
+      window.localStorage.removeItem("bookingData");
+      window.localStorage.removeItem("completedBooking");
+      
       setToken(null);
-      router.refresh();
+      router.push("/sign-in");
     }
   };
 

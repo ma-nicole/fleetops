@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, field_validator
 
@@ -11,6 +11,7 @@ class BookingCreate(BaseModel):
     service_type: ServiceType
     scheduled_date: date
     cargo_weight_tons: float
+    cargo_description: str | None = None
 
     @field_validator("cargo_weight_tons")
     @classmethod
@@ -35,11 +36,23 @@ class BookingRead(BaseModel):
     service_type: ServiceType
     scheduled_date: date
     cargo_weight_tons: float
+    cargo_description: str | None
     estimated_cost: float
+    actual_cost: float | None
     status: BookingStatus
+    approved_by_id: int | None
+    approved_at: datetime | None
+    rejection_reason: str | None
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class BookingApprovalRequest(BaseModel):
+    approved: bool
+    rejection_reason: str | None = None
 
 
 class BookingStatusUpdate(BaseModel):

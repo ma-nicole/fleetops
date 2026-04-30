@@ -4,9 +4,9 @@ export function SkeletonCard() {
   return (
     <div
       style={{
-        background: "rgba(26, 35, 50, 0.6)",
-        border: "1px solid rgba(0, 180, 216, 0.1)",
-        borderRadius: "12px",
+        background: "#FAFAFA",
+        border: "1px solid rgba(255, 152, 0, 0.1)",
+        borderRadius: "8px",
         padding: "1.5rem",
         display: "grid",
         gap: "1rem",
@@ -15,7 +15,7 @@ export function SkeletonCard() {
       <div
         style={{
           height: "24px",
-          background: "linear-gradient(90deg, rgba(0,180,216,0.1), rgba(0,180,216,0.05))",
+          background: "linear-gradient(90deg, rgba(255,152,0,0.1), rgba(255,152,0,0.05))",
           borderRadius: "4px",
           animation: "pulse 1.5s ease-in-out infinite",
         }}
@@ -23,7 +23,7 @@ export function SkeletonCard() {
       <div
         style={{
           height: "16px",
-          background: "linear-gradient(90deg, rgba(0,180,216,0.1), rgba(0,180,216,0.05))",
+          background: "linear-gradient(90deg, rgba(255,152,0,0.1), rgba(255,152,0,0.05))",
           borderRadius: "4px",
           animation: "pulse 1.5s ease-in-out infinite",
           animationDelay: "0.2s",
@@ -33,7 +33,7 @@ export function SkeletonCard() {
         style={{
           height: "16px",
           width: "70%",
-          background: "linear-gradient(90deg, rgba(0,180,216,0.1), rgba(0,180,216,0.05))",
+          background: "linear-gradient(90deg, rgba(255,152,0,0.1), rgba(255,152,0,0.05))",
           borderRadius: "4px",
           animation: "pulse 1.5s ease-in-out infinite",
           animationDelay: "0.4s",

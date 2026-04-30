@@ -4,21 +4,218 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type MenuItem = {
+type SubMenuItem = {
   label: string;
   href: string;
   icon: string;
   roles: string[];
 };
 
-const menuItems: MenuItem[] = [
-  { label: "Home", href: "/", icon: "□", roles: ["customer", "dispatcher", "driver", "manager", "admin"] },
-  { label: "Create Booking", href: "/booking", icon: "📝", roles: ["customer", "manager", "admin"] },
-  { label: "My Bookings", href: "/dashboard/customer", icon: "□", roles: ["customer"] },
-  { label: "Dispatcher Console", href: "/dashboard/dispatcher", icon: "□", roles: ["dispatcher", "manager", "admin"] },
-  { label: "Driver App", href: "/dashboard/driver", icon: "□", roles: ["driver", "manager", "admin"] },
-  { label: "Manager Analytics", href: "/dashboard/manager", icon: "□", roles: ["manager", "admin"] },
-  { label: "Admin Panel", href: "/dashboard/admin", icon: "□", roles: ["admin"] },
+type MenuModule = {
+  label: string;
+  icon: string;
+  roles: string[];
+  items: SubMenuItem[];
+};
+
+const menuModules: MenuModule[] = [
+  // DRIVER ONLY
+  {
+    label: "🚗 Active Operations",
+    icon: "🚗",
+    roles: ["driver"],
+    items: [
+      { label: "Dashboard", href: "/driver/dashboard", icon: "📊", roles: ["driver"] },
+      { label: "Active Trips", href: "/driver/active-trips", icon: "🚚", roles: ["driver"] },
+      { label: "Route Info", href: "/driver/route-info", icon: "🗺️", roles: ["driver"] },
+      { label: "Start/End Trip", href: "/driver/active-trips", icon: "▶️", roles: ["driver"] },
+    ],
+  },
+  {
+    label: "📋 Schedule & Pay",
+    icon: "📋",
+    roles: ["driver"],
+    items: [
+      { label: "Designated Schedule", href: "/driver/schedule", icon: "📅", roles: ["driver"] },
+      { label: "Total Pay", href: "/driver/pay", icon: "💵", roles: ["driver"] },
+    ],
+  },
+  {
+    label: "🚛 Vehicle",
+    icon: "🚛",
+    roles: ["driver"],
+    items: [
+      { label: "Vehicle Status", href: "/driver/vehicle-status", icon: "🔍", roles: ["driver"] },
+      { label: "Log Vehicle Status", href: "/driver/vehicle-status", icon: "✏️", roles: ["driver"] },
+    ],
+  },
+  {
+    label: "📝 Reports & Ratings",
+    icon: "📝",
+    roles: ["driver"],
+    items: [
+      { label: "Accomplishment Report", href: "/driver/accomplishment-report", icon: "✅", roles: ["driver"] },
+      { label: "Activity & Ratings", href: "/driver/activity-ratings", icon: "⭐", roles: ["driver"] },
+    ],
+  },
+
+  // DISPATCHER ONLY
+  {
+    label: "📊 Dashboard & Operations",
+    icon: "📊",
+    roles: ["dispatcher"],
+    items: [
+      { label: "Dashboard", href: "/dispatcher/dashboard", icon: "📊", roles: ["dispatcher"] },
+      { label: "Scheduled Bookings", href: "/dispatcher/scheduled-bookings", icon: "📅", roles: ["dispatcher"] },
+      { label: "Order Details", href: "/dispatcher/order-details", icon: "📦", roles: ["dispatcher"] },
+      { label: "Ongoing Operations", href: "/dispatcher/ongoing-operations", icon: "🚀", roles: ["dispatcher"] },
+    ],
+  },
+  {
+    label: "👥 People & Assets",
+    icon: "👥",
+    roles: ["dispatcher"],
+    items: [
+      { label: "Driver Activity", href: "/dispatcher/driver-activity", icon: "👨‍✈️", roles: ["dispatcher"] },
+      { label: "Assets Management", href: "/dispatcher/assets", icon: "🚛", roles: ["dispatcher"] },
+      { label: "Reported Issues", href: "/dispatcher/reported-issues", icon: "⚠️", roles: ["dispatcher"] },
+    ],
+  },
+  {
+    label: "📋 Reports & Completion",
+    icon: "📋",
+    roles: ["dispatcher"],
+    items: [
+      { label: "Accomplishment Report", href: "/dispatcher/accomplishment-report", icon: "✅", roles: ["dispatcher"] },
+      { label: "Log Report", href: "/dispatcher/log-report", icon: "📝", roles: ["dispatcher"] },
+      { label: "Confirm Completion", href: "/dispatcher/confirm-completion", icon: "✓", roles: ["dispatcher"] },
+    ],
+  },
+
+  // MANAGER ONLY
+  {
+    label: "📈 Analytics",
+    icon: "📈",
+    roles: ["manager", "admin"],
+    items: [
+      { label: "Dashboard", href: "/manager/dashboard", icon: "📊", roles: ["manager", "admin"] },
+      { label: "Analytics Overview", href: "/manager/analytics", icon: "📊", roles: ["manager", "admin"] },
+      { label: "History", href: "/manager/history", icon: "📜", roles: ["manager", "admin"] },
+    ],
+  },
+  {
+    label: "📋 Operations",
+    icon: "📋",
+    roles: ["manager", "admin"],
+    items: [
+      { label: "Scheduled Bookings", href: "/manager/scheduled-bookings", icon: "📅", roles: ["manager", "admin"] },
+      { label: "Order Details", href: "/manager/order-details", icon: "📦", roles: ["manager", "admin"] },
+      { label: "Accomplishment Report", href: "/manager/accomplishment-report", icon: "✅", roles: ["manager", "admin"] },
+      { label: "Pending Bookings", href: "/manager/pending-bookings", icon: "⏳", roles: ["manager", "admin"] },
+      { label: "Accomplished Bookings", href: "/manager/accomplished-bookings", icon: "✓", roles: ["manager", "admin"] },
+    ],
+  },
+  {
+    label: "🚛 Management",
+    icon: "🚛",
+    roles: ["manager", "admin"],
+    items: [
+      { label: "Truck Management", href: "/manager/truck-management", icon: "🚛", roles: ["manager", "admin"] },
+      { label: "Dispatcher Activity", href: "/manager/dispatcher-activity", icon: "👨‍💼", roles: ["manager", "admin"] },
+      { label: "Driver Profiles", href: "/manager/driver-profiles", icon: "👨‍✈️", roles: ["manager", "admin"] },
+    ],
+  },
+  {
+    label: "👥 People & Finance",
+    icon: "👥",
+    roles: ["manager", "admin"],
+    items: [
+      { label: "Customer Profiles", href: "/manager/customer-profiles", icon: "👥", roles: ["manager", "admin"] },
+      { label: "Payments", href: "/manager/payments", icon: "💳", roles: ["manager", "admin"] },
+      { label: "Customer Reviews", href: "/manager/customer-reviews", icon: "⭐", roles: ["manager", "admin"] },
+    ],
+  },
+
+  // ADMIN FLOW MODULES
+  {
+    label: "📅 Scheduling",
+    icon: "📅",
+    roles: ["admin"],
+    items: [
+      { label: "Admin Dashboard", href: "/admin/dashboard", icon: "📊", roles: ["admin"] },
+      { label: "Scheduling", href: "/admin/scheduling", icon: "🗓️", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "🚚 Operations",
+    icon: "🚚",
+    roles: ["admin"],
+    items: [
+      { label: "Trip Monitoring", href: "/admin/trip-monitoring", icon: "🛰️", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "📈 Analytics",
+    icon: "📈",
+    roles: ["admin"],
+    items: [
+      { label: "Analytics Overview", href: "/admin/analytics", icon: "📉", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "📦 Orders",
+    icon: "📦",
+    roles: ["admin"],
+    items: [
+      { label: "Order Details", href: "/admin/orders", icon: "📋", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "💳 Finance",
+    icon: "💳",
+    roles: ["admin"],
+    items: [
+      { label: "Finance View", href: "/admin/finance", icon: "💰", roles: ["admin"] },
+    ],
+  },
+
+  // ADMIN ONLY (existing tools)
+  {
+    label: "🔐 System Administration",
+    icon: "🔐",
+    roles: ["admin"],
+    items: [
+      { label: "Authentication", href: "/modules/administration/authentication", icon: "🔑", roles: ["admin"] },
+      { label: "Access Control", href: "/modules/administration/access-control", icon: "👥", roles: ["admin"] },
+      { label: "Account Management", href: "/modules/administration/accounts", icon: "👤", roles: ["admin"] },
+      { label: "System Settings", href: "/modules/administration/settings", icon: "⚙️", roles: ["admin"] },
+    ],
+  },
+
+  // CUSTOMER ONLY
+  {
+    label: "🛒 Booking",
+    icon: "🛒",
+    roles: ["customer"],
+    items: [
+      { label: "My Profile", href: "/modules/customer/profile", icon: "👤", roles: ["customer"] },
+      { label: "Select Truck", href: "/modules/customer/booking/trucks", icon: "🚚", roles: ["customer"] },
+      { label: "Select Service", href: "/modules/customer/booking/services", icon: "🔧", roles: ["customer"] },
+      { label: "Checkout", href: "/modules/customer/booking/checkout", icon: "🛍️", roles: ["customer"] },
+      { label: "Payment", href: "/modules/customer/payment", icon: "💳", roles: ["customer"] },
+    ],
+  },
+  {
+    label: "📦 My Bookings",
+    icon: "📦",
+    roles: ["customer"],
+    items: [
+      { label: "Current Bookings", href: "/modules/operations/trips", icon: "📋", roles: ["customer"] },
+      { label: "Booking History", href: "/modules/customer/booking-history", icon: "📜", roles: ["customer"] },
+      { label: "Cost Summary", href: "/modules/operations/cost-summary", icon: "💵", roles: ["customer"] },
+      { label: "Support", href: "/modules/customer/support", icon: "💬", roles: ["customer"] },
+    ],
+  },
 ];
 
 type SidebarProps = {
@@ -29,16 +226,26 @@ type SidebarProps = {
 
 export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: SidebarProps) {
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [expandedModules, setExpandedModules] = useState<string[]>([]);
   const pathname = usePathname();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const role = window.localStorage.getItem("userRole") || "customer";
       setUserRole(role);
+      // Auto-expand first module on page load
+      setExpandedModules([]);
     }
   }, []);
 
-  const visibleItems = menuItems.filter((item) => userRole && item.roles.includes(userRole));
+  const visibleModules = menuModules.filter((module) => userRole && module.roles.includes(userRole));
+
+  const toggleModule = (moduleLabel: string) => {
+    setExpandedModules((prev) =>
+      prev.includes(moduleLabel) ? prev.filter((m) => m !== moduleLabel) : [...prev, moduleLabel]
+    );
+  };
+
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
@@ -73,11 +280,10 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
           position: "fixed",
           left: 0,
           top: "76px",
-          width: isOpen ? "240px" : "0",
+          width: isOpen ? "280px" : "0",
           height: "calc(100vh - 76px)",
-          background: "rgba(26, 35, 50, 0.95)",
-          borderRight: "1px solid rgba(0, 180, 216, 0.2)",
-          backdropFilter: "blur(10px)",
+          background: "#FFFFFF",
+          borderRight: "1px solid #E8E8E8",
           overflowX: "hidden",
           overflowY: "auto",
           transition: "width 0.3s ease, transform 0.3s ease",
@@ -91,7 +297,7 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
         <div
           style={{
             padding: "1rem 1rem 0.75rem",
-            borderBottom: "1px solid rgba(0, 180, 216, 0.1)",
+            borderBottom: "1px solid #E8E8E8",
             marginBottom: "1rem",
             display: "flex",
             alignItems: "center",
@@ -108,7 +314,7 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
               textDecoration: "none",
             }}
           >
-            FleetOps
+            FleetOpt
           </Link>
 
           <button
@@ -120,9 +326,9 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
               minWidth: "44px",
               display: "inline-grid",
               placeItems: "center",
-              borderRadius: "10px",
-              border: "1px solid rgba(0, 180, 216, 0.25)",
-              background: "rgba(255, 255, 255, 0.04)",
+              borderRadius: "6px",
+              border: "1px solid #E8E8E8",
+              background: "transparent",
               color: "var(--text)",
               cursor: "pointer",
             }}
@@ -131,50 +337,108 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
           </button>
         </div>
 
-        {/* Menu Items */}
+        {/* Hierarchical Menu Items */}
         <nav style={{ padding: "0 0.5rem" }}>
-          {visibleItems.map((item) => {
-            const active = isActive(item.href);
+          {visibleModules.map((module) => {
+            const isExpanded = expandedModules.includes(module.label);
+            const hasVisibleItems = module.items.some((item) => userRole && item.roles.includes(userRole));
+
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.75rem 1rem",
-                  margin: "0.25rem 0",
-                  borderRadius: "8px",
-                  color: active ? "var(--primary)" : "var(--text-secondary)",
-                  textDecoration: "none",
-                  background: active ? "rgba(0, 180, 216, 0.1)" : "transparent",
-                  borderLeft: active ? "3px solid var(--primary)" : "3px solid transparent",
-                  transition: "all 0.2s ease",
-                  fontSize: "0.95rem",
-                  fontWeight: active ? 600 : 500,
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(0, 180, 216, 0.05)";
-                    (e.currentTarget as HTMLElement).style.color = "var(--text)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) {
-                    (e.currentTarget as HTMLElement).style.background = "transparent";
-                    (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
-                  }
-                }}
-                onClick={() => {
-                  if (window.innerWidth <= 768) {
-                    onCloseSidebar();
-                  }
-                }}
-              >
-                <span style={{ fontSize: "1.2rem" }}>{item.icon}</span>
-                <span>{item.label}</span>
-              </Link>
+              <div key={module.label}>
+                <button
+                  onClick={() => toggleModule(module.label)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.75rem",
+                    padding: "0.75rem 1rem",
+                    margin: "0.25rem 0",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "rgba(255, 152, 0, 0.08)",
+                    color: "var(--text)",
+                    textDecoration: "none",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    fontSize: "0.95rem",
+                    fontWeight: 600,
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(255, 152, 0, 0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(255, 152, 0, 0.08)";
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                    <span style={{ fontSize: "1.2rem" }}>{module.icon}</span>
+                    <span>{module.label}</span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: "1rem",
+                      transition: "transform 0.2s ease",
+                      transform: isExpanded ? "rotate(180deg)" : "rotate(0)",
+                    }}
+                  >
+                    ▼
+                  </span>
+                </button>
+
+                {/* Submodules */}
+                {isExpanded &&
+                  hasVisibleItems &&
+                  module.items
+                    .filter((item) => userRole && item.roles.includes(userRole))
+                    .map((item) => {
+                      const active = isActive(item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.75rem",
+                            padding: "0.6rem 1rem",
+                            marginLeft: "1rem",
+                            marginTop: "0.2rem",
+                            marginBottom: "0.2rem",
+                            borderRadius: "6px",
+                            color: active ? "#FF9800" : "var(--text-secondary)",
+                            textDecoration: "none",
+                            background: active ? "rgba(255, 152, 0, 0.12)" : "transparent",
+                            borderLeft: active ? "3px solid #FF9800" : "3px solid transparent",
+                            transition: "all 0.2s ease",
+                            fontSize: "0.9rem",
+                            fontWeight: active ? 600 : 500,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!active) {
+                              (e.currentTarget as HTMLElement).style.background = "rgba(255, 152, 0, 0.08)";
+                              (e.currentTarget as HTMLElement).style.color = "var(--text)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) {
+                              (e.currentTarget as HTMLElement).style.background = "transparent";
+                              (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                            }
+                          }}
+                          onClick={() => {
+                            if (window.innerWidth <= 768) {
+                              onCloseSidebar();
+                            }
+                          }}
+                        >
+                          <span style={{ fontSize: "1rem" }}>{item.icon}</span>
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+              </div>
             );
           })}
         </nav>
@@ -188,8 +452,8 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
               left: "1rem",
               right: "1rem",
               padding: "0.75rem",
-              background: "rgba(0, 180, 216, 0.1)",
-              border: "1px solid rgba(0, 180, 216, 0.2)",
+              background: "rgba(255, 152, 0, 0.1)",
+              border: "1px solid rgba(255, 152, 0, 0.2)",
               borderRadius: "8px",
               textAlign: "center",
               fontSize: "0.85rem",
@@ -198,7 +462,7 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
               textTransform: "capitalize",
             }}
           >
-            {userRole}
+            {userRole.toUpperCase()}
           </div>
         )}
       </aside>
@@ -209,30 +473,16 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
           onClick={onCloseSidebar}
           style={{
             position: "fixed",
-            left: "240px",
-            top: "76px",
+            top: 0,
+            left: 0,
             right: 0,
             bottom: 0,
-            background: "rgba(0, 0, 0, 0.5)",
+            background: "rgba(0,0,0,0.3)",
             zIndex: 999,
-            display: "none",
+            display: isOpen ? "block" : "none",
           }}
-          className="sidebar-overlay"
         />
       )}
-
-      <style>{`
-        @media (max-width: 768px) {
-          .sidebar-overlay { display: block !important; }
-          .sidebar-open-button { display: block !important; }
-          aside { width: 240px !important; top: 76px !important; height: calc(100vh - 76px) !important; }
-          main { margin-left: 0; }
-        }
-
-        @media (min-width: 769px) {
-          .sidebar-open-button { display: none !important; }
-        }
-      `}</style>
     </>
   );
 }
