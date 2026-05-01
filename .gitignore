@@ -6,12 +6,15 @@ __pycache__/
 .venv/
 venv/
 backend/.env
+backend/.env.local
+backend/.env.*.local
 
 # Node
 node_modules/
 .next/
 out/
 frontend/.env.local
+frontend/.env.*.local
 
 # Editor
 .vscode/
@@ -19,3 +22,14 @@ frontend/.env.local
 # OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Secrets
+*.key
+*.pem
+credentials.json

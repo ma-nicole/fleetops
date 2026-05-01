@@ -3,11 +3,17 @@
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CostCalculator from "@/components/CostCalculator";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
+import { isAuthenticated } from "@/lib/auth";
 
 export default function BookingPage() {
   const router = useRouter();
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push("/sign-in");
+    }
+  }, [router]);
   const [serviceType, setServiceType] = useState("Standard");
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");

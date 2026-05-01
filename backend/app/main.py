@@ -1,14 +1,19 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.api.routes import admin, auth, bookings, clerk_auth, dispatch, driver, manager, ratings, reports, workflow
 from app.core.config import settings
-from app.db import engine
+from app.db import engine, get_db
 from app.models.base import Base
 from app.models import erd_entities  # noqa: F401 - ensure ERD tables are registered
 
 
-app = FastAPI(title=settings.app_name)
+def require_db(db=Depends(get_db)) -> None:
+    db.execute(text("SELECT 1"))
+
+
+app = FastAPI(title=settings.app_name, dependencies=[Depends(require_db)])
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,13 +26,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup() -> None:
-    try:
-        Base.metadata.create_all(bind=engine)
-    except Exception as e:
-        print(f"⚠️ Database connection failed on startup: {str(e)}")
-        print("⚠️ API will run but database operations will fail")
-        print("⚠️ Please start MySQL or use Docker: docker compose up -d")
-        pass
+    Base.metadata.create_all(bind=engine)
 
 
 @app.get("/health")

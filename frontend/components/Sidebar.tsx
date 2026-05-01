@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { isAuthenticated } from "@/lib/auth";
 
 type SubMenuItem = {
   label: string;
@@ -230,15 +231,47 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
   const pathname = usePathname();
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const role = window.localStorage.getItem("userRole") || "customer";
-      setUserRole(role);
-      // Auto-expand first module on page load
-      setExpandedModules([]);
-    }
-  }, []);
+      if (typeof window !== "undefined") {
+        if (isAuthenticated()) {
+          const role = window.localStorage.getItem("userRole") || "customer";
+          setUserRole(role);
+        } else {
+          setUserRole(null);
+        }
+        // Auto-expand first module on page load
+        setExpandedModules([]);
+      }
+    }, []);
 
   const visibleModules = menuModules.filter((module) => userRole && module.roles.includes(userRole));
+
+  // If user is not authenticated, show a small sign-in CTA instead of sidebar
+  if (!userRole) {
+    return (
+      <div>
+        <Link href="/sign-in">
+          <button
+            aria-label="Sign in"
+            style={{
+              position: "fixed",
+              top: "1rem",
+              left: "1rem",
+              zIndex: 1001,
+              background: "var(--primary)",
+              border: "none",
+              color: "white",
+              padding: "0.5rem 0.75rem",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "0.95rem",
+            }}
+          >
+            Sign in
+          </button>
+        </Link>
+      </div>
+    );
+  }
 
   const toggleModule = (moduleLabel: string) => {
     setExpandedModules((prev) =>

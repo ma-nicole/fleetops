@@ -231,7 +231,7 @@ def seed_database():
                 fuel_cost=45 + (i * 8),
                 labor_cost=150 + (i * 25),
                 duration_hours=3 + (i * 0.5),
-                started_at=datetime.now() - timedelta(days=i+1),
+                departure_time=datetime.now() - timedelta(days=i+1),
                 completed_at=datetime.now() - timedelta(hours=24-i*6) if booking.status == "completed" else None
             )
             trips.append(trip)

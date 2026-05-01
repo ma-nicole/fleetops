@@ -43,7 +43,7 @@ def assign_trip(
         labor_cost=80,
         duration_hours=6,
     )
-    booking.status = BookingStatus.SCHEDULED
+    booking.status = BookingStatus.ASSIGNED
 
     db.add(trip)
     db.commit()
