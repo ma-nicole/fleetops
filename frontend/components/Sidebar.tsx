@@ -26,9 +26,9 @@ const menuModules: MenuModule[] = [
     roles: ["driver"],
     items: [
       { label: "Dashboard", href: "/driver/dashboard", icon: "📊", roles: ["driver"] },
-      { label: "Active Trips", href: "/driver/active-trips", icon: "🚚", roles: ["driver"] },
-      { label: "Route Info", href: "/driver/route-info", icon: "🗺️", roles: ["driver"] },
-      { label: "Start/End Trip", href: "/driver/active-trips", icon: "▶️", roles: ["driver"] },
+      { label: "Scheduled Trips", href: "/driver/scheduled-trips", icon: "🚚", roles: ["driver"] },
+      { label: "Order Details", href: "/driver/order-details", icon: "📦", roles: ["driver"] },
+      { label: "Update Trip Status", href: "/driver/update-status", icon: "▶️", roles: ["driver"] },
     ],
   },
   {
@@ -54,7 +54,7 @@ const menuModules: MenuModule[] = [
     icon: "📝",
     roles: ["driver"],
     items: [
-      { label: "Accomplishment Report", href: "/driver/accomplishment-report", icon: "✅", roles: ["driver"] },
+      { label: "Completion Report", href: "/driver/completion-report", icon: "✅", roles: ["driver"] },
       { label: "Activity & Ratings", href: "/driver/activity-ratings", icon: "⭐", roles: ["driver"] },
     ],
   },
@@ -66,9 +66,10 @@ const menuModules: MenuModule[] = [
     roles: ["dispatcher"],
     items: [
       { label: "Dashboard", href: "/dispatcher/dashboard", icon: "📊", roles: ["dispatcher"] },
-      { label: "Scheduled Bookings", href: "/dispatcher/scheduled-bookings", icon: "📅", roles: ["dispatcher"] },
+      { label: "Create Schedule", href: "/dispatcher/create-schedule", icon: "📅", roles: ["dispatcher"] },
+      { label: "Schedules", href: "/dispatcher/schedules", icon: "🗓️", roles: ["dispatcher"] },
       { label: "Order Details", href: "/dispatcher/order-details", icon: "📦", roles: ["dispatcher"] },
-      { label: "Ongoing Operations", href: "/dispatcher/ongoing-operations", icon: "🚀", roles: ["dispatcher"] },
+      { label: "Trip Monitoring", href: "/dispatcher/trip-monitoring", icon: "🚀", roles: ["dispatcher"] },
     ],
   },
   {
@@ -76,8 +77,7 @@ const menuModules: MenuModule[] = [
     icon: "👥",
     roles: ["dispatcher"],
     items: [
-      { label: "Driver Activity", href: "/dispatcher/driver-activity", icon: "👨‍✈️", roles: ["dispatcher"] },
-      { label: "Assets Management", href: "/dispatcher/assets", icon: "🚛", roles: ["dispatcher"] },
+      { label: "Assets & Drivers", href: "/dispatcher/assets-drivers", icon: "🚛", roles: ["dispatcher"] },
       { label: "Reported Issues", href: "/dispatcher/reported-issues", icon: "⚠️", roles: ["dispatcher"] },
     ],
   },
@@ -86,6 +86,7 @@ const menuModules: MenuModule[] = [
     icon: "📋",
     roles: ["dispatcher"],
     items: [
+      { label: "System Reports", href: "/dispatcher/reports", icon: "📊", roles: ["dispatcher"] },
       { label: "Accomplishment Report", href: "/dispatcher/accomplishment-report", icon: "✅", roles: ["dispatcher"] },
       { label: "Log Report", href: "/dispatcher/log-report", icon: "📝", roles: ["dispatcher"] },
       { label: "Confirm Completion", href: "/dispatcher/confirm-completion", icon: "✓", roles: ["dispatcher"] },
@@ -100,6 +101,10 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Dashboard", href: "/manager/dashboard", icon: "📊", roles: ["manager", "admin"] },
       { label: "Analytics Overview", href: "/manager/analytics", icon: "📊", roles: ["manager", "admin"] },
+      { label: "Analytics Dashboard", href: "/analytics/dashboard", icon: "🧠", roles: ["manager", "admin"] },
+      { label: "Predictions", href: "/analytics/predictions", icon: "🔮", roles: ["manager", "admin"] },
+      { label: "Analytics Reports", href: "/analytics/reports", icon: "📑", roles: ["manager", "admin"] },
+      { label: "Trip Monitoring", href: "/manager/trip-monitoring", icon: "🛰️", roles: ["manager", "admin"] },
       { label: "History", href: "/manager/history", icon: "📜", roles: ["manager", "admin"] },
     ],
   },
@@ -108,8 +113,8 @@ const menuModules: MenuModule[] = [
     icon: "📋",
     roles: ["manager", "admin"],
     items: [
-      { label: "Scheduled Bookings", href: "/manager/scheduled-bookings", icon: "📅", roles: ["manager", "admin"] },
-      { label: "Order Details", href: "/manager/order-details", icon: "📦", roles: ["manager", "admin"] },
+      { label: "Scheduling", href: "/manager/scheduling", icon: "📅", roles: ["manager", "admin"] },
+      { label: "Order Details", href: "/manager/orders", icon: "📦", roles: ["manager", "admin"] },
       { label: "Accomplishment Report", href: "/manager/accomplishment-report", icon: "✅", roles: ["manager", "admin"] },
       { label: "Pending Bookings", href: "/manager/pending-bookings", icon: "⏳", roles: ["manager", "admin"] },
       { label: "Accomplished Bookings", href: "/manager/accomplished-bookings", icon: "✓", roles: ["manager", "admin"] },
@@ -131,7 +136,7 @@ const menuModules: MenuModule[] = [
     roles: ["manager", "admin"],
     items: [
       { label: "Customer Profiles", href: "/manager/customer-profiles", icon: "👥", roles: ["manager", "admin"] },
-      { label: "Payments", href: "/manager/payments", icon: "💳", roles: ["manager", "admin"] },
+      { label: "Finance View", href: "/manager/finance", icon: "💳", roles: ["manager", "admin"] },
       { label: "Customer Reviews", href: "/manager/customer-reviews", icon: "⭐", roles: ["manager", "admin"] },
     ],
   },

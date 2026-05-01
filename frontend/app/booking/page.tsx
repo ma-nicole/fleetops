@@ -15,9 +15,10 @@ export default function BookingPage() {
   const [error, setError] = useState("");
 
   const createBooking = () => {
-    const booking = CustomerDataFlowService.createBooking(serviceType, pickup, dropoff, load);
-    if (!booking) {
-      setError("Please login first to create a booking.");
+    setError("");
+    const result = CustomerDataFlowService.createBooking(serviceType, pickup, dropoff, load);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     router.push("/order-confirmation");

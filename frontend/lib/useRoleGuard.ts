@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getDashboardPath, type UserRole } from "./auth";
 
 /**
  * Hook to protect pages based on user role
- * Redirects unauthorized users to home page
+ * Redirects unauthorized users to their role dashboard
  */
 export function useRoleGuard(allowedRoles: string[]) {
   const router = useRouter();
@@ -19,9 +20,9 @@ export function useRoleGuard(allowedRoles: string[]) {
       return;
     }
 
-    // If user's role is not in allowed roles, redirect to home
+    // If user's role is not in allowed roles, redirect to their own dashboard
     if (!allowedRoles.includes(userRole)) {
-      router.push("/");
+      router.push(getDashboardPath(userRole as UserRole));
       return;
     }
   }, [allowedRoles, router]);

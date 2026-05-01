@@ -6,7 +6,7 @@ import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
 
 export default function OrderDetailsPage() {
   const booking = useMemo(() => CustomerDataFlowService.getCurrentBooking(), []);
-  const payment = useMemo(() => CustomerDataFlowService.getPayments()[0], []);
+  const payment = useMemo(() => CustomerDataFlowService.getPaymentForCurrentBooking(), []);
 
   return (
     <main style={{ padding: "2rem", minHeight: "100vh", background: "#FAFAFA" }}>
@@ -20,6 +20,9 @@ export default function OrderDetailsPage() {
               <p style={{ margin: 0 }}><strong>Booking Info:</strong> {booking.id} | {booking.pickup} → {booking.dropoff}</p>
               <p style={{ margin: 0 }}><strong>Service:</strong> {booking.serviceType}</p>
               <p style={{ margin: 0 }}><strong>Payment Status:</strong> {payment?.status || "unpaid"}</p>
+              {payment && (
+                <p style={{ margin: 0 }}><strong>Payment Reference:</strong> {payment.reference}</p>
+              )}
               <p style={{ margin: 0 }}><strong>Trip Summary:</strong> Driver assignment pending, ETA will be sent after dispatch.</p>
             </>
           )}

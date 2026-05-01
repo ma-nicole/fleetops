@@ -40,8 +40,10 @@ export default function NavBarAuth() {
       Sign Out
     </button>
   ) : (
-    <Link href="/sign-in" className="sign-in-button">
-      Sign In
-    </Link>
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <Link href="/sign-in" className="sign-in-button">
+        Login
+      </Link>
+    </div>
   );
 }

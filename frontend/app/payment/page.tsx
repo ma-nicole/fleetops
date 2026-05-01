@@ -14,9 +14,10 @@ export default function PaymentPage() {
   const amount = 450;
 
   const pay = () => {
-    const payment = CustomerDataFlowService.payCurrentBooking(method, amount);
-    if (!payment) {
-      setError("No confirmed booking found for payment.");
+    setError("");
+    const result = CustomerDataFlowService.payCurrentBooking(method, amount);
+    if (!result.ok) {
+      setError(result.message);
       return;
     }
     router.push("/order-details");

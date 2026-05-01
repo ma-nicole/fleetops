@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
 
   const submit = () => {
+    setError("");
     const result = CustomerDataFlowService.register(fullName, email, password);
     if (!result.ok) {
       setError(result.message);

@@ -10,8 +10,17 @@ const searchIndex = [
   { label: "Create booking", href: "/booking", keywords: ["booking", "book", "shipment", "cargo"] },
   { label: "Customer dashboard", href: "/dashboard/customer", keywords: ["customer", "bookings", "payments", "ratings"] },
   { label: "Dispatcher console", href: "/dashboard/dispatcher", keywords: ["dispatcher", "assign", "route", "conflict"] },
+  { label: "Dispatcher schedules", href: "/dispatcher/schedules", keywords: ["dispatcher", "schedule", "trips"] },
+  { label: "Dispatcher trip monitoring", href: "/dispatcher/trip-monitoring", keywords: ["dispatcher", "monitoring", "execution"] },
+  { label: "Driver scheduled trips", href: "/driver/scheduled-trips", keywords: ["driver", "schedule", "trips"] },
+  { label: "Driver update status", href: "/driver/update-status", keywords: ["driver", "status", "ongoing", "completed", "cancelled"] },
+  { label: "Manager analytics", href: "/manager/analytics", keywords: ["manager", "analytics", "overview"] },
+  { label: "Analytics dashboard", href: "/analytics/dashboard", keywords: ["analytics", "data pipeline", "dashboard"] },
+  { label: "Analytics predictions", href: "/analytics/predictions", keywords: ["prediction", "trip cost", "maintenance risk", "forecast"] },
+  { label: "Analytics reports", href: "/analytics/reports", keywords: ["analytics", "reports", "connector ai", "marts"] },
+  { label: "Manager finance", href: "/manager/finance", keywords: ["manager", "finance", "payments", "reports"] },
   { label: "Driver app", href: "/dashboard/driver", keywords: ["driver", "trip", "attendance", "earnings"] },
-  { label: "Manager analytics", href: "/dashboard/manager", keywords: ["manager", "kpi", "forecast", "revenue"] },
+  { label: "Manager dashboard", href: "/dashboard/manager", keywords: ["manager", "kpi", "forecast", "revenue"] },
   { label: "Admin control center", href: "/dashboard/admin", keywords: ["admin", "users", "audit", "fleet"] },
 ];
 
@@ -44,6 +53,8 @@ export default function NavBar({ isSidebarOpen, onToggleSidebar }: { isSidebarOp
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!isLoggedIn) return;
+
       const isSearchShortcut = event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey);
       const isBookingShortcut = event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey);
 
@@ -60,7 +71,7 @@ export default function NavBar({ isSidebarOpen, onToggleSidebar }: { isSidebarOp
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [router]);
+  }, [router, isLoggedIn]);
 
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -140,18 +151,6 @@ export default function NavBar({ isSidebarOpen, onToggleSidebar }: { isSidebarOp
             </div>
           )}
         </form>
-      )}
-
-      {/* Not logged in: Show marketing links */}
-      {isMounted && !isLoggedIn && (
-        <div className="navbar-links">
-          <Link href="/#features" className="navbar-link">
-            Features
-          </Link>
-          <Link href="/#pricing" className="navbar-link">
-            Pricing
-          </Link>
-        </div>
       )}
 
       <div className="navbar-links">

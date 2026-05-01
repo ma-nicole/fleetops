@@ -1,6 +1,6 @@
 import { ERDDataService } from "./erdDataService";
 
-export type DriverFlowStatus = "pending" | "confirmed" | "scheduled" | "ongoing" | "completed";
+export type DriverFlowStatus = "pending" | "confirmed" | "scheduled" | "ongoing" | "completed" | "cancelled";
 
 export type DriverFlowBooking = {
   id: string;
@@ -57,6 +57,33 @@ export class DriverDataFlowService {
     return booking;
   }
 
+  /**
+   * Booking DB check for driver flow:
+   * - If booking does not exist, create it as pending.
+   * - If booking exists, confirm the order and keep current assignment.
+   */
+  static ensureBookingEntry(
+    payload: Omit<DriverFlowBooking, "id" | "createdAt" | "status">,
+    dispatcherName: string
+  ): DriverFlowBooking {
+    const existing = this.getBookings().find(
+      (item) =>
+        item.customerName.toLowerCase() === payload.customerName.toLowerCase() &&
+        item.pickup.toLowerCase() === payload.pickup.toLowerCase() &&
+        item.dropoff.toLowerCase() === payload.dropoff.toLowerCase() &&
+        item.load.toLowerCase() === payload.load.toLowerCase()
+    );
+
+    if (!existing) {
+      return this.createBooking(payload);
+    }
+
+    return (
+      this.confirmOrder(existing.id, dispatcherName, existing.assignedDriver || payload.assignedDriver || "Unassigned") ||
+      existing
+    );
+  }
+
   static confirmOrder(bookingId: string, dispatcher: string, assignedDriver: string): DriverFlowBooking | null {
     const bookings = this.getBookings();
     const index = bookings.findIndex((b) => b.id === bookingId);
@@ -102,6 +129,8 @@ export class DriverDataFlowService {
           ? "ongoing"
           : status === "completed"
           ? "completed"
+          : status === "cancelled"
+          ? "cancelled"
           : "pending";
       ERDDataService.updateTripStatus(trip.id, mapped);
       if (status === "ongoing") {

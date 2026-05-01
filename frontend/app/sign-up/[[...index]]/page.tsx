@@ -15,6 +15,7 @@ const roles = [
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("customer");
@@ -63,6 +64,16 @@ export default function SignUpPage() {
       <div style={{ width: 420, padding: 24, background: "rgba(255,255,255,0.04)", borderRadius: 16 }}>
         <h1>Sign Up</h1>
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16, marginTop: 16 }}>
+          {error && (
+            <div aria-live="polite" style={{ color: "#ff6b6b", fontSize: "0.95rem" }}>
+              {error}
+            </div>
+          )}
+          {success && (
+            <div aria-live="polite" style={{ color: "#8ce99a", fontSize: "0.95rem" }}>
+              {success}
+            </div>
+          )}
           <label style={{ display: "grid", gap: 8 }}>
             Full Name
             <input
@@ -71,7 +82,8 @@ export default function SignUpPage() {
               onChange={(event) => setFullName(event.target.value)}
               required
               placeholder="Jane Doe"
-              style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white" }}
+              autoComplete="name"
+              style={{ width: "100%", minHeight: 44, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white", fontSize: "1rem" }}
             />
           </label>
           <label style={{ display: "grid", gap: 8 }}>
@@ -82,19 +94,30 @@ export default function SignUpPage() {
               onChange={(event) => setEmail(event.target.value)}
               required
               placeholder="you@example.com"
-              style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white" }}
+              autoComplete="email"
+              style={{ width: "100%", minHeight: 44, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white", fontSize: "1rem" }}
             />
           </label>
           <label style={{ display: "grid", gap: 8 }}>
             Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              placeholder="••••••••"
-              style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white" }}
-            />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                placeholder="At least 6 characters"
+                autoComplete="new-password"
+                style={{ width: "100%", minHeight: 44, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white", fontSize: "1rem" }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                style={{ minHeight: 44, minWidth: 44, padding: "0 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white", cursor: "pointer", fontSize: "0.9rem" }}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
           <label style={{ display: "grid", gap: 8 }}>
             Phone
@@ -103,7 +126,8 @@ export default function SignUpPage() {
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               placeholder="Optional"
-              style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white" }}
+              autoComplete="tel"
+              style={{ width: "100%", minHeight: 44, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white", fontSize: "1rem" }}
             />
           </label>
           <label style={{ display: "grid", gap: 8 }}>
@@ -129,20 +153,27 @@ export default function SignUpPage() {
               ))}
             </select>
           </label>
-          {error && <div style={{ color: "#ff6b6b" }}>{error}</div>}
-          {success && <div style={{ color: "#8ce99a" }}>{success}</div>}
           <button
             type="submit"
             disabled={isSubmitting}
-            style={{ padding: 12, borderRadius: 10, border: "none", background: "#0ea5e9", color: "white", cursor: isSubmitting ? "not-allowed" : "pointer" }}
+            style={{ minHeight: 44, padding: 12, borderRadius: 10, border: "none", background: "#0ea5e9", color: "white", cursor: isSubmitting ? "not-allowed" : "pointer", fontSize: "1rem", fontWeight: 600 }}
           >
             {isSubmitting ? "Registering…" : "Sign Up"}
           </button>
         </form>
         <p style={{ marginTop: 16, color: "rgba(255,255,255,0.7)" }}>
-          Already have an account? <Link href="/sign-in">Sign in</Link>
+          Already have an account? <Link href="/sign-in">Login</Link>
         </p>
       </div>
+      <style jsx>{`
+        :global(input:focus-visible),
+        :global(select:focus-visible),
+        :global(button:focus-visible),
+        :global(a:focus-visible) {
+          outline: 3px solid #93c5fd;
+          outline-offset: 2px;
+        }
+      `}</style>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 const modules = [
   { icon: "", title: "Booking Workflow", desc: "Create trips with real-time cost estimation" },
@@ -11,6 +12,17 @@ const modules = [
 ];
 
 export default function Home() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsLoggedIn(!!window.localStorage.getItem("token"));
+    }
+  }, []);
+
+  const primaryHref = isLoggedIn ? "/booking" : "/sign-in";
+  const primaryLabel = isLoggedIn ? "Create Booking" : "Login to Book";
+
   return (
     <main style={{ minHeight: "100vh", background: "#FAFAFA" }}>
       {/* Hero Section */}
@@ -55,9 +67,9 @@ export default function Home() {
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
             <Link
               className="cta-button-primary"
-              href="/booking"
+              href={primaryHref}
             >
-              Create Booking
+              {primaryLabel}
             </Link>
             <Link
               className="cta-button-secondary"
@@ -205,8 +217,8 @@ export default function Home() {
         <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.5rem", color: "#1A1A1A" }}>Ready to optimize your fleet?</h3>
         <p style={{ margin: "0 0 2rem 0", color: "#666666" }}>Start with a booking or explore a role dashboard</p>
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-          <Link href="/booking" className="cta-button-primary">
-            Start Now
+          <Link href={primaryHref} className="cta-button-primary">
+            {isLoggedIn ? "Start Now" : "Login to Start"}
           </Link>
         </div>
       </section>

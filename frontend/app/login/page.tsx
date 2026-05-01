@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const submit = () => {
+    setError("");
     const result = CustomerDataFlowService.login(email, password);
     if (!result.ok) {
       setError(result.message);
