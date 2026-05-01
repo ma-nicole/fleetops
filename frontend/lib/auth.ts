@@ -34,12 +34,20 @@ export function setUserRole(role: UserRole): void {
   }
 }
 
-export function setAuthSession(token: string, fallbackRole?: UserRole | null): UserRole | null {
+const KNOWN_ROLES: UserRole[] = ["driver", "helper", "dispatcher", "manager", "admin", "customer"];
+
+function coerceRole(value: string | null | undefined): UserRole | null {
+  if (!value) return null;
+  return KNOWN_ROLES.includes(value as UserRole) ? (value as UserRole) : null;
+}
+
+/** Prefer `preferredRole` from API login body; then JWT; default customer. */
+export function setAuthSession(token: string, preferredRole?: string | null): UserRole | null {
   if (typeof window === "undefined") return null;
   window.localStorage.setItem("token", token);
   window.localStorage.setItem("authToken", token);
-  const fromJwt = decodeJwtRole(token) as UserRole | null;
-  const role: UserRole = (fromJwt as UserRole) || fallbackRole || "customer";
+  const fromJwt = coerceRole(decodeJwtRole(token));
+  const role: UserRole = coerceRole(preferredRole ?? undefined) ?? fromJwt ?? "customer";
   window.localStorage.setItem("userRole", role);
   window.localStorage.setItem("preferredLoginRole", role);
   window.dispatchEvent(new CustomEvent("fleetops:auth-change"));
@@ -69,6 +77,8 @@ export function clearAuth(): void {
     localStorage.removeItem("token");
     localStorage.removeItem("authToken");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("preferredLoginRole");
+    localStorage.removeItem("customer_current_user");
     window.dispatchEvent(new CustomEvent("fleetops:auth-change"));
   }
 }

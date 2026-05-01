@@ -4,6 +4,7 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type BookingData = {
   bookingId: number;
@@ -23,7 +24,7 @@ export default function PaymentPage() {
   const router = useRouter();
 
   const [bookingData, setBookingData] = useState<BookingData | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("credit_card");
+  const [paymentMethod, setPaymentMethod] = useState("gcash");
   const [cardName, setCardName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
@@ -46,10 +47,12 @@ export default function PaymentPage() {
   const validatePayment = () => {
     const newErrors: { [key: string]: string } = {};
 
-    if (!cardName.trim()) newErrors.cardName = "Name is required";
-    if (!cardNumber.replace(/\s/g, "").match(/^\d{13,19}$/)) newErrors.cardNumber = "Invalid card number";
-    if (!expiryDate.match(/^\d{2}\/\d{2}$/)) newErrors.expiryDate = "Use MM/YY format";
-    if (!cvv.match(/^\d{3,4}$/)) newErrors.cvv = "Invalid CVV";
+    if (paymentMethod === "credit_card") {
+      if (!cardName.trim()) newErrors.cardName = "Name is required";
+      if (!cardNumber.replace(/\s/g, "").match(/^\d{13,19}$/)) newErrors.cardNumber = "Invalid card number";
+      if (!expiryDate.match(/^\d{2}\/\d{2}$/)) newErrors.expiryDate = "Use MM/YY format";
+      if (!cvv.match(/^\d{3,4}$/)) newErrors.cvv = "Invalid CVV";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -104,7 +107,7 @@ export default function PaymentPage() {
 
       <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Payment</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
-        Complete your payment to confirm your booking
+        Payments are in Philippine peso (PHP). You can use GCash, Maya, bank transfer, or card — all amounts are quoted in PHP.
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem" }}>
@@ -126,7 +129,7 @@ export default function PaymentPage() {
               <strong>Date:</strong> {bookingData.shipmentDate}
             </p>
             <p style={{ color: "#FF9800", fontWeight: 600, margin: "1rem 0 0 0" }}>
-              Amount: ${bookingData.totalCost.toFixed(2)}
+              Amount: {formatPhp(bookingData.totalCost)}
             </p>
           </div>
 
@@ -134,6 +137,40 @@ export default function PaymentPage() {
           <div style={{ marginBottom: "2rem" }}>
             <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Payment Method</h3>
             <div style={{ display: "grid", gap: "1rem" }}>
+              <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "gcash" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
+                <input
+                  type="radio"
+                  name="payment"
+                  value="gcash"
+                  checked={paymentMethod === "gcash"}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  style={{ marginRight: "1rem" }}
+                />
+                <div>
+                  <strong style={{ color: "#1A1A1A" }}>GCash</strong>
+                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
+                    Send payment via GCash app (Philippines).
+                  </p>
+                </div>
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "maya" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
+                <input
+                  type="radio"
+                  name="payment"
+                  value="maya"
+                  checked={paymentMethod === "maya"}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  style={{ marginRight: "1rem" }}
+                />
+                <div>
+                  <strong style={{ color: "#1A1A1A" }}>Maya</strong>
+                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
+                    Send payment via Maya wallet (Philippines).
+                  </p>
+                </div>
+              </label>
+
               <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "credit_card" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
                 <input
                   type="radio"
@@ -144,9 +181,9 @@ export default function PaymentPage() {
                   style={{ marginRight: "1rem" }}
                 />
                 <div>
-                  <strong style={{ color: "#1A1A1A" }}> Credit/Debit Card</strong>
+                  <strong style={{ color: "#1A1A1A" }}>Credit / debit card</strong>
                   <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    Visa, Mastercard, American Express
+                    Visa, Mastercard — billed in PHP.
                   </p>
                 </div>
               </label>
@@ -161,9 +198,9 @@ export default function PaymentPage() {
                   style={{ marginRight: "1rem" }}
                 />
                 <div>
-                  <strong style={{ color: "#1A1A1A" }}> Bank Transfer</strong>
+                  <strong style={{ color: "#1A1A1A" }}>Bank transfer (Philippines)</strong>
                   <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    Direct bank account transfer
+                    Direct deposit to a local bank account (PHP).
                   </p>
                 </div>
               </label>
@@ -181,7 +218,7 @@ export default function PaymentPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="John Doe"
+                  placeholder="Juan Dela Cruz"
                   value={cardName}
                   onChange={(e) => setCardName(e.target.value)}
                   style={{
@@ -276,18 +313,21 @@ export default function PaymentPage() {
 
           {paymentMethod === "bank_transfer" && (
             <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-              <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Bank Transfer Details</h3>
+              <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Bank transfer (PHP)</h3>
               <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                <strong>Bank:</strong> FLEETOPS Financial Bank
+                <strong>Bank:</strong> BDO Unibank (sample — replace with your company&apos;s live account details)
               </p>
               <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                <strong>Account:</strong> 1234567890
+                <strong>Account name:</strong> FleetOpt Logistics Inc.
               </p>
               <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                <strong>Routing:</strong> 987654321
+                <strong>Account number:</strong> 001234567890
+              </p>
+              <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.85rem" }}>
+                Reference on deposit slip: Booking #{bookingData.bookingId}
               </p>
               <p style={{ color: "#FF9800", fontWeight: 600, margin: "1rem 0 0 0" }}>
-                Amount to Transfer: ${bookingData.totalCost.toFixed(2)}
+                Halaga na ililipat: {formatPhp(bookingData.totalCost)}
               </p>
             </div>
           )}
@@ -301,18 +341,18 @@ export default function PaymentPage() {
             <div style={{ marginBottom: "1rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", color: "#666666" }}>
                 <span>Service:</span>
-                <span>${bookingData.service.base_price}</span>
+                <span>{formatPhp(Number(bookingData.service.base_price))}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", color: "#666666" }}>
                 <span>Distance Charge:</span>
-                <span>${(bookingData.totalCost - bookingData.service.base_price).toFixed(2)}</span>
+                <span>{formatPhp(bookingData.totalCost - Number(bookingData.service.base_price))}</span>
               </div>
             </div>
 
             <div style={{ borderTop: "1px solid #E8E8E8", paddingTop: "1rem", marginBottom: "1.5rem" }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <strong style={{ color: "#1A1A1A" }}>Total:</strong>
-                <strong style={{ color: "#FF9800", fontSize: "1.5rem" }}>${bookingData.totalCost.toFixed(2)}</strong>
+                <strong style={{ color: "#FF9800", fontSize: "1.5rem" }}>{formatPhp(bookingData.totalCost)}</strong>
               </div>
             </div>
 

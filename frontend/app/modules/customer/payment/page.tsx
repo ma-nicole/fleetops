@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
+import { formatDateTime, formatPhpWhole } from "@/lib/appLocale";
 
 export default function CustomerPaymentPage() {
   useRoleGuard(["customer", "manager", "admin"]);
@@ -38,7 +39,7 @@ export default function CustomerPaymentPage() {
     setError(null);
     try {
       await WorkflowApi.payBooking(selected.id, method, selected.estimated_cost);
-      setOkMsg(`Paid ₱${selected.estimated_cost.toLocaleString()} via ${method}`);
+      setOkMsg(`Paid ${formatPhpWhole(selected.estimated_cost)} via ${method}`);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Payment failed");
@@ -91,7 +92,7 @@ export default function CustomerPaymentPage() {
           {selected && (
             <div style={{ marginTop: 14, background: "#F9FAFB", padding: 14, borderRadius: 8 }}>
               <div style={{ fontSize: 24, fontWeight: 800 }}>
-                Total: ₱{selected.estimated_cost.toLocaleString()}
+                Total: {formatPhpWhole(selected.estimated_cost)}
               </div>
               <div style={{ marginTop: 6 }}>
                 {selected.pickup_location} → {selected.dropoff_location}
@@ -158,9 +159,9 @@ export default function CustomerPaymentPage() {
                     <td style={td}>{p.reference}</td>
                     <td style={td}>#{p.booking_id}</td>
                     <td style={td}>{p.method}</td>
-                    <td style={td}>₱{p.amount.toLocaleString()}</td>
+                    <td style={td}>{formatPhpWhole(p.amount)}</td>
                     <td style={{ ...td, fontWeight: 700, color: statusColor(p.status) }}>{p.status}</td>
-                    <td style={td}>{p.paid_at ? new Date(p.paid_at).toLocaleString() : "—"}</td>
+                    <td style={td}>{p.paid_at ? formatDateTime(p.paid_at) : "—"}</td>
                   </tr>
                 ))}
               </tbody>

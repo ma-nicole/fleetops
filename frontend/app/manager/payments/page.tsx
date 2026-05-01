@@ -3,12 +3,13 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type Payment = {
   id: string;
   date: string;
   description: string;
-  amount: string;
+  amount: number;
   status: "completed" | "pending" | "failed";
   paymentMethod: string;
   relatedBooking: string;
@@ -22,7 +23,7 @@ export default function PaymentsPage() {
       id: "PAY-2024-001",
       date: "May 10, 2024",
       description: "Payment from ABC Retail Corp",
-      amount: "$450.00",
+      amount: 450,
       status: "completed",
       paymentMethod: "Bank Transfer",
       relatedBooking: "BK-2024-0001",
@@ -31,7 +32,7 @@ export default function PaymentsPage() {
       id: "PAY-2024-002",
       date: "May 10, 2024",
       description: "Payment from DEF Logistics",
-      amount: "$680.00",
+      amount: 680,
       status: "completed",
       paymentMethod: "Credit Card",
       relatedBooking: "BK-2024-0002",
@@ -40,7 +41,7 @@ export default function PaymentsPage() {
       id: "PAY-2024-003",
       date: "May 09, 2024",
       description: "Driver Earnings - Carlos Rodriguez",
-      amount: "$245.50",
+      amount: 245.5,
       status: "completed",
       paymentMethod: "Internal Transfer",
       relatedBooking: "TR-2024-0156",
@@ -49,7 +50,7 @@ export default function PaymentsPage() {
       id: "PAY-2024-004",
       date: "May 09, 2024",
       description: "Payment from GHI Trading",
-      amount: "$920.00",
+      amount: 920,
       status: "pending",
       paymentMethod: "Bank Transfer",
       relatedBooking: "BK-2024-0003",
@@ -58,7 +59,7 @@ export default function PaymentsPage() {
       id: "PAY-2024-005",
       date: "May 08, 2024",
       description: "Payment from JKL Manufacturing",
-      amount: "$550.00",
+      amount: 550,
       status: "failed",
       paymentMethod: "Credit Card",
       relatedBooking: "BK-2024-0004",
@@ -76,7 +77,10 @@ export default function PaymentsPage() {
 
   const totalRevenue = payments
     .filter((p) => p.status === "completed")
-    .reduce((sum, p) => sum + parseFloat(p.amount.replace(/[$,]/g, "")), 0);
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  const pendingTotal = payments.filter((p) => p.status === "pending").reduce((sum, p) => sum + p.amount, 0);
+  const failedTotal = payments.filter((p) => p.status === "failed").reduce((sum, p) => sum + p.amount, 0);
 
   return (
     <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
@@ -105,15 +109,15 @@ export default function PaymentsPage() {
         >
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Total Received</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#10B981" }}>${totalRevenue.toFixed(2)}</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#10B981" }}>{formatPhp(totalRevenue)}</div>
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Pending</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#F59E0B" }}>$920.00</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#F59E0B" }}>{formatPhp(pendingTotal)}</div>
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Failed</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#EF4444" }}>$550.00</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#EF4444" }}>{formatPhp(failedTotal)}</div>
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Total Transactions</div>
@@ -143,7 +147,7 @@ export default function PaymentsPage() {
                       <td style={{ padding: "1rem", fontWeight: 700, color: "#0EA5E9" }}>{payment.id}</td>
                       <td style={{ padding: "1rem", color: "#666" }}>{payment.date}</td>
                       <td style={{ padding: "1rem", color: "#1A1A1A", fontWeight: 500 }}>{payment.description}</td>
-                      <td style={{ padding: "1rem", fontWeight: 700, color: "#1A1A1A" }}>{payment.amount}</td>
+                      <td style={{ padding: "1rem", fontWeight: 700, color: "#1A1A1A" }}>{formatPhp(payment.amount)}</td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{payment.paymentMethod}</td>
                       <td style={{ padding: "1rem" }}>
                         <span

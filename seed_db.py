@@ -5,10 +5,14 @@ Database Seeding Script for FleetOpts (paper §3.2 + §3.5).
 Creates realistic test data for UAT and to bootstrap the analytics
 pipeline (predictive cost regression needs at least 5 historical trips,
 the time-series model prefers 12 months).
-Usage: python seed_db.py
+
+Usage:
+  python seed_db.py          # seed only if DB has no users
+  python seed_db.py --force  # drop all tables, recreate, then seed (destructive)
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from datetime import date, datetime, timedelta
@@ -51,21 +55,24 @@ from app.models.entities import (  # noqa: E402
 )
 
 
-def seed_database() -> None:
+def seed_database(*, force: bool = False) -> None:
     if not settings.database_url or settings.database_url.startswith("sqlite"):
         raise SystemExit(
             "ERROR: SQLite is not supported.\n"
             "Set DATABASE_URL=mysql+pymysql://root:@localhost:3306/fleetopt in backend/.env"
         )
     engine = create_engine(settings.database_url, pool_pre_ping=True)
+    if force:
+        print("[WARN] --force: dropping all tables (destructive), then creating schema...")
+        Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     with Session(engine) as db:
-        if db.query(User).count() > 0:
-            print("⚠️  Database already has users — skipping seed (drop tables to re-seed).")
+        if not force and db.query(User).count() > 0:
+            print("[SKIP] Database already has users -- skipping seed (drop tables to re-seed).")
             return
 
-        print("🌱 Seeding database with test data…")
+        print("[INFO] Seeding database with test data...")
 
         # ----------- Users -----------
         users = [
@@ -82,7 +89,7 @@ def seed_database() -> None:
         ]
         db.add_all(users)
         db.flush()
-        print(f"✓ Users: {len(users)}")
+        print(f"[OK] Users: {len(users)}")
 
         customers = [u for u in users if u.role == UserRole.CUSTOMER]
         drivers = [u for u in users if u.role == UserRole.DRIVER]
@@ -100,7 +107,7 @@ def seed_database() -> None:
         ]
         db.add_all(trucks)
         db.flush()
-        print(f"✓ Trucks: {len(trucks)}")
+        print(f"[OK] Trucks: {len(trucks)}")
 
         # ----------- Routes -----------
         routes = [
@@ -112,7 +119,7 @@ def seed_database() -> None:
         ]
         db.add_all(routes)
         db.flush()
-        print(f"✓ Routes: {len(routes)}")
+        print(f"[OK] Routes: {len(routes)}")
 
         db.add_all([
             TruckBanRule(name="EDSA-Bus-Lane-Truck-Ban", road_segment="Hub-Manila-North", weekdays_csv="Mon,Tue,Wed,Thu,Fri", start_hour=6, end_hour=9, description="Morning truck ban (paper Fig 25)"),
@@ -165,7 +172,7 @@ def seed_database() -> None:
             ))
         db.add_all(bookings)
         db.flush()
-        print(f"✓ Bookings: {len(bookings)}")
+        print(f"[OK] Bookings: {len(bookings)}")
 
         # ----------- Trips for non-pending bookings -----------
         trips: list[Trip] = []
@@ -224,7 +231,7 @@ def seed_database() -> None:
             trips.append(trip)
         db.add_all(trips)
         db.flush()
-        print(f"✓ Trips: {len(trips)}")
+        print(f"[OK] Trips: {len(trips)}")
 
         # ----------- Fuel & toll logs for completed trips -----------
         fuel_logs: list[FuelLog] = []
@@ -320,7 +327,7 @@ def seed_database() -> None:
                 paid_at=datetime.utcnow() if paid else None,
             ))
         db.add_all(payments)
-        print(f"✓ Payments: {len(payments)}")
+        print(f"[OK] Payments: {len(payments)}")
 
         # ----------- Feedback -----------
         feedback = []
@@ -347,9 +354,9 @@ def seed_database() -> None:
         db.commit()
 
         print("\n" + "=" * 60)
-        print("✅ Database seeding completed successfully!")
+        print("DONE: Database seeding completed successfully.")
         print("=" * 60)
-        print("\n🔐 Test Credentials (all use password: 'password'):")
+        print("\nTest credentials (password for all: password):")
         print("  Customer:   customer1@fleetops.com")
         print("  Driver:     driver1@fleetops.com")
         print("  Helper:     helper1@fleetops.com")
@@ -359,4 +366,11 @@ def seed_database() -> None:
 
 
 if __name__ == "__main__":
-    seed_database()
+    parser = argparse.ArgumentParser(description="Seed FleetOpt MySQL database with UAT data.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Drop all tables first (destructive), then recreate schema and seed.",
+    )
+    args = parser.parse_args()
+    seed_database(force=args.force)

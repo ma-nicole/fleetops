@@ -1,7 +1,6 @@
 "use client";
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
@@ -17,17 +16,17 @@ type BookingForRating = {
 
 export default function RatingPage() {
   useRoleGuard(["customer"]);
-  const router = useRouter();
 
   const [booking, setBooking] = useState<BookingForRating | null>(null);
   const [stars, setStars] = useState(0);
-  const [hoverStars, setHoverStars] = useState(0);
   const [driverQuality, setDriverQuality] = useState(0);
   const [vehicleCondition, setVehicleCondition] = useState(0);
   const [timeliness, setTimeliness] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -39,8 +38,16 @@ export default function RatingPage() {
   }, []);
 
   const handleSubmit = () => {
+    setFormError(null);
+    setFeedbackError(null);
+
     if (stars === 0) {
-      alert("Please provide an overall rating");
+      setFormError("Please choose an overall rating (1–5 stars).");
+      return;
+    }
+
+    if (feedback.length > 500) {
+      setFeedbackError("Feedback must be at most 500 characters.");
       return;
     }
 
@@ -214,7 +221,13 @@ export default function RatingPage() {
       </div>
 
       {/* Rating Form */}
-      <form style={{ display: "grid", gap: "1.5rem" }}>
+      <form style={{ display: "grid", gap: "1.5rem" }} noValidate>
+        {formError && (
+          <div role="alert" style={{ padding: "0.75rem 1rem", background: "#FFEBEE", color: "#C62828", borderRadius: "6px", fontSize: "0.95rem" }}>
+            {formError}
+          </div>
+        )}
+
         {/* Overall Rating */}
         <div>
           <p style={{ color: "#1A1A1A", fontWeight: 600, marginBottom: "0.75rem", fontSize: "1rem" }}>
@@ -225,7 +238,10 @@ export default function RatingPage() {
               <button
                 key={star}
                 type="button"
-                onClick={() => setStars(star)}
+                onClick={() => {
+                  setStars(star);
+                  if (formError) setFormError(null);
+                }}
                 style={{
                   background: "none",
                   border: "none",
@@ -276,11 +292,16 @@ export default function RatingPage() {
           <textarea
             placeholder="Tell us what went well or what could be improved..."
             value={feedback}
-            onChange={(e) => setFeedback(e.target.value)}
+            onChange={(e) => {
+              setFeedback(e.target.value);
+              if (feedbackError) setFeedbackError(null);
+            }}
+            maxLength={500}
+            aria-invalid={!!feedbackError}
             style={{
               width: "100%",
               padding: "0.75rem",
-              border: "1px solid #E8E8E8",
+              border: feedbackError ? "2px solid #F44336" : "1px solid #E8E8E8",
               borderRadius: "6px",
               boxSizing: "border-box",
               minHeight: "120px",
@@ -288,23 +309,26 @@ export default function RatingPage() {
               fontSize: "0.95rem",
             }}
           />
-          <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.5rem 0 0 0" }}>
-            Max 500 characters
+          <p style={{ color: feedback.length > 500 ? "#C62828" : "#999", fontSize: "0.85rem", margin: "0.5rem 0 0 0" }}>
+            {feedback.length}/500 characters
           </p>
+          {feedbackError && (
+            <p role="alert" style={{ color: "#C62828", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>{feedbackError}</p>
+          )}
         </div>
 
         {/* Submit Button */}
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting || stars === 0}
+          disabled={isSubmitting}
           style={{
             padding: "0.75rem",
-            background: isSubmitting || stars === 0 ? "#CCC" : "#FF9800",
+            background: isSubmitting ? "#CCC" : "#FF9800",
             color: "white",
             border: "none",
             borderRadius: "6px",
-            cursor: isSubmitting || stars === 0 ? "not-allowed" : "pointer",
+            cursor: isSubmitting ? "not-allowed" : "pointer",
             fontWeight: 600,
             fontSize: "1rem",
           }}

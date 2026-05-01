@@ -1,11 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Trip } from "@/lib/workflowApi";
 
 export default function TripLogsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+          <p style={{ color: "#6B7280" }}>Loading trip logs…</p>
+        </main>
+      }
+    >
+      <TripLogsContent />
+    </Suspense>
+  );
+}
+
+function TripLogsContent() {
   useRoleGuard(["driver"]);
   const searchParams = useSearchParams();
 

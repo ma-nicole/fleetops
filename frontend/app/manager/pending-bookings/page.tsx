@@ -3,13 +3,14 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type PendingBooking = {
   id: string;
   customer: string;
   route: string;
   scheduledDate: string;
-  amount: string;
+  amount: number;
   priority: "low" | "medium" | "high";
   daysPending: number;
 };
@@ -23,7 +24,7 @@ export default function PendingBookingsPage() {
       customer: "JKL Manufacturing",
       route: "Las Piñas → Cavite",
       scheduledDate: "May 11, 2024 06:00 AM",
-      amount: "$550.00",
+      amount: 550,
       priority: "high",
       daysPending: 1,
     },
@@ -32,7 +33,7 @@ export default function PendingBookingsPage() {
       customer: "MNO Suppliers",
       route: "Makati → Antipolo",
       scheduledDate: "May 11, 2024 02:00 PM",
-      amount: "$380.00",
+      amount: 380,
       priority: "medium",
       daysPending: 1,
     },
@@ -41,7 +42,7 @@ export default function PendingBookingsPage() {
       customer: "PQR Trading",
       route: "Pasig → Manila",
       scheduledDate: "May 12, 2024 08:30 AM",
-      amount: "$420.00",
+      amount: 420,
       priority: "low",
       daysPending: 2,
     },
@@ -55,6 +56,8 @@ export default function PendingBookingsPage() {
     };
     return colors[priority] || { bg: "#F3F4F6", text: "#374151" };
   };
+
+  const pendingValue = bookings.reduce((sum, b) => sum + b.amount, 0);
 
   return (
     <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
@@ -87,7 +90,7 @@ export default function PendingBookingsPage() {
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Total Value</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#FF9800" }}>$1,350.00</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#FF9800" }}>{formatPhp(pendingValue)}</div>
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>High Priority</div>
@@ -119,7 +122,7 @@ export default function PendingBookingsPage() {
                       <td style={{ padding: "1rem", color: "#1A1A1A", fontWeight: 500 }}>{booking.customer}</td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{booking.route}</td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{booking.scheduledDate}</td>
-                      <td style={{ padding: "1rem", fontWeight: 700, color: "#1A1A1A" }}>{booking.amount}</td>
+                      <td style={{ padding: "1rem", fontWeight: 700, color: "#1A1A1A" }}>{formatPhp(booking.amount)}</td>
                       <td style={{ padding: "1rem" }}>
                         <span
                           style={{

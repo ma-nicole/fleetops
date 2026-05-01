@@ -1,3 +1,5 @@
+import { decodeJwtSubject } from "./api";
+import { formatPhp } from "./appLocale";
 import { ERDDataService } from "./erdDataService";
 
 export type CustomerUser = {
@@ -5,6 +7,7 @@ export type CustomerUser = {
   fullName: string;
   email: string;
   password: string;
+  phone?: string;
   createdAt: string;
 };
 
@@ -61,34 +64,62 @@ function write<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+/** When signed in via `/sign-in` (JWT), no demo `customer_current_user` row exists — derive profile from token. */
+function apiBackedCustomerProfile(): CustomerUser | null {
+  if (typeof window === "undefined") return null;
+  const token = window.localStorage.getItem("token") || window.localStorage.getItem("authToken");
+  const role = window.localStorage.getItem("userRole");
+  if (!token || role !== "customer") return null;
+  const email = decodeJwtSubject(token);
+  if (!email) return null;
+  const localPart = email.split("@")[0] || "customer";
+  const fullName = localPart.replace(/[._-]+/g, " ").replace(/\b\w/g, (s) => s.toUpperCase());
+  return {
+    id: `api:${email.toLowerCase()}`,
+    fullName,
+    email,
+    password: "",
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export class CustomerDataFlowService {
   static getUsers(): CustomerUser[] { return read(usersKey, [] as CustomerUser[]); }
   static getBookings(): CustomerBooking[] { return read(bookingsKey, [] as CustomerBooking[]); }
   static getPayments(): CustomerPayment[] { return read(paymentsKey, [] as CustomerPayment[]); }
   static getFeedback(): CustomerFeedback[] { return read(feedbackKey, [] as CustomerFeedback[]); }
 
-  static register(fullName: string, email: string, password: string): { ok: boolean; message: string } {
-    if (!fullName.trim()) return { ok: false, message: "Full name is required." };
-    if (!email.trim()) return { ok: false, message: "Email is required." };
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return { ok: false, message: "Please enter a valid email address." };
-    if (password.trim().length < 6) return { ok: false, message: "Password must be at least 6 characters." };
+  static register(fullName: string, email: string, password: string, phone?: string): { ok: boolean; message: string } {
+    const name = fullName.trim();
+    const mail = email.trim();
+    if (!name) return { ok: false, message: "Full name is required." };
+    if (name.length < 3) return { ok: false, message: "Full name must be at least 3 characters." };
+    if (!mail) return { ok: false, message: "Email is required." };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return { ok: false, message: "Please enter a valid email address." };
+    if (password.length < 8) return { ok: false, message: "Password must be at least 8 characters." };
+
+    const digitsPhone = phone ? phone.replace(/\D/g, "") : "";
+    if (phone?.trim() && digitsPhone.length < 10) {
+      return { ok: false, message: "Phone number seems too short." };
+    }
 
     const users = this.getUsers();
-    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+    if (users.some((u) => u.email.toLowerCase() === mail.toLowerCase())) {
       return { ok: false, message: "Email already registered." };
     }
     const user: CustomerUser = {
       id: `USR-${String(users.length + 1).padStart(4, "0")}`,
-      fullName,
-      email,
+      fullName: name,
+      email: mail,
       password,
+      ...(phone?.trim() ? { phone: phone.trim() } : {}),
       createdAt: new Date().toISOString(),
     };
     write(usersKey, [user, ...users]);
     ERDDataService.upsertCustomer({
-      name: fullName,
+      name,
       address: "N/A",
-      contact: email,
+      contact: phone?.trim() ? `${phone.trim()} · ${mail}` : mail,
       type: "customer",
       balance: 0,
     });
@@ -108,7 +139,9 @@ export class CustomerDataFlowService {
   }
 
   static getCurrentUser(): CustomerUser | null {
-    return read<CustomerUser | null>(currentUserKey, null);
+    const stored = read<CustomerUser | null>(currentUserKey, null);
+    if (stored) return stored;
+    return apiBackedCustomerProfile();
   }
 
   static createBooking(
@@ -121,6 +154,12 @@ export class CustomerDataFlowService {
     if (!currentUser) return { ok: false, message: "Please login first to create a booking.", booking: null };
     if (!serviceType.trim() || !pickup.trim() || !dropoff.trim() || !load.trim()) {
       return { ok: false, message: "Please complete all booking details.", booking: null };
+    }
+    if (pickup.trim().length < 3 || dropoff.trim().length < 3) {
+      return { ok: false, message: "Pickup and dropoff must be at least 3 characters.", booking: null };
+    }
+    if (load.trim().length < 2) {
+      return { ok: false, message: "Please describe the load (at least 2 characters).", booking: null };
     }
     if (pickup.trim().toLowerCase() === dropoff.trim().toLowerCase()) {
       return { ok: false, message: "Pickup and dropoff locations must be different.", booking: null };
@@ -220,7 +259,7 @@ export class CustomerDataFlowService {
       return { ok: false, message: "Payment failed. Please try again.", payment };
     }
 
-    const receiptMessage = `Receipt ${payment.reference}: Payment of ${amount.toFixed(2)} via ${method} was successful for booking ${booking.id}.`;
+    const receiptMessage = `Receipt ${payment.reference}: Payment of ${formatPhp(amount)} via ${method} was successful for booking ${booking.id}.`;
     write(lastReceiptKey, receiptMessage);
     return { ok: true, message: "Payment successful.", payment };
   }
@@ -250,7 +289,7 @@ export class CustomerDataFlowService {
     const emailSentAt = new Date().toISOString();
     const receiptMessage =
       this.getLastReceipt() ||
-      `Receipt ${payment.reference}: Payment of ${payment.amount.toFixed(2)} via ${payment.method} was successful for booking ${booking.id}.`;
+      `Receipt ${payment.reference}: Payment of ${formatPhp(payment.amount)} via ${payment.method} was successful for booking ${booking.id}.`;
 
     const items = this.getFeedback();
     const feedback: CustomerFeedback = {

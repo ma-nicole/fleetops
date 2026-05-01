@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type Driver = {
   id: string;
@@ -14,7 +15,7 @@ type Driver = {
   rating: number;
   status: "active" | "inactive" | "on_leave";
   joinDate: string;
-  totalEarnings: string;
+  totalEarnings: number;
 };
 
 export default function DriverProfilesPage() {
@@ -31,7 +32,7 @@ export default function DriverProfilesPage() {
       rating: 4.8,
       status: "active",
       joinDate: "January 15, 2023",
-      totalEarnings: "$18,450.50",
+      totalEarnings: 18450.5,
     },
     {
       id: "DRIVER-002",
@@ -43,7 +44,7 @@ export default function DriverProfilesPage() {
       rating: 4.7,
       status: "active",
       joinDate: "February 20, 2023",
-      totalEarnings: "$16,820.25",
+      totalEarnings: 16820.25,
     },
     {
       id: "DRIVER-003",
@@ -55,7 +56,7 @@ export default function DriverProfilesPage() {
       rating: 4.6,
       status: "active",
       joinDate: "March 10, 2023",
-      totalEarnings: "$15,240.75",
+      totalEarnings: 15240.75,
     },
     {
       id: "DRIVER-004",
@@ -67,7 +68,7 @@ export default function DriverProfilesPage() {
       rating: 4.5,
       status: "on_leave",
       joinDate: "April 05, 2023",
-      totalEarnings: "$11,560.00",
+      totalEarnings: 11560,
     },
     {
       id: "DRIVER-005",
@@ -79,7 +80,7 @@ export default function DriverProfilesPage() {
       rating: 4.9,
       status: "active",
       joinDate: "May 12, 2023",
-      totalEarnings: "$19,680.50",
+      totalEarnings: 19680.5,
     },
   ]);
 
@@ -160,7 +161,7 @@ export default function DriverProfilesPage() {
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{driver.phone}</td>
                       <td style={{ padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>{driver.tripsCompleted}</td>
                       <td style={{ padding: "1rem", fontWeight: 600 }}>★ {driver.rating}</td>
-                      <td style={{ padding: "1rem", fontWeight: 700, color: "#10B981" }}>{driver.totalEarnings}</td>
+                      <td style={{ padding: "1rem", fontWeight: 700, color: "#10B981" }}>{formatPhp(driver.totalEarnings)}</td>
                       <td style={{ padding: "1rem" }}>
                         <span
                           style={{

@@ -1,4 +1,30 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+/** Ensures requests hit `.../api/...` when env omits `/api` (common misconfiguration). */
+function normalizeApiBase(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return "http://127.0.0.1:8000/api";
+  /** Same-origin proxy path from Next.js `rewrites` (see next.config.mjs). */
+  if (trimmed.startsWith("/")) return trimmed;
+  if (/\/api(\/|$)/.test(trimmed)) return trimmed;
+  return `${trimmed}/api`;
+}
+
+export const API_BASE_URL = normalizeApiBase(
+  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api",
+);
+
+/** Absolute URL for fetch (handles `/api-proxy` during SSR vs browser). */
+export function apiFullUrl(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const base = API_BASE_URL;
+  if (base.startsWith("/")) {
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+    return `${origin}${base}${p}`;
+  }
+  return `${base.replace(/\/+$/, "")}${p}`;
+}
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -39,7 +65,7 @@ async function handle<T>(response: Response): Promise<T> {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiFullUrl(path), {
     ...init,
     headers: buildHeaders(init),
     cache: "no-store",
@@ -69,23 +95,48 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return apiFetch<T>(path, { method: "DELETE" });
 }
 
-export async function apiLogin(email: string, password: string): Promise<{ access_token: string }> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+export type LoginResponse = {
+  access_token: string;
+  token_type?: string;
+  role?: string | null;
+};
+
+export async function apiLogin(email: string, password: string): Promise<LoginResponse> {
+  const response = await fetch(apiFullUrl("/auth/login"), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ username: email, password }),
     cache: "no-store",
   });
-  return handle<{ access_token: string }>(response);
+  return handle<LoginResponse>(response);
 }
 
-export function decodeJwtRole(token: string): string | null {
+/** Decode JWT payload segment (base64url); pads for browsers where `atob` requires it. */
+function decodeJwtPayloadJson(segment: string): Record<string, unknown> | null {
   try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return (payload?.role as string) || null;
+    let base64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = base64.length % 4;
+    if (pad) base64 += "=".repeat(4 - pad);
+    const json = atob(base64);
+    return JSON.parse(json) as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+export function decodeJwtRole(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const payload = decodeJwtPayloadJson(parts[1]);
+  const role = payload?.role;
+  return typeof role === "string" ? role : null;
+}
+
+/** JWT `sub` — backend uses user email as subject for local auth. */
+export function decodeJwtSubject(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const payload = decodeJwtPayloadJson(parts[1]);
+  const sub = payload?.sub;
+  return typeof sub === "string" ? sub : null;
 }

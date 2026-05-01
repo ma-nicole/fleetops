@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type RouteInfo = {
   id: string;
@@ -39,21 +40,21 @@ export default function RouteInfoPage() {
       name: "Alternative Route 1",
       distance: "32 km",
       duration: "2 hours 45 minutes",
-      tollCost: "$12.50",
+      tollCost: 188,
       trafficLevel: "Low",
     },
     {
       name: "Alternative Route 2",
       distance: "26 km",
       duration: "2 hours 20 minutes",
-      tollCost: "$8.75",
+      tollCost: 138,
       trafficLevel: "Moderate",
     },
     {
       name: "Alternative Route 3",
       distance: "30 km",
       duration: "2 hours 50 minutes",
-      tollCost: "$10.00",
+      tollCost: 155,
       trafficLevel: "Light",
     },
   ]);
@@ -115,7 +116,7 @@ export default function RouteInfoPage() {
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TOLL COST</p>
             <p style={{ color: "#4CAF50", fontSize: "0.9rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              ~$10.50
+              ~{formatPhp(162)}
             </p>
           </div>
         </div>
@@ -174,7 +175,7 @@ export default function RouteInfoPage() {
                   </div>
                   <div>
                     <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TOLL COST</p>
-                    <p style={{ color: "#4CAF50", fontWeight: "700", margin: "0.25rem 0 0 0" }}>{alt.tollCost}</p>
+                    <p style={{ color: "#4CAF50", fontWeight: "700", margin: "0.25rem 0 0 0" }}>{formatPhp(alt.tollCost)}</p>
                   </div>
                 </div>
               </div>

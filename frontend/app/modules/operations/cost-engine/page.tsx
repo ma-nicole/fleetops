@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type CostBreakdown = {
@@ -112,7 +113,7 @@ export default function CostComputationPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${computedTrips.reduce((sum, t) => sum + t.total, 0).toFixed(2)}
+              {formatPhp(computedTrips.reduce((sum, t) => sum + t.total, 0))}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Revenue</div>
           </div>
@@ -238,7 +239,7 @@ export default function CostComputationPage() {
                             Base Fare
                           </p>
                           <p style={{ color: "#1A1A1A", fontWeight: 700, fontSize: "1.2rem", margin: 0 }}>
-                            ${trip.base_fare.toFixed(2)}
+                            {formatPhp(trip.base_fare)}
                           </p>
                         </div>
                         <div>
@@ -246,7 +247,7 @@ export default function CostComputationPage() {
                             Fuel Cost
                           </p>
                           <p style={{ color: "#1A1A1A", fontWeight: 700, fontSize: "1.2rem", margin: 0 }}>
-                            ${trip.fuel_cost.toFixed(2)}
+                            {formatPhp(trip.fuel_cost)}
                           </p>
                         </div>
                         <div>
@@ -254,7 +255,7 @@ export default function CostComputationPage() {
                             Labor Cost
                           </p>
                           <p style={{ color: "#1A1A1A", fontWeight: 700, fontSize: "1.2rem", margin: 0 }}>
-                            ${trip.labor_cost.toFixed(2)}
+                            {formatPhp(trip.labor_cost)}
                           </p>
                         </div>
                         <div>
@@ -262,7 +263,7 @@ export default function CostComputationPage() {
                             Toll Cost
                           </p>
                           <p style={{ color: "#1A1A1A", fontWeight: 700, fontSize: "1.2rem", margin: 0 }}>
-                            ${trip.toll_cost.toFixed(2)}
+                            {formatPhp(trip.toll_cost)}
                           </p>
                         </div>
                         <div>
@@ -270,7 +271,7 @@ export default function CostComputationPage() {
                             Surcharges
                           </p>
                           <p style={{ color: "#1A1A1A", fontWeight: 700, fontSize: "1.2rem", margin: 0 }}>
-                            ${trip.surcharges.toFixed(2)}
+                            {formatPhp(trip.surcharges)}
                           </p>
                         </div>
                       </div>
@@ -286,7 +287,7 @@ export default function CostComputationPage() {
                       >
                         <span style={{ color: "#1A1A1A", fontWeight: 600 }}>TOTAL:</span>
                         <span style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.5rem" }}>
-                          ${trip.total.toFixed(2)}
+                          {formatPhp(trip.total)}
                         </span>
                       </div>
                     </div>

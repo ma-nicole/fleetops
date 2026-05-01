@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useState } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 
 type LaborTollRecord = {
   id: number;
@@ -22,8 +23,8 @@ export default function LaborTollsPage() {
       id: 1,
       trip_id: 101,
       type: "labor",
-      description: "Driver: Carlos Rodriguez - 8 hours @ $25/hr",
-      amount: 200,
+      description: "Driver: Carlos Rodriguez - 8 hours @ ₱350/hr",
+      amount: 2800,
       date_recorded: "2026-04-28",
       details: "8 hours standard rate",
     },
@@ -31,8 +32,8 @@ export default function LaborTollsPage() {
       id: 2,
       trip_id: 101,
       type: "toll",
-      description: "NJ Turnpike - Newark to Philadelphia",
-      amount: 15.5,
+      description: "NLEX Bocaue to Tarlac segment",
+      amount: 155,
       date_recorded: "2026-04-28",
       details: "Class 3 Vehicle",
     },
@@ -40,10 +41,10 @@ export default function LaborTollsPage() {
       id: 3,
       trip_id: 102,
       type: "labor",
-      description: "Driver: Sarah Williams - 10 hours @ $25/hr (2 OT)",
-      amount: 250,
+      description: "Driver: Sarah Williams - 10 hours @ ₱350/hr (2 OT)",
+      amount: 3850,
       date_recorded: "2026-04-28",
-      details: "8 hrs @ $25/hr + 2 hrs OT @ $37.5/hr",
+      details: "8 hrs @ ₱350/hr + 2 hrs OT @ ₱525/hr",
     },
   ]);
 
@@ -51,7 +52,7 @@ export default function LaborTollsPage() {
   const [showTollForm, setShowTollForm] = useState(false);
   const [tripId, setTripId] = useState("");
   const [hours, setHours] = useState("");
-  const [hourlyRate, setHourlyRate] = useState("25");
+  const [hourlyRate, setHourlyRate] = useState("350");
   const [overtimeHours, setOvertimeHours] = useState("0");
   const [tollAmount, setTollAmount] = useState("");
   const [tollDescription, setTollDescription] = useState("");
@@ -89,10 +90,10 @@ export default function LaborTollsPage() {
       id: records.length + 1,
       trip_id: parseInt(tripId),
       type: "labor",
-      description: `${hours}h @ $${hourlyRate}/h${overtimeHours !== "0" ? ` + ${overtimeHours}h OT` : ""}`,
+      description: `${hours}h @ ${formatPhp(parseFloat(hourlyRate))}/h${overtimeHours !== "0" ? ` + ${overtimeHours}h OT` : ""}`,
       amount: parseFloat(laborTotal),
       date_recorded: new Date().toISOString().split("T")[0],
-      details: `${hours}h @ $${hourlyRate}/h${overtimeHours !== "0" ? ` + ${overtimeHours}h @ $${overtimeRate}/h` : ""}`,
+      details: `${hours}h @ ${formatPhp(parseFloat(hourlyRate))}/h${overtimeHours !== "0" ? ` + ${overtimeHours}h @ ${formatPhp(parseFloat(overtimeRate))}/h` : ""}`,
     };
 
     setRecords([...records, newRecord]);
@@ -100,7 +101,7 @@ export default function LaborTollsPage() {
     setShowLaborForm(false);
     setTripId("");
     setHours("");
-    setHourlyRate("25");
+    setHourlyRate("350");
     setOvertimeHours("0");
     setErrors({});
 
@@ -210,12 +211,12 @@ export default function LaborTollsPage() {
                 </div>
 
                 <div>
-                  <label style={{ display: "block", color: "#1A1A1A", fontWeight: 600, marginBottom: "0.5rem" }}>Hourly Rate ($) *</label>
+                  <label style={{ display: "block", color: "#1A1A1A", fontWeight: 600, marginBottom: "0.5rem" }}>Hourly Rate (PHP/h) *</label>
                   <input
                     type="number"
                     value={hourlyRate}
                     onChange={(e) => setHourlyRate(e.target.value)}
-                    placeholder="e.g., 25"
+                    placeholder="e.g., 350"
                     step="0.5"
                     style={{ width: "100%", padding: "0.75rem", border: errors.rate ? "2px solid #F44336" : "1px solid #E8E8E8", borderRadius: "6px", boxSizing: "border-box" }}
                   />
@@ -238,15 +239,15 @@ export default function LaborTollsPage() {
 
               <div className="card" style={{ background: "rgba(255, 152, 0, 0.08)", border: "1px solid #FFE0B2", marginBottom: "1rem", padding: "1rem" }}>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: "0 0 0.5rem 0" }}>
-                  {hours && hourlyRate && `${hours}h @ $${hourlyRate}/h = $${(parseFloat(hours) * parseFloat(hourlyRate)).toFixed(2)}`}
+                  {hours && hourlyRate && `${hours}h @ ${formatPhp(parseFloat(hourlyRate))}/h = ${formatPhp(parseFloat(hours) * parseFloat(hourlyRate))}`}
                 </p>
                 {overtimeHours !== "0" && parseFloat(overtimeHours) > 0 && (
                   <p style={{ color: "#666666", fontSize: "0.9rem", margin: "0 0 0.5rem 0" }}>
-                    {overtimeHours}h OT @ ${overtimeRate}/h = ${(parseFloat(overtimeHours) * parseFloat(overtimeRate)).toFixed(2)}
+                    {overtimeHours}h OT @ {formatPhp(parseFloat(overtimeRate))}/h = {formatPhp(parseFloat(overtimeHours) * parseFloat(overtimeRate))}
                   </p>
                 )}
                 <p style={{ color: "#FF9800", fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>
-                  Total: ${laborTotal}
+                  Total: {formatPhp(parseFloat(laborTotal))}
                 </p>
               </div>
 
@@ -273,7 +274,7 @@ export default function LaborTollsPage() {
                       <p style={{ margin: "0 0 0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>{record.description}</p>
                       <p style={{ margin: 0, color: "#999", fontSize: "0.85rem" }}>{record.details}</p>
                     </div>
-                    <span style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.1rem" }}>${record.amount.toFixed(2)}</span>
+                    <span style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.1rem" }}>{formatPhp(record.amount)}</span>
                   </div>
                 </div>
               ))}
@@ -319,12 +320,12 @@ export default function LaborTollsPage() {
                 </div>
 
                 <div>
-                  <label style={{ display: "block", color: "#1A1A1A", fontWeight: 600, marginBottom: "0.5rem" }}>Amount ($) *</label>
+                  <label style={{ display: "block", color: "#1A1A1A", fontWeight: 600, marginBottom: "0.5rem" }}>Amount (PHP) *</label>
                   <input
                     type="number"
                     value={tollAmount}
                     onChange={(e) => setTollAmount(e.target.value)}
-                    placeholder="e.g., 15.50"
+                    placeholder="e.g., 155"
                     step="0.01"
                     style={{ width: "100%", padding: "0.75rem", border: errors.amount ? "2px solid #F44336" : "1px solid #E8E8E8", borderRadius: "6px", boxSizing: "border-box" }}
                   />
@@ -338,7 +339,7 @@ export default function LaborTollsPage() {
                   type="text"
                   value={tollDescription}
                   onChange={(e) => setTollDescription(e.target.value)}
-                  placeholder="e.g., NJ Turnpike - Newark to Philadelphia"
+                  placeholder="e.g., NLEX Bocaue to Tarlac segment"
                   style={{ width: "100%", padding: "0.75rem", border: errors.desc ? "2px solid #F44336" : "1px solid #E8E8E8", borderRadius: "6px", boxSizing: "border-box" }}
                 />
                 {errors.desc && <p style={{ color: "#F44336", fontSize: "0.85rem", marginTop: "0.25rem" }}>{errors.desc}</p>}
@@ -366,7 +367,7 @@ export default function LaborTollsPage() {
                       <p style={{ margin: "0 0 0.5rem 0", color: "#1A1A1A", fontWeight: 600 }}>Trip #{record.trip_id}</p>
                       <p style={{ margin: 0, color: "#666666", fontSize: "0.9rem" }}>{record.description}</p>
                     </div>
-                    <span style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.1rem" }}>${record.amount.toFixed(2)}</span>
+                    <span style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.1rem" }}>{formatPhp(record.amount)}</span>
                   </div>
                 </div>
               ))}
@@ -382,19 +383,19 @@ export default function LaborTollsPage() {
               <div>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Total Labor Cost</p>
                 <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-                  ${totalLabor.toFixed(2)}
+                  {formatPhp(totalLabor)}
                 </p>
               </div>
               <div>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Total Toll Cost</p>
                 <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-                  ${totalToll.toFixed(2)}
+                  {formatPhp(totalToll)}
                 </p>
               </div>
               <div>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Combined Total</p>
                 <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-                  ${(totalLabor + totalToll).toFixed(2)}
+                  {formatPhp(totalLabor + totalToll)}
                 </p>
               </div>
             </div>

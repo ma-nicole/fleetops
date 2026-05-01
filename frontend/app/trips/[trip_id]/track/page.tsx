@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Trip } from "@/lib/workflowApi";
+import { formatDateTime, formatPhp } from "@/lib/appLocale";
 
 const STATUS_PROGRESS: Record<string, number> = {
   pending: 5,
@@ -94,7 +95,7 @@ export default function TripTrackPage() {
             <p style={{ color: "#6B7280" }}>Waiting for first GPS ping from driver…</p>
           )}
           {trip.estimated_delivery_time && (
-            <p>ETA: {new Date(trip.estimated_delivery_time).toLocaleString()}</p>
+            <p>ETA: {formatDateTime(trip.estimated_delivery_time)}</p>
           )}
         </div>
 
@@ -105,11 +106,11 @@ export default function TripTrackPage() {
 
         <div style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
           <h3 style={{ marginTop: 0 }}>Cost</h3>
-          <p>Fuel: ₱{trip.fuel_cost}</p>
-          <p>Toll: ₱{trip.toll_cost}</p>
-          <p>Labor: ₱{trip.labor_cost}</p>
+          <p>Fuel: {formatPhp(trip.fuel_cost)}</p>
+          <p>Toll: {formatPhp(trip.toll_cost)}</p>
+          <p>Labor: {formatPhp(trip.labor_cost)}</p>
           <p>
-            <strong>Total: ₱{(trip.fuel_cost + trip.toll_cost + trip.labor_cost).toFixed(2)}</strong>
+            <strong>Total: {formatPhp(trip.fuel_cost + trip.toll_cost + trip.labor_cost)}</strong>
           </p>
         </div>
       </div>
@@ -142,7 +143,7 @@ function Timeline({ trip }: { trip: Trip }) {
           }}
         >
           <span>{label}</span>
-          <span>{ts ? new Date(ts).toLocaleString() : "—"}</span>
+          <span>{ts ? formatDateTime(ts) : "—"}</span>
         </li>
       ))}
     </ul>

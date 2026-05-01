@@ -4,6 +4,7 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type TruckOption = {
   id: number;
@@ -121,7 +122,7 @@ export default function TruckSelectionPage() {
                   Capacity: <strong>{truck.capacity_tons} tons</strong>
                 </p>
                 <p style={{ color: "#666666", margin: "0.25rem 0", fontSize: "0.9rem" }}>
-                  Rate: <strong>${truck.price_per_km}/km</strong>
+                  Rate: <strong>{formatPhp(truck.price_per_km)}/km</strong>
                 </p>
               </div>
               <div style={{ textAlign: "right" }}>

@@ -18,8 +18,8 @@ export default function DispatcherAssignmentPage() {
     setTrips([
       {
         id: 1,
-        pickup_location: "Manhattan, NY",
-        dropoff_location: "Newark, NJ",
+        pickup_location: "Makati CBD",
+        dropoff_location: "Batangas City",
         cargo_weight_tons: 5,
         scheduled_date: "2026-04-29",
         scheduled_time: "09:00",
@@ -29,8 +29,8 @@ export default function DispatcherAssignmentPage() {
       },
       {
         id: 2,
-        pickup_location: "Brooklyn, NY",
-        dropoff_location: "Philadelphia, PA",
+        pickup_location: "Bonifacio Global City",
+        dropoff_location: "Parañaque City",
         cargo_weight_tons: 8,
         scheduled_date: "2026-04-29",
         scheduled_time: "11:30",
@@ -40,8 +40,8 @@ export default function DispatcherAssignmentPage() {
       },
       {
         id: 3,
-        pickup_location: "Bronx, NY",
-        dropoff_location: "Boston, MA",
+        pickup_location: "Quezon City",
+        dropoff_location: "Laoag City",
         cargo_weight_tons: 3,
         scheduled_date: "2026-04-30",
         scheduled_time: "08:00",
@@ -75,21 +75,21 @@ export default function DispatcherAssignmentPage() {
     setVehicles([
       {
         id: 201,
-        plate_number: "NY-5847",
+        plate_number: "NFR 5847",
         model: "Volvo FH16",
         capacity_tons: 15,
         status: "available",
       },
       {
         id: 202,
-        plate_number: "NJ-3421",
+        plate_number: "NFR 3421",
         model: "Scania R440",
         capacity_tons: 12,
         status: "available",
       },
       {
         id: 203,
-        plate_number: "PA-9012",
+        plate_number: "XYZ 9012",
         model: "DAF XF105",
         capacity_tons: 10,
         status: "available",

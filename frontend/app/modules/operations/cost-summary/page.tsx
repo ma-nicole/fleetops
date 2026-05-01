@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type TripCost = {
@@ -25,8 +26,8 @@ export default function CostSummaryPage() {
     {
       trip_id: 101,
       status: "completed",
-      pickup: "New York, NY",
-      dropoff: "Philadelphia, PA",
+      pickup: "Makati City",
+      dropoff: "Batangas City",
       base_fare: 150,
       fuel_cost: 144,
       labor_cost: 200,
@@ -38,8 +39,8 @@ export default function CostSummaryPage() {
     {
       trip_id: 102,
       status: "completed",
-      pickup: "Boston, MA",
-      dropoff: "New York, NY",
+      pickup: "Angeles City",
+      dropoff: "Makati City",
       base_fare: 180,
       fuel_cost: 204.75,
       labor_cost: 250,
@@ -51,8 +52,8 @@ export default function CostSummaryPage() {
     {
       trip_id: 103,
       status: "in-transit",
-      pickup: "Philadelphia, PA",
-      dropoff: "Washington, DC",
+      pickup: "Santa Rosa, Laguna",
+      dropoff: "Quezon City",
       base_fare: 120,
       fuel_cost: 96,
       labor_cost: 175,
@@ -64,8 +65,8 @@ export default function CostSummaryPage() {
     {
       trip_id: 104,
       status: "pending",
-      pickup: "Washington, DC",
-      dropoff: "Atlanta, GA",
+      pickup: "Manila",
+      dropoff: "Laoag City",
       base_fare: 200,
       fuel_cost: 0,
       labor_cost: 0,
@@ -131,31 +132,31 @@ export default function CostSummaryPage() {
         >
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${totalRevenue.toFixed(2)}
+              {formatPhp(totalRevenue)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Revenue</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${avgCost.toFixed(2)}
+              {formatPhp(avgCost)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Avg Cost/Trip</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#2196F3" }}>
-              ${totalFuel.toFixed(2)}
+              {formatPhp(totalFuel)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Fuel</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#4CAF50" }}>
-              ${totalLabor.toFixed(2)}
+              {formatPhp(totalLabor)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Labor</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#9C27B0" }}>
-              ${totalTolls.toFixed(2)}
+              {formatPhp(totalTolls)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Tolls</div>
           </div>
@@ -266,7 +267,7 @@ export default function CostSummaryPage() {
                         fontSize: "1.3rem",
                       }}
                     >
-                      ${trip.total.toFixed(2)}
+                      {formatPhp(trip.total)}
                     </div>
                     <p
                       style={{
@@ -315,7 +316,7 @@ export default function CostSummaryPage() {
                             margin: 0,
                           }}
                         >
-                          ${trip.base_fare.toFixed(2)}
+                          {formatPhp(trip.base_fare)}
                         </p>
                       </div>
                       <div>
@@ -330,7 +331,7 @@ export default function CostSummaryPage() {
                             margin: 0,
                           }}
                         >
-                          ${trip.fuel_cost.toFixed(2)}
+                          {formatPhp(trip.fuel_cost)}
                         </p>
                       </div>
                       <div>
@@ -345,7 +346,7 @@ export default function CostSummaryPage() {
                             margin: 0,
                           }}
                         >
-                          ${trip.labor_cost.toFixed(2)}
+                          {formatPhp(trip.labor_cost)}
                         </p>
                       </div>
                       <div>
@@ -360,7 +361,7 @@ export default function CostSummaryPage() {
                             margin: 0,
                           }}
                         >
-                          ${trip.toll_cost.toFixed(2)}
+                          {formatPhp(trip.toll_cost)}
                         </p>
                       </div>
                       <div>
@@ -375,7 +376,7 @@ export default function CostSummaryPage() {
                             margin: 0,
                           }}
                         >
-                          ${trip.surcharges.toFixed(2)}
+                          {formatPhp(trip.surcharges)}
                         </p>
                       </div>
                     </div>
@@ -399,7 +400,7 @@ export default function CostSummaryPage() {
                           fontSize: "1.4rem",
                         }}
                       >
-                        ${trip.total.toFixed(2)}
+                        {formatPhp(trip.total)}
                       </span>
                     </div>
                   </div>

@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type MaintenanceItem = {
@@ -43,7 +44,7 @@ export default function MaintenanceStatusPage() {
     },
     {
       id: 4,
-      service_type: "completed",
+      service_type: "inspection",
       description: "Engine diagnostics",
       due_date: "2026-04-20",
       status: "completed",
@@ -136,7 +137,7 @@ export default function MaintenanceStatusPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.estimatedCost.toFixed(2)}
+              {formatPhp(stats.estimatedCost)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>
               Est. Cost (Pending)
@@ -202,7 +203,7 @@ export default function MaintenanceStatusPage() {
                     </span>
                   </div>
                   <p style={{ margin: "0.25rem 0", color: "#999", fontSize: "0.85rem" }}>
-                    Due: {item.due_date} | Est. Cost: ${item.cost_estimated}
+                    Due: {item.due_date} | Est. Cost: {formatPhp(item.cost_estimated)}
                   </p>
                 </div>
               </div>
@@ -229,7 +230,7 @@ export default function MaintenanceStatusPage() {
                     <strong>Due Date:</strong> {item.due_date}
                   </p>
                   <p style={{ color: "#FF9800", margin: "0.5rem 0", fontWeight: 600 }}>
-                    <strong>Estimated Cost:</strong> ${item.cost_estimated.toFixed(2)}
+                    <strong>Estimated Cost:</strong> {formatPhp(item.cost_estimated)}
                   </p>
                 </div>
               )}

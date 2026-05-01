@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type CostBreakdown = {
@@ -22,7 +23,7 @@ export default function CostBreakdownPage() {
       date: "2026-04-28",
     },
     {
-      item: "Toll - I-95 Gate 5",
+      item: "Toll - NLEX Bocaue northbound",
       category: "toll",
       amount: 12.5,
       date: "2026-04-28",
@@ -34,7 +35,7 @@ export default function CostBreakdownPage() {
       date: "2026-04-27",
     },
     {
-      item: "Toll - US Route 1",
+      item: "Toll - MCX connector",
       category: "toll",
       amount: 8.75,
       date: "2026-04-27",
@@ -84,7 +85,7 @@ export default function CostBreakdownPage() {
       .reduce((sum, c) => sum + c.amount, 0),
   };
 
-  const driverShare = (stats.total * 0.7).toFixed(2);
+  const driverShare = stats.total * 0.7;
 
   return (
     <div className="container" style={{ paddingTop: "2rem" }}>
@@ -115,7 +116,7 @@ export default function CostBreakdownPage() {
         >
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#1A1A1A" }}>
-              ${stats.total.toFixed(2)}
+              {formatPhp(stats.total)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>
               Total Costs
@@ -123,19 +124,19 @@ export default function CostBreakdownPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.fuel.toFixed(2)}
+              {formatPhp(stats.fuel)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Fuel</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#2196F3" }}>
-              ${stats.toll.toFixed(2)}
+              {formatPhp(stats.toll)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Tolls</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#F44336" }}>
-              ${stats.maintenance.toFixed(2)}
+              {formatPhp(stats.maintenance)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>
               Maintenance
@@ -168,7 +169,7 @@ export default function CostBreakdownPage() {
                 <strong>Total Operational Costs:</strong>
               </p>
               <p style={{ color: "#1A1A1A", fontSize: "1.3rem", fontWeight: 700 }}>
-                ${stats.total.toFixed(2)}
+                {formatPhp(stats.total)}
               </p>
             </div>
             <div>
@@ -176,7 +177,7 @@ export default function CostBreakdownPage() {
                 <strong>Your Share (70%):</strong>
               </p>
               <p style={{ color: "#4CAF50", fontSize: "1.3rem", fontWeight: 700 }}>
-                ${driverShare}
+                {formatPhp(driverShare)}
               </p>
             </div>
           </div>
@@ -244,7 +245,7 @@ export default function CostBreakdownPage() {
                     {item.category}
                   </span>
                   <div style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.1rem" }}>
-                    ${item.amount.toFixed(2)}
+                    {formatPhp(item.amount)}
                   </div>
                 </div>
               </div>

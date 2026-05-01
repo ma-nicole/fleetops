@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 import { StatusBadge, EmptyState } from "./StatusBadge";
 import { SkeletonGrid } from "./Skeleton";
 
@@ -234,7 +235,7 @@ export default function AnalyticsDashboard() {
         <KPICard
           icon=""
           title="Avg Trip Cost"
-          value={`$${(stats.average_trip_cost).toFixed(2)}`}
+          value={formatPhp(stats.average_trip_cost)}
           trend="stable"
         />
         <KPICard
@@ -247,7 +248,7 @@ export default function AnalyticsDashboard() {
         <KPICard
           icon=""
           title="Total Revenue"
-          value={`$${(stats.total_revenue).toFixed(0)}`}
+          value={formatPhpWhole(stats.total_revenue)}
           trend="up"
           status="good"
         />

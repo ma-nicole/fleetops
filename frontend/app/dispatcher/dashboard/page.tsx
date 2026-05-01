@@ -2,6 +2,7 @@
 
 import DashboardRoleTabs from "@/components/DashboardRoleTabs";
 import KpiCard from "@/components/KpiCard";
+import { formatTimeShort } from "@/lib/appLocale";
 import { DispatchApi, type DispatcherDashboardTrip } from "@/lib/dispatchApi";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -17,11 +18,7 @@ type TripSummary = {
 
 function fmtTime(iso: string | null): string {
   if (!iso) return "—";
-  try {
-    return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(iso));
-  } catch {
-    return "—";
-  }
+  return formatTimeShort(iso);
 }
 
 function mapTripStatus(api: string, etaIso: string | null): TripSummary["status"] {

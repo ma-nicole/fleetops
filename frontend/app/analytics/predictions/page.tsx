@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsPipelineService } from "@/lib/analyticsPipelineService";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function AnalyticsPredictionsPage() {
   useRoleGuard(["manager", "admin"]);
@@ -31,7 +32,7 @@ export default function AnalyticsPredictionsPage() {
           <div className="card">
             <p style={{ margin: 0, color: "#666" }}>Trip Cost Prediction</p>
             <h3 style={{ margin: "0.4rem 0 0" }}>
-              ${((pipeline.connectorAI.topTripCostPrediction?.predictedCost || 0)).toFixed(2)}
+              {formatPhp(pipeline.connectorAI.topTripCostPrediction?.predictedCost || 0)}
             </h3>
           </div>
           <div className="card">
@@ -41,7 +42,7 @@ export default function AnalyticsPredictionsPage() {
           <div className="card">
             <p style={{ margin: 0, color: "#666" }}>Monthly Cost Forecast</p>
             <h3 style={{ margin: "0.4rem 0 0" }}>
-              ${((pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0)).toFixed(2)}
+              {formatPhp(pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0)}
             </h3>
           </div>
         </section>
@@ -61,7 +62,7 @@ export default function AnalyticsPredictionsPage() {
               {pipeline.predictions.tripCost.map((row) => (
                 <tr key={row.tripId}>
                   <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.tripId}</td>
-                  <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>${row.predictedCost.toFixed(2)}</td>
+                  <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{formatPhp(row.predictedCost)}</td>
                   <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.formula}</td>
                 </tr>
               ))}
@@ -106,7 +107,7 @@ export default function AnalyticsPredictionsPage() {
                 {pipeline.predictions.monthlyForecast.map((row) => (
                   <tr key={row.month}>
                     <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.month}</td>
-                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>${row.estimatedMonthlyExpense.toFixed(2)}</td>
+                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{formatPhp(row.estimatedMonthlyExpense)}</td>
                   </tr>
                 ))}
               </tbody>

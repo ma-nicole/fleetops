@@ -29,7 +29,7 @@ const roleConfigs: Record<string, {
     kpis: [
       { label: "Active Bookings", value: "12" },
       { label: "On-time Deliveries", value: "94%" },
-      { label: "Avg Booking Cost", value: "$1,240" },
+      { label: "Avg Booking Cost", value: "₱62,000 (sample)" },
     ],
     quickActions: [
       { label: "Create a booking", description: "Start a new shipment request with live pricing." },
@@ -102,8 +102,8 @@ const roleConfigs: Record<string, {
       "Financial and pricing configuration",
     ],
     kpis: [
-      { label: "Fuel Spend", value: "$45,200" },
-      { label: "Toll Spend", value: "$12,880" },
+      { label: "Fuel Spend", value: "₱2.54M (sample)" },
+      { label: "Toll Spend", value: "₱728,000 (sample)" },
       { label: "Predicted Demand", value: "+9.2%" },
       { label: "Breakdown Risk", value: "Low" },
     ],

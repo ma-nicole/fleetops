@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AdminFlowService, AdminOrder } from "@/lib/adminFlowService";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function AdminOrdersPage() {
   useRoleGuard(["admin", "manager"]);
@@ -36,7 +37,7 @@ export default function AdminOrdersPage() {
                   <td style={{ padding: "0.75rem" }}>{order.customer}</td>
                   <td style={{ padding: "0.75rem" }}>{order.route}</td>
                   <td style={{ padding: "0.75rem" }}>{order.driver} / {order.vehicle}</td>
-                  <td style={{ padding: "0.75rem" }}>${order.amount.toFixed(2)}</td>
+                  <td style={{ padding: "0.75rem" }}>{formatPhp(order.amount)}</td>
                   <td style={{ padding: "0.75rem", textTransform: "capitalize" }}>{order.paymentStatus}</td>
                 </tr>
               ))}

@@ -3,13 +3,14 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type AccomplishedBooking = {
   id: string;
   customer: string;
   route: string;
   completedDate: string;
-  amount: string;
+  amount: number;
   daysToComplete: number;
   status: string;
 };
@@ -23,7 +24,7 @@ export default function AccomplishedBookingsPage() {
       customer: "ABC Retail Corp",
       route: "Manila → Makati",
       completedDate: "May 10, 2024 11:45 AM",
-      amount: "$450.00",
+      amount: 450,
       daysToComplete: 1,
       status: "Completed",
     },
@@ -32,7 +33,7 @@ export default function AccomplishedBookingsPage() {
       customer: "DEF Logistics",
       route: "Pasig → Batangas",
       completedDate: "May 10, 2024 03:30 PM",
-      amount: "$680.00",
+      amount: 680,
       daysToComplete: 1,
       status: "Completed",
     },
@@ -41,7 +42,7 @@ export default function AccomplishedBookingsPage() {
       customer: "GHI Trading",
       route: "Quezon City → Cebu",
       completedDate: "May 09, 2024 07:00 PM",
-      amount: "$920.00",
+      amount: 920,
       daysToComplete: 2,
       status: "Completed",
     },
@@ -50,7 +51,7 @@ export default function AccomplishedBookingsPage() {
       customer: "XYZ Distribution",
       route: "Manila → Antipolo",
       completedDate: "May 08, 2024 04:15 PM",
-      amount: "$380.00",
+      amount: 380,
       daysToComplete: 1,
       status: "Completed",
     },
@@ -59,11 +60,13 @@ export default function AccomplishedBookingsPage() {
       customer: "ABC Retail Corp",
       route: "Cavite → Manila",
       completedDate: "May 07, 2024 02:30 PM",
-      amount: "$520.00",
+      amount: 520,
       daysToComplete: 2,
       status: "Completed",
     },
   ]);
+
+  const revenueMonth = bookings.reduce((sum, b) => sum + b.amount, 0);
 
   return (
     <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
@@ -100,7 +103,7 @@ export default function AccomplishedBookingsPage() {
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Total Revenue</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#FF9800" }}>$2,950.00</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#FF9800" }}>{formatPhp(revenueMonth)}</div>
           </div>
         </div>
 
@@ -125,7 +128,7 @@ export default function AccomplishedBookingsPage() {
                     <td style={{ padding: "1rem", color: "#1A1A1A", fontWeight: 500 }}>{booking.customer}</td>
                     <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{booking.route}</td>
                     <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{booking.completedDate}</td>
-                    <td style={{ padding: "1rem", fontWeight: 700, color: "#FF9800" }}>{booking.amount}</td>
+                    <td style={{ padding: "1rem", fontWeight: 700, color: "#FF9800" }}>{formatPhp(booking.amount)}</td>
                     <td style={{ padding: "1rem", fontWeight: 600, color: "#1A1A1A" }}>{booking.daysToComplete}</td>
                   </tr>
                 ))}

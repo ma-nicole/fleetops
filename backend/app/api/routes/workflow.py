@@ -111,6 +111,21 @@ def get_pending_bookings(
     return bookings
 
 
+@router.get("/booking/assignable", response_model=list[BookingRead])
+def get_assignable_bookings_for_dispatch(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Approved bookings waiting for dispatcher assignment (Job Assignment wizard)."""
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.status == BookingStatus.APPROVED)
+        .order_by(Booking.created_at.desc())
+        .all()
+    )
+    return bookings
+
+
 @router.post("/booking/{booking_id}/approve", response_model=BookingRead)
 def approve_booking(
     booking_id: int,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsPipelineService } from "@/lib/analyticsPipelineService";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function AnalyticsReportsPage() {
   useRoleGuard(["manager", "admin"]);
@@ -33,8 +34,8 @@ export default function AnalyticsReportsPage() {
             <div style={{ padding: "0.7rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
               <p style={{ margin: 0, color: "#666" }}>Top Predicted Trip Cost</p>
               <p style={{ margin: "0.35rem 0 0", fontWeight: 700 }}>
-                {pipeline.connectorAI.topTripCostPrediction?.tripId || "-"} • $
-                {(pipeline.connectorAI.topTripCostPrediction?.predictedCost || 0).toFixed(2)}
+                {pipeline.connectorAI.topTripCostPrediction?.tripId || "-"} •{" "}
+                {formatPhp(pipeline.connectorAI.topTripCostPrediction?.predictedCost || 0)}
               </p>
             </div>
             <div style={{ padding: "0.7rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
@@ -46,7 +47,7 @@ export default function AnalyticsReportsPage() {
             <div style={{ padding: "0.7rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
               <p style={{ margin: 0, color: "#666" }}>Estimated Next Month Expense</p>
               <p style={{ margin: "0.35rem 0 0", fontWeight: 700 }}>
-                ${(pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0).toFixed(2)}
+                {formatPhp(pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0)}
               </p>
             </div>
           </div>
@@ -67,8 +68,8 @@ export default function AnalyticsReportsPage() {
                 {pipeline.marts.tripCostMart.map((row) => (
                   <tr key={row.tripId}>
                     <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.tripId}</td>
-                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>${row.totalCost.toFixed(2)}</td>
-                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>${row.costPerKm.toFixed(2)}</td>
+                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{formatPhp(row.totalCost)}</td>
+                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{formatPhp(row.costPerKm)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -90,7 +91,7 @@ export default function AnalyticsReportsPage() {
                   <tr key={row.month}>
                     <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.month}</td>
                     <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.tripCount}</td>
-                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>${row.totalCost.toFixed(2)}</td>
+                    <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{formatPhp(row.totalCost)}</td>
                   </tr>
                 ))}
               </tbody>

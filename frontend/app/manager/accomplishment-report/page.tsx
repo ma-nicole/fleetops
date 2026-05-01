@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type Report = {
   id: string;
@@ -14,7 +15,7 @@ type Report = {
   startMileage: string;
   endMileage: string;
   totalDistance: string;
-  totalEarnings: string;
+  totalEarnings: number;
 };
 
 export default function AccomplishmentReportPage() {
@@ -31,7 +32,7 @@ export default function AccomplishmentReportPage() {
       startMileage: "158,420 km",
       endMileage: "158,448 km",
       totalDistance: "28 km",
-      totalEarnings: "$245.00",
+      totalEarnings: 245,
     },
     {
       id: "RPT-2024-002",
@@ -43,7 +44,7 @@ export default function AccomplishmentReportPage() {
       startMileage: "145,600 km",
       endMileage: "145,618 km",
       totalDistance: "18 km",
-      totalEarnings: "$175.50",
+      totalEarnings: 175.5,
     },
     {
       id: "RPT-2024-003",
@@ -55,7 +56,7 @@ export default function AccomplishmentReportPage() {
       startMileage: "178,950 km",
       endMileage: "179,032 km",
       totalDistance: "82 km",
-      totalEarnings: "$420.00",
+      totalEarnings: 420,
     },
   ]);
 
@@ -109,7 +110,7 @@ export default function AccomplishmentReportPage() {
                       <td style={{ padding: "1rem", color: "#1A1A1A" }}>{report.driver}</td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{report.route}</td>
                       <td style={{ padding: "1rem", fontWeight: 600, color: "#1A1A1A" }}>{report.totalDistance}</td>
-                      <td style={{ padding: "1rem", fontWeight: 700, color: "#FF9800" }}>{report.totalEarnings}</td>
+                      <td style={{ padding: "1rem", fontWeight: 700, color: "#FF9800" }}>{formatPhp(report.totalEarnings)}</td>
                       <td style={{ padding: "1rem" }}>
                         <span
                           style={{

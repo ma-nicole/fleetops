@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsPipelineService } from "@/lib/analyticsPipelineService";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function AnalyticsDashboardPage() {
   useRoleGuard(["manager", "admin"]);
@@ -38,11 +39,11 @@ export default function AnalyticsDashboardPage() {
           </div>
           <div className="card">
             <p style={{ margin: 0, color: "#666" }}>Average Cost / Trip</p>
-            <h2 style={{ margin: "0.35rem 0 0" }}>${pipeline.features.averageCostPerTrip.toFixed(2)}</h2>
+            <h2 style={{ margin: "0.35rem 0 0" }}>{formatPhp(pipeline.features.averageCostPerTrip)}</h2>
           </div>
           <div className="card">
             <p style={{ margin: 0, color: "#666" }}>Monthly Forecast</p>
-            <h2 style={{ margin: "0.35rem 0 0" }}>${(pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0).toFixed(2)}</h2>
+            <h2 style={{ margin: "0.35rem 0 0" }}>{formatPhp(pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0)}</h2>
           </div>
         </section>
 
@@ -86,7 +87,7 @@ export default function AnalyticsDashboardPage() {
                   <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.distanceKm.toFixed(1)} km</td>
                   <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.fuelEfficiencyKmPerLiter.toFixed(2)} km/L</td>
                   <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{row.deliveryHours.toFixed(2)} hrs</td>
-                  <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>${row.totalCost.toFixed(2)}</td>
+                  <td style={{ borderBottom: "1px solid #F1F1F1", padding: "0.55rem" }}>{formatPhp(row.totalCost)}</td>
                 </tr>
               ))}
             </tbody>

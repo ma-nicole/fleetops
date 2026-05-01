@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type Schedule = {
   date: string;
@@ -68,7 +69,7 @@ export default function SchedulePage() {
   const [weeklyStats] = useState({
     totalTrips: 14,
     totalDistance: "402 km",
-    totalEarnings: "$1,850.75",
+    totalEarnings: 1850.75,
     averageRating: 4.8,
   });
 
@@ -126,7 +127,7 @@ export default function SchedulePage() {
         >
           <p style={{ color: "#999", margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600" }}>TOTAL EARNINGS</p>
           <p style={{ color: "#4CAF50", fontSize: "2rem", fontWeight: "700", margin: "0" }}>
-            {weeklyStats.totalEarnings}
+            {formatPhp(weeklyStats.totalEarnings)}
           </p>
         </div>
 

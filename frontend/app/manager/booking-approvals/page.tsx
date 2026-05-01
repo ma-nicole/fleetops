@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import BookingService, { Booking } from "@/lib/bookingService";
 import WorkflowStatusBadge from "@/components/WorkflowStatusBadge";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function BookingApprovalsPage() {
   useRoleGuard(["manager", "admin"]);
@@ -87,7 +88,7 @@ export default function BookingApprovalsPage() {
                     <p style={{ margin: "0 0 0.25rem", fontWeight: 700 }}>{booking.id}</p>
                     <p style={{ margin: "0 0 0.25rem", color: "#666" }}>{booking.pickupLocation} → {booking.dropoffLocation}</p>
                     <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-                      {booking.cargoWeight} tons • {new Date(booking.shipmentDate).toLocaleDateString()} • ${booking.totalCost.toFixed(2)}
+                      {booking.cargoWeight} tons • {new Date(booking.shipmentDate).toLocaleDateString()} • {formatPhp(booking.totalCost)}
                     </p>
                   </div>
                   <button
@@ -158,7 +159,7 @@ export default function BookingApprovalsPage() {
             <h2 style={{ marginTop: 0 }}>Review {selectedBooking.id}</h2>
             <p style={{ margin: "0 0 0.4rem", color: "#666" }}>{selectedBooking.pickupLocation} → {selectedBooking.dropoffLocation}</p>
             <p style={{ margin: "0 0 1rem", color: "#666" }}>
-              Cost: ${selectedBooking.totalCost.toFixed(2)} • Date: {new Date(selectedBooking.shipmentDate).toLocaleDateString()}
+              Cost: {formatPhp(selectedBooking.totalCost)} • Date: {new Date(selectedBooking.shipmentDate).toLocaleDateString()}
             </p>
             <textarea
               value={notes}

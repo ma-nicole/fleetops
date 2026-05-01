@@ -19,13 +19,13 @@ export default function RouteDetailsPage() {
   useRoleGuard(["driver"]);
 
   const [route] = useState<RouteDetails>({
-    name: "NYC to Philadelphia Standard",
-    pickup_city: "New York, NY",
-    dropoff_city: "Philadelphia, PA",
-    estimated_distance: "95 miles",
+    name: "Metro Manila to Batangas (standard)",
+    pickup_city: "Makati City",
+    dropoff_city: "Batangas City",
+    estimated_distance: "108 km",
     estimated_duration: "2.5 hours",
     estimated_stops: 2,
-    cargo_restrictions: "Weight limit: 25 tons. No hazardous materials.",
+    cargo_restrictions: "Weight limit: 25 tonnes. No hazardous materials.",
     hazmat_required: false,
   });
 
@@ -33,17 +33,17 @@ export default function RouteDetailsPage() {
 
   const alternatives = [
     {
-      name: "NYC to Philadelphia via New Jersey",
-      distance: "98 miles",
+      name: "Via SLEX and STAR Tollway",
+      distance: "112 km",
       duration: "2.75 hours",
-      toll_cost: "$18.50",
+      toll_cost: "PHP 620",
       traffic: "Light",
     },
     {
-      name: "NYC to Philadelphia via I-95 Express",
-      distance: "92 miles",
+      name: "Via CALAX and SLEX",
+      distance: "105 km",
       duration: "2.25 hours",
-      toll_cost: "$22.00",
+      toll_cost: "PHP 710",
       traffic: "Moderate",
     },
   ];

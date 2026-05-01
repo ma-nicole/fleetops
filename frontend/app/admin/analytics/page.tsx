@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AdminFlowService } from "@/lib/adminFlowService";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function AdminAnalyticsPage() {
   useRoleGuard(["admin", "manager"]);
@@ -28,7 +29,7 @@ export default function AdminAnalyticsPage() {
           {[
             { label: "Ongoing Trips", value: kpis.ongoingTrips, color: "#F59E0B" },
             { label: "Completed Trips", value: kpis.completedTrips, color: "#10B981" },
-            { label: "Total Revenue", value: `$${kpis.totalRevenue.toFixed(2)}`, color: "#8B5CF6" },
+            { label: "Total Revenue", value: formatPhp(kpis.totalRevenue), color: "#8B5CF6" },
             { label: "Paid Orders", value: kpis.paidOrders, color: "#3B82F6" },
           ].map((kpi) => (
             <div key={kpi.label} style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1rem" }}>

@@ -4,6 +4,7 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type Service = {
   id: number;
@@ -112,7 +113,7 @@ export default function ServiceSelectionPage() {
                   {service.type}
                 </span>
                 <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#FF9800" }}>
-                  {service.base_price > 0 ? `$${service.base_price}` : "Custom"}
+                  {service.base_price > 0 ? formatPhp(service.base_price) : "Custom"}
                 </div>
               </div>
             </div>

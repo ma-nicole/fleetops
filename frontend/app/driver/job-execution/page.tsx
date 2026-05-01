@@ -6,6 +6,7 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import WorkflowStatusBadge from "@/components/WorkflowStatusBadge";
 import WorkflowTimeline from "@/components/WorkflowTimeline";
 import BookingService, { Booking, BookingStatus } from "@/lib/bookingService";
+import { formatDateTime } from "@/lib/appLocale";
 
 export default function DriverJobExecutionPage() {
   useRoleGuard(["driver"]);
@@ -82,7 +83,7 @@ export default function DriverJobExecutionPage() {
               </div>
               <p style={{ margin: "0 0 0.25rem", color: "#666" }}>{activeJob.pickupLocation} → {activeJob.dropoffLocation}</p>
               <p style={{ margin: "0 0 1rem", color: "#666", fontSize: "0.9rem" }}>
-                Current location: {activeJob.currentLocation || "No location update"} • ETA: {activeJob.currentETA ? new Date(activeJob.currentETA).toLocaleString() : "Pending"}
+                Current location: {activeJob.currentLocation || "No location update"} • ETA: {activeJob.currentETA ? formatDateTime(activeJob.currentETA) : "Pending"}
               </p>
 
               <WorkflowTimeline steps={timelineSteps} />

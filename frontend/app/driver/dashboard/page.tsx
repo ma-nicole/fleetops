@@ -6,6 +6,9 @@ import DashboardRoleTabs from "@/components/DashboardRoleTabs";
 import KpiCard from "@/components/KpiCard";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Trip } from "@/lib/workflowApi";
+import { formatDateTime, formatPhpWhole } from "@/lib/appLocale";
+import { announce } from "@/lib/useAnnouncer";
+import { ApiError } from "@/lib/api";
 
 type SalaryPayload = {
   user_id: number;
@@ -37,6 +40,8 @@ export default function DriverDashboardPage() {
   const [salary, setSalary] = useState<SalaryPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [checkInBusy, setCheckInBusy] = useState(false);
+  const [checkInOk, setCheckInOk] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -68,11 +73,31 @@ export default function DriverDashboardPage() {
   };
 
   const checkIn = async () => {
+    setError(null);
+    setCheckInOk(null);
+    setCheckInBusy(true);
     try {
       await WorkflowApi.driverCheckIn();
       await refresh();
+      const msg = "Check-in recorded for this shift.";
+      setCheckInOk(msg);
+      announce(msg, "polite");
+      window.setTimeout(() => setCheckInOk(null), 6000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Check-in failed");
+      let msg = "Check-in could not be recorded.";
+      if (err instanceof ApiError) {
+        try {
+          const parsed = JSON.parse(err.body) as { detail?: unknown };
+          const d = parsed.detail;
+          if (typeof d === "string") msg = d;
+        } catch {
+          if (err.body) msg = err.body.slice(0, 240);
+        }
+      } else if (err instanceof Error) msg = err.message;
+      setError(msg);
+      announce(msg, "assertive");
+    } finally {
+      setCheckInBusy(false);
     }
   };
 
@@ -93,7 +118,7 @@ export default function DriverDashboardPage() {
       ? [
           {
             title: "Pickup completed",
-            detail: primary.loading_end_time ? `Pickup window closed ${new Date(primary.loading_end_time).toLocaleString()}` : "Awaiting pickup / load confirmation",
+            detail: primary.loading_end_time ? `Pickup window closed ${formatDateTime(primary.loading_end_time)}` : "Awaiting pickup / load confirmation",
             state: !!(primary.departure_delivery_time || primary.loading_end_time || primary.departure_time),
           },
           {
@@ -104,7 +129,7 @@ export default function DriverDashboardPage() {
           },
           {
             title: "Delivered",
-            detail: primary.completed_at ? `Closed ${new Date(primary.completed_at).toLocaleString()}` : "POD pending",
+            detail: primary.completed_at ? `Closed ${formatDateTime(primary.completed_at)}` : "POD pending",
             state: !!primary.completed_at,
           },
         ]
@@ -118,10 +143,32 @@ export default function DriverDashboardPage() {
             <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.06em" }}>FleetOpt Analytics</p>
             <h1 style={{ margin: "0.15rem 0 0", fontSize: "1.35rem", fontWeight: 800 }}>Logistics Management System</h1>
           </div>
-          <button type="button" className="button" onClick={checkIn}>
-            Check in for shift
+          <button
+            type="button"
+            className="button"
+            onClick={() => void checkIn()}
+            disabled={checkInBusy}
+            aria-busy={checkInBusy}
+          >
+            {checkInBusy ? "Check-in…" : "Check in for shift"}
           </button>
         </header>
+
+        {checkInOk ? (
+          <div
+            role="status"
+            style={{
+              padding: "0.75rem 1rem",
+              borderRadius: 8,
+              background: "var(--bg-success)",
+              color: "var(--text-success)",
+              fontWeight: 600,
+              fontSize: "0.9rem",
+            }}
+          >
+            {checkInOk}
+          </div>
+        ) : null}
 
         <DashboardRoleTabs active="driver" />
 
@@ -157,7 +204,7 @@ export default function DriverDashboardPage() {
             tone="neutral"
           />
           <KpiCard label="Distance (loaded trips)" value={`${totalKmToday.toFixed(1)} km`} delta={`Avg ${trips.length ? (totalKmToday / trips.length).toFixed(1) : "0"} km / trip`} />
-          <KpiCard label="Fuel (cost rollup)" value={fuelToday ? `₱${fuelToday.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"} delta="Based on logged trip fuel_cost" tone="neutral" />
+          <KpiCard label="Fuel (cost rollup)" value={fuelToday ? formatPhpWhole(fuelToday) : "—"} delta="Based on logged trip fuel_cost" tone="neutral" />
           <KpiCard label="Completion rate (sample)" value={`${completedRate}%`} delta={salary?.rating != null ? `Rating ${salary.rating.toFixed(1)} / 5` : salary?.compliance_status || "Compliance on profile"} tone="success" />
         </section>
 
@@ -212,9 +259,9 @@ export default function DriverDashboardPage() {
                 </ol>
                 <div style={{ padding: "0.75rem", borderRadius: 8, background: "rgba(14,165,233,0.08)", marginBottom: "0.65rem", fontSize: "0.88rem" }}>
                   <strong>ETA:</strong>{" "}
-                  {primary.estimated_delivery_time ? new Date(primary.estimated_delivery_time).toLocaleString() : "Not set"}
+                  {primary.estimated_delivery_time ? formatDateTime(primary.estimated_delivery_time) : "Not set"}
                   {" · "}
-                  <strong>Distance:</strong> {primary.distance_km} km · <strong>Fuel cost:</strong> ₱{(primary.fuel_cost || 0).toLocaleString()}
+                  <strong>Distance:</strong> {primary.distance_km} km · <strong>Fuel cost:</strong> {formatPhpWhole(primary.fuel_cost || 0)}
                 </div>
                 <div style={{ padding: "0.75rem", borderRadius: 8, background: "rgba(5,150,105,0.08)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>
                   <strong>Optional route tweak:</strong> If traffic builds, planners may suggest alternate arterials via Route Info — coordination with dispatcher first.
@@ -334,7 +381,7 @@ export default function DriverDashboardPage() {
                       <td style={{ padding: "0.65rem", fontWeight: 600 }}>TRP-{t.id}</td>
                       <td style={{ padding: "0.65rem", color: "var(--text-secondary)" }}>{formatRoute(t)}</td>
                       <td style={{ padding: "0.65rem", textAlign: "right" }}>{t.distance_km}</td>
-                      <td style={{ padding: "0.65rem", textAlign: "right" }}>₱{(t.fuel_cost || 0).toLocaleString()}</td>
+                      <td style={{ padding: "0.65rem", textAlign: "right" }}>{formatPhpWhole(t.fuel_cost || 0)}</td>
                       <td style={{ padding: "0.65rem" }}>
                         <StatusPill ok={t.status === "completed"} label={t.status.replace(/_/g, " ")} />
                       </td>

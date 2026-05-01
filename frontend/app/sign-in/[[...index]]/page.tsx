@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiLogin } from "@/lib/api";
+import { ApiError, apiLogin } from "@/lib/api";
 import { setAuthSession, type UserRole as AuthUserRole, getDashboardPath } from "@/lib/auth";
 import { announce } from "@/lib/useAnnouncer";
+import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
+import FloatingField from "@/components/auth/FloatingField";
 
 const GENERIC_AUTH_ERROR = "Email or password is incorrect.";
 
@@ -19,8 +21,6 @@ export default function SignInPage() {
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
-  // When a form-level error appears, move focus to it so screen-reader and
-  // keyboard users hear the new context immediately.
   useEffect(() => {
     if (error && errorBannerRef.current) {
       errorBannerRef.current.focus();
@@ -48,8 +48,6 @@ export default function SignInPage() {
     return Object.keys(nextFieldErrors).length === 0;
   };
 
-  const getRoleDashboardPath = (role: AuthUserRole): string => getDashboardPath(role);
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -58,22 +56,41 @@ export default function SignInPage() {
     setIsSubmitting(true);
 
     try {
-      const data = await apiLogin(email, password).catch((err) => {
-        const status = (err as { status?: number })?.status ?? 500;
-        const body = (err as { body?: string })?.body || "";
-        if (status === 423) {
-          throw new Error(body || "This account is temporarily locked. Please try again later.");
+      const data = await apiLogin(email.trim(), password).catch((err) => {
+        if (err instanceof ApiError) {
+          let detail = "";
+          try {
+            const parsed = JSON.parse(err.body) as { detail?: unknown };
+            const d = parsed.detail;
+            if (typeof d === "string") detail = d;
+            else if (Array.isArray(d))
+              detail = d.map((x: { msg?: string }) => x.msg).filter(Boolean).join("; ");
+          } catch {
+            detail = err.body?.slice(0, 280) || "";
+          }
+          if (err.status === 423) {
+            throw new Error(detail || "This account is temporarily locked. Please try again later.");
+          }
+          if (err.status === 429) {
+            throw new Error("Too many attempts. Please wait a few minutes before trying again.");
+          }
+          if (err.status === 401) {
+            throw new Error(detail || GENERIC_AUTH_ERROR);
+          }
+          throw new Error(detail || `Request failed (${err.status}).`);
         }
-        if (status === 429) {
-          throw new Error("Too many attempts. Please wait a few minutes before trying again.");
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+          throw new Error(
+            "Cannot connect to the API. Make sure the backend is running and NEXT_PUBLIC_API_URL is set correctly (include /api at the end of a direct URL, e.g. http://127.0.0.1:8000/api, or use /api-proxy with rewrites).",
+          );
         }
         throw new Error(GENERIC_AUTH_ERROR);
       });
 
-      // Role comes from the JWT — no need for the user to select it.
-      const resolvedRole = setAuthSession(data.access_token) || "customer";
+      const resolvedRole = setAuthSession(data.access_token, data.role) ?? "customer";
       announce("Signed in. Redirecting to your dashboard.");
-      router.push(getRoleDashboardPath(resolvedRole as AuthUserRole));
+      router.push(getDashboardPath(resolvedRole as AuthUserRole));
     } catch (err) {
       setError(err instanceof Error ? err.message : GENERIC_AUTH_ERROR);
       setIsSubmitting(false);
@@ -81,198 +98,105 @@ export default function SignInPage() {
   };
 
   return (
-    <section
-      aria-labelledby="signin-title"
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "calc(100vh - 76px)",
-        padding: "2rem 1rem",
-        background:
-          "radial-gradient(circle at top right, rgba(14,165,233,0.18), transparent 35%), radial-gradient(circle at bottom left, rgba(99,102,241,0.15), transparent 35%)",
-      }}
+    <AuthSplitLayout
+      ctaHeading={
+        <>
+          Welcome back to
+          <span className="auth-cta-title-accent auth-cta-title-accent-block">FleetOpt</span>
+        </>
+      }
+      ctaSubtitle="Need a customer account? Register in a minute."
+      ctaHref="/sign-up"
+      ctaButtonLabel="Sign up"
     >
-      <div
-        className="floating-login-card"
-        style={{
-          width: "min(380px, 100%)",
-          padding: 24,
-          borderRadius: 18,
-          border: "1px solid rgba(15,23,42,0.08)",
-          background: "rgba(255,255,255,0.96)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-          color: "#1F2937",
-        }}
-      >
-        <h1 id="signin-title" style={{ margin: 0, fontSize: "2rem", color: "#111827" }}>
-          Log in
-        </h1>
-        <p style={{ margin: "0.5rem 0 0 0", color: "#374151", fontSize: "1rem" }}>
-          Access your account to continue with bookings and operations.
-        </p>
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16, marginTop: 16 }} noValidate>
-          {error && (
-            <div
-              ref={errorBannerRef}
-              role="alert"
-              tabIndex={-1}
-              style={{
-                color: "#991B1B",
-                background: "#FEE2E2",
-                border: "1px solid #FCA5A5",
-                borderRadius: 8,
-                padding: "0.65rem 0.75rem",
-                fontSize: "0.95rem",
-                outline: "none",
-              }}
-            >
-              <strong style={{ display: "block", marginBottom: 2 }}>Couldn&apos;t sign you in</strong>
-              {error}
+      <h1 className="auth-page-title" id="signin-title">
+        Log in
+      </h1>
+      <p className="auth-page-lede">
+        Sign in with the email your admin or team uses for FleetOpt. Same account across web and dashboards.
+      </p>
+      <p className="auth-trust-note" role="note">
+        <span className="auth-trust-dot" aria-hidden="true" />
+        Secured session — your password is never shown in plain text on screen after you submit.
+      </p>
+
+      <form className="auth-form-stack" onSubmit={handleSubmit} noValidate aria-labelledby="signin-title">
+        {error ? (
+          <div
+            ref={errorBannerRef}
+            className="auth-banner auth-banner--error"
+            role="alert"
+            tabIndex={-1}
+          >
+            <span className="auth-banner-icon" aria-hidden="true">
+              !
+            </span>
+            <div className="auth-banner-text">
+              <p className="auth-banner-title">Couldn&apos;t sign you in</p>
+              <p className="auth-banner-body">{error}</p>
             </div>
-          )}
+          </div>
+        ) : null}
 
-          <label style={{ display: "grid", gap: 8 }}>
-            <span>
-              Email <span aria-hidden="true">*</span>
-              <span className="sr-only"> (required)</span>
-            </span>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
-              }}
-              required
-              placeholder="you@example.com"
-              autoComplete="email"
-              aria-invalid={!!fieldErrors.email}
-              aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
-              style={{
-                width: "100%",
-                minHeight: 44,
-                padding: 10,
-                borderRadius: 8,
-                border: fieldErrors.email ? "1px solid #B91C1C" : "1px solid #6B7280",
-                background: "#FFFFFF",
-                color: "#111827",
-                fontSize: "1rem",
-              }}
-            />
-            {fieldErrors.email && (
-              <span id="login-email-error" role="alert" style={{ color: "#991B1B", fontSize: "0.9rem" }}>
-                {fieldErrors.email}
-              </span>
-            )}
-          </label>
+        <FloatingField
+          id="signin-email"
+          label="Work email"
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+          }}
+          error={fieldErrors.email}
+          hint={!fieldErrors.email ? "Use the email tied to your FleetOpt profile." : undefined}
+        />
 
-          <label style={{ display: "grid", gap: 8 }}>
-            <span>
-              Password <span aria-hidden="true">*</span>
-              <span className="sr-only"> (required)</span>
-            </span>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
-                }}
-                required
-                placeholder="At least 6 characters"
-                autoComplete="current-password"
-                aria-invalid={!!fieldErrors.password}
-                aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
-                style={{
-                  width: "100%",
-                  minHeight: 44,
-                  padding: 10,
-                  borderRadius: 8,
-                  border: fieldErrors.password ? "1px solid #B91C1C" : "1px solid #6B7280",
-                  background: "#FFFFFF",
-                  color: "#111827",
-                  fontSize: "1rem",
-                }}
-              />
+        <div className="auth-password-block">
+          <FloatingField
+            id="signin-password"
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
+            }}
+            error={fieldErrors.password}
+            endSlot={
               <button
                 type="button"
+                className="auth-icon-btn"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-pressed={showPassword}
                 aria-label={showPassword ? "Hide password" : "Show password"}
-                style={{
-                  minHeight: 44,
-                  minWidth: 44,
-                  padding: "0 0.8rem",
-                  borderRadius: 8,
-                  border: "1px solid #6B7280",
-                  background: "#FFFFFF",
-                  color: "#111827",
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
-                }}
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
-            </div>
-            {fieldErrors.password && (
-              <span id="login-password-error" role="alert" style={{ color: "#991B1B", fontSize: "0.9rem" }}>
-                {fieldErrors.password}
-              </span>
-            )}
-          </label>
+            }
+          />
+          <div className="auth-password-meta">
+            <Link href="/support" className="auth-forgot-link">
+              Forgot password?
+            </Link>
+          </div>
+        </div>
 
-          <Link
-            href="/modules/customer/support"
-            style={{
-              color: "#1D4ED8",
-              textDecoration: "underline",
-              fontSize: "0.95rem",
-              minHeight: 44,
-              display: "inline-flex",
-              alignItems: "center",
-            }}
-          >
-            Forgot password?
-          </Link>
+        <button type="submit" className="auth-primary-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
+          {isSubmitting ? "Signing in…" : "Log in"}
+        </button>
+      </form>
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            aria-busy={isSubmitting}
-            style={{
-              minHeight: 44,
-              padding: 12,
-              borderRadius: 10,
-              border: "none",
-              background: isSubmitting ? "#0369A1" : "#0284C7",
-              color: "white",
-              cursor: isSubmitting ? "wait" : "pointer",
-              fontSize: "1rem",
-              fontWeight: 600,
-            }}
-          >
-            {isSubmitting ? "Logging in…" : "Log in"}
-          </button>
-        </form>
-        <p style={{ marginTop: 16, color: "#374151", fontSize: "1rem" }}>
-          No account?{" "}
-          <Link href="/sign-up" style={{ color: "#1D4ED8", textDecoration: "underline" }}>
-            Sign up
+      <footer className="auth-form-footer">
+        <p className="auth-footnote">
+          Trouble signing in?{" "}
+          <Link href="/support" className="auth-text-link">
+            Contact support
           </Link>
         </p>
-      </div>
-      <style jsx>{`
-        :global(input:focus-visible),
-        :global(select:focus-visible),
-        :global(button:focus-visible),
-        :global(a:focus-visible) {
-          outline: 3px solid #1D4ED8;
-          outline-offset: 2px;
-        }
-      `}</style>
-    </section>
+      </footer>
+    </AuthSplitLayout>
   );
 }

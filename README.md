@@ -98,10 +98,18 @@ python -m uvicorn app.main:app --reload --port 8000
 # Terminal 2 - From frontend directory
 cd frontend
 npm install
+
+# Copy env (uses Next.js proxy → fewer "cannot connect to API" errors on Windows)
+copy .env.example .env.local   # PowerShell / Cmd on Windows — or cp on Git Bash
+
 npm run dev
 
 # Frontend will be available at http://localhost:3000
 ```
+
+**Important:** Keep **Terminal 1** running with the backend (`uvicorn` on port **8000**). Without it, sign-in shows a connection error.
+
+The default `.env.local` uses **`NEXT_PUBLIC_API_URL=/api-proxy`** so the browser talks only to Next.js; Next forwards `/api-proxy/*` to `BACKEND_ORIGIN` (see `next.config.mjs`). Change `BACKEND_ORIGIN` if your API runs elsewhere.
 
 ### Step 5: Seed Database (Optional)
 
@@ -117,11 +125,15 @@ After running `python seed_db.py`:
 
 | Role | Email | Password |
 |------|-------|----------|
-| 👤 Customer | customer1@fleetops.com | any_password |
-| 🎛️ Dispatcher | dispatcher@fleetops.com | any_password |
-| 🚗 Driver | driver1@fleetops.com | any_password |
-| 📊 Manager | manager@fleetops.com | any_password |
-| ⚙️ Admin | admin@fleetops.com | any_password |
+| 👤 Customer | customer1@fleetops.com | `password` |
+| 🎛️ Dispatcher | dispatcher@fleetops.com | `password` |
+| 🚗 Driver | driver1@fleetops.com | `password` |
+| 📊 Manager | manager@fleetops.com | `password` |
+| ⚙️ Admin | admin@fleetops.com | `password` |
+
+*(Ang `seed_db.py` ay `hash_password("password")` ang ginagamit — hindi “any_password”.)*
+
+**Driver / staff:** Hindi maaaring mag-sign up bilang driver sa public registration; kailangan **gumawa ng account sa Admin** (`POST /api/admin/users`, role `driver`) o mag-run ng `seed_db.py` (MySQL).
 
 ---
 
@@ -209,7 +221,8 @@ FLEETOPS/
 ├── 📖 QUICKSTART.md                 # 5-minute setup guide
 ├── 📖 SYSTEM_OVERVIEW.md            # Complete system architecture
 ├── 📖 UAT_TESTING_GUIDE.md          # Comprehensive test procedures
-├── 📖 DEPLOYMENT_GUIDE.md           # Cloud/Hostinger deployment
+├── deploy-docker-hostinger.sh      # Hostinger VPS: Docker stack
+├── deploy-hostinger.sh             # Hostinger VPS: systemd + Nginx templates
 ├── 📖 API_REFERENCE.md              # Complete API documentation
 ├── 📖 PRODUCTION_DEPLOYMENT_CHECKLIST.md # Pre-production checklist
 └── README.md                         # This file
@@ -236,7 +249,7 @@ CLERK_WEBHOOK_SECRET=whsec_...
 - User synchronization
 - 5 predefined roles (customer, dispatcher, driver, manager, admin)
 
-**Setup:** See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#clerk-setup)
+**Setup:** Clerk env vars sa `backend/.env` at `frontend/.env.local` (`USE_CLERK_AUTH`, keys).
 
 ---
 
@@ -260,7 +273,7 @@ CLOUD_SQL_DB_USER=fleetopt
 CLOUD_SQL_DB_PASSWORD=your-password
 ```
 
-**Setup:** See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md#cloud-sql-setup)
+**Setup:** I-set ang `DATABASE_URL` / Cloud SQL flags sa `backend/.env`.
 
 ---
 
@@ -383,21 +396,27 @@ pytest tests/test_integration.py -v
 
 **Setup Time:** 2-3 hours
 
-### Option 2: Hostinger VPS (Cost-Effective)
-- Ubuntu 22.04 LTS
-- Docker containers
-- Nginx reverse proxy
-- Let's Encrypt SSL
-- Manual scaling
+### Option 2: Hostinger VPS (matching this stack)
 
-**Setup Time:** 1-2 hours
+Ang FleetOpt ay **FastAPI + Next.js + MySQL**. Para sa ganitong kombinasyon, ang angkop na Hostinger tier ay **`KVM VPS`** (Ubuntu, SSH, puedeng mag-install ng Docker/Nginx/Systemd).
+
+| Route | Mga script |
+|--------|-------------|
+| **Docker** ( pinakamadalí kung VPS may Docker na ) | `chmod +x deploy-docker-hostinger.sh && DOMAIN=https://YOURDOMAIN ./deploy-docker-hostinger.sh` |
+| **Walang Docker** (Python virtualenv + `npm build` + Nginx/systemd templates ) | `chmod +x deploy-hostinger.sh && ./deploy-hostinger.sh` |
+
+Hindi mismo sa dokumentasyong ito ang **Shared Web Hosting lamang**: karaniwan hindi kumpleto ang long-running Node + Python API at MySQL tulad ng itinayo dito maliban kung Dedicated/VPS-tier.
+
+Mga requirements: Ubuntu 22.04+ (hinahangaan), Nginx bilang reverse proxy (`/api` → backend port, `/` → frontend), TLS (Let’s Encrypt o SSL sa Hostinger panel).
+
+**Setup Time:** Mga 1–2 oras kapag VPS handa na ang Docker/Linux.
 
 ### Option 3: Docker Swarm / Kubernetes (Enterprise)
 - Full container orchestration
 - Multi-region support
 - Advanced load balancing
 
-**Guide:** [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+**Reference:** Standard cloud runbooks (Helm, Terraform) — wala sa repo ang buong Swarm/K8s manifest.
 
 ---
 
@@ -426,7 +445,7 @@ Before going live, complete:
 | [QUICKSTART.md](./QUICKSTART.md) | 5-minute setup for local development |
 | [SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md) | Complete architecture & features |
 | [UAT_TESTING_GUIDE.md](./UAT_TESTING_GUIDE.md) | 50+ test cases with procedures |
-| [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) | Cloud SQL, Clerk, Hostinger setup |
+| `deploy-docker-hostinger.sh`, `deploy-hostinger.sh` | Hostinger VPS: Docker stack o systemd + Nginx templates |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Complete endpoint documentation |
 | [PRODUCTION_DEPLOYMENT_CHECKLIST.md](./PRODUCTION_DEPLOYMENT_CHECKLIST.md) | Pre-production validation |
 
@@ -524,131 +543,9 @@ Proprietary - FleetOpts Fleet Management System
 1. **Get Started:** [QUICKSTART.md](./QUICKSTART.md)
 2. **Understand System:** [SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md)
 3. **Run UAT:** [UAT_TESTING_GUIDE.md](./UAT_TESTING_GUIDE.md)
-4. **Deploy:** [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+4. **Deploy (Hostinger VPS):** `deploy-docker-hostinger.sh` o `deploy-hostinger.sh`
 5. **Go Live:** [PRODUCTION_DEPLOYMENT_CHECKLIST.md](./PRODUCTION_DEPLOYMENT_CHECKLIST.md)
 
 ---
 
 **Ready to optimize your fleet? Let's ship! 🚚✨**
-
-# 2. Clone repository
-git clone https://github.com/yourusername/fleetopt.git
-cd fleetopt
-
-# 3. Run deployment script
-chmod +x deploy-hostinger.sh
-./deploy-hostinger.sh
-
-# 4. Update environment files with your credentials
-# Edit backend/.env and frontend/.env.local
-
-# 5. Start services
-sudo systemctl start fleetopt-backend
-sudo systemctl start fleetopt-frontend
-sudo systemctl restart nginx
-```
-
-### Detailed Deployment Guide
-
-See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for:
-- Google Cloud SQL setup and connection
-- Clerk authentication configuration
-- Hostinger-specific deployment steps
-- Nginx reverse proxy configuration
-- SSL/HTTPS setup
-- Monitoring and logging
-- Security best practices
-
-## 📋 Environment Variables
-
-### Backend (.env)
-
-```env
-# Application
-SECRET_KEY=change-me-to-strong-secret
-APP_ENV=production
-
-# Database
-USE_CLOUD_SQL=false
-DATABASE_URL=postgresql+psycopg://fleetopt:fleetopt@localhost:5432/fleetopt
-
-# Cloud SQL (if USE_CLOUD_SQL=true)
-GCP_PROJECT_ID=your-project-id
-CLOUD_SQL_INSTANCE=project:region:instance
-CLOUD_SQL_DB_USER=fleetopt
-CLOUD_SQL_DB_PASSWORD=your-password
-CLOUD_SQL_DB_NAME=fleetopt
-
-# Clerk
-USE_CLERK_AUTH=false
-CLERK_API_KEY=
-CLERK_FRONTEND_API=
-
-# Frontend
-FRONTEND_URL=http://localhost:3000
-
-# Notifications
-RESEND_API_KEY=
-```
-
-### Frontend (.env.local)
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000/api
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-```
-
-## 🛠️ Development Commands
-
-```bash
-# Backend
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Frontend
-cd frontend
-npm run dev
-
-# Database migration
-bash migrate-db.sh
-
-# Run tests
-pytest backend/
-
-# Build production
-# Backend: docker build -t fleetopt-backend backend/
-# Frontend: npm run build
-```
-
-## 🐳 Docker Deployment
-
-```bash
-# Build images
-docker build -t fleetopt-backend ./backend
-docker build -t fleetopt-frontend ./frontend
-
-# Run containers
-docker run -e DATABASE_URL=... -p 8000:8000 fleetopt-backend
-docker run -e NEXT_PUBLIC_API_URL=... -p 3000:3000 fleetopt-frontend
-
-# Or use docker-compose
-docker compose -f docker-compose.yml up
-```
-
-## 📚 Additional Resources
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Clerk Documentation](https://clerk.com/docs)
-- [Google Cloud SQL Documentation](https://cloud.google.com/sql/docs)
-- [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
-
-## 📝 License
-
-This project is provided as-is for the FleetOpt fleet management system.
-
-## 🤝 Support
-
-For deployment issues, refer to [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) or contact support.
-

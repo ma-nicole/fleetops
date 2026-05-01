@@ -1,4 +1,5 @@
-import { ERDDataService } from "./erdDataService";
+import { ERDDataService, type Trip } from "./erdDataService";
+import { formatPhp } from "./appLocale";
 
 export type DriverFlowStatus = "pending" | "confirmed" | "scheduled" | "ongoing" | "completed" | "cancelled";
 
@@ -120,7 +121,7 @@ export class DriverDataFlowService {
     const erdStore = ERDDataService.getStore();
     const trip = erdStore.trips.find((t) => t.driver_name === (bookings[index].assignedDriver || ""));
     if (trip) {
-      const mapped =
+      const mapped: Trip["trip_status"] =
         status === "confirmed"
           ? "confirmed"
           : status === "scheduled"
@@ -130,7 +131,7 @@ export class DriverDataFlowService {
           : status === "completed"
           ? "completed"
           : status === "cancelled"
-          ? "cancelled"
+          ? "pending"
           : "pending";
       ERDDataService.updateTripStatus(trip.id, mapped);
       if (status === "ongoing") {
@@ -154,7 +155,7 @@ export class DriverDataFlowService {
       bookingId: booking.id,
       generatedAt: new Date().toISOString(),
       tripDetails: `${booking.pickup} -> ${booking.dropoff} (${booking.load})`,
-      costs: booking.status === "completed" ? "$420.00" : "$300.00 (estimated)",
+      costs: booking.status === "completed" ? formatPhp(420) : `${formatPhp(300)} (estimated)`,
       status: booking.status,
       driverActivity: booking.assignedDriver ? `Driver ${booking.assignedDriver} updated status to ${booking.status}.` : "No driver activity yet.",
       final: booking.status === "completed",

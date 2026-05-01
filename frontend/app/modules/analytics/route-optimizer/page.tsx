@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsApi, type RouteOptimizeResponse } from "@/lib/analyticsApi";
+import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
 const SAMPLE_NODES = [
-  "Warehouse-Tarlac",
   "Hub-Pampanga",
   "SMC-Plant-Bulacan",
   "Hub-Manila-North",
@@ -184,7 +184,7 @@ export default function RouteOptimizerPage() {
                       )}
                     </h3>
                     <p style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>
-                      ₱{candidate.total_cost.toLocaleString()}
+                      {formatPhpWhole(candidate.total_cost)}
                     </p>
                   </div>
                   <p style={{ marginTop: 8, color: "#374151" }}>
@@ -192,10 +192,10 @@ export default function RouteOptimizerPage() {
                   </p>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginTop: 12 }}>
                     <Stat label="Distance" value={`${candidate.distance_km} km`} />
-                    <Stat label="Fuel" value={`₱${candidate.fuel_cost}`} />
-                    <Stat label="Toll" value={`₱${candidate.toll_cost}`} />
-                    <Stat label="Time penalty" value={`₱${candidate.time_penalty}`} />
-                    <Stat label="Maintenance" value={`₱${candidate.maintenance_penalty}`} />
+                    <Stat label="Fuel" value={formatPhp(candidate.fuel_cost)} />
+                    <Stat label="Toll" value={formatPhp(candidate.toll_cost)} />
+                    <Stat label="Time penalty" value={formatPhp(candidate.time_penalty)} />
+                    <Stat label="Maintenance" value={formatPhp(candidate.maintenance_penalty)} />
                   </div>
                   <details style={{ marginTop: 12 }}>
                     <summary style={{ cursor: "pointer", color: "#0EA5E9" }}>Edge breakdown</summary>
@@ -217,10 +217,10 @@ export default function RouteOptimizerPage() {
                             <td style={tdStyle}>{e.from_node}</td>
                             <td style={tdStyle}>{e.to_node}</td>
                             <td style={tdStyle}>{e.distance_km}</td>
-                            <td style={tdStyle}>₱{e.fuel_cost}</td>
-                            <td style={tdStyle}>₱{e.toll_cost}</td>
-                            <td style={tdStyle}>₱{e.time_penalty}</td>
-                            <td style={tdStyle}>₱{e.maintenance_penalty}</td>
+                            <td style={tdStyle}>{formatPhp(e.fuel_cost)}</td>
+                            <td style={tdStyle}>{formatPhp(e.toll_cost)}</td>
+                            <td style={tdStyle}>{formatPhp(e.time_penalty)}</td>
+                            <td style={tdStyle}>{formatPhp(e.maintenance_penalty)}</td>
                           </tr>
                         ))}
                       </tbody>

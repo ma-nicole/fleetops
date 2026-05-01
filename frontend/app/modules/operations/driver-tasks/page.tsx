@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useState, useEffect } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 
 type DriverTask = {
   id: number;
@@ -34,8 +35,8 @@ export default function DriverTaskListPage() {
       {
         id: 1,
         trip_id: 101,
-        pickup_location: "Manhattan, NY",
-        dropoff_location: "Newark, NJ",
+        pickup_location: "Makati CBD",
+        dropoff_location: "Batangas City",
         cargo_weight_tons: 5,
         scheduled_date: "2026-04-29",
         scheduled_time: "09:00",
@@ -46,8 +47,8 @@ export default function DriverTaskListPage() {
       {
         id: 2,
         trip_id: 102,
-        pickup_location: "Brooklyn, NY",
-        dropoff_location: "Philadelphia, PA",
+        pickup_location: "Bonifacio Global City",
+        dropoff_location: "Parañaque City",
         cargo_weight_tons: 8,
         scheduled_date: "2026-04-29",
         scheduled_time: "11:30",
@@ -60,8 +61,8 @@ export default function DriverTaskListPage() {
       {
         id: 3,
         trip_id: 103,
-        pickup_location: "Bronx, NY",
-        dropoff_location: "Boston, MA",
+        pickup_location: "Quezon City",
+        dropoff_location: "Laoag City",
         cargo_weight_tons: 3,
         scheduled_date: "2026-04-30",
         scheduled_time: "08:00",
@@ -249,7 +250,7 @@ export default function DriverTaskListPage() {
                        {task.cargo_weight_tons}t | Customer: {task.customer_name}
                     </p>
                     <p style={{ margin: "0.25rem 0", color: "#FF9800", fontWeight: 600 }}>
-                      Estimated Cost: ${task.estimated_cost}
+                      Estimated Cost: {task.estimated_cost != null ? formatPhp(task.estimated_cost) : "—"}
                     </p>
                   </div>
 

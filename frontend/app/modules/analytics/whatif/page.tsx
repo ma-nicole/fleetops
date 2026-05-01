@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsApi, type WhatIfResponse } from "@/lib/analyticsApi";
+import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
 export default function WhatIfPage() {
   useRoleGuard(["manager", "admin", "dispatcher"]);
@@ -183,7 +184,7 @@ export default function WhatIfPage() {
                 <h3 style={{ margin: "0 0 8px" }}>Delta</h3>
                 <p style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>
                   {result.delta_total >= 0 ? "+" : ""}
-                  ₱{result.delta_total.toLocaleString()}
+                  {formatPhpWhole(result.delta_total)}
                 </p>
                 <p style={{ marginTop: 4 }}>
                   {result.delta_pct >= 0 ? "+" : ""}
@@ -209,13 +210,13 @@ function ScenarioCard({
     <div style={{ background: "#F9FAFB", borderRadius: 10, padding: 16 }}>
       <h3 style={{ margin: "0 0 8px" }}>{title}</h3>
       <p style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>
-        ₱{data.total_cost.toLocaleString()}
+        {formatPhpWhole(data.total_cost)}
       </p>
       <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none", fontSize: 13, color: "#374151" }}>
-        <li>Fuel: ₱{data.fuel_cost} ({data.fuel_liters}L)</li>
-        <li>Toll: ₱{data.toll_cost}</li>
-        <li>Labor: ₱{data.labor_cost}</li>
-        <li>Maintenance risk: ₱{data.maintenance_risk_cost}</li>
+        <li>Fuel: {formatPhp(data.fuel_cost)} ({data.fuel_liters}L)</li>
+        <li>Toll: {formatPhp(data.toll_cost)}</li>
+        <li>Labor: {formatPhp(data.labor_cost)}</li>
+        <li>Maintenance risk: {formatPhp(data.maintenance_risk_cost)}</li>
       </ul>
     </div>
   );

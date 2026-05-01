@@ -37,7 +37,7 @@ def check_in(
     db.add(record)
     db.commit()
     db.refresh(record)
-    return {"checked_in": True, "timestamp": record.check_in_time}
+    return {"checked_in": True, "timestamp": record.check_in_time.isoformat()}
 
 
 @router.get("/salary")

@@ -23,7 +23,7 @@ export default function SubmitReportsPage() {
       id: 1,
       trip_id: 101,
       report_type: "delay",
-      title: "Traffic Congestion on I-95",
+      title: "Heavy traffic on EDSA",
       description:
         "Unexpected traffic delays caused arrival 45 minutes late. Documented with dashcam.",
       date: "2026-04-28",

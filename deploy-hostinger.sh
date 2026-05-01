@@ -110,7 +110,7 @@ npm run build
 cd ..
 
 # 4. Database initialization message
-log_info "Database setup instructions:"
+log_info "Database setup instructions (MySQL):"
 echo "  1. Ensure MySQL 8.0+ is running on your server"
 echo "  2. Create database: mysql -u root -p -e \"CREATE DATABASE fleetopt;\""
 echo "  3. Create user: mysql -u root -p -e \"CREATE USER 'fleetopt'@'localhost' IDENTIFIED BY 'fleetopt';\""
@@ -249,7 +249,7 @@ echo "1. Update environment variables:"
 echo "   - Edit: $BACKEND_DIR/.env"
 echo "   - Edit: $FRONTEND_DIR/.env.local"
 echo ""
-echo "2. Setup PostgreSQL database:"
+echo "2. Setup MySQL database:"
 echo "   - Follow database initialization instructions above"
 echo ""
 echo "3. Start services:"

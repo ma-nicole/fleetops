@@ -1,3 +1,5 @@
+import { APP_LOCALE } from "@/lib/appLocale";
+
 type KpiTone = "neutral" | "success" | "warning" | "danger";
 
 type KpiCardProps = {
@@ -34,9 +36,10 @@ export default function KpiCard({
   locale,
   tone = "neutral",
 }: KpiCardProps) {
+  const resolvedLocale = locale ?? APP_LOCALE;
   const formatted =
     typeof value === "number"
-      ? new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)
+      ? new Intl.NumberFormat(resolvedLocale, { maximumFractionDigits: 1 }).format(value)
       : value;
 
   const trendInfo = trend ? trendIndicator[trend] : null;

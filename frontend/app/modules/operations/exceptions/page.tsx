@@ -23,7 +23,7 @@ export default function ExceptionsPage() {
       id: 1,
       trip_id: 101,
       exception_type: "delay",
-      description: "Traffic congestion on I-95. Estimated delay: 45 minutes",
+      description: "Heavy traffic on EDSA southbound. Estimated delay: 45 minutes",
       reported_by: "Carlos Rodriguez",
       reported_time: "2026-04-28 09:30",
       status: "acknowledged",

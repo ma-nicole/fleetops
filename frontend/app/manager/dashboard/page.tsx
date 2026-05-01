@@ -8,6 +8,7 @@ import KpiCard from "@/components/KpiCard";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { type AnalyticsDashboard } from "@/lib/analyticsApi";
 import { apiGet } from "@/lib/api";
+import { formatNumber, formatPhpWhole } from "@/lib/appLocale";
 
 type ManagerDashboardPayload = {
   kpis: {
@@ -31,9 +32,9 @@ type ManagerDashboardPayload = {
 };
 
 function formatPesoCompact(n: number): string {
-  if (n >= 1_000_000) return `₱${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `₱${(n / 1_000).toFixed(1)}K`;
-  return `₱${Math.round(n).toLocaleString()}`;
+  if (n >= 1_000_000) return `₱${formatNumber(n / 1_000_000, { maximumFractionDigits: 1 })}M`;
+  if (n >= 1_000) return `₱${formatNumber(n / 1_000, { maximumFractionDigits: 1 })}K`;
+  return formatPhpWhole(Math.round(n));
 }
 
 function sumFuelCost(pipeline: AnalyticsDashboard | undefined): number {
@@ -41,6 +42,7 @@ function sumFuelCost(pipeline: AnalyticsDashboard | undefined): number {
   return pipeline.marts.trip_cost_mart.reduce((s, r) => s + (r.fuel_cost || 0), 0);
 }
 
+/** Rough liters from spend using indicative PH pump price (₱/L). */
 function estimateLitersFromSpend(fuelSpend: number, pricePerLiter = 65): number {
   if (fuelSpend <= 0) return 0;
   return Math.round(fuelSpend / pricePerLiter);
@@ -152,7 +154,7 @@ export default function ManagerDashboardPage() {
               />
               <KpiCard
                 label="Fuel consumption (est.)"
-                value={fuelL > 0 ? `${fuelL.toLocaleString()} L` : "—"}
+                value={fuelL > 0 ? `${formatNumber(fuelL, { maximumFractionDigits: 1 })} L` : "—"}
                 delta={fuelL > 0 ? `Fuel spend ${formatPesoCompact(fuelSpend)}` : "No trip mart yet"}
                 trend={fuelL > 0 ? "up" : "flat"}
               />
@@ -347,7 +349,7 @@ export default function ManagerDashboardPage() {
                         <tr key={m.month}>
                           <td style={td}>{m.month}</td>
                           <td style={td}>{m.trips}</td>
-                          <td style={td}>₱{m.total_cost.toLocaleString()}</td>
+                          <td style={td}>{formatPhpWhole(m.total_cost)}</td>
                         </tr>
                       ))}
                     </tbody>

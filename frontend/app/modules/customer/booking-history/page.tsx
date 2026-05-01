@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type BookingHistory = {
@@ -23,8 +24,8 @@ export default function BookingHistoryPage() {
     {
       id: 1,
       trip_id: 101,
-      pickup: "New York, NY",
-      dropoff: "Philadelphia, PA",
+      pickup: "Makati City",
+      dropoff: "Batangas City",
       booking_date: "2026-04-28",
       trip_date: "2026-04-28",
       status: "completed",
@@ -34,8 +35,8 @@ export default function BookingHistoryPage() {
     {
       id: 2,
       trip_id: 102,
-      pickup: "Boston, MA",
-      dropoff: "New York, NY",
+      pickup: "Angeles City",
+      dropoff: "Makati City",
       booking_date: "2026-04-27",
       trip_date: "2026-04-27",
       status: "completed",
@@ -45,8 +46,8 @@ export default function BookingHistoryPage() {
     {
       id: 3,
       trip_id: 103,
-      pickup: "Philadelphia, PA",
-      dropoff: "Washington, DC",
+      pickup: "Santa Rosa, Laguna",
+      dropoff: "Quezon City",
       booking_date: "2026-04-28",
       trip_date: "2026-04-28",
       status: "completed",
@@ -56,8 +57,8 @@ export default function BookingHistoryPage() {
     {
       id: 4,
       trip_id: 104,
-      pickup: "Washington, DC",
-      dropoff: "Atlanta, GA",
+      pickup: "Manila",
+      dropoff: "Laoag City",
       booking_date: "2026-04-26",
       trip_date: "2026-04-27",
       status: "cancelled",
@@ -144,13 +145,13 @@ export default function BookingHistoryPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.totalSpent.toFixed(2)}
+              {formatPhp(stats.totalSpent)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Spent</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.avgCost}
+              {formatPhp(Number(stats.avgCost))}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Avg Cost</div>
           </div>
@@ -245,7 +246,7 @@ export default function BookingHistoryPage() {
                 </div>
                 <div style={{ textAlign: "right", marginLeft: "1rem", whiteSpace: "nowrap" }}>
                   <div style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.2rem" }}>
-                    ${booking.total_cost.toFixed(2)}
+                    {formatPhp(booking.total_cost)}
                   </div>
                 </div>
               </div>
@@ -267,7 +268,7 @@ export default function BookingHistoryPage() {
                     <strong>Cargo Weight:</strong> {booking.cargo_weight} tons
                   </p>
                   <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                    <strong>Total Cost:</strong> ${booking.total_cost.toFixed(2)}
+                    <strong>Total Cost:</strong> {formatPhp(booking.total_cost)}
                   </p>
                   {booking.status === "completed" && (
                     <button

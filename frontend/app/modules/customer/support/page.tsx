@@ -14,6 +14,7 @@ export default function CustomerSupportPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ booking?: string; message?: string }>({});
 
   useEffect(() => {
     WorkflowApi.listBookings()
@@ -25,8 +26,20 @@ export default function CustomerSupportPage() {
   }, []);
 
   const submit = async () => {
-    if (!bookingId) return;
+    setFieldErrors({});
     setError(null);
+    setOkMsg(null);
+
+    if (!bookingId) {
+      setFieldErrors({ booking: "Please select a booking." });
+      return;
+    }
+
+    if (message.length > 2000) {
+      setFieldErrors({ message: "Message must be at most 2000 characters." });
+      return;
+    }
+
     try {
       await WorkflowApi.submitFeedback({
         booking_id: bookingId,
@@ -70,8 +83,12 @@ export default function CustomerSupportPage() {
             <span>Booking</span>
             <select
               value={bookingId}
-              onChange={(e) => setBookingId(Number(e.target.value))}
-              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+              onChange={(e) => {
+                setBookingId(Number(e.target.value));
+                if (fieldErrors.booking) setFieldErrors((f) => ({ ...f, booking: undefined }));
+              }}
+              aria-invalid={!!fieldErrors.booking}
+              style={{ padding: 8, border: fieldErrors.booking ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: 6 }}
             >
               <option value={0}>— pick a booking —</option>
               {bookings.map((b) => (
@@ -80,6 +97,9 @@ export default function CustomerSupportPage() {
                 </option>
               ))}
             </select>
+            {fieldErrors.booking && (
+              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.booking}</span>
+            )}
           </label>
 
           <label style={{ display: "grid", gap: 4, marginTop: 12 }}>
@@ -112,13 +132,25 @@ export default function CustomerSupportPage() {
             <span>Message (optional)</span>
             <textarea
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                if (fieldErrors.message) setFieldErrors((f) => ({ ...f, message: undefined }));
+              }}
               rows={5}
-              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+              maxLength={2000}
+              aria-invalid={!!fieldErrors.message}
+              style={{ padding: 8, border: fieldErrors.message ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: 6 }}
             />
+            <span style={{ fontSize: "0.8rem", color: message.length > 2000 ? "#DC2626" : "#6B7280" }}>
+              {message.length}/2000
+            </span>
+            {fieldErrors.message && (
+              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.message}</span>
+            )}
           </label>
 
           <button
+            type="button"
             onClick={submit}
             disabled={!bookingId}
             style={{

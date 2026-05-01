@@ -5,6 +5,7 @@ import Link from "next/link";
 import WorkflowStatusBadge from "@/components/WorkflowStatusBadge";
 import WorkflowTimeline from "@/components/WorkflowTimeline";
 import BookingService, { Booking } from "@/lib/bookingService";
+import { formatDateTime } from "@/lib/appLocale";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 
 export default function BookingStatusPage() {
@@ -89,7 +90,7 @@ export default function BookingStatusPage() {
                   </div>
                   <p style={{ margin: "0 0 0.25rem", color: "#666" }}>{booking.pickupLocation} → {booking.dropoffLocation}</p>
                   <p style={{ margin: "0 0 1rem", color: "#666", fontSize: "0.9rem" }}>
-                    ETA: {booking.currentETA ? new Date(booking.currentETA).toLocaleString() : "Pending"} • Location: {booking.currentLocation || "No location update"}
+                    ETA: {booking.currentETA ? formatDateTime(booking.currentETA) : "Pending"} • Location: {booking.currentLocation || "No location update"}
                   </p>
 
                   <WorkflowTimeline steps={timelineSteps} />
@@ -116,7 +117,7 @@ export default function BookingStatusPage() {
                         const [ts, text] = msg.split("|");
                         return (
                           <p key={msg} style={{ margin: 0, color: "#666", fontSize: "0.85rem" }}>
-                            {new Date(ts).toLocaleString()} - {text}
+                            {formatDateTime(ts)} - {text}
                           </p>
                         );
                       })}

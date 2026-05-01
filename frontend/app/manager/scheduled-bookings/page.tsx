@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type Booking = {
   id: string;
@@ -11,7 +12,7 @@ type Booking = {
   deliveryLocation: string;
   scheduledDate: string;
   status: "pending" | "confirmed" | "scheduled" | "in_transit" | "completed";
-  totalValue: string;
+  totalValue: number;
   assignedDriver?: string;
 };
 
@@ -26,7 +27,7 @@ export default function ScheduledBookingsPage() {
       deliveryLocation: "Makati Branch",
       scheduledDate: "2024-05-10 09:00 AM",
       status: "scheduled",
-      totalValue: "$450.00",
+      totalValue: 450,
       assignedDriver: "Carlos Rodriguez",
     },
     {
@@ -36,7 +37,7 @@ export default function ScheduledBookingsPage() {
       deliveryLocation: "Batangas Distribution",
       scheduledDate: "2024-05-10 10:30 AM",
       status: "confirmed",
-      totalValue: "$680.00",
+      totalValue: 680,
       assignedDriver: "Maria Santos",
     },
     {
@@ -46,7 +47,7 @@ export default function ScheduledBookingsPage() {
       deliveryLocation: "Cebu Warehouse",
       scheduledDate: "2024-05-10 08:00 AM",
       status: "in_transit",
-      totalValue: "$920.00",
+      totalValue: 920,
       assignedDriver: "Juan Dela Cruz",
     },
     {
@@ -56,7 +57,7 @@ export default function ScheduledBookingsPage() {
       deliveryLocation: "Cavite Distribution",
       scheduledDate: "2024-05-11 06:00 AM",
       status: "pending",
-      totalValue: "$550.00",
+      totalValue: 550,
     },
     {
       id: "BK-2024-0005",
@@ -65,7 +66,7 @@ export default function ScheduledBookingsPage() {
       deliveryLocation: "Antipolo Depot",
       scheduledDate: "2024-05-11 02:00 PM",
       status: "pending",
-      totalValue: "$380.00",
+      totalValue: 380,
     },
   ]);
 
@@ -127,7 +128,7 @@ export default function ScheduledBookingsPage() {
                       </td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{booking.scheduledDate}</td>
                       <td style={{ padding: "1rem", color: "#1A1A1A" }}>{booking.assignedDriver || "-"}</td>
-                      <td style={{ padding: "1rem", fontWeight: 700, color: "#1A1A1A" }}>{booking.totalValue}</td>
+                      <td style={{ padding: "1rem", fontWeight: 700, color: "#1A1A1A" }}>{formatPhp(booking.totalValue)}</td>
                       <td style={{ padding: "1rem" }}>
                         <span
                           style={{

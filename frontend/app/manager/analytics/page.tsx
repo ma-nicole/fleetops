@@ -3,22 +3,23 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
 type AnalyticsData = {
   totalTrips: number;
   completedTrips: number;
   cancelledTrips: number;
   averageRating: number;
-  totalEarnings: string;
-  averageCostPerTrip: string;
-  fuelCostPerLiter: string;
-  maintenanceCost: string;
+  totalEarnings: number;
+  averageCostPerTrip: number;
+  fuelCostPerLiter: number;
+  maintenanceCost: number;
 };
 
 type TripTrend = {
   date: string;
   trips: number;
-  revenue: string;
+  revenue: number;
 };
 
 export default function AnalyticsPage() {
@@ -29,20 +30,20 @@ export default function AnalyticsPage() {
     completedTrips: 1089,
     cancelledTrips: 67,
     averageRating: 4.7,
-    totalEarnings: "$245,680.50",
-    averageCostPerTrip: "$195.50",
-    fuelCostPerLiter: "$1.35",
-    maintenanceCost: "$12,450.00",
+    totalEarnings: 245680.5,
+    averageCostPerTrip: 195.5,
+    fuelCostPerLiter: 72.35,
+    maintenanceCost: 12450,
   });
 
   const [tripTrends] = useState<TripTrend[]>([
-    { date: "Monday", trips: 145, revenue: "$28,450" },
-    { date: "Tuesday", trips: 152, revenue: "$29,680" },
-    { date: "Wednesday", trips: 138, revenue: "$27,220" },
-    { date: "Thursday", trips: 161, revenue: "$31,590" },
-    { date: "Friday", trips: 173, revenue: "$33,870" },
-    { date: "Saturday", trips: 145, revenue: "$28,350" },
-    { date: "Sunday", trips: 98, revenue: "$19,240" },
+    { date: "Monday", trips: 145, revenue: 28450 },
+    { date: "Tuesday", trips: 152, revenue: 29680 },
+    { date: "Wednesday", trips: 138, revenue: 27220 },
+    { date: "Thursday", trips: 161, revenue: 31590 },
+    { date: "Friday", trips: 173, revenue: 33870 },
+    { date: "Saturday", trips: 145, revenue: 28350 },
+    { date: "Sunday", trips: 98, revenue: 19240 },
   ]);
 
   return (
@@ -84,7 +85,7 @@ export default function AnalyticsPage() {
 
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Total Earnings</div>
-            <div style={{ fontSize: "2.5rem", fontWeight: 900, color: "#FF9800" }}>{analytics.totalEarnings}</div>
+            <div style={{ fontSize: "2.5rem", fontWeight: 900, color: "#FF9800" }}>{formatPhpWhole(analytics.totalEarnings)}</div>
             <div style={{ fontSize: "0.8rem", color: "#999", marginTop: "0.5rem" }}>Revenue generated</div>
           </div>
 
@@ -109,15 +110,15 @@ export default function AnalyticsPage() {
             <div style={{ display: "grid", gap: "1rem" }}>
               <div style={{ padding: "1rem", background: "#F0F9FF", borderRadius: "6px", borderLeft: "3px solid #0EA5E9" }}>
                 <div style={{ color: "#666", fontSize: "0.9rem" }}>Avg Cost Per Trip</div>
-                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0EA5E9" }}>{analytics.averageCostPerTrip}</div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#0EA5E9" }}>{formatPhp(analytics.averageCostPerTrip)}</div>
               </div>
               <div style={{ padding: "1rem", background: "#FEF3C7", borderRadius: "6px", borderLeft: "3px solid #F59E0B" }}>
                 <div style={{ color: "#666", fontSize: "0.9rem" }}>Fuel Cost Per Liter</div>
-                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#F59E0B" }}>{analytics.fuelCostPerLiter}</div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#F59E0B" }}>{formatPhp(analytics.fuelCostPerLiter)}</div>
               </div>
               <div style={{ padding: "1rem", background: "#FEE2E2", borderRadius: "6px", borderLeft: "3px solid #EF4444" }}>
                 <div style={{ color: "#666", fontSize: "0.9rem" }}>Maintenance Cost</div>
-                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#EF4444" }}>{analytics.maintenanceCost}</div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#EF4444" }}>{formatPhpWhole(analytics.maintenanceCost)}</div>
               </div>
             </div>
           </div>

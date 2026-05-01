@@ -93,6 +93,8 @@ export const WorkflowApi = {
   workflowCreateBooking: (payload: Record<string, unknown>) =>
     apiPost<Booking>("/workflow/booking/create", payload),
   pendingApprovals: () => apiGet<Booking[]>("/workflow/booking/pending-approval"),
+  /** Approved bookings ready for dispatcher assignment (empty until managers approve). */
+  assignableBookings: () => apiGet<Booking[]>("/workflow/booking/assignable"),
   approveBooking: (id: number, approved: boolean, reason?: string) =>
     apiPost<Booking>(`/workflow/booking/${id}/approve`, { approved, rejection_reason: reason }),
   createJobFromBooking: (id: number) => apiPost<Trip>(`/workflow/job/create-from-booking/${id}`),
@@ -103,7 +105,8 @@ export const WorkflowApi = {
   // Driver
   myTrips: () => apiGet<Trip[]>("/driver/trips"),
   driverSalary: () => apiGet<Record<string, unknown>>("/driver/salary"),
-  driverCheckIn: () => apiPost<{ checked_in: boolean; timestamp: string }>("/driver/attendance/check-in"),
+  driverCheckIn: () =>
+    apiPost<{ checked_in: boolean; timestamp: string }>("/driver/attendance/check-in", {}),
   acceptJob: (trip_id: number) => apiPost<Trip>(`/workflow/job/${trip_id}/accept`),
   depart: (trip_id: number, lat?: number, lng?: number) =>
     apiPost<Trip>(`/workflow/job/${trip_id}/depart`, {

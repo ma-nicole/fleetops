@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { formatDateTime } from "@/lib/appLocale";
 import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
+import { downloadReceiptPdf } from "@/lib/receiptPdf";
 
 export default function FeedbackPage() {
   const [message, setMessage] = useState("");
@@ -22,22 +24,96 @@ export default function FeedbackPage() {
     setSaved(result.feedback.id);
   };
 
+  const downloadPdf = () => {
+    if (!booking || !payment) return;
+    const notes: string[] = [];
+    if (latestFeedback?.receiptMessage) notes.push(`Receipt email summary: ${latestFeedback.receiptMessage}`);
+    if (message.trim()) notes.push(`Feedback text: ${message.trim()}`);
+    if (rating) notes.push(`Rating: ${rating} / 5`);
+    downloadReceiptPdf({
+      bookingId: booking.id,
+      receiptId: payment.id,
+      reference: payment.reference,
+      amount: payment.amount,
+      paymentMethod: payment.method,
+      paidAtDisplay: formatDateTime(payment.paidAt),
+      pickup: booking.pickup,
+      dropoff: booking.dropoff,
+      cargo: booking.load,
+      serviceType: booking.serviceType,
+      extraNotes: notes.length ? notes : undefined,
+      filenameStem: payment.reference || booking.id,
+    });
+  };
+
   return (
     <main style={{ padding: "2rem", minHeight: "100vh", background: "#FAFAFA" }}>
       <div style={{ maxWidth: "900px", margin: "0 auto", display: "grid", gap: "1rem" }}>
         <h1 style={{ margin: 0 }}>Email Feedback / Receipt</h1>
         <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1rem", display: "grid", gap: "0.5rem" }}>
-          <p style={{ margin: 0 }}><strong>Receipt:</strong> {payment ? `${payment.id} (${payment.status})` : "No payment record"}</p>
-          <p style={{ margin: 0 }}><strong>Booking:</strong> {booking?.id || "-"}</p>
-          {payment?.reference && <p style={{ margin: 0 }}><strong>Reference:</strong> {payment.reference}</p>}
-          <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write feedback..." style={{ minHeight: "90px", padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px", fontFamily: "inherit" }} />
-          <select value={rating} onChange={(e) => setRating(parseInt(e.target.value, 10))} style={{ maxWidth: "160px", padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}>
-            <option value={5}>5 Stars</option><option value={4}>4 Stars</option><option value={3}>3 Stars</option><option value={2}>2 Stars</option><option value={1}>1 Star</option>
+          <p style={{ margin: 0 }}>
+            <strong>Receipt:</strong> {payment ? `${payment.id} (${payment.status})` : "No payment record"}
+          </p>
+          <p style={{ margin: 0 }}>
+            <strong>Booking:</strong> {booking?.id || "-"}
+          </p>
+          {payment?.reference && (
+            <p style={{ margin: 0 }}>
+              <strong>Reference:</strong> {payment.reference}
+            </p>
+          )}
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Write feedback..."
+            style={{ minHeight: "90px", padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px", fontFamily: "inherit" }}
+          />
+          <select
+            value={rating}
+            onChange={(e) => setRating(parseInt(e.target.value, 10))}
+            style={{ maxWidth: "160px", padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
+          >
+            <option value={5}>5 Stars</option>
+            <option value={4}>4 Stars</option>
+            <option value={3}>3 Stars</option>
+            <option value={2}>2 Stars</option>
+            <option value={1}>1 Star</option>
           </select>
           {error && <p style={{ margin: 0, color: "#DC2626" }}>{error}</p>}
-          <button onClick={submit} style={{ width: "fit-content", border: "none", borderRadius: "6px", background: "#10B981", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
-            Save Feedback & Receipt
-          </button>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.65rem", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={submit}
+              style={{
+                border: "none",
+                borderRadius: "6px",
+                background: "#10B981",
+                color: "white",
+                fontWeight: 600,
+                padding: "0.65rem 1rem",
+                cursor: "pointer",
+              }}
+            >
+              Save Feedback & Receipt
+            </button>
+            <button
+              type="button"
+              onClick={downloadPdf}
+              disabled={!payment || !booking}
+              title={!payment || !booking ? "Complete payment first to download a receipt." : undefined}
+              style={{
+                border: "1px solid #1565C0",
+                borderRadius: "6px",
+                background: payment && booking ? "#2196F3" : "#BDBDBD",
+                color: "white",
+                fontWeight: 600,
+                padding: "0.65rem 1rem",
+                cursor: payment && booking ? "pointer" : "not-allowed",
+              }}
+            >
+              Download receipt (PDF)
+            </button>
+          </div>
           {saved && <p style={{ margin: 0, color: "#059669" }}>Feedback saved ({saved}) and stored in Feedback Data.</p>}
           {latestFeedback?.receiptMessage && (
             <p style={{ margin: 0, color: "#4B5563" }}>

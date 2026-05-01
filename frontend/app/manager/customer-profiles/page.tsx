@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
 type Customer = {
   id: string;
@@ -11,7 +12,7 @@ type Customer = {
   phone: string;
   company: string;
   totalBookings: number;
-  totalSpent: string;
+  totalSpent: number;
   status: "active" | "inactive";
   joinDate: string;
   lastBooking: string;
@@ -28,7 +29,7 @@ export default function CustomerProfilesPage() {
       phone: "+63 2 8123 4567",
       company: "ABC Retail Corp",
       totalBookings: 24,
-      totalSpent: "$12,450.00",
+      totalSpent: 12450,
       status: "active",
       joinDate: "January 10, 2023",
       lastBooking: "Today",
@@ -40,7 +41,7 @@ export default function CustomerProfilesPage() {
       phone: "+63 2 8234 5678",
       company: "DEF Logistics",
       totalBookings: 18,
-      totalSpent: "$9,820.50",
+      totalSpent: 9820.5,
       status: "active",
       joinDate: "February 15, 2023",
       lastBooking: "Yesterday",
@@ -52,7 +53,7 @@ export default function CustomerProfilesPage() {
       phone: "+63 2 8345 6789",
       company: "GHI Trading",
       totalBookings: 31,
-      totalSpent: "$15,680.75",
+      totalSpent: 15680.75,
       status: "active",
       joinDate: "March 05, 2023",
       lastBooking: "3 days ago",
@@ -64,7 +65,7 @@ export default function CustomerProfilesPage() {
       phone: "+63 2 8456 7890",
       company: "JKL Manufacturing",
       totalBookings: 12,
-      totalSpent: "$6,240.00",
+      totalSpent: 6240,
       status: "inactive",
       joinDate: "April 20, 2023",
       lastBooking: "2 months ago",
@@ -76,7 +77,7 @@ export default function CustomerProfilesPage() {
       phone: "+63 2 8567 8901",
       company: "MNO Suppliers",
       totalBookings: 27,
-      totalSpent: "$14,320.25",
+      totalSpent: 14320.25,
       status: "active",
       joinDate: "May 12, 2023",
       lastBooking: "Today",
@@ -126,11 +127,11 @@ export default function CustomerProfilesPage() {
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Total Revenue</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#FF9800" }}>$245.6K</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#FF9800" }}>{formatPhpWhole(245600)}</div>
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Avg Spend</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#0EA5E9" }}>$854</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#0EA5E9" }}>{formatPhpWhole(854)}</div>
           </div>
         </div>
 
@@ -158,7 +159,7 @@ export default function CustomerProfilesPage() {
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{customer.email}</td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{customer.phone}</td>
                       <td style={{ padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>{customer.totalBookings}</td>
-                      <td style={{ padding: "1rem", fontWeight: 700, color: "#FF9800" }}>{customer.totalSpent}</td>
+                      <td style={{ padding: "1rem", fontWeight: 700, color: "#FF9800" }}>{formatPhp(customer.totalSpent)}</td>
                       <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>{customer.lastBooking}</td>
                       <td style={{ padding: "1rem" }}>
                         <span

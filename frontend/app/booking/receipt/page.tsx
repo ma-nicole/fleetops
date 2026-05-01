@@ -4,6 +4,8 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { formatDateTime, formatPhp } from "@/lib/appLocale";
+import { downloadReceiptPdf } from "@/lib/receiptPdf";
 
 type CompletedBooking = {
   bookingId: number;
@@ -37,47 +39,20 @@ export default function ReceiptPage() {
   }, []);
 
   const handleDownloadReceipt = () => {
-    // Simulate receipt download
-    if (booking) {
-      const receiptText = `
-FLEETOPS - BOOKING RECEIPT
-==========================
-Booking ID: #${booking.bookingId}
-Payment ID: #${booking.paymentId}
-
-SHIPMENT DETAILS
-================
-From: ${booking.pickupLocation}
-To: ${booking.dropoffLocation}
-Date: ${booking.shipmentDate}
-Cargo: ${booking.cargoDescription}
-Weight: ${booking.cargoWeight} tons
-
-TRUCK INFORMATION
-================
-Type: ${booking.truck.name}
-Capacity: ${booking.truck.capacity_tons} tons
-
-SERVICE
-======
-${booking.service.name}
-
-AMOUNT
-======
-Total Cost: $${booking.totalCost.toFixed(2)}
-Payment Status: PAID
-Payment Date: ${new Date(booking.paymentDate).toLocaleString()}
-
-Thank you for using FLEETOPS!
-      `;
-
-      const blob = new Blob([receiptText], { type: "text/plain" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `receipt-${booking.bookingId}.txt`;
-      a.click();
-    }
+    if (!booking) return;
+    downloadReceiptPdf({
+      bookingId: `#${booking.bookingId}`,
+      receiptId: `#${booking.paymentId}`,
+      reference: `INV-${booking.paymentId}`,
+      amount: booking.totalCost,
+      paymentMethod: "Paid — card / wallet / bank as selected at checkout",
+      paidAtDisplay: formatDateTime(booking.paymentDate),
+      pickup: booking.pickupLocation,
+      dropoff: booking.dropoffLocation,
+      cargo: `${booking.cargoDescription} (${booking.cargoWeight} tons)`,
+      serviceType: booking.service?.name,
+      filenameStem: `booking-${booking.bookingId}`,
+    });
   };
 
   if (!booking) {
@@ -175,15 +150,13 @@ Thank you for using FLEETOPS!
         <div style={{ marginBottom: "1.5rem", borderTop: "2px solid #E8E8E8", borderBottom: "2px solid #E8E8E8", padding: "1rem 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "#1A1A1A", fontWeight: 600 }}>TOTAL AMOUNT</span>
-            <span style={{ fontSize: "1.5rem", fontWeight: 700, color: "#FF9800" }}>
-              ${booking.totalCost.toFixed(2)}
-            </span>
+            <span style={{ fontSize: "1.5rem", fontWeight: 700, color: "#FF9800" }}>{formatPhp(booking.totalCost)}</span>
           </div>
         </div>
 
         {/* Payment Info */}
         <div style={{ fontSize: "0.85rem", color: "#999", textAlign: "center" }}>
-          <p style={{ margin: "0 0 0.5rem 0" }}>Payment Date: {new Date(booking.paymentDate).toLocaleString()}</p>
+          <p style={{ margin: "0 0 0.5rem 0" }}>Payment Date: {formatDateTime(booking.paymentDate)}</p>
           <p style={{ margin: "0" }}>Invoice #{booking.paymentId}</p>
         </div>
       </div>
@@ -191,6 +164,7 @@ Thank you for using FLEETOPS!
       {/* Actions */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
         <button
+          type="button"
           onClick={handleDownloadReceipt}
           style={{
             padding: "0.75rem",
@@ -202,7 +176,7 @@ Thank you for using FLEETOPS!
             fontWeight: 600,
           }}
         >
-           Download Receipt
+           Download receipt (PDF)
         </button>
         <Link
           href="/booking/status"

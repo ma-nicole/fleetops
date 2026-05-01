@@ -45,3 +45,5 @@ class UserRead(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    # Echoed from DB so clients need not parse JWT (avoids fragile browser base64 decoding).
+    role: str | None = None

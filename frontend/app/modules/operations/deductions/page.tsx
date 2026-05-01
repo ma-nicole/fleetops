@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type Deduction = {
@@ -37,7 +38,7 @@ export default function DeductionsPage() {
     {
       id: 3,
       type: "violation",
-      description: "Speeding violation - I-95",
+      description: "Speeding violation - NLEX",
       amount: 50.0,
       date: "2026-04-26",
       status: "pending",
@@ -134,7 +135,7 @@ export default function DeductionsPage() {
         >
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#F44336" }}>
-              ${stats.total.toFixed(2)}
+              {formatPhp(stats.total)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>
               Total Deductions
@@ -142,19 +143,19 @@ export default function DeductionsPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#4CAF50" }}>
-              ${stats.approved.toFixed(2)}
+              {formatPhp(stats.approved)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Approved</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.pending.toFixed(2)}
+              {formatPhp(stats.pending)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Pending</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#F44336" }}>
-              ${stats.disputed.toFixed(2)}
+              {formatPhp(stats.disputed)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Disputed</div>
           </div>
@@ -247,7 +248,7 @@ export default function DeductionsPage() {
                 </div>
                 <div style={{ textAlign: "right", marginLeft: "1rem", whiteSpace: "nowrap" }}>
                   <div style={{ color: "#F44336", fontWeight: 700, fontSize: "1.1rem" }}>
-                    -${deduction.amount.toFixed(2)}
+                    {formatPhp(-deduction.amount)}
                   </div>
                 </div>
               </div>
@@ -271,7 +272,7 @@ export default function DeductionsPage() {
                       deduction.type.slice(1).replace(/_/g, " ")}
                   </p>
                   <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                    <strong>Amount:</strong> -${deduction.amount.toFixed(2)}
+                    <strong>Amount:</strong> {formatPhp(-deduction.amount)}
                   </p>
                   <p style={{ color: "#666666", margin: "0.5rem 0" }}>
                     <strong>Date:</strong> {deduction.date}

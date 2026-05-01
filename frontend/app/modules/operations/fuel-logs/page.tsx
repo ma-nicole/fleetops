@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useState, useEffect } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 
 type FuelLog = {
   id: number;
@@ -22,26 +23,26 @@ export default function FuelLogsPage() {
       id: 1,
       trip_id: 101,
       gallons: 45,
-      price_per_gallon: 3.2,
-      total_cost: 144,
+      price_per_gallon: 72.5,
+      total_cost: 3262.5,
       date_recorded: "2026-04-28",
-      vendor: "Shell Station - Manhattan",
+      vendor: "Shell Station - Makati",
     },
     {
       id: 2,
       trip_id: 102,
       gallons: 65,
-      price_per_gallon: 3.15,
-      total_cost: 204.75,
+      price_per_gallon: 71.5,
+      total_cost: 4647.5,
       date_recorded: "2026-04-28",
-      vendor: "Exxon Mobil - Newark",
+      vendor: "Petron - Quezon City",
     },
   ]);
 
   const [showForm, setShowForm] = useState(false);
   const [tripId, setTripId] = useState("");
   const [gallons, setGallons] = useState("");
-  const [pricePerGallon, setPricePerGallon] = useState("3.2");
+  const [pricePerGallon, setPricePerGallon] = useState("72.5");
   const [vendor, setVendor] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
@@ -51,7 +52,7 @@ export default function FuelLogsPage() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!tripId || isNaN(parseInt(tripId))) newErrors.trip_id = "Valid trip ID required";
-    if (!gallons || parseFloat(gallons) <= 0) newErrors.gallons = "Gallons must be greater than 0";
+    if (!gallons || parseFloat(gallons) <= 0) newErrors.gallons = "Volume must be greater than 0";
     if (!pricePerGallon || parseFloat(pricePerGallon) <= 0) newErrors.price = "Price must be greater than 0";
     if (!vendor || vendor.trim().length < 3) newErrors.vendor = "Vendor name required";
     return newErrors;
@@ -79,7 +80,7 @@ export default function FuelLogsPage() {
     setShowForm(false);
     setTripId("");
     setGallons("");
-    setPricePerGallon("3.2");
+    setPricePerGallon("72.5");
     setVendor("");
     setErrors({});
 
@@ -150,7 +151,7 @@ export default function FuelLogsPage() {
 
               <div>
                 <label style={{ display: "block", color: "#1A1A1A", fontWeight: 600, marginBottom: "0.5rem" }}>
-                  Gallons *
+                  Volume (L) *
                 </label>
                 <input
                   type="number"
@@ -171,13 +172,13 @@ export default function FuelLogsPage() {
 
               <div>
                 <label style={{ display: "block", color: "#1A1A1A", fontWeight: 600, marginBottom: "0.5rem" }}>
-                  Price per Gallon ($) *
+                  Price per liter (PHP/L) *
                 </label>
                 <input
                   type="number"
                   value={pricePerGallon}
                   onChange={(e) => setPricePerGallon(e.target.value)}
-                  placeholder="e.g., 3.20"
+                  placeholder="e.g., 72.50"
                   step="0.01"
                   style={{
                     width: "100%",
@@ -196,7 +197,7 @@ export default function FuelLogsPage() {
                 </label>
                 <input
                   type="text"
-                  value={`$${totalCost}`}
+                  value={gallons && pricePerGallon ? formatPhp(parseFloat(totalCost)) : formatPhp(0)}
                   disabled
                   style={{
                     width: "100%",
@@ -220,7 +221,7 @@ export default function FuelLogsPage() {
                 type="text"
                 value={vendor}
                 onChange={(e) => setVendor(e.target.value)}
-                placeholder="e.g., Shell Station - Manhattan"
+                placeholder="e.g., Shell Station - Makati"
                 style={{
                   width: "100%",
                   padding: "0.75rem",
@@ -263,8 +264,8 @@ export default function FuelLogsPage() {
               <thead>
                 <tr style={{ borderBottom: "2px solid #E8E8E8" }}>
                   <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Trip ID</th>
-                  <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Gallons</th>
-                  <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Price/Gal</th>
+                  <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Volume (L)</th>
+                  <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>PHP/L</th>
                   <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Total Cost</th>
                   <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Vendor</th>
                   <th style={{ textAlign: "left", padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>Date</th>
@@ -274,9 +275,9 @@ export default function FuelLogsPage() {
                 {fuelLogs.map((log) => (
                   <tr key={log.id} style={{ borderBottom: "1px solid #E8E8E8" }}>
                     <td style={{ padding: "1rem", color: "#1A1A1A", fontWeight: 600 }}>#{log.trip_id}</td>
-                    <td style={{ padding: "1rem", color: "#666666" }}>{log.gallons}gal</td>
-                    <td style={{ padding: "1rem", color: "#666666" }}>${log.price_per_gallon.toFixed(2)}</td>
-                    <td style={{ padding: "1rem", color: "#FF9800", fontWeight: 600 }}>${log.total_cost.toFixed(2)}</td>
+                    <td style={{ padding: "1rem", color: "#666666" }}>{log.gallons} L</td>
+                    <td style={{ padding: "1rem", color: "#666666" }}>{formatPhp(log.price_per_gallon)}</td>
+                    <td style={{ padding: "1rem", color: "#FF9800", fontWeight: 600 }}>{formatPhp(log.total_cost)}</td>
                     <td style={{ padding: "1rem", color: "#666666" }}>{log.vendor}</td>
                     <td style={{ padding: "1rem", color: "#666666" }}>{log.date_recorded}</td>
                   </tr>
@@ -292,7 +293,7 @@ export default function FuelLogsPage() {
             <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Summary</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
               <div>
-                <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Total Gallons</p>
+                <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Total Volume (L)</p>
                 <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
                   {fuelLogs.reduce((sum, log) => sum + log.gallons, 0).toFixed(1)}
                 </p>
@@ -300,13 +301,16 @@ export default function FuelLogsPage() {
               <div>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Total Fuel Cost</p>
                 <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-                  ${fuelLogs.reduce((sum, log) => sum + log.total_cost, 0).toFixed(2)}
+                  {formatPhp(fuelLogs.reduce((sum, log) => sum + log.total_cost, 0))}
                 </p>
               </div>
               <div>
-                <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Avg Price/Gallon</p>
+                <p style={{ color: "#666666", fontSize: "0.9rem", margin: 0 }}>Avg PHP/L</p>
                 <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>
-                  ${(fuelLogs.reduce((sum, log) => sum + log.total_cost, 0) / fuelLogs.reduce((sum, log) => sum + log.gallons, 0)).toFixed(2)}
+                  {formatPhp(
+                    fuelLogs.reduce((sum, log) => sum + log.total_cost, 0) /
+                      fuelLogs.reduce((sum, log) => sum + log.gallons, 0)
+                  )}
                 </p>
               </div>
             </div>

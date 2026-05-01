@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
+import { formatPhp } from "@/lib/appLocale";
 
 export default function PaymentPage() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function PaymentPage() {
           ) : (
             <>
               <p style={{ margin: 0 }}><strong>Booking:</strong> {booking.id}</p>
-              <p style={{ margin: 0 }}><strong>Amount:</strong> ${amount.toFixed(2)}</p>
+              <p style={{ margin: 0 }}><strong>Amount:</strong> {formatPhp(amount)}</p>
               <select value={method} onChange={(e) => setMethod(e.target.value)} style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px", maxWidth: "280px" }}>
                 <option>Credit Card</option>
                 <option>Bank Transfer</option>

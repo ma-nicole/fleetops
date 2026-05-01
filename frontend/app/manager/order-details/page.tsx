@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type OrderDetail = {
   id: string;
@@ -14,7 +15,7 @@ type OrderDetail = {
   pickupDate: string;
   deliveryDate: string;
   deliveryAddress: string;
-  totalAmount: string;
+  totalAmount: number;
   status: string;
 };
 
@@ -31,7 +32,7 @@ export default function OrderDetailsPage() {
     pickupDate: "May 10, 2024 09:00 AM",
     deliveryDate: "May 10, 2024 11:45 AM",
     deliveryAddress: "Makati Branch, EDSA Cor. Makati Ave, Makati City 1200",
-    totalAmount: "$450.00",
+    totalAmount: 450,
     status: "in_transit",
   });
 
@@ -132,7 +133,7 @@ export default function OrderDetailsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div>
                 <div style={{ color: "#666", fontSize: "0.9rem" }}>Total Amount</div>
-                <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#FF9800" }}>{order.totalAmount}</div>
+                <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#FF9800" }}>{formatPhp(order.totalAmount)}</div>
               </div>
             </div>
           </div>

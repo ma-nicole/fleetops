@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type Route = {
@@ -22,10 +23,10 @@ export default function RoutesPage() {
   const [routes] = useState<Route[]>([
     {
       id: 1,
-      name: "NYC to Philadelphia",
-      pickup_city: "New York, NY",
-      dropoff_city: "Philadelphia, PA",
-      estimated_distance: 95,
+      name: "Makati to Batangas",
+      pickup_city: "Makati City",
+      dropoff_city: "Batangas City",
+      estimated_distance: 108,
       estimated_duration: 2.5,
       base_fare: 150,
       status: "active",
@@ -33,33 +34,33 @@ export default function RoutesPage() {
     },
     {
       id: 2,
-      name: "Boston to NYC",
-      pickup_city: "Boston, MA",
-      dropoff_city: "New York, NY",
-      estimated_distance: 215,
-      estimated_duration: 4,
+      name: "Clark to Makati",
+      pickup_city: "Angeles City",
+      dropoff_city: "Makati City",
+      estimated_distance: 85,
+      estimated_duration: 2,
       base_fare: 180,
       status: "active",
       frequency: "Daily",
     },
     {
       id: 3,
-      name: "Philadelphia to DC",
-      pickup_city: "Philadelphia, PA",
-      dropoff_city: "Washington, DC",
-      estimated_distance: 140,
-      estimated_duration: 3,
+      name: "Laguna to Quezon City",
+      pickup_city: "Santa Rosa, Laguna",
+      dropoff_city: "Quezon City",
+      estimated_distance: 55,
+      estimated_duration: 1.25,
       base_fare: 120,
       status: "active",
       frequency: "5 times/week",
     },
     {
       id: 4,
-      name: "DC to Atlanta",
-      pickup_city: "Washington, DC",
-      dropoff_city: "Atlanta, GA",
-      estimated_distance: 640,
-      estimated_duration: 10,
+      name: "Manila to Laoag",
+      pickup_city: "Manila",
+      dropoff_city: "Laoag City",
+      estimated_distance: 485,
+      estimated_duration: 8,
       base_fare: 200,
       status: "seasonal",
       frequency: "3 times/week",
@@ -205,7 +206,7 @@ export default function RoutesPage() {
                   }}
                 >
                   <div style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.1rem" }}>
-                    ${route.base_fare.toFixed(2)}
+                    {formatPhp(route.base_fare)}
                   </div>
                   <p
                     style={{

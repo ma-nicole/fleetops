@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import DashboardRoleTabs from "@/components/DashboardRoleTabs";
 import KpiCard from "@/components/KpiCard";
+import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/appLocale";
 import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
 
 function bookingProgress(status: Booking["status"]): number {
@@ -60,7 +62,12 @@ function bookingLabel(status: Booking["status"]): string {
 
 function formatShortDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return new Intl.DateTimeFormat(APP_LOCALE, {
+      timeZone: APP_TIMEZONE,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(iso));
   } catch {
     return iso;
   }
@@ -109,7 +116,7 @@ export default function CustomerPortalDashboard() {
       pendingPickup: bookings.filter((b) => b.status === "approved" || b.status === "assigned").length,
       totalOrders,
       spent,
-      spentLabel: spent >= 1000 ? `₱${(spent / 1000).toFixed(1)}K` : `₱${Math.round(spent).toLocaleString()}`,
+      spentLabel: spent >= 1000 ? `₱${formatNumber(spent / 1000, { maximumFractionDigits: 1 })}K` : formatPhpWhole(Math.round(spent)),
       rate,
       thisMonth: bookings.filter((b) => {
         const t = new Date(b.created_at).getTime();
@@ -140,7 +147,7 @@ export default function CustomerPortalDashboard() {
         .map((p) => ({
           id: p.id,
           when: formatShortDate(p.paid_at || p.created_at),
-          amt: `₱${p.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+          amt: formatPhpWhole(p.amount),
           state: "Paid" as const,
         })),
     [payments],
@@ -152,14 +159,14 @@ export default function CustomerPortalDashboard() {
         <section style={{ display: "grid", gap: "0.85rem" }}>
           <div>
             <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.06em" }}>FleetOpt Analytics</p>
-            <h1 style={{ margin: "0.15rem 0 0", fontSize: "1.35rem", fontWeight: 800 }}>Logistics Management System</h1>
+            <h1 style={{ margin: "0.15rem 0 0", fontSize: "1.35rem", fontWeight: 800 }}>Philippine logistics hub</h1>
           </div>
           <DashboardRoleTabs active="customer" />
 
           <div>
             <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Customer portal</h2>
             <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-              Your bookings, shipments, and payments in one place.
+              Bookings, shipments, and payments in one place — amounts are in Philippine peso (PHP); dates and times use Manila (PHT).
             </p>
           </div>
         </section>
@@ -246,11 +253,11 @@ export default function CustomerPortalDashboard() {
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem", flexWrap: "wrap", gap: "0.35rem" }}>
                             <span style={{ color: "var(--text-secondary)" }}>
-                              Estimate <strong>₱{Number(order.estimated_cost).toLocaleString()}</strong>
+                              Estimate <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
                             </span>
-                            <a href="/modules/customer/booking-history" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
+                            <Link href="/modules/customer/booking-history" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
                               Details
-                            </a>
+                            </Link>
                           </div>
                         </div>
                       );
@@ -262,7 +269,7 @@ export default function CustomerPortalDashboard() {
               <div style={{ display: "grid", gap: "1.25rem" }}>
                 <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
                   <h2 style={{ margin: 0 }}>Quick booking</h2>
-                  <CustomerCtaPrimary href="/modules/customer/booking/trucks">+ New booking</CustomerCtaPrimary>
+                  <CustomerCtaPrimary href="/booking">+ New booking</CustomerCtaPrimary>
                   <CustomerCtaGhost href="/modules/customer/profile">Your profile</CustomerCtaGhost>
                   <CustomerCtaGhost href="/modules/customer/booking-history">Booking history</CustomerCtaGhost>
                   <div style={{ padding: "0.75rem", borderRadius: 10, border: "1px dashed var(--border)", fontSize: "0.85rem", background: "#fff" }}>
@@ -273,7 +280,14 @@ export default function CustomerPortalDashboard() {
                 <div className="card" style={{ display: "grid", gap: "1rem" }}>
                   <h2 style={{ margin: 0 }}>Account</h2>
                   <RowKv label="Member reference" value={`Customer ID (session)`} />
-                  <RowKv label="Support" value={<a href="/modules/customer/support" style={{ color: "var(--brand-text-strong)", fontWeight: 600 }}>Contact support</a>} />
+                  <RowKv
+                    label="Support"
+                    value={
+                      <Link href="/modules/customer/support" style={{ color: "var(--brand-text-strong)", fontWeight: 600 }}>
+                        Contact support
+                      </Link>
+                    }
+                  />
                   <CustomerCtaGhost href="/modules/customer/profile">View profile</CustomerCtaGhost>
                 </div>
 
@@ -292,9 +306,9 @@ export default function CustomerPortalDashboard() {
                       </div>
                     ))
                   )}
-                  <a href="/modules/customer/payment" style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--brand-text-strong)" }}>
+                  <Link href="/modules/customer/payment" style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--brand-text-strong)" }}>
                     Payments &amp; receipts
-                  </a>
+                  </Link>
                 </div>
               </div>
             </section>
@@ -326,7 +340,7 @@ export default function CustomerPortalDashboard() {
                           {row.dropoff_location && row.dropoff_location.length > 24 ? "…" : ""}
                         </td>
                         <td style={{ padding: "0.65rem", color: "var(--text-secondary)", textTransform: "capitalize" }}>{row.service_type}</td>
-                        <td style={{ padding: "0.65rem" }}>₱{Number(row.estimated_cost).toLocaleString()}</td>
+                        <td style={{ padding: "0.65rem" }}>{formatPhpWhole(Number(row.estimated_cost))}</td>
                         <td style={{ padding: "0.65rem" }}>
                           <ShipmentBadgeTiny label={bookingLabel(row.status)} />
                         </td>
@@ -374,7 +388,7 @@ function RowKv({ label, value }: { label: string; value: ReactNode }) {
 
 function CustomerCtaPrimary({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a
+    <Link
       href={href}
       style={{
         padding: "0.85rem",
@@ -384,16 +398,17 @@ function CustomerCtaPrimary({ href, children }: { href: string; children: ReactN
         textDecoration: "none",
         background: "linear-gradient(135deg, #F57C00, #FF9800)",
         color: "#fff",
+        display: "block",
       }}
     >
       {children}
-    </a>
+    </Link>
   );
 }
 
 function CustomerCtaGhost({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a
+    <Link
       href={href}
       style={{
         padding: "0.65rem",
@@ -404,9 +419,10 @@ function CustomerCtaGhost({ href, children }: { href: string; children: ReactNod
         textDecoration: "none",
         color: "var(--brand-text-strong)",
         background: "#fff",
+        display: "block",
       }}
     >
       {children}
-    </a>
+    </Link>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type Booking = {
@@ -26,8 +27,8 @@ export default function BookingsPage() {
       id: 1,
       customer_name: "John Smith",
       customer_email: "john@example.com",
-      pickup_location: "New York, NY",
-      dropoff_location: "Philadelphia, PA",
+      pickup_location: "Makati City",
+      dropoff_location: "Batangas City",
       booking_date: "2026-04-28",
       trip_date: "2026-04-28",
       status: "completed",
@@ -39,8 +40,8 @@ export default function BookingsPage() {
       id: 2,
       customer_name: "Sarah Johnson",
       customer_email: "sarah@example.com",
-      pickup_location: "Boston, MA",
-      dropoff_location: "New York, NY",
+      pickup_location: "Angeles City",
+      dropoff_location: "Makati City",
       booking_date: "2026-04-27",
       trip_date: "2026-04-27",
       status: "completed",
@@ -52,8 +53,8 @@ export default function BookingsPage() {
       id: 3,
       customer_name: "Michael Chen",
       customer_email: "michael@example.com",
-      pickup_location: "Philadelphia, PA",
-      dropoff_location: "Washington, DC",
+      pickup_location: "Santa Rosa, Laguna",
+      dropoff_location: "Quezon City",
       booking_date: "2026-04-28",
       trip_date: "2026-04-28",
       status: "confirmed",
@@ -65,8 +66,8 @@ export default function BookingsPage() {
       id: 4,
       customer_name: "Emma Wilson",
       customer_email: "emma@example.com",
-      pickup_location: "Washington, DC",
-      dropoff_location: "Atlanta, GA",
+      pickup_location: "Manila",
+      dropoff_location: "Laoag City",
       booking_date: "2026-04-28",
       trip_date: "2026-04-29",
       status: "pending",
@@ -165,7 +166,7 @@ export default function BookingsPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.totalRevenue.toFixed(2)}
+              {formatPhp(stats.totalRevenue)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Revenue</div>
           </div>
@@ -249,7 +250,7 @@ export default function BookingsPage() {
                 </div>
                 <div style={{ textAlign: "right", marginLeft: "1rem" }}>
                   <div style={{ color: "#FF9800", fontWeight: 700 }}>
-                    ${booking.estimated_cost.toFixed(2)}
+                    {formatPhp(booking.estimated_cost)}
                   </div>
                   <p style={{ color: "#666666", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
                     {booking.truck_type}
@@ -303,7 +304,7 @@ export default function BookingsPage() {
                           margin: 0,
                         }}
                       >
-                        ${booking.estimated_cost.toFixed(2)}
+                        {formatPhp(booking.estimated_cost)}
                       </p>
                     </div>
                   </div>

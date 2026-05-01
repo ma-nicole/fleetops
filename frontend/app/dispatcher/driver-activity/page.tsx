@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, type CSSProperties } from "react";
+
+import { announce } from "@/lib/useAnnouncer";
 
 type DriverActivity = {
   driverId: string;
   driverName: string;
+  /** Display label for SMS / UI */
+  contactPhone: string;
+  /** E.164 without spaces, e.g. +639171234567 */
+  contactPhoneE164: string;
   status: string;
   currentLocation: string;
   distanceTraveledToday: string;
@@ -15,11 +22,19 @@ type DriverActivity = {
   rating: number;
 };
 
+function googleMapsSearchUrl(place: string): string {
+  const query = encodeURIComponent(`${place.trim()}, Philippines`);
+  return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
 export default function DriverActivityPage() {
+  const router = useRouter();
   const [activities] = useState<DriverActivity[]>([
     {
       driverId: "DRV-001",
       driverName: "Carlos Rodriguez",
+      contactPhone: "+63 917 123 4567",
+      contactPhoneE164: "+639171234567",
       status: "on_trip",
       currentLocation: "EDSA, Makati",
       distanceTraveledToday: "85 km",
@@ -31,6 +46,8 @@ export default function DriverActivityPage() {
     {
       driverId: "DRV-002",
       driverName: "Maria Santos",
+      contactPhone: "+63 918 987 6543",
+      contactPhoneE164: "+639189876543",
       status: "on_trip",
       currentLocation: "Quezon City",
       distanceTraveledToday: "62 km",
@@ -42,6 +59,8 @@ export default function DriverActivityPage() {
     {
       driverId: "DRV-003",
       driverName: "Juan Dela Cruz",
+      contactPhone: "+63 919 555 0199",
+      contactPhoneE164: "+639195550199",
       status: "on_break",
       currentLocation: "Caloocan Rest Area",
       distanceTraveledToday: "45 km",
@@ -53,6 +72,8 @@ export default function DriverActivityPage() {
     {
       driverId: "DRV-004",
       driverName: "Rita Gonzales",
+      contactPhone: "+63 920 444 7722",
+      contactPhoneE164: "+639204447722",
       status: "available",
       currentLocation: "Warehouse",
       distanceTraveledToday: "0 km",
@@ -64,6 +85,8 @@ export default function DriverActivityPage() {
     {
       driverId: "DRV-005",
       driverName: "Miguel Reyes",
+      contactPhone: "+63 921 333 8811",
+      contactPhoneE164: "+639213338811",
       status: "completed_shift",
       currentLocation: "Main Office",
       distanceTraveledToday: "145 km",
@@ -73,6 +96,46 @@ export default function DriverActivityPage() {
       rating: 4.9,
     },
   ]);
+
+  const [contactFor, setContactFor] = useState<DriverActivity | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!contactFor) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContactFor(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contactFor]);
+
+  useEffect(() => {
+    if (!copyFeedback) return;
+    const t = window.setTimeout(() => setCopyFeedback(null), 2200);
+    return () => window.clearTimeout(t);
+  }, [copyFeedback]);
+
+  const openLocation = (activity: DriverActivity) => {
+    const url = googleMapsSearchUrl(activity.currentLocation);
+    window.open(url, "_blank", "noopener,noreferrer");
+    announce(`Opening map for ${activity.driverName} near ${activity.currentLocation}.`);
+  };
+
+  const telHref = (e164: string) => `tel:${e164.replace(/\s/g, "")}`;
+  const smsHref = (e164: string, body: string) =>
+    `sms:${e164.replace(/\s/g, "")}?body=${encodeURIComponent(body)}`;
+
+  const copyPhone = async (activity: DriverActivity) => {
+    const raw = activity.contactPhoneE164.replace(/\s/g, "");
+    try {
+      await navigator.clipboard.writeText(raw);
+      setCopyFeedback("Copied to clipboard.");
+      announce(`Phone number copied for ${activity.driverName}.`);
+    } catch {
+      setCopyFeedback("Could not copy — select the number manually.");
+      announce("Could not copy phone number.", "assertive");
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -102,6 +165,26 @@ export default function DriverActivityPage() {
       default:
         return "Unknown";
     }
+  };
+
+  const actionsRowStyle: CSSProperties = {
+    display: "flex",
+    gap: "0.5rem",
+    flexWrap: "wrap",
+    position: "relative",
+    zIndex: 2,
+    isolation: "isolate",
+    marginTop: 2,
+  };
+
+  const btnBase: CSSProperties = {
+    padding: "0.5rem 1rem",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontWeight: "600",
+    fontSize: "0.85rem",
   };
 
   return (
@@ -184,6 +267,7 @@ export default function DriverActivityPage() {
               border: `2px solid ${getStatusColor(activity.status)}`,
               borderRadius: "8px",
               background: "#F9F9F9",
+              position: "relative",
             }}
           >
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "1.5rem", marginBottom: "1rem", alignItems: "center" }}>
@@ -196,9 +280,7 @@ export default function DriverActivityPage() {
 
               <div>
                 <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LOCATION</p>
-                <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                   {activity.currentLocation}
-                </p>
+                <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>{activity.currentLocation}</p>
               </div>
 
               <div>
@@ -235,63 +317,38 @@ export default function DriverActivityPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
                 <div>
                   <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LAST ACTIVITY</p>
-                  <p style={{ color: "#1A1A1A", fontSize: "0.9rem", margin: "0.25rem 0 0 0" }}>
-                    {activity.lastActivity}
-                  </p>
+                  <p style={{ color: "#1A1A1A", fontSize: "0.9rem", margin: "0.25rem 0 0 0" }}>{activity.lastActivity}</p>
                 </div>
                 <div>
                   <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>UPTIME</p>
-                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                    {activity.uptime}
-                  </p>
+                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>{activity.uptime}</p>
                 </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div style={actionsRowStyle}>
               <button
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "#2196F3",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  fontSize: "0.85rem",
-                }}
-                onClick={() => alert("Viewing map for " + activity.driverName)}
+                type="button"
+                style={{ ...btnBase, background: "#2196F3" }}
+                onClick={() => openLocation(activity)}
               >
                 View Location
               </button>
-              <button
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "#FF9800",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  fontSize: "0.85rem",
-                }}
-                onClick={() => alert("Contacting " + activity.driverName)}
-              >
+              <button type="button" style={{ ...btnBase, background: "#FF9800" }} onClick={() => setContactFor(activity)}>
                 Contact
               </button>
               {activity.status === "available" && (
                 <button
-                  style={{
-                    padding: "0.5rem 1rem",
-                    background: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    fontSize: "0.85rem",
+                  type="button"
+                  style={{ ...btnBase, background: "#4CAF50" }}
+                  onClick={() => {
+                    const q = new URLSearchParams({
+                      fromDriver: activity.driverId,
+                      driverName: activity.driverName,
+                    });
+                    announce(`Opening Job Assignment for ${activity.driverName}.`);
+                    router.push(`/dispatcher/job-assignments?${q.toString()}`);
                   }}
-                  onClick={() => alert("Assigning trip to " + activity.driverName)}
                 >
                   Assign Trip
                 </button>
@@ -300,6 +357,99 @@ export default function DriverActivityPage() {
           </div>
         ))}
       </div>
+
+      {contactFor ? (
+        <div
+          role="presentation"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            zIndex: 2000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+          onClick={() => setContactFor(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="contact-driver-title"
+            style={{
+              background: "#fff",
+              borderRadius: "12px",
+              maxWidth: "420px",
+              width: "100%",
+              padding: "1.25rem",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="contact-driver-title" style={{ margin: "0 0 0.35rem", fontSize: "1.15rem", color: "#1A1A1A" }}>
+              Contact driver
+            </h2>
+            <p style={{ margin: "0 0 1rem", color: "#666", fontSize: "0.95rem" }}>
+              <strong>{contactFor.driverName}</strong>
+              <span style={{ color: "#999" }}> · {contactFor.driverId}</span>
+            </p>
+            <p style={{ margin: "0 0 1rem", fontSize: "1.1rem", fontWeight: 700, letterSpacing: "0.02em" }}>
+              {contactFor.contactPhone}
+            </p>
+            <p style={{ margin: "0 0 1rem", fontSize: "0.82rem", color: "#888" }}>
+              Demo numbers for prototyping. Replace with your directory or telephony integration.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+              <a
+                href={telHref(contactFor.contactPhoneE164)}
+                style={{
+                  ...btnBase,
+                  background: "#2196F3",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                Call
+              </a>
+              <a
+                href={smsHref(contactFor.contactPhoneE164, `FleetOpt dispatcher — reply when safe. (${contactFor.driverId})`)}
+                style={{
+                  ...btnBase,
+                  background: "#FF9800",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                SMS
+              </a>
+              <button type="button" style={{ ...btnBase, background: "#455A64" }} onClick={() => copyPhone(contactFor)}>
+                Copy number
+              </button>
+            </div>
+            {copyFeedback ? <p style={{ margin: "0 0 0.75rem", fontSize: "0.85rem", color: "#2E7D32" }}>{copyFeedback}</p> : null}
+            <button
+              type="button"
+              onClick={() => setContactFor(null)}
+              style={{
+                width: "100%",
+                padding: "0.65rem",
+                borderRadius: "6px",
+                border: "1px solid #E0E0E0",
+                background: "#FAFAFA",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

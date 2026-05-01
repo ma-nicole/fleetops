@@ -49,7 +49,7 @@ export default function Home() {
                 lineHeight: 1.2,
               }}
             >
-              FleetOpt Logistics Command Center
+              FleetOpt — Philippine fleet operations
             </h1>
             <p
               style={{
@@ -59,7 +59,8 @@ export default function Home() {
                 color: "#666666",
               }}
             >
-              Automate booking, scheduling, fleet operations, and decision-making with predictive analytics. Built for trucking teams to reduce delays, cut costs, and improve reliability.
+              Bookings through billing in Philippine peso (PHP), with Luzon and nationwide route samples (for example Tarlac–Manila).
+              Dispatcher console, analytics, and maintenance insights for trucking teams in the Philippines.
             </p>
           </div>
 
@@ -174,15 +175,15 @@ export default function Home() {
             <div className="timeline">
               <div className="timeline-step">
                 <span className="timeline-dot" />
-                <span>BK-2034 • Manhattan to Newark • In transit</span>
+                <span>BK-2034 • Makati to Quezon City • In transit</span>
               </div>
               <div className="timeline-step">
                 <span className="timeline-dot" />
-                <span>BK-2035 • Brooklyn to Jersey City • Pending payment</span>
+                <span>BK-2035 • Bonifacio Global City to Parañaque • Pending payment</span>
               </div>
               <div className="timeline-step">
                 <span className="timeline-dot" />
-                <span>BK-2036 • Queens to Hartford • Delivered</span>
+                <span>BK-2036 • Cebu IT Park to Mandaue • Delivered</span>
               </div>
             </div>
           </div>

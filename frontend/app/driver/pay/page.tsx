@@ -3,13 +3,14 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type PayBreakdown = {
   period: string;
-  baseSalary: string;
-  bonuses: string;
-  deductions: string;
-  total: string;
+  baseSalary: number;
+  bonuses: number;
+  deductions: number;
+  total: number;
   status: string;
 };
 
@@ -19,26 +20,26 @@ export default function PayPage() {
   const [payHistory] = useState<PayBreakdown[]>([
     {
       period: "April 1-15, 2024",
-      baseSalary: "$1,200.00",
-      bonuses: "$150.00",
-      deductions: "$80.00",
-      total: "$1,270.00",
+      baseSalary: 1200,
+      bonuses: 150,
+      deductions: 80,
+      total: 1270,
       status: "paid",
     },
     {
       period: "April 16-30, 2024",
-      baseSalary: "$1,250.00",
-      bonuses: "$200.00",
-      deductions: "$100.00",
-      total: "$1,350.00",
+      baseSalary: 1250,
+      bonuses: 200,
+      deductions: 100,
+      total: 1350,
       status: "pending",
     },
     {
       period: "March 16-31, 2024",
-      baseSalary: "$1,180.00",
-      bonuses: "$100.00",
-      deductions: "$75.00",
-      total: "$1,205.00",
+      baseSalary: 1180,
+      bonuses: 100,
+      deductions: 75,
+      total: 1205,
       status: "paid",
     },
   ]);
@@ -46,10 +47,11 @@ export default function PayPage() {
   const [currentPeriod] = useState({
     tripsCompleted: 24,
     totalDistance: "402 km",
-    baseRate: "$50/trip",
-    distanceRate: "$2/km",
-    currentEarnings: "$2,450.50",
-    bonusEarned: "$150.00",
+    baseRateTripPeso: 2500,
+    distanceRatePesoPerKm: 35,
+    baseEarnings: 1650,
+    bonusEarned: 150,
+    currentEarnings: 2450.5,
     safetyBonus: "0%",
   });
 
@@ -89,13 +91,13 @@ export default function PayPage() {
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>BASE RATE</p>
             <p style={{ color: "#1A1A1A", fontSize: "1.2rem", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-              {currentPeriod.baseRate}
+              {formatPhp(currentPeriod.baseRateTripPeso)}/trip
             </p>
           </div>
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DISTANCE RATE</p>
             <p style={{ color: "#1A1A1A", fontSize: "1.2rem", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-              {currentPeriod.distanceRate}
+              {formatPhp(currentPeriod.distanceRatePesoPerKm)}/km
             </p>
           </div>
         </div>
@@ -105,19 +107,19 @@ export default function PayPage() {
             <div>
               <p style={{ color: "#999", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>BASE EARNINGS</p>
               <p style={{ color: "#1A1A1A", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-                $1,650.00
+                {formatPhp(currentPeriod.baseEarnings)}
               </p>
             </div>
             <div>
               <p style={{ color: "#999", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>BONUS</p>
               <p style={{ color: "#4CAF50", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-                {currentPeriod.bonusEarned}
+                {formatPhp(currentPeriod.bonusEarned)}
               </p>
             </div>
             <div style={{ paddingTop: "1.5rem", borderTop: "2px solid #4CAF50" }}>
               <p style={{ color: "#999", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>CURRENT TOTAL (this month)</p>
               <p style={{ color: "#4CAF50", fontSize: "2rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-                {currentPeriod.currentEarnings}
+                {formatPhp(currentPeriod.currentEarnings)}
               </p>
             </div>
           </div>
@@ -144,13 +146,13 @@ export default function PayPage() {
                 <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0", fontSize: "0.9rem" }}>
                   {payment.period}
                 </p>
-                <p style={{ color: "#1A1A1A", margin: "0", fontSize: "0.9rem" }}>{payment.baseSalary}</p>
+                <p style={{ color: "#1A1A1A", margin: "0", fontSize: "0.9rem" }}>{formatPhp(payment.baseSalary)}</p>
                 <p style={{ color: "#4CAF50", fontWeight: "600", margin: "0", fontSize: "0.9rem" }}>
-                  {payment.bonuses}
+                  {formatPhp(payment.bonuses)}
                 </p>
-                <p style={{ color: "#F44336", margin: "0", fontSize: "0.9rem" }}>{payment.deductions}</p>
+                <p style={{ color: "#F44336", margin: "0", fontSize: "0.9rem" }}>{formatPhp(payment.deductions)}</p>
                 <p style={{ color: "#1A1A1A", fontWeight: "700", margin: "0", fontSize: "0.95rem" }}>
-                  {payment.total}
+                  {formatPhp(payment.total)}
                 </p>
                 <span
                   style={{

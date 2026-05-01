@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
+import { formatPhp } from "@/lib/appLocale";
 
 type CostEstimate = {
   estimated_fuel: number;
@@ -33,7 +34,7 @@ export default function CostCalculator({
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error" | "">("") 
+  const [messageType, setMessageType] = useState<"success" | "error" | "">("");
   const [date, setDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const today = new Date().toISOString().split("T")[0];
@@ -88,6 +89,9 @@ export default function CostCalculator({
     if (!dropoff || dropoff.length < 3) {
       newErrors.dropoff_location = "Dropoff location required (3+ chars)";
     }
+    if (pickup.trim().length >= 3 && dropoff.trim().length >= 3 && pickup.trim().toLowerCase() === dropoff.trim().toLowerCase()) {
+      newErrors.dropoff_location = "Pickup and dropoff must be different.";
+    }
     if (parseFloat(weight) <= 0 || parseFloat(weight) > 50) {
       newErrors.cargo_weight_tons = "Weight must be 0.1–50 tons";
     }
@@ -125,7 +129,7 @@ export default function CostCalculator({
         body: JSON.stringify(payload),
       });
 
-      setMessage(`✓ Booking #${data.id} created! Cost: $${data.estimated_cost.toFixed(2)}`);
+      setMessage(`✓ Booking #${data.id} created! Cost: ${formatPhp(data.estimated_cost)}`);
       setMessageType("success");
       setPickup("");
       setDropoff("");
@@ -165,7 +169,7 @@ export default function CostCalculator({
             </label>
             <input
               className="input"
-              placeholder="e.g., Manhattan"
+              placeholder="e.g., Makati"
               value={pickup}
               onChange={(e) => setPickup(e.target.value)}
               style={errors.pickup_location ? { borderColor: "#F44336" } : {}}
@@ -185,7 +189,7 @@ export default function CostCalculator({
             </label>
             <input
               className="input"
-              placeholder="e.g., Newark"
+              placeholder="e.g., Quezon City"
               value={dropoff}
               onChange={(e) => setDropoff(e.target.value)}
               style={errors.dropoff_location ? { borderColor: "#F44336" } : {}}
@@ -284,25 +288,25 @@ export default function CostCalculator({
             <div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Fuel</p>
               <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                ${cost.estimated_fuel.toFixed(2)}
+                {formatPhp(cost.estimated_fuel)}
               </p>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Toll</p>
               <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                ${cost.estimated_toll.toFixed(2)}
+                {formatPhp(cost.estimated_toll)}
               </p>
             </div>
             <div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Labor</p>
               <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                ${cost.estimated_labor.toFixed(2)}
+                {formatPhp(cost.estimated_labor)}
               </p>
             </div>
             <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total</p>
               <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
-                ${cost.estimated_total.toFixed(2)}
+                {formatPhp(cost.estimated_total)}
               </p>
             </div>
           </div>

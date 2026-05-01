@@ -7,6 +7,7 @@ import {
   type MaintenancePredictResponse,
   type TripCostPredictResponse,
 } from "@/lib/analyticsApi";
+import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
 export default function PredictionsPage() {
   useRoleGuard(["manager", "admin", "dispatcher", "customer"]);
@@ -135,12 +136,12 @@ export default function PredictionsPage() {
             {costResult && (
               <div style={{ marginTop: 16, background: "#F9FAFB", borderRadius: 8, padding: 14 }}>
                 <div style={{ fontSize: 28, fontWeight: 800 }}>
-                  ₱{costResult.total_cost.toLocaleString()}
+                  {formatPhpWhole(costResult.total_cost)}
                 </div>
-                <div>Fuel ₱{costResult.fuel_cost} ({costResult.fuel_liters}L)</div>
-                <div>Toll ₱{costResult.toll_cost}</div>
-                <div>Labor ₱{costResult.labor_cost}</div>
-                <div>Maintenance risk ₱{costResult.maintenance_risk_cost}</div>
+                <div>Fuel {formatPhp(costResult.fuel_cost)} ({costResult.fuel_liters}L)</div>
+                <div>Toll {formatPhp(costResult.toll_cost)}</div>
+                <div>Labor {formatPhp(costResult.labor_cost)}</div>
+                <div>Maintenance risk {formatPhp(costResult.maintenance_risk_cost)}</div>
                 <details style={{ marginTop: 8 }}>
                   <summary>Why?</summary>
                   <ul>
@@ -204,7 +205,7 @@ export default function PredictionsPage() {
                   Priority: {maintResult.priority_level.replace("_", " ").toUpperCase()}
                 </div>
                 <div>Risk score: {maintResult.risk_score}</div>
-                <div>Estimated cost: ₱{maintResult.estimated_cost.toLocaleString()}</div>
+                <div>Estimated cost: {formatPhpWhole(maintResult.estimated_cost)}</div>
                 <div>Next service in: {maintResult.next_service_in_days} days</div>
                 <details style={{ marginTop: 8 }}>
                   <summary>Why?</summary>

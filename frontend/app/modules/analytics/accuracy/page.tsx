@@ -7,6 +7,7 @@ import {
   type FeedbackSummaryResponse,
   type ModelMetricRead,
 } from "@/lib/analyticsApi";
+import { formatDateTime } from "@/lib/appLocale";
 
 export default function AccuracyMonitoringPage() {
   useRoleGuard(["manager", "admin"]);
@@ -91,7 +92,7 @@ export default function AccuracyMonitoringPage() {
               <Stat label="Sample size" value={String(summary.sample_size)} />
               <Stat
                 label="Last retrain"
-                value={summary.last_retrain_at ? new Date(summary.last_retrain_at).toLocaleString() : "—"}
+                value={summary.last_retrain_at ? formatDateTime(summary.last_retrain_at) : "—"}
               />
               <Stat label="Models monitored" value={String(Object.keys(summary.metrics_by_model).length)} />
             </div>
@@ -132,7 +133,7 @@ export default function AccuracyMonitoringPage() {
                       <td style={td}>{m.rmse}</td>
                       <td style={td}>{m.accuracy}</td>
                       <td style={td}>{m.sample_size}</td>
-                      <td style={td}>{new Date(m.measured_at).toLocaleString()}</td>
+                      <td style={td}>{formatDateTime(m.measured_at)}</td>
                     </tr>
                   ))}
                 </tbody>

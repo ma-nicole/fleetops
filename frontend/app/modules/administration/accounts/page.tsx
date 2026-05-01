@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 
 import Breadcrumbs from "@/components/Breadcrumbs";
+import PhoneInputRow from "@/components/PhoneInputRow";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { announce } from "@/lib/useAnnouncer";
+import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
+import {
+  buildInternationalPhone,
+  isValidEmail,
+  validateAdminInitialPassword,
+  validateOptionalInternationalPhone,
+  validatePersonNameLoose,
+} from "@/lib/formValidation";
 import { adminApi, type AdminUser } from "@/lib/adminApi";
 
 const ROLES: AdminUser["role"][] = ["admin", "manager", "dispatcher", "driver", "helper", "customer"];
@@ -232,24 +241,52 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<AdminUser["role"]>("customer");
-  const [phone, setPhone] = useState("");
+  const [phoneDial, setPhoneDial] = useState(DEFAULT_DIAL_CODE);
+  const [phoneNational, setPhoneNational] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    password?: string;
+  }>({});
+
+  const validate = (): boolean => {
+    const next: typeof fieldErrors = {};
+    const nameErr = validatePersonNameLoose(fullName);
+    if (nameErr) next.fullName = nameErr;
+
+    const mail = email.trim();
+    if (!mail) next.email = "Email is required.";
+    else if (!isValidEmail(mail)) next.email = "Enter a valid email address.";
+
+    const phoneErr = validateOptionalInternationalPhone(phoneDial, phoneNational);
+    if (phoneErr) next.phone = phoneErr;
+
+    const pwErr = validateAdminInitialPassword(password);
+    if (pwErr) next.password = pwErr;
+
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!validate()) return;
     setSubmitting(true);
+    const combinedPhone = buildInternationalPhone(phoneDial, phoneNational);
     try {
       await adminApi.createUser({
         email: email.trim(),
         full_name: fullName.trim(),
         role,
-        phone: phone.trim() || undefined,
+        phone: combinedPhone || undefined,
         password,
       });
-      announce(`User ${email} created.`);
+      announce(`User ${email.trim()} created.`);
       onCreated();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create user";
@@ -271,7 +308,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
       }}
       onClick={onClose}
     >
-      <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()}
+      <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} noValidate
         style={{ background: "white", borderRadius: 8, padding: "1.5rem", width: "min(480px, 100%)", display: "grid", gap: "1rem" }}
       >
         <h2 id="create-user-title" style={{ margin: 0 }}>Create new user</h2>
@@ -284,12 +321,36 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Full name <span aria-hidden="true">*</span></span>
-          <input className="input" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          <input
+            className="input"
+            value={fullName}
+            onChange={(e) => {
+              setFullName(e.target.value);
+              if (fieldErrors.fullName) setFieldErrors((p) => ({ ...p, fullName: undefined }));
+            }}
+            aria-invalid={!!fieldErrors.fullName}
+          />
+          {fieldErrors.fullName && (
+            <span role="alert" style={{ color: "var(--text-error)", fontSize: "0.85rem" }}>{fieldErrors.fullName}</span>
+          )}
         </label>
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Email <span aria-hidden="true">*</span></span>
-          <input className="input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+          <input
+            className="input"
+            type="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
+            }}
+            autoComplete="email"
+            aria-invalid={!!fieldErrors.email}
+          />
+          {fieldErrors.email && (
+            <span role="alert" style={{ color: "var(--text-error)", fontSize: "0.85rem" }}>{fieldErrors.email}</span>
+          )}
         </label>
 
         <label style={{ display: "grid", gap: 4 }}>
@@ -299,14 +360,45 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </select>
         </label>
 
-        <label style={{ display: "grid", gap: 4 }}>
-          <span>Phone</span>
-          <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+63-917-…" autoComplete="tel" />
-        </label>
+        <div style={{ display: "grid", gap: 4 }}>
+          <span>Phone <span style={{ fontWeight: 400, color: "var(--text-secondary)" }}>(optional)</span></span>
+          <PhoneInputRow
+            dialCode={phoneDial}
+            nationalNumber={phoneNational}
+            onDialCodeChange={(d) => {
+              setPhoneDial(d);
+              if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: undefined }));
+            }}
+            onNationalChange={(n) => {
+              setPhoneNational(n);
+              if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: undefined }));
+            }}
+            optional
+            error={fieldErrors.phone}
+            nationalPlaceholder="9171234567"
+            selectId="admin-user-phone-cc"
+            nationalId="admin-user-phone-national"
+          />
+        </div>
 
         <label style={{ display: "grid", gap: 4 }}>
           <span>Initial password <span aria-hidden="true">*</span></span>
-          <input className="input" type="text" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" />
+          <input
+            className="input"
+            type="text"
+            maxLength={72}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
+            }}
+            placeholder="6–72 characters"
+            autoComplete="new-password"
+            aria-invalid={!!fieldErrors.password}
+          />
+          {fieldErrors.password && (
+            <span role="alert" style={{ color: "var(--text-error)", fontSize: "0.85rem" }}>{fieldErrors.password}</span>
+          )}
         </label>
 
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "0.5rem" }}>

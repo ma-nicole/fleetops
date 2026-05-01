@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type MaintenanceReport = {
@@ -143,7 +144,7 @@ export default function MaintenancePage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.totalCost.toFixed(2)}
+              {formatPhp(stats.totalCost)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Cost</div>
           </div>
@@ -258,7 +259,7 @@ export default function MaintenancePage() {
                   }}
                 >
                   <div style={{ color: "#FF9800", fontWeight: 700 }}>
-                    ${report.cost.toFixed(2)}
+                    {formatPhp(report.cost)}
                   </div>
                   <p
                     style={{

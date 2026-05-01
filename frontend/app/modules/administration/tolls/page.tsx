@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { formatPhp } from "@/lib/appLocale";
 import { useState } from "react";
 
 type TollRecord = {
@@ -22,9 +23,9 @@ export default function TollManagementPage() {
     {
       id: 1,
       trip_id: 101,
-      toll_booth_name: "NJ Turnpike - Newark",
-      toll_zone: "NJ-NYC",
-      amount: 15.5,
+      toll_booth_name: "NLEX Bocaue Toll Plaza",
+      toll_zone: "NCR–Central Luzon",
+      amount: 155,
       vehicle_class: "Class 3",
       date_recorded: "2026-04-28",
       status: "paid",
@@ -32,9 +33,9 @@ export default function TollManagementPage() {
     {
       id: 2,
       trip_id: 102,
-      toll_booth_name: "I-95 Toll Plaza",
-      toll_zone: "MD-VA",
-      amount: 22,
+      toll_booth_name: "SLEX Mamplasan Toll Plaza",
+      toll_zone: "Laguna",
+      amount: 220,
       vehicle_class: "Class 3",
       date_recorded: "2026-04-27",
       status: "paid",
@@ -42,9 +43,9 @@ export default function TollManagementPage() {
     {
       id: 3,
       trip_id: 103,
-      toll_booth_name: "Delaware Toll Bridge",
-      toll_zone: "DE-PA",
-      amount: 18.75,
+      toll_booth_name: "STAR Toll Lipa",
+      toll_zone: "Batangas",
+      amount: 188,
       vehicle_class: "Class 3",
       date_recorded: "2026-04-28",
       status: "pending",
@@ -52,9 +53,9 @@ export default function TollManagementPage() {
     {
       id: 4,
       trip_id: 104,
-      toll_booth_name: "PA Turnpike",
-      toll_zone: "PA-OH",
-      amount: 35,
+      toll_booth_name: "TPLEX Tarlac Exit",
+      toll_zone: "Central Luzon",
+      amount: 350,
       vehicle_class: "Class 3",
       date_recorded: "2026-04-28",
       status: "reimbursed",
@@ -141,13 +142,13 @@ export default function TollManagementPage() {
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#FF9800" }}>
-              ${stats.totalAmount.toFixed(2)}
+              {formatPhp(stats.totalAmount)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Total Amount</div>
           </div>
           <div className="card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "2rem", fontWeight: 700, color: "#4CAF50" }}>
-              ${stats.paidAmount.toFixed(2)}
+              {formatPhp(stats.paidAmount)}
             </div>
             <div style={{ color: "#666666", fontSize: "0.9rem" }}>Paid Amount</div>
           </div>
@@ -229,7 +230,7 @@ export default function TollManagementPage() {
                   }}
                 >
                   <div style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.2rem" }}>
-                    ${toll.amount.toFixed(2)}
+                    {formatPhp(toll.amount)}
                   </div>
                 </div>
               </div>

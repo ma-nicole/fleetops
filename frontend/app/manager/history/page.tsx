@@ -3,13 +3,14 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
+import { formatPhp } from "@/lib/appLocale";
 
 type HistoryRecord = {
   id: string;
   date: string;
   type: string;
   description: string;
-  amount?: string;
+  amount?: number;
   status: string;
 };
 
@@ -22,7 +23,7 @@ export default function HistoryPage() {
       date: "May 10, 2024 02:30 PM",
       type: "Booking Completed",
       description: "BK-2024-0001 from ABC Retail Corp completed successfully",
-      amount: "$450.00",
+      amount: 450,
       status: "completed",
     },
     {
@@ -30,7 +31,7 @@ export default function HistoryPage() {
       date: "May 10, 2024 01:15 PM",
       type: "Trip Completed",
       description: "TR-2024-156 completed by Carlos Rodriguez",
-      amount: "$245.00",
+      amount: 245,
       status: "completed",
     },
     {
@@ -45,7 +46,7 @@ export default function HistoryPage() {
       date: "May 09, 2024 10:45 AM",
       type: "Payment Received",
       description: "Payment from GHI Trading Co",
-      amount: "$920.00",
+      amount: 920,
       status: "completed",
     },
     {
@@ -82,7 +83,7 @@ export default function HistoryPage() {
                   <div style={{ fontSize: "1rem", fontWeight: 700, color: "#1A1A1A", marginBottom: "0.25rem" }}>{record.type}</div>
                   <div style={{ color: "#666", fontSize: "0.9rem" }}>{record.date}</div>
                 </div>
-                {record.amount && <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FF9800" }}>{record.amount}</div>}
+                {record.amount != null && <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FF9800" }}>{formatPhp(record.amount)}</div>}
               </div>
               <p style={{ margin: "0.75rem 0 0", color: "#666", fontSize: "0.95rem" }}>{record.description}</p>
             </div>
