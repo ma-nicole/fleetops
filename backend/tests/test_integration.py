@@ -18,7 +18,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
 from app.main import app
 from app.db import Base, get_db
-from app.models.entities import User, Booking, Trip, Truck, DriverProfile
+from app.models.entities import (
+    User,
+    Booking,
+    Trip,
+    Truck,
+    DriverProfile,
+    UserRole,
+    BookingStatus,
+    TripStatus,
+)
 from app.core.security import create_access_token
 
 # Test database setup
@@ -53,7 +62,7 @@ def test_users(db):
             email="test_customer@example.com",
             password_hash="hashed",
             full_name="Test Customer",
-            role="customer",
+            role=UserRole.CUSTOMER,
             phone="+1-555-0001",
             clerk_id="test_clerk_customer"
         ),
@@ -61,7 +70,7 @@ def test_users(db):
             email="test_dispatcher@example.com",
             password_hash="hashed",
             full_name="Test Dispatcher",
-            role="dispatcher",
+            role=UserRole.DISPATCHER,
             phone="+1-555-1001",
             clerk_id="test_clerk_dispatcher"
         ),
@@ -69,7 +78,7 @@ def test_users(db):
             email="test_driver@example.com",
             password_hash="hashed",
             full_name="Test Driver",
-            role="driver",
+            role=UserRole.DRIVER,
             phone="+1-555-2001",
             clerk_id="test_clerk_driver"
         ),
@@ -77,7 +86,7 @@ def test_users(db):
             email="test_manager@example.com",
             password_hash="hashed",
             full_name="Test Manager",
-            role="manager",
+            role=UserRole.MANAGER,
             phone="+1-555-3001",
             clerk_id="test_clerk_manager"
         ),
@@ -113,7 +122,7 @@ class TestBookingWorkflow:
     def test_create_booking(self, client, db, test_users):
         """Test: Customer creates a booking"""
         customer = test_users["customer"]
-        token = create_access_token(customer.id, customer.role)
+        token = create_access_token(customer.email, customer.role.value)
         
         booking_data = {
             "pickup_location": "Warehouse A",
@@ -129,16 +138,16 @@ class TestBookingWorkflow:
             headers={"Authorization": f"Bearer {token}"}
         )
         
-        assert response.status_code == 201
+        assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "pending"
+        assert data["status"] == BookingStatus.PENDING_APPROVAL.value
         assert data["estimated_cost"] > 0
-        return data["id"]
+        assert data["id"] is not None
     
     def test_booking_validation(self, client, db, test_users):
         """Test: Booking validation catches invalid input"""
         customer = test_users["customer"]
-        token = create_access_token(customer.id, customer.role)
+        token = create_access_token(customer.email, customer.role.value)
         
         # Invalid: negative weight
         invalid_booking = {
@@ -176,13 +185,13 @@ class TestDispatchWorkflow:
             scheduled_date=(datetime.now() + timedelta(days=1)).date(),
             cargo_weight_tons=10,
             estimated_cost=500,
-            status="pending"
+            status=BookingStatus.PENDING_APPROVAL
         )
         db.add(booking)
         db.flush()
         
         # Assign via dispatcher
-        token = create_access_token(dispatcher.id, dispatcher.role)
+        token = create_access_token(dispatcher.email, dispatcher.role.value)
         
         assignment_data = {
             "booking_id": booking.id,
@@ -196,9 +205,9 @@ class TestDispatchWorkflow:
             headers={"Authorization": f"Bearer {token}"}
         )
         
-        assert response.status_code in [200, 201]
+        assert response.status_code == 200
         data = response.json()
-        assert data["status"] in ["assigned", "confirmed"]
+        assert "trip_id" in data
 
 class TestRatingWorkflow:
     """Test driver rating submission and aggregation"""
@@ -217,7 +226,7 @@ class TestRatingWorkflow:
             scheduled_date=datetime.now().date(),
             cargo_weight_tons=10,
             estimated_cost=500,
-            status="completed"
+            status=BookingStatus.COMPLETED
         )
         db.add(booking)
         db.flush()
@@ -232,22 +241,22 @@ class TestRatingWorkflow:
             fuel_cost=50,
             labor_cost=100,
             duration_hours=2,
-            started_at=datetime.now() - timedelta(hours=3),
+            departure_time=datetime.now() - timedelta(hours=3),
             completed_at=datetime.now()
         )
         db.add(trip)
         db.flush()
         
         # Submit rating
-        token = create_access_token(customer.id, customer.role)
+        token = create_access_token(customer.email, customer.role.value)
         rating_data = {
             "trip_id": trip.id,
             "driver_id": driver.id,
-            "rating_value": 5,
+            "rating": 5,
         }
         
         response = client.post(
-            "/api/ratings",
+            "/api/ratings/driver",
             json=rating_data,
             headers={"Authorization": f"Bearer {token}"}
         )
@@ -258,7 +267,7 @@ class TestRatingWorkflow:
         """Test: Retrieve driver's average rating"""
         driver = test_users["driver"]
         
-        response = client.get(f"/api/ratings/{driver.id}")
+        response = client.get(f"/api/ratings/driver/{driver.id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -281,7 +290,7 @@ class TestAuthenticationFlow:
         """Test: Role-based access control enforced"""
         # Driver cannot access dispatch endpoint (requires dispatcher role)
         driver = test_users["driver"]
-        token = create_access_token(driver.id, driver.role)
+        token = create_access_token(driver.email, driver.role.value)
         
         response = client.post(
             "/api/dispatch/1/assign",
@@ -298,7 +307,7 @@ class TestAnalyticsEndpoints:
     def test_manager_dashboard(self, client, test_users):
         """Test: Manager can access dashboard analytics"""
         manager = test_users["manager"]
-        token = create_access_token(manager.id, manager.role)
+        token = create_access_token(manager.email, manager.role.value)
         
         response = client.get(
             "/api/manager/dashboard",
@@ -308,44 +317,46 @@ class TestAnalyticsEndpoints:
         assert response.status_code == 200
         data = response.json()
         
-        # Check required dashboard fields
-        required_fields = [
+        assert "kpis" in data
+        assert "cost_model" in data
+        assert "demand_forecast" in data
+        assert "maintenance_risk" in data
+
+        required_kpis = [
             "total_bookings",
-            "completed_trips",
-            "average_trip_cost",
-            "fleet_utilization",
-            "total_revenue"
+            "ongoing_bookings",
+            "completed_bookings",
+            "total_trip_cost",
+            "total_distance",
         ]
-        
-        for field in required_fields:
-            assert field in data
+
+        for field in required_kpis:
+            assert field in data["kpis"]
 
 class TestCostEstimation:
-    """Test cost calculation service"""
-    
-    def test_cost_prediction(self, client):
-        """Test: Cost estimation returns valid numbers"""
-        cost_data = {
-            "distance_km": 150,
-            "cargo_weight_tons": 15,
-            "fuel_price_per_liter": 3.5,
-            "toll_rate": 0.15,
-            "labor_rate": 50
+    """Test cost estimation via workflow booking creation"""
+
+    def test_cost_prediction(self, client, test_users):
+        customer = test_users["customer"]
+        token = create_access_token(customer.email, customer.role.value)
+
+        booking_data = {
+            "pickup_location": "Warehouse A",
+            "dropoff_location": "City B",
+            "service_type": "fixed",
+            "scheduled_date": (datetime.now() + timedelta(days=2)).isoformat().split('T')[0],
+            "cargo_weight_tons": 12.5,
         }
-        
+
         response = client.post(
-            "/api/analytics/cost-predict",
-            json=cost_data
+            "/api/workflow/booking/create",
+            json=booking_data,
+            headers={"Authorization": f"Bearer {token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
-        assert "fuel_cost" in data
-        assert "toll_cost" in data
-        assert "labor_cost" in data
-        assert "estimated_total" in data
-        assert data["estimated_total"] > 0
+        assert data["estimated_cost"] > 0
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

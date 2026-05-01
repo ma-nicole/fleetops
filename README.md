@@ -46,32 +46,75 @@ Frontend (Next.js 15.1.2)          Backend (FastAPI 0.115.6)        Data Layer (
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+## 🚀 Quick Start with XAMPP MySQL
 
 ### Prerequisites
-- Node.js 18+ | Python 3.12+ | Docker & Docker Compose | Git
+- Node.js 18+ | Python 3.12+ | XAMPP (with MySQL) | Git
 
-### Installation
+### Step 1: Setup XAMPP MySQL
+
+1. **Download & Install XAMPP:** https://www.apachefriends.org/
+2. **Launch XAMPP Control Panel** and click **Start** on MySQL
+3. **Create Database** via phpMyAdmin (`http://localhost/phpmyadmin`):
+   ```sql
+   CREATE DATABASE fleetopt;
+   CREATE USER 'fleetopt'@'localhost' IDENTIFIED BY 'fleetopt';
+   GRANT ALL PRIVILEGES ON fleetopt.* TO 'fleetopt'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+
+### Step 2: Configure Backend Environment
+
 ```bash
-cd /path/to/FLEETOPS
+cd backend
 
-# 1. Start database
-docker compose up -d
+# Copy the example environment file
+cp .env.example .env
 
-# 2. Backend (Terminal 1)
-cd backend && pip install -r requirements.txt
+# .env is already configured for XAMPP MySQL
+# No additional changes needed!
+```
+
+**Verify .env contains:**
+```bash
+DATABASE_URL=mysql+pymysql://fleetopt:fleetopt@localhost:3306/fleetopt
+```
+
+### Step 3: Start Backend
+
+```bash
+# Terminal 1 - From backend directory
+cd backend
+pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 
-# 3. Frontend (Terminal 2)
-cd frontend && npm install && npm run dev
+# API will be available at http://localhost:8000
+# Swagger docs: http://localhost:8000/docs
+```
 
-# 4. Seed data (Terminal 3)
+### Step 4: Start Frontend
+
+```bash
+# Terminal 2 - From frontend directory
+cd frontend
+npm install
+npm run dev
+
+# Frontend will be available at http://localhost:3000
+```
+
+### Step 5: Seed Database (Optional)
+
+```bash
+# Terminal 3 - From project root
 python seed_db.py
 ```
 
-**Access:** http://localhost:3000
 
-**Test Credentials:**
+### Test Credentials
+
+After running `python seed_db.py`:
+
 | Role | Email | Password |
 |------|-------|----------|
 | 👤 Customer | customer1@fleetops.com | any_password |
@@ -80,7 +123,39 @@ python seed_db.py
 | 📊 Manager | manager@fleetops.com | any_password |
 | ⚙️ Admin | admin@fleetops.com | any_password |
 
-📖 **Detailed Guide:** See [QUICKSTART.md](./QUICKSTART.md)
+---
+
+## 🔐 Security & Environment Configuration
+
+### Development vs Production
+
+**Development (.env):**
+- Uses default credentials from `.env.example`
+- Secret key can be simple
+- Database URL points to local/Docker
+
+**Production (.env):**
+- Must use strong SECRET_KEY (32+ characters)
+  ```bash
+  # Generate with:
+  python -c "import secrets; print(secrets.token_urlsafe(32))"
+  ```
+- Use managed database services (Cloud SQL, RDS)
+- Enable HTTPS/SSL
+- Set appropriate CORS origins
+- Use secrets management (AWS Secrets Manager, etc.)
+
+### Never Commit Secrets
+
+✅ **DO:**
+- Commit `.env.example` with placeholder values
+- Use `.env` file for local development (in `.gitignore`)
+- Store production secrets in secure vaults
+
+❌ **DON'T:**
+- Commit `.env` files to version control
+- Hardcode secrets in config files
+- Use default credentials in production
 
 ---
 
@@ -167,13 +242,16 @@ CLERK_WEBHOOK_SECRET=whsec_...
 
 ## 🗄️ Database Configuration
 
-### Option A: Local PostgreSQL (Development)
+### XAMPP MySQL (Development - Recommended)
 ```bash
-docker compose up -d
-# Runs PostgreSQL on localhost:5432
+# 1. Install XAMPP: https://www.apachefriends.org/
+# 2. Start MySQL via XAMPP Control Panel
+# 3. Access phpMyAdmin: http://localhost/phpmyadmin
+# 4. Create database (see Step 1 in Quick Start above)
+# 5. Backend will auto-connect with DATABASE_URL in .env
 ```
 
-### Option B: Google Cloud SQL (Production)
+### Production: Google Cloud SQL
 ```env
 USE_CLOUD_SQL=true
 GCP_PROJECT_ID=your-project-id
@@ -357,20 +435,21 @@ Before going live, complete:
 ## 🛠️ Common Commands
 
 ```bash
-# Database
-docker compose up -d              # Start PostgreSQL
+# Database (XAMPP)
+# Start XAMPP MySQL via Control Panel or:
+# mysql -u root -p              # Connect to MySQL CLI
+# Use phpMyAdmin at http://localhost/phpmyadmin
+
 python seed_db.py                 # Seed test data
-docker compose down -v            # Reset everything
 
 # Backend
 cd backend
-pip install -r requirements.txt   # Install deps
-uvicorn app.main:app --reload     # Start API (port 8000)
-pytest tests/ -v                  # Run tests
+pip install -r requirements.txt   # Install deps (first time)
+python -m uvicorn app.main:app --reload --port 8000  # Start API
 
 # Frontend
 cd frontend
-npm install                       # Install deps
+npm install                       # Install deps (first time)
 npm run dev                       # Start dev server (port 3000)
 npm run build                     # Build for production
 npm run type-check                # TypeScript check
@@ -382,17 +461,18 @@ npm run type-check                # TypeScript check
 
 ### Backend (.env)
 ```env
-SECRET_KEY=your-secret-key
-DATABASE_URL=postgresql://user:pass@localhost:5432/fleetops
-USE_CLOUD_SQL=false
+SECRET_KEY=dev-secret-key-minimum-32-chars
+DATABASE_URL=mysql+pymysql://fleetopt:fleetopt@localhost:3306/fleetopt
+APP_ENV=development
+FRONTEND_URL=http://localhost:3000
 USE_CLERK_AUTH=false
-RESEND_API_KEY=your-resend-key
+RESEND_API_KEY=
 ```
 
 ### Frontend (.env.local)
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 ```
 
 ---
@@ -450,173 +530,6 @@ Proprietary - FleetOpts Fleet Management System
 ---
 
 **Ready to optimize your fleet? Let's ship! 🚚✨**
-
-### 1. Start Database
-
-```bash
-# Option A: Local PostgreSQL with Docker
-docker compose up -d
-
-# Option B: Use existing PostgreSQL
-# Ensure it's running on localhost:5432
-```
-
-### 2. Setup Backend
-
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-# On Windows:
-.venv\Scripts\activate
-# On Linux/Mac:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment template and update
-cp .env.example .env
-# Edit .env with your configuration
-
-# Run backend
-uvicorn app.main:app --reload --port 8000
-```
-
-### 3. Setup Frontend
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Copy environment template and update
-cp .env.example .env.local
-# Edit .env.local with your configuration
-
-# Run frontend development server
-npm run dev
-# Access at http://localhost:3000
-```
-
-## 🔐 Authentication Setup
-
-### Option 1: Local Development (JWT)
-- Uses local JWT token authentication
-- No additional setup required
-- Register/login via API endpoints
-
-### Option 2: Clerk (Recommended for Production)
-
-1. **Create Clerk Account**
-   - Go to https://clerk.com
-   - Create an application
-
-2. **Get API Keys**
-   - Backend: `CLERK_API_KEY` (Secret Key)
-   - Frontend: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (Publishable Key)
-
-3. **Configure Environment Files**
-
-   **backend/.env**:
-   ```env
-   USE_CLERK_AUTH=true
-   CLERK_API_KEY=sk_live_xxxxxxxxxxxx
-   CLERK_FRONTEND_API=https://your-app.clerk.accounts.com
-   ```
-
-   **frontend/.env.local**:
-   ```env
-   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_xxxxxxxxxxxx
-   ```
-
-4. **Setup Webhooks** (in Clerk Dashboard)
-   - Endpoint: `https://yourdomain.com/api/clerk/webhook`
-   - Subscribe to: `user.created`, `user.updated`, `user.deleted`
-
-## 🗄️ Database Configuration
-
-### Option 1: Local PostgreSQL (Development)
-```env
-DATABASE_URL=postgresql+psycopg://fleetopt:fleetopt@localhost:5432/fleetopt
-USE_CLOUD_SQL=false
-```
-
-### Option 2: Google Cloud SQL (Production)
-
-See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md#part-1-google-cloud-sql-setup) for detailed instructions.
-
-```env
-USE_CLOUD_SQL=true
-GCP_PROJECT_ID=your-project-id
-CLOUD_SQL_INSTANCE=your-project:region:instance-name
-CLOUD_SQL_DB_USER=fleetopt
-CLOUD_SQL_DB_PASSWORD=your-strong-password
-CLOUD_SQL_DB_NAME=fleetopt
-```
-
-## 📊 Core Implemented Flows
-
-✓ Customer booking request with cost estimation
-✓ Dispatcher assignment of truck and driver with availability matching
-✓ A* routing optimization by distance, time, or cost
-✓ Manager analytics dashboard with demand forecasting and KPIs
-✓ Driver profile and attendance management
-✓ Admin fleet and user configuration
-✓ CSV batch reports (bookings, fleet performance)
-✓ Email notifications via Resend
-
-## 🔌 API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login with email/password
-- `POST /api/clerk/webhook` - Clerk user sync webhook
-
-### Bookings
-- `POST /api/bookings` - Create booking
-- `GET /api/bookings` - List user bookings
-- `POST /api/bookings/{booking_id}/cancel` - Cancel booking
-
-### Dispatch & Assignment
-- `POST /api/dispatch/{booking_id}/assign` - Assign truck and driver
-- `POST /api/dispatch/trip/{trip_id}/status` - Update trip status
-
-### Driver Operations
-- `GET /api/driver/trips` - Get assigned trips
-- `POST /api/driver/attendance/check-in` - Record check-in
-- `GET /api/driver/salary` - View salary breakdown
-
-### Manager (Analytics & Configuration)
-- `GET /api/manager/dashboard` - Analytics dashboard with KPIs
-- `POST /api/manager/pricing` - Configure service pricing
-- `POST /api/manager/drivers/profile` - Manage driver profiles
-
-### Admin (Configuration)
-- `GET /api/admin/users` - List all users
-- `POST /api/admin/trucks` - Add truck
-- `DELETE /api/admin/trucks/{truck_id}` - Remove truck
-
-### Reports
-- `GET /api/reports/bookings.csv` - Booking report
-- `GET /api/reports/fleet.csv` - Fleet performance report
-
-## 🚢 Deployment on Hostinger
-
-### Prerequisites
-- Hostinger VPS or Cloud hosting account
-- SSH access to server
-- Domain name (optional but recommended)
-
-### Quick Deployment
-
-```bash
-# 1. SSH into Hostinger server
-ssh user@yourdomain.com
 
 # 2. Clone repository
 git clone https://github.com/yourusername/fleetopt.git

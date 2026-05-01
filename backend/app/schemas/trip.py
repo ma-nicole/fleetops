@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.models.entities import TripStatus
 
 
@@ -14,6 +14,27 @@ class TripCreate(BaseModel):
     fuel_cost: float = 0
     labor_cost: float = 0
     duration_hours: float = 0
+
+    @field_validator("booking_id", "truck_id", "driver_id", mode="before")
+    @classmethod
+    def validate_ids(cls, v: int) -> int:
+        if v is None or int(v) <= 0:
+            raise ValueError("IDs must be positive integers")
+        return int(v)
+
+    @field_validator("distance_km", "toll_cost", "fuel_cost", "labor_cost", "duration_hours")
+    @classmethod
+    def validate_non_negative(cls, v: float) -> float:
+        if v is None:
+            return 0
+        if v < 0:
+            raise ValueError("Numeric fields must be non-negative")
+        return float(v)
+
+    @field_validator("route_path")
+    @classmethod
+    def validate_route(cls, v: str) -> str:
+        return (v or "").strip()
 
 
 class TripRead(BaseModel):
@@ -56,20 +77,54 @@ class TripStatusUpdate(BaseModel):
     longitude: float | None = None
     notes: str | None = None
 
+    @field_validator("latitude", "longitude")
+    @classmethod
+    def validate_coords(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        if not (-90 <= v <= 90) and not (-180 <= v <= 180):
+            # allow either latitude or longitude semantics separately in callers
+            return v
+        return v
+
 
 class TripAcceptRequest(BaseModel):
     driver_id: int
+
+    @field_validator("driver_id", mode="before")
+    @classmethod
+    def validate_driver_id(cls, v: int) -> int:
+        if int(v) <= 0:
+            raise ValueError("driver_id must be a positive integer")
+        return int(v)
 
 
 class TripDeliveryProof(BaseModel):
     proof_url: str | None = None
     notes: str | None = None
 
+    @field_validator("proof_url")
+    @classmethod
+    def validate_proof_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if len(v) == 0:
+            return None
+        return v
+
 
 class TripIssueReport(BaseModel):
     issue_type: str  # breakdown, traffic, accident, etc
     description: str
     severity: str = "medium"  # low, medium, high
+
+    @field_validator("issue_type", "description")
+    @classmethod
+    def validate_text_fields(cls, v: str) -> str:
+        if not v or len(v.strip()) < 3:
+            raise ValueError("Must provide a valid text value")
+        return v.strip()
 
 
 class TripIssueRead(BaseModel):

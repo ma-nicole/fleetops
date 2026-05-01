@@ -18,7 +18,16 @@ def manager_dashboard(
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
 ):
     total_bookings = db.query(func.count(Booking.id)).scalar() or 0
-    ongoing = db.query(func.count(Booking.id)).filter(Booking.status == BookingStatus.ONGOING).scalar() or 0
+    ongoing_statuses = [
+        BookingStatus.PENDING_APPROVAL,
+        BookingStatus.APPROVED,
+        BookingStatus.ASSIGNED,
+        BookingStatus.ACCEPTED,
+        BookingStatus.ENROUTE,
+        BookingStatus.LOADING,
+        BookingStatus.OUT_FOR_DELIVERY,
+    ]
+    ongoing = db.query(func.count(Booking.id)).filter(Booking.status.in_(ongoing_statuses)).scalar() or 0
     completed = db.query(func.count(Booking.id)).filter(Booking.status == BookingStatus.COMPLETED).scalar() or 0
 
     trip_cost = (
