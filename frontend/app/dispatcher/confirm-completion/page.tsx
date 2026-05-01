@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -17,8 +16,6 @@ type PendingTrip = {
 };
 
 export default function ConfirmCompletionPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [trips] = useState<PendingTrip[]>([
     {
       tripId: "TRIP-001",
@@ -99,7 +96,7 @@ export default function ConfirmCompletionPage() {
       {confirmed && (
         <div style={{ padding: "1.5rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <div style={{ fontSize: "2rem" }}>✅</div>
+            <div style={{ fontSize: "2rem" }}></div>
             <div>
               <p style={{ color: "#4CAF50", fontWeight: "600", margin: "0" }}>Trip Confirmed!</p>
               <p style={{ color: "#666666", margin: "0.5rem 0 0 0", fontSize: "0.9rem" }}>
@@ -140,7 +137,7 @@ export default function ConfirmCompletionPage() {
                       fontWeight: "600",
                     }}
                   >
-                    {trip.status === "arrived" ? "📍 ARRIVED" : "✓ DELIVERED"}
+                    {trip.status === "arrived" ? " ARRIVED" : "✓ DELIVERED"}
                   </span>
                 </div>
 
@@ -265,7 +262,7 @@ export default function ConfirmCompletionPage() {
                         onChange={(e) => handleInputChange("photosUploaded", e.target.checked)}
                         style={{ cursor: "pointer" }}
                       />
-                      📷 Photos Uploaded
+                       Photos Uploaded
                     </label>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>

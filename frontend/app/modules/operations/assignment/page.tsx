@@ -207,7 +207,7 @@ export default function DispatcherAssignmentPage() {
                         {trip.pickup_location} → {trip.dropoff_location}
                       </p>
                       <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                        🚐 {trip.assigned_vehicle} | 👤 {trip.assigned_driver}
+                         {trip.assigned_vehicle} |  {trip.assigned_driver}
                       </p>
                     </div>
                     <span

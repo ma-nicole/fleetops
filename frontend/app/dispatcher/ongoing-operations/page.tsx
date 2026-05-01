@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -19,8 +18,6 @@ type OngoingOperation = {
 };
 
 export default function OngoingOperationsPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [operations] = useState<OngoingOperation[]>([
     {
       tripId: "TRIP-001",
@@ -100,15 +97,15 @@ export default function OngoingOperationsPage() {
       case "pending":
         return "⏳ Pending";
       case "started":
-        return "▶️ Started";
+        return "▶ Started";
       case "in_transit":
-        return "🚚 In Transit";
+        return " In Transit";
       case "arrived":
-        return "📍 Arrived";
+        return " Arrived";
       case "loading":
-        return "📦 Loading";
+        return " Loading";
       case "unloading":
-        return "📦 Unloading";
+        return " Unloading";
       default:
         return "Unknown";
     }
@@ -208,7 +205,7 @@ export default function OngoingOperationsPage() {
               <div>
                 <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CURRENT LOCATION</p>
                 <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  📍 {op.currentLocation}
+                   {op.currentLocation}
                 </p>
               </div>
 

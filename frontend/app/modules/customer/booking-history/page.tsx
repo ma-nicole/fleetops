@@ -113,7 +113,7 @@ export default function BookingHistoryPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          📜 Booking History
+           Booking History
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           View your past bookings and trip details. Track your spending and service history.

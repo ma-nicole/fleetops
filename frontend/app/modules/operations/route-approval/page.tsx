@@ -108,7 +108,7 @@ export default function RouteApprovalPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          ✅ Approve Route Plans
+           Approve Route Plans
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Review and approve route proposals from drivers. Verify distance, duration, and estimated costs.
@@ -291,7 +291,7 @@ export default function RouteApprovalPage() {
                           fontWeight: 600,
                         }}
                       >
-                        ✗ Reject & Request Revision
+                         Reject & Request Revision
                       </button>
                     </div>
                   )}

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -19,8 +18,6 @@ type Booking = {
 };
 
 export default function ScheduledBookingsPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [bookings] = useState<Booking[]>([
     {
       id: "BK-2024-0001",
@@ -108,17 +105,17 @@ export default function ScheduledBookingsPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "pending":
-        return "📋 Pending";
+        return " Pending";
       case "confirmed":
         return "✓ Confirmed";
       case "scheduled":
-        return "📅 Scheduled";
+        return " Scheduled";
       case "assigned":
-        return "👤 Assigned";
+        return " Assigned";
       case "in_transit":
-        return "🚚 In Transit";
+        return " In Transit";
       case "completed":
-        return "✅ Completed";
+        return " Completed";
       default:
         return "Unknown";
     }
@@ -320,7 +317,7 @@ export default function ScheduledBookingsPage() {
               )}
               {!booking.assignedDriver && (
                 <p style={{ color: "#F44336", fontWeight: "600", margin: "0", fontSize: "0.9rem" }}>
-                  ⚠️ Not assigned yet
+                   Not assigned yet
                 </p>
               )}
 

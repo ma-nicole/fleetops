@@ -200,7 +200,7 @@ export default function RouteInfoPage() {
 
       {/* Safety Tips */}
       <div style={{ padding: "1.5rem", background: "#E3F2FD", borderRadius: "8px", border: "1px solid #2196F3" }}>
-        <p style={{ color: "#1565C0", margin: "0", fontWeight: "600" }}>⚠️ Safety Reminders:</p>
+        <p style={{ color: "#1565C0", margin: "0", fontWeight: "600" }}> Safety Reminders:</p>
         <ul style={{ color: "#1565C0", margin: "0.5rem 0 0 0", paddingLeft: "1.5rem" }}>
           <li>Check weather conditions before departure</li>
           <li>Ensure all cargo is properly secured</li>

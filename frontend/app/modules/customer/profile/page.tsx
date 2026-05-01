@@ -51,7 +51,7 @@ export default function CustomerProfilePage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          👤 My Profile
+           My Profile
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Manage your account information and preferences.

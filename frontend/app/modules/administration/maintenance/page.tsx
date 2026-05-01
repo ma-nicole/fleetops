@@ -98,7 +98,7 @@ export default function MaintenancePage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          🔧 Maintenance Reports
+           Maintenance Reports
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Track scheduled, preventive, and emergency maintenance for all vehicles.

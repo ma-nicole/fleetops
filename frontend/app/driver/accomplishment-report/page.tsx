@@ -53,7 +53,7 @@ export default function AccomplishmentReportPage() {
     return (
       <div style={{ padding: "2rem", display: "grid", gap: "2rem" }}>
         <div style={{ padding: "2rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px", textAlign: "center" }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>✅</div>
+          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}></div>
           <h2 style={{ color: "#4CAF50", margin: "0 0 0.5rem 0" }}>Report Submitted!</h2>
           <p style={{ color: "#666666", margin: "0" }}>Your accomplishment report has been recorded</p>
         </div>

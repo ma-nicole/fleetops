@@ -109,7 +109,7 @@ export default function CheckoutPage() {
         </Link>
       </div>
 
-      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>📋 Booking Confirmation</h1>
+      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Booking Confirmation</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
         Review your booking details and enter shipment information
       </p>
@@ -265,7 +265,7 @@ export default function CheckoutPage() {
 
           {showErrors && (
             <div style={{ padding: "1rem", background: "#FFEBEE", color: "#C62828", borderRadius: "6px", marginTop: "1rem" }}>
-              ⚠️ Please fill in all required fields marked with *
+               Please fill in all required fields marked with *
             </div>
           )}
         </div>

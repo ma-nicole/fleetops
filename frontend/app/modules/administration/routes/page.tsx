@@ -93,7 +93,7 @@ export default function RoutesPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          🗺️ Route Mappings
+           Route Mappings
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Configure and manage delivery routes. Set pricing and frequency for each route.

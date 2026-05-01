@@ -88,7 +88,7 @@ export default function HistoryPage() {
       case "ongoing":
         return "●";
       case "scheduled":
-        return "📅";
+        return "";
       default:
         return "?";
     }
@@ -112,7 +112,7 @@ export default function HistoryPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          📜 Trip History
+           Trip History
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           View all accomplished, ongoing, and scheduled trips. Monitor trip progress and completion.

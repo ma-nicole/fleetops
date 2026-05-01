@@ -117,7 +117,7 @@ export default function ExceptionsPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          ⚠️ Exceptions & Delays
+           Exceptions & Delays
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Monitor and manage trip exceptions, delays, and incidents. Coordinate responses and track resolution.

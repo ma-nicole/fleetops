@@ -138,7 +138,7 @@ export default function TripAssignment({
                     {trip.pickup_location} → {trip.dropoff_location}
                   </p>
                   <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                    📦 {trip.cargo_weight_tons}t | 📅 {trip.scheduled_date} {trip.scheduled_time}
+                     {trip.cargo_weight_tons}t |  {trip.scheduled_date} {trip.scheduled_time}
                   </p>
                   {trip.customer_name && (
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.85rem" }}>

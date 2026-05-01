@@ -94,7 +94,7 @@ export default function VehicleStatusPage() {
               fontSize: "0.9rem",
             }}
           >
-            ✅ Operational
+             Operational
           </span>
         </div>
 

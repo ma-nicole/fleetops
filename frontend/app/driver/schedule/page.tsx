@@ -140,7 +140,7 @@ export default function SchedulePage() {
         >
           <p style={{ color: "#999", margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: "600" }}>AVERAGE RATING</p>
           <p style={{ color: "#9C27B0", fontSize: "2rem", fontWeight: "700", margin: "0" }}>
-            {weeklyStats.averageRating} ⭐
+            {weeklyStats.averageRating} ★
           </p>
         </div>
       </div>
@@ -177,7 +177,7 @@ export default function SchedulePage() {
                 width: "fit-content",
               }}
             >
-              {item.status === "today" ? "🔴 TODAY" : "📅 UPCOMING"}
+              {item.status === "today" ? " TODAY" : " UPCOMING"}
             </span>
           </div>
         ))}

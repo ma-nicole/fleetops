@@ -73,9 +73,9 @@ export default function ActiveTripsPage() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      pending: { color: "#2196F3", label: "📍 Pending" },
-      in_progress: { color: "#FF9800", label: "🚚 In Progress" },
-      completed: { color: "#4CAF50", label: "✅ Completed" },
+      pending: { color: "#2196F3", label: " Pending" },
+      in_progress: { color: "#FF9800", label: " In Progress" },
+      completed: { color: "#4CAF50", label: " Completed" },
     };
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
   };
@@ -157,7 +157,7 @@ export default function ActiveTripsPage() {
                 </div>
               </div>
 
-              <p style={{ color: "#666666", fontSize: "0.9rem", margin: "0" }}>📦 {trip.cargo}</p>
+              <p style={{ color: "#666666", fontSize: "0.9rem", margin: "0" }}> {trip.cargo}</p>
 
               {trip.status === "in_progress" && (
                 <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
@@ -189,7 +189,7 @@ export default function ActiveTripsPage() {
                     }}
                     onClick={() => alert("Delivery photos uploaded")}
                   >
-                    📸 Upload Photos
+                     Upload Photos
                   </button>
                   <button
                     style={{
@@ -204,7 +204,7 @@ export default function ActiveTripsPage() {
                     }}
                     onClick={() => alert("Trip completed successfully")}
                   >
-                    ✅ Complete Trip
+                     Complete Trip
                   </button>
                 </div>
               )}
@@ -225,7 +225,7 @@ export default function ActiveTripsPage() {
                     }}
                     onClick={() => alert("Trip started. Safe travels!")}
                   >
-                    🚗 Start Trip
+                     Start Trip
                   </button>
                 </div>
               )}

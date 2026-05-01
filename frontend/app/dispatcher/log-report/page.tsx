@@ -1,12 +1,9 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
 export default function LogReportPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [formData, setFormData] = useState({
     reportType: "",
     date: "",
@@ -55,7 +52,7 @@ export default function LogReportPage() {
     return (
       <div style={{ padding: "2rem", display: "grid", gap: "2rem" }}>
         <div style={{ padding: "2rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px", textAlign: "center" }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>✅</div>
+          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}></div>
           <h2 style={{ color: "#4CAF50", margin: "0 0 0.5rem 0" }}>Report Submitted!</h2>
           <p style={{ color: "#666666", margin: "0" }}>Your log report has been successfully recorded</p>
         </div>

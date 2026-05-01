@@ -337,7 +337,7 @@ export default function AnalyticsDashboard() {
         }}
       >
         <div className="card">
-          <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>📍 Booking Status</h3>
+          <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}> Booking Status</h3>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <StatusBadge status="confirmed" />
             <StatusBadge status="in-transit" />
@@ -346,7 +346,7 @@ export default function AnalyticsDashboard() {
         </div>
 
         <div className="card">
-          <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>⚠️ Fleet Alerts</h3>
+          <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}> Fleet Alerts</h3>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             <p style={{ margin: 0, fontSize: "0.9rem" }}>✓ No critical maintenance issues</p>
             <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)" }}>2 preventive checks scheduled</p>
@@ -354,7 +354,7 @@ export default function AnalyticsDashboard() {
         </div>
 
         <div className="card">
-          <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>🎯 Performance</h3>
+          <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}> Performance</h3>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             <p style={{ margin: 0, fontSize: "0.9rem" }}>On-time delivery: 97%</p>
             <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)" }}>Driver satisfaction: 4.6/5</p>
@@ -371,13 +371,13 @@ export default function AnalyticsDashboard() {
         }}
       >
         <button className="button" style={{ background: "#3b82f6" }} onClick={exportReport}>
-          📋 Export Report
+           Export Report
         </button>
         <button className="button" style={{ background: "#8b5cf6" }} onClick={scheduleMaintenance}>
-          📅 Schedule Maintenance
+           Schedule Maintenance
         </button>
         <button className="button" style={{ background: "#ec4899" }} onClick={manageDrivers}>
-          👥 Manage Drivers
+           Manage Drivers
         </button>
       </section>
     </main>

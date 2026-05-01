@@ -1,149 +1,223 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRoleGuard } from "@/lib/useRoleGuard";
-import WorkflowStatusBadge from "@/components/WorkflowStatusBadge";
-import Link from "next/link";
-import BookingService, { Booking } from "@/lib/bookingService";
+import { useEffect, useState } from "react";
+import { WorkflowApi, type Booking } from "@/lib/workflowApi";
+import {
+  AnalyticsApi,
+  type AssignmentRecommendResponse,
+  type RouteOptimizeResponse,
+} from "@/lib/analyticsApi";
 
 export default function DispatcherJobAssignmentsPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [selectedBookingId, setSelectedBookingId] = useState("");
-  const [selectedDriver, setSelectedDriver] = useState("driver-001");
-  const [selectedTruck, setSelectedTruck] = useState("TRK-001");
-  const dispatcherId = "dispatcher-001";
-  const drivers = ["driver-001", "driver-002", "driver-003"];
-  const trucks = ["TRK-001", "TRK-002", "TRK-003"];
+  const [bookingId, setBookingId] = useState<number>(0);
+  const [recommendation, setRecommendation] = useState<AssignmentRecommendResponse | null>(null);
+  const [route, setRoute] = useState<RouteOptimizeResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const refresh = () => setBookings(BookingService.getAllBookings());
-    refresh();
-    const interval = window.setInterval(refresh, 4000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  const approvedBookings = useMemo(
-    () => bookings.filter((b) => b.status === "approved"),
-    [bookings]
-  );
-  const activeTrips = useMemo(
-    () => bookings.filter((b) => ["assigned", "accepted", "enroute", "loading", "out_for_delivery"].includes(b.status)),
-    [bookings]
-  );
-  const bookingsWithIssues = useMemo(
-    () => activeTrips.filter((b) => b.exceptionType),
-    [activeTrips]
-  );
-
-  const createAssignment = () => {
-    if (!selectedBookingId) return;
-    const routePlan = {
-      waypoints: [
-        { location: "Pickup", eta: new Date(Date.now() + 40 * 60000).toISOString() },
-        { location: "Dropoff", eta: new Date(Date.now() + 3 * 60 * 60000).toISOString() },
-      ],
-      estimatedDistance: 56,
-      estimatedDuration: 3.2,
-    };
-    BookingService.dispatcherAssignJob(selectedBookingId, dispatcherId, selectedDriver, selectedTruck, routePlan);
-    setBookings(BookingService.getAllBookings());
+  const refresh = async () => {
+    try {
+      const list = await WorkflowApi.pendingApprovals().catch(() => [] as Booking[]);
+      const approved = list.filter((b) => b.status === "approved" || b.status === "pending_approval");
+      setBookings(approved);
+      if (!bookingId && approved.length) setBookingId(approved[0].id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load bookings");
+    }
   };
 
-  const rerouteBooking = (booking: Booking) => {
-    const newRoute = {
-      waypoints: [
-        { location: "Reroute Checkpoint", eta: new Date(Date.now() + 70 * 60000).toISOString() },
-        { location: "Destination", eta: new Date(Date.now() + 4 * 60 * 60000).toISOString() },
-      ],
-      estimatedDistance: 74,
-      estimatedDuration: 4.1,
-    };
-    BookingService.updateRouteForException(booking.id, dispatcherId, newRoute);
-    setBookings(BookingService.getAllBookings());
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const selected = bookings.find((b) => b.id === bookingId);
+
+  const recommend = async () => {
+    if (!bookingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const recommendation = await AnalyticsApi.recommendAssignment(bookingId);
+      setRecommendation(recommendation);
+
+      if (selected) {
+        const r = await AnalyticsApi.optimizeRoute({
+          origin: selected.pickup_location,
+          destination: selected.dropoff_location,
+          weight: "cost",
+          cargo_weight_tons: selected.cargo_weight_tons,
+          departure_hour: 8,
+        });
+        setRoute(r);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Recommendation failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const dispatch = async () => {
+    if (!bookingId || !recommendation?.best) return;
+    setBusy(true);
+    try {
+      const best = recommendation.best;
+      const top = route?.candidates[0];
+      await WorkflowApi.manualAssign(bookingId, {
+        truck_id: best.truck_id,
+        driver_id: best.driver_id,
+        helper_id: best.helper_id ?? undefined,
+        route_path: top?.path,
+        distance_km: top?.distance_km,
+        duration_hours: top?.distance_km ? top.distance_km / 50 : undefined,
+        fuel_cost: top?.fuel_cost,
+        toll_cost: top?.toll_cost,
+        labor_cost: top ? top.time_penalty * 10 : undefined,
+        predicted_total_cost: top?.total_cost,
+      });
+      setOkMsg("Assignment dispatched and driver notified");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Dispatch failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const card: React.CSSProperties = {
+    background: "white",
+    border: "1px solid #E5E7EB",
+    borderRadius: 12,
+    padding: 18,
   };
 
   return (
     <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
-      <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.5rem" }}>
-        <div>
-          <Link href="/dispatcher/dashboard" style={{ color: "#0EA5E9", textDecoration: "none" }}>
-            ← Dashboard
-          </Link>
-          <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Job Assignments</h1>
-          <p style={{ margin: 0, color: "#666" }}>Assign approved bookings and monitor trip progress in real time.</p>
-        </div>
+      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 16 }}>
+        <header>
+          <h1 style={{ margin: 0 }}>Job Assignment Wizard</h1>
+          <p style={{ color: "#6B7280", marginTop: 4 }}>
+            Paper Fig 25 — pick a booking, get a prescribed driver/truck/helper + optimized route, then dispatch.
+          </p>
+        </header>
 
-        <section className="card" style={{ padding: "1.25rem" }}>
-          <h3 style={{ marginTop: 0 }}>Create Assignment</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: "0.75rem", alignItems: "end" }}>
-            <select value={selectedBookingId} onChange={(e) => setSelectedBookingId(e.target.value)} style={{ padding: "0.65rem", borderRadius: "6px", border: "1px solid #D1D5DB" }}>
-              <option value="">Select approved booking...</option>
-              {approvedBookings.map((b) => (
+        {error && (
+          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>{error}</div>
+        )}
+        {okMsg && (
+          <div style={{ background: "#D1FAE5", color: "#047857", padding: 12, borderRadius: 8 }}>{okMsg}</div>
+        )}
+
+        <section style={card}>
+          <label style={{ display: "grid", gap: 4 }}>
+            <span>Booking</span>
+            <select
+              value={bookingId}
+              onChange={(e) => {
+                setBookingId(Number(e.target.value));
+                setRecommendation(null);
+                setRoute(null);
+              }}
+              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+            >
+              <option value={0}>— pick a booking —</option>
+              {bookings.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.id} • {b.pickupLocation} → {b.dropoffLocation}
+                  #{b.id} · {b.pickup_location} → {b.dropoff_location} · {b.status}
                 </option>
               ))}
             </select>
-            <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} style={{ padding: "0.65rem", borderRadius: "6px", border: "1px solid #D1D5DB" }}>
-              {drivers.map((driver) => <option key={driver} value={driver}>{driver}</option>)}
-            </select>
-            <select value={selectedTruck} onChange={(e) => setSelectedTruck(e.target.value)} style={{ padding: "0.65rem", borderRadius: "6px", border: "1px solid #D1D5DB" }}>
-              {trucks.map((truck) => <option key={truck} value={truck}>{truck}</option>)}
-            </select>
-            <button onClick={createAssignment} style={{ padding: "0.65rem 1rem", border: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, cursor: "pointer" }}>
-              Assign
-            </button>
-          </div>
+          </label>
+
+          <button
+            onClick={recommend}
+            disabled={!bookingId || busy}
+            style={{
+              marginTop: 14,
+              padding: "10px 18px",
+              background: "#0EA5E9",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              fontWeight: 600,
+              cursor: !bookingId || busy ? "not-allowed" : "pointer",
+            }}
+          >
+            {busy ? "Computing…" : "Recommend assignment + route"}
+          </button>
         </section>
 
-        <section className="card" style={{ padding: "1.25rem" }}>
-          <h3 style={{ marginTop: 0 }}>Ongoing Operations ({activeTrips.length})</h3>
-          {activeTrips.length === 0 ? (
-            <p style={{ color: "#666", marginBottom: 0 }}>No active assigned trips.</p>
-          ) : (
-            <div style={{ display: "grid", gap: "0.75rem" }}>
-              {activeTrips.map((booking) => (
-                <div key={booking.id} style={{ border: "1px solid #E8E8E8", borderRadius: "8px", padding: "1rem", background: "white", display: "grid", gap: "0.5rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <strong>{booking.id}</strong>
-                    <WorkflowStatusBadge status={booking.status} />
-                  </div>
-                  <p style={{ margin: 0, color: "#666" }}>{booking.pickupLocation} → {booking.dropoffLocation}</p>
-                  <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-                    Driver: {booking.driverId || "-"} • Truck: {booking.truckAssignedId || "-"}
-                  </p>
-                  <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>
-                    Location: {booking.currentLocation || "No update yet"} • ETA: {booking.currentETA ? new Date(booking.currentETA).toLocaleString() : "Pending"}
-                  </p>
-                </div>
-              ))}
+        {recommendation?.best && (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>Best assignment</h2>
+            <div style={{ background: "#F0FDF4", borderRadius: 8, padding: 14 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>
+                Driver: {recommendation.best.driver_name} (#{recommendation.best.driver_id})
+              </div>
+              <div>
+                Truck: {recommendation.best.truck_code} (#{recommendation.best.truck_id})
+              </div>
+              {recommendation.best.helper_name && (
+                <div>Helper: {recommendation.best.helper_name}</div>
+              )}
+              <div style={{ marginTop: 6, fontWeight: 700 }}>Score: {recommendation.best.score}</div>
+              <ul style={{ marginTop: 8 }}>
+                {recommendation.best.reasoning.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
             </div>
-          )}
-        </section>
+            {recommendation.alternatives.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: "pointer" }}>{recommendation.alternatives.length} alternatives</summary>
+                <ul>
+                  {recommendation.alternatives.map((a, i) => (
+                    <li key={i}>
+                      {a.driver_name} on {a.truck_code} — score {a.score}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+        )}
 
-        <section className="card" style={{ padding: "1.25rem" }}>
-          <h3 style={{ marginTop: 0 }}>Exception Handling ({bookingsWithIssues.length})</h3>
-          {bookingsWithIssues.length === 0 ? (
-            <p style={{ color: "#666", marginBottom: 0 }}>No active issues.</p>
-          ) : (
-            <div style={{ display: "grid", gap: "0.75rem" }}>
-              {bookingsWithIssues.map((booking) => (
-                <div key={booking.id} style={{ border: "1px solid #FECACA", borderRadius: "8px", padding: "1rem", background: "#FFFBFB", display: "flex", justifyContent: "space-between", gap: "1rem" }}>
-                  <div>
-                    <p style={{ margin: "0 0 0.3rem", fontWeight: 700 }}>{booking.id}</p>
-                    <p style={{ margin: "0 0 0.3rem", color: "#7F1D1D" }}>{booking.exceptionType?.replace("_", " ")}: {booking.exceptionDetails}</p>
-                    <p style={{ margin: 0, color: "#666", fontSize: "0.9rem" }}>Update plan and ETA to notify manager/user.</p>
-                  </div>
-                  <button onClick={() => rerouteBooking(booking)} style={{ border: "none", borderRadius: "6px", padding: "0.65rem 1rem", background: "#F59E0B", color: "white", fontWeight: 600, cursor: "pointer", height: "fit-content" }}>
-                    Re-route
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        {route?.candidates && route.candidates.length > 0 && (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>Recommended route</h2>
+            <p>
+              <strong>{route.candidates[0].path.join(" → ")}</strong>
+            </p>
+            <p>
+              Distance {route.candidates[0].distance_km}km · Total cost ₱
+              {route.candidates[0].total_cost.toLocaleString()}
+            </p>
+            {route.constraints_applied.length > 0 && (
+              <p style={{ color: "#B45309" }}>{route.constraints_applied.join(" · ")}</p>
+            )}
+          </section>
+        )}
+
+        {recommendation?.best && (
+          <button
+            onClick={dispatch}
+            disabled={busy}
+            style={{
+              padding: "12px 20px",
+              background: "#10B981",
+              color: "white",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 700,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontSize: 16,
+            }}
+          >
+            {busy ? "Dispatching…" : "Dispatch assignment"}
+          </button>
+        )}
       </div>
     </main>
   );

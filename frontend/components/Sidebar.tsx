@@ -1,228 +1,188 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isAuthenticated } from "@/lib/auth";
+import { useFocusTrap } from "@/lib/useAnnouncer";
 
 type SubMenuItem = {
   label: string;
   href: string;
-  icon: string;
   roles: string[];
 };
 
 type MenuModule = {
   label: string;
-  icon: string;
   roles: string[];
   items: SubMenuItem[];
 };
 
 const menuModules: MenuModule[] = [
-  // DRIVER ONLY
+  // DRIVER
   {
-    label: "🚗 Active Operations",
-    icon: "🚗",
+    label: "Active Operations",
     roles: ["driver"],
     items: [
-      { label: "Dashboard", href: "/driver/dashboard", icon: "📊", roles: ["driver"] },
-      { label: "Scheduled Trips", href: "/driver/scheduled-trips", icon: "🚚", roles: ["driver"] },
-      { label: "Order Details", href: "/driver/order-details", icon: "📦", roles: ["driver"] },
-      { label: "Update Trip Status", href: "/driver/update-status", icon: "▶️", roles: ["driver"] },
+      { label: "Dashboard", href: "/driver/dashboard", roles: ["driver"] },
+      { label: "Scheduled Trips", href: "/driver/scheduled-trips", roles: ["driver"] },
+      { label: "Order Details", href: "/driver/order-details", roles: ["driver"] },
+      { label: "Update Trip Status", href: "/driver/update-status", roles: ["driver"] },
     ],
   },
   {
-    label: "📋 Schedule & Pay",
-    icon: "📋",
+    label: "Schedule & Pay",
     roles: ["driver"],
     items: [
-      { label: "Designated Schedule", href: "/driver/schedule", icon: "📅", roles: ["driver"] },
-      { label: "Total Pay", href: "/driver/pay", icon: "💵", roles: ["driver"] },
+      { label: "Designated Schedule", href: "/driver/schedule", roles: ["driver"] },
+      { label: "Total Pay", href: "/driver/pay", roles: ["driver"] },
     ],
   },
   {
-    label: "🚛 Vehicle",
-    icon: "🚛",
+    label: "Vehicle",
     roles: ["driver"],
     items: [
-      { label: "Vehicle Status", href: "/driver/vehicle-status", icon: "🔍", roles: ["driver"] },
-      { label: "Log Vehicle Status", href: "/driver/vehicle-status", icon: "✏️", roles: ["driver"] },
+      { label: "Vehicle Status", href: "/driver/vehicle-status", roles: ["driver"] },
     ],
   },
   {
-    label: "📝 Reports & Ratings",
-    icon: "📝",
+    label: "Reports & Ratings",
     roles: ["driver"],
     items: [
-      { label: "Completion Report", href: "/driver/completion-report", icon: "✅", roles: ["driver"] },
-      { label: "Activity & Ratings", href: "/driver/activity-ratings", icon: "⭐", roles: ["driver"] },
+      { label: "Completion Report", href: "/driver/completion-report", roles: ["driver"] },
+      { label: "Activity & Ratings", href: "/driver/activity-ratings", roles: ["driver"] },
     ],
   },
 
-  // DISPATCHER ONLY
+  // DISPATCHER
   {
-    label: "📊 Dashboard & Operations",
-    icon: "📊",
+    label: "Dashboard & Operations",
     roles: ["dispatcher"],
     items: [
-      { label: "Dashboard", href: "/dispatcher/dashboard", icon: "📊", roles: ["dispatcher"] },
-      { label: "Create Schedule", href: "/dispatcher/create-schedule", icon: "📅", roles: ["dispatcher"] },
-      { label: "Schedules", href: "/dispatcher/schedules", icon: "🗓️", roles: ["dispatcher"] },
-      { label: "Order Details", href: "/dispatcher/order-details", icon: "📦", roles: ["dispatcher"] },
-      { label: "Trip Monitoring", href: "/dispatcher/trip-monitoring", icon: "🚀", roles: ["dispatcher"] },
+      { label: "Dashboard", href: "/dispatcher/dashboard", roles: ["dispatcher"] },
+      { label: "Weekly Schedule Board", href: "/dispatcher/week-board", roles: ["dispatcher"] },
+      { label: "Job Assignment", href: "/dispatcher/job-assignments", roles: ["dispatcher"] },
+      { label: "Route Optimizer", href: "/modules/analytics/route-optimizer", roles: ["dispatcher"] },
+      { label: "What-if Simulator", href: "/modules/analytics/whatif", roles: ["dispatcher"] },
+      { label: "Schedules", href: "/dispatcher/schedules", roles: ["dispatcher"] },
+      { label: "Order Details", href: "/dispatcher/order-details", roles: ["dispatcher"] },
+      { label: "Trip Monitoring", href: "/dispatcher/trip-monitoring", roles: ["dispatcher"] },
     ],
   },
   {
-    label: "👥 People & Assets",
-    icon: "👥",
+    label: "People & Assets",
     roles: ["dispatcher"],
     items: [
-      { label: "Assets & Drivers", href: "/dispatcher/assets-drivers", icon: "🚛", roles: ["dispatcher"] },
-      { label: "Reported Issues", href: "/dispatcher/reported-issues", icon: "⚠️", roles: ["dispatcher"] },
+      { label: "Assets & Drivers", href: "/dispatcher/assets-drivers", roles: ["dispatcher"] },
+      { label: "Reported Issues", href: "/dispatcher/reported-issues", roles: ["dispatcher"] },
     ],
   },
   {
-    label: "📋 Reports & Completion",
-    icon: "📋",
+    label: "Reports & Completion",
     roles: ["dispatcher"],
     items: [
-      { label: "System Reports", href: "/dispatcher/reports", icon: "📊", roles: ["dispatcher"] },
-      { label: "Accomplishment Report", href: "/dispatcher/accomplishment-report", icon: "✅", roles: ["dispatcher"] },
-      { label: "Log Report", href: "/dispatcher/log-report", icon: "📝", roles: ["dispatcher"] },
-      { label: "Confirm Completion", href: "/dispatcher/confirm-completion", icon: "✓", roles: ["dispatcher"] },
+      { label: "System Reports", href: "/dispatcher/reports", roles: ["dispatcher"] },
+      { label: "Accomplishment Report", href: "/dispatcher/accomplishment-report", roles: ["dispatcher"] },
+      { label: "Log Report", href: "/dispatcher/log-report", roles: ["dispatcher"] },
+      { label: "Confirm Completion", href: "/dispatcher/confirm-completion", roles: ["dispatcher"] },
     ],
   },
 
-  // MANAGER ONLY
+  // MANAGER
   {
-    label: "📈 Analytics",
-    icon: "📈",
-    roles: ["manager", "admin"],
+    label: "Analytics",
+    roles: ["manager"],
     items: [
-      { label: "Dashboard", href: "/manager/dashboard", icon: "📊", roles: ["manager", "admin"] },
-      { label: "Analytics Overview", href: "/manager/analytics", icon: "📊", roles: ["manager", "admin"] },
-      { label: "Analytics Dashboard", href: "/analytics/dashboard", icon: "🧠", roles: ["manager", "admin"] },
-      { label: "Predictions", href: "/analytics/predictions", icon: "🔮", roles: ["manager", "admin"] },
-      { label: "Analytics Reports", href: "/analytics/reports", icon: "📑", roles: ["manager", "admin"] },
-      { label: "Trip Monitoring", href: "/manager/trip-monitoring", icon: "🛰️", roles: ["manager", "admin"] },
-      { label: "History", href: "/manager/history", icon: "📜", roles: ["manager", "admin"] },
+      { label: "Dashboard", href: "/manager/dashboard", roles: ["manager"] },
+      { label: "Predictive (Cost/Fuel/Maint.)", href: "/modules/analytics/predictions", roles: ["manager"] },
+      { label: "What-if Simulator", href: "/modules/analytics/whatif", roles: ["manager"] },
+      { label: "Route Optimizer (A*)", href: "/modules/analytics/route-optimizer", roles: ["manager"] },
+      { label: "Accuracy & Drift", href: "/modules/analytics/accuracy", roles: ["manager"] },
+      { label: "Analytics Dashboard", href: "/analytics/dashboard", roles: ["manager"] },
+      { label: "Analytics Reports", href: "/analytics/reports", roles: ["manager"] },
+      { label: "Trip Monitoring", href: "/manager/trip-monitoring", roles: ["manager"] },
+      { label: "History", href: "/manager/history", roles: ["manager"] },
     ],
   },
   {
-    label: "📋 Operations",
-    icon: "📋",
-    roles: ["manager", "admin"],
+    label: "Operations",
+    roles: ["manager"],
     items: [
-      { label: "Scheduling", href: "/manager/scheduling", icon: "📅", roles: ["manager", "admin"] },
-      { label: "Order Details", href: "/manager/orders", icon: "📦", roles: ["manager", "admin"] },
-      { label: "Accomplishment Report", href: "/manager/accomplishment-report", icon: "✅", roles: ["manager", "admin"] },
-      { label: "Pending Bookings", href: "/manager/pending-bookings", icon: "⏳", roles: ["manager", "admin"] },
-      { label: "Accomplished Bookings", href: "/manager/accomplished-bookings", icon: "✓", roles: ["manager", "admin"] },
+      { label: "Scheduling", href: "/manager/scheduling", roles: ["manager"] },
+      { label: "Order Details", href: "/manager/orders", roles: ["manager"] },
+      { label: "Accomplishment Report", href: "/manager/accomplishment-report", roles: ["manager"] },
+      { label: "Pending Bookings", href: "/manager/pending-bookings", roles: ["manager"] },
+      { label: "Accomplished Bookings", href: "/manager/accomplished-bookings", roles: ["manager"] },
     ],
   },
   {
-    label: "🚛 Management",
-    icon: "🚛",
-    roles: ["manager", "admin"],
+    label: "Management",
+    roles: ["manager"],
     items: [
-      { label: "Truck Management", href: "/manager/truck-management", icon: "🚛", roles: ["manager", "admin"] },
-      { label: "Dispatcher Activity", href: "/manager/dispatcher-activity", icon: "👨‍💼", roles: ["manager", "admin"] },
-      { label: "Driver Profiles", href: "/manager/driver-profiles", icon: "👨‍✈️", roles: ["manager", "admin"] },
+      { label: "Truck Management", href: "/manager/truck-management", roles: ["manager"] },
+      { label: "Dispatcher Activity", href: "/manager/dispatcher-activity", roles: ["manager"] },
+      { label: "Driver Profiles", href: "/manager/driver-profiles", roles: ["manager"] },
     ],
   },
   {
-    label: "👥 People & Finance",
-    icon: "👥",
-    roles: ["manager", "admin"],
+    label: "People & Finance",
+    roles: ["manager"],
     items: [
-      { label: "Customer Profiles", href: "/manager/customer-profiles", icon: "👥", roles: ["manager", "admin"] },
-      { label: "Finance View", href: "/manager/finance", icon: "💳", roles: ["manager", "admin"] },
-      { label: "Customer Reviews", href: "/manager/customer-reviews", icon: "⭐", roles: ["manager", "admin"] },
-    ],
-  },
-
-  // ADMIN FLOW MODULES
-  {
-    label: "📅 Scheduling",
-    icon: "📅",
-    roles: ["admin"],
-    items: [
-      { label: "Admin Dashboard", href: "/admin/dashboard", icon: "📊", roles: ["admin"] },
-      { label: "Scheduling", href: "/admin/scheduling", icon: "🗓️", roles: ["admin"] },
-    ],
-  },
-  {
-    label: "🚚 Operations",
-    icon: "🚚",
-    roles: ["admin"],
-    items: [
-      { label: "Trip Monitoring", href: "/admin/trip-monitoring", icon: "🛰️", roles: ["admin"] },
-    ],
-  },
-  {
-    label: "📈 Analytics",
-    icon: "📈",
-    roles: ["admin"],
-    items: [
-      { label: "Analytics Overview", href: "/admin/analytics", icon: "📉", roles: ["admin"] },
-    ],
-  },
-  {
-    label: "📦 Orders",
-    icon: "📦",
-    roles: ["admin"],
-    items: [
-      { label: "Order Details", href: "/admin/orders", icon: "📋", roles: ["admin"] },
-    ],
-  },
-  {
-    label: "💳 Finance",
-    icon: "💳",
-    roles: ["admin"],
-    items: [
-      { label: "Finance View", href: "/admin/finance", icon: "💰", roles: ["admin"] },
+      { label: "Customer Profiles", href: "/manager/customer-profiles", roles: ["manager"] },
+      { label: "Finance View", href: "/manager/finance", roles: ["manager"] },
+      { label: "Customer Reviews", href: "/manager/customer-reviews", roles: ["manager"] },
     ],
   },
 
-  // ADMIN ONLY (existing tools)
+  // ADMIN — compact 2-group layout
   {
-    label: "🔐 System Administration",
-    icon: "🔐",
+    label: "Overview",
     roles: ["admin"],
     items: [
-      { label: "Authentication", href: "/modules/administration/authentication", icon: "🔑", roles: ["admin"] },
-      { label: "Access Control", href: "/modules/administration/access-control", icon: "👥", roles: ["admin"] },
-      { label: "Account Management", href: "/modules/administration/accounts", icon: "👤", roles: ["admin"] },
-      { label: "System Settings", href: "/modules/administration/settings", icon: "⚙️", roles: ["admin"] },
+      { label: "Dashboard", href: "/admin/dashboard", roles: ["admin"] },
+      { label: "Scheduling", href: "/admin/scheduling", roles: ["admin"] },
+      { label: "Trip Monitoring", href: "/admin/trip-monitoring", roles: ["admin"] },
+      { label: "Orders", href: "/admin/orders", roles: ["admin"] },
+      { label: "Analytics", href: "/admin/analytics", roles: ["admin"] },
+      { label: "Finance", href: "/admin/finance", roles: ["admin"] },
+    ],
+  },
+  {
+    label: "System",
+    roles: ["admin"],
+    items: [
+      { label: "Authentication", href: "/modules/administration/authentication", roles: ["admin"] },
+      { label: "Access Control", href: "/modules/administration/access-control", roles: ["admin"] },
+      { label: "Accounts", href: "/modules/administration/accounts", roles: ["admin"] },
+      { label: "Settings", href: "/modules/administration/settings", roles: ["admin"] },
     ],
   },
 
-  // CUSTOMER ONLY
+  // CUSTOMER
   {
-    label: "🛒 Booking",
-    icon: "🛒",
+    label: "Booking",
     roles: ["customer"],
     items: [
-      { label: "My Profile", href: "/modules/customer/profile", icon: "👤", roles: ["customer"] },
-      { label: "Select Truck", href: "/modules/customer/booking/trucks", icon: "🚚", roles: ["customer"] },
-      { label: "Select Service", href: "/modules/customer/booking/services", icon: "🔧", roles: ["customer"] },
-      { label: "Checkout", href: "/modules/customer/booking/checkout", icon: "🛍️", roles: ["customer"] },
-      { label: "Payment", href: "/modules/customer/payment", icon: "💳", roles: ["customer"] },
+      { label: "My Profile", href: "/modules/customer/profile", roles: ["customer"] },
+      { label: "Select Truck", href: "/modules/customer/booking/trucks", roles: ["customer"] },
+      { label: "Select Service", href: "/modules/customer/booking/services", roles: ["customer"] },
+      { label: "Checkout", href: "/modules/customer/booking/checkout", roles: ["customer"] },
+      { label: "Payment", href: "/modules/customer/payment", roles: ["customer"] },
     ],
   },
   {
-    label: "📦 My Bookings",
-    icon: "📦",
+    label: "My Bookings",
     roles: ["customer"],
     items: [
-      { label: "Current Bookings", href: "/modules/operations/trips", icon: "📋", roles: ["customer"] },
-      { label: "Booking History", href: "/modules/customer/booking-history", icon: "📜", roles: ["customer"] },
-      { label: "Cost Summary", href: "/modules/operations/cost-summary", icon: "💵", roles: ["customer"] },
-      { label: "Support", href: "/modules/customer/support", icon: "💬", roles: ["customer"] },
+      { label: "Current Bookings", href: "/modules/operations/trips", roles: ["customer"] },
+      { label: "Booking History", href: "/modules/customer/booking-history", roles: ["customer"] },
+      { label: "Cost Summary", href: "/modules/operations/cost-summary", roles: ["customer"] },
+      { label: "Support", href: "/modules/customer/support", roles: ["customer"] },
     ],
   },
 ];
+
+const moduleId = (label: string) => `sidebar-panel-${label.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
 
 type SidebarProps = {
   isOpen: boolean;
@@ -230,90 +190,107 @@ type SidebarProps = {
   onOpenSidebar: () => void;
 };
 
-export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: SidebarProps) {
+export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [expandedModules, setExpandedModules] = useState<string[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
 
+  // For admin (compact 2-group layout) keep both groups expanded by default
+  // so navigation is one click instead of two.
   useEffect(() => {
-      if (typeof window !== "undefined") {
-        if (isAuthenticated()) {
-          const role = window.localStorage.getItem("userRole") || "customer";
-          setUserRole(role);
-        } else {
-          setUserRole(null);
-        }
-        // Auto-expand first module on page load
-        setExpandedModules([]);
+    if (userRole === "admin") {
+      setExpandedModules((prev) => {
+        const adminGroups = ["Overview", "System"];
+        const next = new Set(prev);
+        adminGroups.forEach((g) => next.add(g));
+        return Array.from(next);
+      });
+    }
+  }, [userRole]);
+  const asideRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isAuthenticated()) {
+      const role = window.localStorage.getItem("userRole") || "customer";
+      setUserRole(role);
+    } else {
+      setUserRole(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => setIsMobile(window.innerWidth <= 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  // Close on Escape (only when open).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseSidebar();
       }
-    }, []);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onCloseSidebar]);
 
-  const visibleModules = menuModules.filter((module) => userRole && module.roles.includes(userRole));
+  // Trap focus inside the drawer when modal (mobile + open). On desktop the
+  // sidebar is non-modal and users can freely tab in and out.
+  useFocusTrap(asideRef, isOpen && isMobile);
 
-  // If user is not authenticated, show a small sign-in CTA instead of sidebar
-  if (!userRole) {
-    return (
-      <div>
-        <Link href="/sign-in">
-          <button
-            aria-label="Sign in"
-            style={{
-              position: "fixed",
-              top: "1rem",
-              left: "1rem",
-              zIndex: 1001,
-              background: "var(--primary)",
-              border: "none",
-              color: "white",
-              padding: "0.5rem 0.75rem",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "0.95rem",
-            }}
-          >
-            Sign in
-          </button>
-        </Link>
-      </div>
+  const visibleModules = menuModules.filter(
+    (module) => userRole && module.roles.includes(userRole)
+  );
+
+  // Auto-expand the module that contains the current page so the user can
+  // see where they are.
+  useEffect(() => {
+    if (!userRole) return;
+    const containing = menuModules.find((module) =>
+      module.items.some(
+        (item) => pathname === item.href || pathname.startsWith(item.href + "/")
+      )
     );
-  }
+    if (containing && !expandedModules.includes(containing.label)) {
+      setExpandedModules((prev) =>
+        prev.includes(containing.label) ? prev : [...prev, containing.label]
+      );
+    }
+  }, [pathname, userRole, expandedModules]);
+
+  if (!userRole) return null;
 
   const toggleModule = (moduleLabel: string) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleLabel) ? prev.filter((m) => m !== moduleLabel) : [...prev, moduleLabel]
+      prev.includes(moduleLabel)
+        ? prev.filter((m) => m !== moduleLabel)
+        : [...prev, moduleLabel]
     );
   };
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
+
+  // React 19 types `inert` as a proper boolean attribute. Spread it only when
+  // the sidebar is closed so React renders the bare attribute (no value) and
+  // omits it entirely when open.
+  const inertProps = !isOpen ? { inert: true } : {};
 
   return (
     <>
-      {/* Open button when sidebar is collapsed */}
-      <button
-        onClick={onOpenSidebar}
-        aria-label="Open sidebar"
-        style={{
-          display: isOpen ? "none" : "block",
-          position: "fixed",
-          top: "1rem",
-          left: "1rem",
-          zIndex: 1001,
-          background: "var(--primary)",
-          border: "none",
-          color: "white",
-          padding: "0.5rem",
-          borderRadius: "6px",
-          cursor: "pointer",
-          fontSize: "1.2rem",
-        }}
-        className="sidebar-open-button"
-      >
-        ☰
-      </button>
-
-      {/* Sidebar */}
       <aside
+        ref={asideRef}
+        id="primary-nav"
+        aria-label="Primary navigation"
         aria-hidden={!isOpen}
+        {...inertProps}
         style={{
           position: "fixed",
           left: 0,
@@ -323,15 +300,15 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
           background: "#FFFFFF",
           borderRight: "1px solid #E8E8E8",
           overflowX: "hidden",
-          overflowY: "auto",
           transition: "width 0.3s ease, transform 0.3s ease",
           zIndex: 1000,
           paddingTop: "1rem",
           transform: isOpen ? "translateX(0)" : "translateX(-100%)",
-          pointerEvents: isOpen ? "auto" : "none",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        {/* Logo */}
+        {/* Logo + close */}
         <div
           style={{
             padding: "1rem 1rem 0.75rem",
@@ -348,7 +325,7 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
             style={{
               fontSize: "1.2rem",
               fontWeight: 800,
-              color: "var(--primary)",
+              color: "var(--brand-text)",
               textDecoration: "none",
             }}
           >
@@ -358,7 +335,7 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
           <button
             type="button"
             onClick={onCloseSidebar}
-            aria-label="Close sidebar"
+            aria-label="Close navigation"
             style={{
               minHeight: "44px",
               minWidth: "44px",
@@ -369,155 +346,185 @@ export default function Sidebar({ isOpen, onCloseSidebar, onOpenSidebar }: Sideb
               background: "transparent",
               color: "var(--text)",
               cursor: "pointer",
+              fontSize: "1.25rem",
             }}
           >
-            ×
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="3" x2="15" y2="15" />
+              <line x1="15" y1="3" x2="3" y2="15" />
+            </svg>
           </button>
         </div>
 
-        {/* Hierarchical Menu Items */}
-        <nav style={{ padding: "0 0.5rem" }}>
-          {visibleModules.map((module) => {
-            const isExpanded = expandedModules.includes(module.label);
-            const hasVisibleItems = module.items.some((item) => userRole && item.roles.includes(userRole));
+        <nav aria-label="Main menu" style={{ padding: "0 0.5rem", flex: 1, overflowY: "auto", minHeight: 0 }}>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {visibleModules.map((module) => {
+              const panelId = moduleId(module.label);
+              const isExpanded = expandedModules.includes(module.label);
+              const visibleItems = module.items.filter(
+                (item) => userRole && item.roles.includes(userRole)
+              );
 
-            return (
-              <div key={module.label}>
-                <button
-                  onClick={() => toggleModule(module.label)}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "0.75rem",
-                    padding: "0.75rem 1rem",
-                    margin: "0.25rem 0",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "rgba(255, 152, 0, 0.08)",
-                    color: "var(--text)",
-                    textDecoration: "none",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    fontSize: "0.95rem",
-                    fontWeight: 600,
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(255, 152, 0, 0.15)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(255, 152, 0, 0.08)";
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <span style={{ fontSize: "1.2rem" }}>{module.icon}</span>
-                    <span>{module.label}</span>
-                  </div>
-                  <span
+              return (
+                <li key={module.label}>
+                  <button
+                    type="button"
+                    onClick={() => toggleModule(module.label)}
+                    aria-expanded={isExpanded}
+                    aria-controls={panelId}
                     style={{
-                      fontSize: "1rem",
-                      transition: "transform 0.2s ease",
-                      transform: isExpanded ? "rotate(180deg)" : "rotate(0)",
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "0.75rem",
+                      padding: "0.75rem 1rem",
+                      margin: "0.25rem 0",
+                      minHeight: "44px",
+                      borderRadius: "8px",
+                      border: "none",
+                      background: "rgba(255, 152, 0, 0.08)",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      transition: "background 0.2s ease",
+                      fontSize: "0.95rem",
+                      fontWeight: 600,
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(255, 152, 0, 0.15)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLElement).style.background =
+                        "rgba(255, 152, 0, 0.08)";
                     }}
                   >
-                    ▼
-                  </span>
-                </button>
+                    <span>{module.label}</span>
+                    <svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 14 14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{
+                        transition: "transform 0.2s ease",
+                        transform: isExpanded ? "rotate(180deg)" : "rotate(0)",
+                        color: "var(--text-secondary)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <polyline points="2,4 7,10 12,4" />
+                    </svg>
+                  </button>
 
-                {/* Submodules */}
-                {isExpanded &&
-                  hasVisibleItems &&
-                  module.items
-                    .filter((item) => userRole && item.roles.includes(userRole))
-                    .map((item) => {
+                  <ul
+                    id={panelId}
+                    hidden={!isExpanded}
+                    style={{
+                      listStyle: "none",
+                      margin: 0,
+                      padding: 0,
+                    }}
+                  >
+                    {visibleItems.map((item) => {
                       const active = isActive(item.href);
                       return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.75rem",
-                            padding: "0.6rem 1rem",
-                            marginLeft: "1rem",
-                            marginTop: "0.2rem",
-                            marginBottom: "0.2rem",
-                            borderRadius: "6px",
-                            color: active ? "#FF9800" : "var(--text-secondary)",
-                            textDecoration: "none",
-                            background: active ? "rgba(255, 152, 0, 0.12)" : "transparent",
-                            borderLeft: active ? "3px solid #FF9800" : "3px solid transparent",
-                            transition: "all 0.2s ease",
-                            fontSize: "0.9rem",
-                            fontWeight: active ? 600 : 500,
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!active) {
-                              (e.currentTarget as HTMLElement).style.background = "rgba(255, 152, 0, 0.08)";
-                              (e.currentTarget as HTMLElement).style.color = "var(--text)";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!active) {
-                              (e.currentTarget as HTMLElement).style.background = "transparent";
-                              (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
-                            }
-                          }}
-                          onClick={() => {
-                            if (window.innerWidth <= 768) {
-                              onCloseSidebar();
-                            }
-                          }}
-                        >
-                          <span style={{ fontSize: "1rem" }}>{item.icon}</span>
-                          <span>{item.label}</span>
-                        </Link>
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            aria-current={active ? "page" : undefined}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.75rem",
+                              padding: "0.6rem 1rem",
+                              marginLeft: "1rem",
+                              marginTop: "0.2rem",
+                              marginBottom: "0.2rem",
+                              minHeight: "44px",
+                              borderRadius: "6px",
+                              color: active ? "var(--brand-text-strong)" : "var(--text)",
+                              textDecoration: "none",
+                              background: active ? "rgba(255, 152, 0, 0.18)" : "transparent",
+                              borderLeft: active
+                                ? "3px solid var(--brand-text)"
+                                : "3px solid transparent",
+                              transition: "background 0.2s ease, color 0.2s ease",
+                              fontSize: "0.9rem",
+                              fontWeight: active ? 600 : 500,
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!active) {
+                                (e.currentTarget as HTMLElement).style.background =
+                                  "rgba(255, 152, 0, 0.08)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!active) {
+                                (e.currentTarget as HTMLElement).style.background =
+                                  "transparent";
+                              }
+                            }}
+                            onClick={() => {
+                              if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                onCloseSidebar();
+                              }
+                            }}
+                          >
+                            {item.label}
+                          </Link>
+                        </li>
                       );
                     })}
-              </div>
-            );
-          })}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
         </nav>
 
-        {/* Role Badge */}
-        {userRole && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "1rem",
-              left: "1rem",
-              right: "1rem",
-              padding: "0.75rem",
-              background: "rgba(255, 152, 0, 0.1)",
-              border: "1px solid rgba(255, 152, 0, 0.2)",
-              borderRadius: "8px",
-              textAlign: "center",
-              fontSize: "0.85rem",
-              color: "var(--primary)",
-              fontWeight: 600,
-              textTransform: "capitalize",
-            }}
-          >
-            {userRole.toUpperCase()}
-          </div>
-        )}
+        <p
+          style={{
+            margin: "1rem",
+            padding: "0.75rem",
+            background: "rgba(255, 152, 0, 0.1)",
+            border: "1px solid rgba(255, 152, 0, 0.25)",
+            borderRadius: "8px",
+            textAlign: "center",
+            fontSize: "0.85rem",
+            color: "var(--brand-text-strong)",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+          aria-label={`Signed in as ${userRole}`}
+        >
+          <span style={{ textTransform: "capitalize" }}>{userRole}</span>
+        </p>
       </aside>
 
-      {/* Overlay for mobile when open */}
-      {isOpen && (
-        <div
+      {/* Click-away overlay (mobile only). It's a real button so screen-reader
+          users can also dismiss the drawer; visually it sits behind the panel. */}
+      {isOpen && isMobile && (
+        <button
+          type="button"
           onClick={onCloseSidebar}
+          aria-label="Close navigation"
           style={{
             position: "fixed",
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
-            background: "rgba(0,0,0,0.3)",
+            background: "rgba(0,0,0,0.4)",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
             zIndex: 999,
-            display: isOpen ? "block" : "none",
           }}
         />
       )}

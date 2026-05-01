@@ -6,12 +6,65 @@
   --bg-dark: #F5F5F5;
   --bg-card: #FFFFFF;
   --text: #2A2A2A;
-  --text-secondary: #666666;
+  --text-secondary: #595959;
   --border: #E0E0E0;
   --success: #4CAF50;
   --warning: #FF9800;
   --error: #F44336;
   --accent: #FF9800;
+
+  /* WCAG-AA accessible variants of the brand color.
+     #FF9800 is 2.46:1 on white (fails AA for text). Use --brand-text for any
+     text or icon that carries meaning; use --accent for fills/large graphics. */
+  --brand-text: #B25900;
+  --brand-text-strong: #7A3E00;
+  --focus-ring: #B25900;
+
+  /* Semantic text tones with AA contrast on white. */
+  --text-success: #2E7D32;
+  --text-warning: #B25900;
+  --text-error: #B91C1C;
+  --text-info: #1D4ED8;
+
+  /* Status backgrounds (used with the matching text tone above). */
+  --bg-success: #E8F5E9;
+  --bg-warning: #FFF3E0;
+  --bg-error: #FFEBEE;
+  --bg-info: #E0F2FE;
+
+  /* Spacing scale (4-pt). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Typography scale. */
+  --font-size-xs: 0.75rem;   /* 12px - metadata only */
+  --font-size-sm: 0.875rem;  /* 14px */
+  --font-size-base: 1rem;    /* 16px - body */
+  --font-size-lg: 1.125rem;  /* 18px */
+  --font-size-xl: 1.375rem;  /* 22px */
+  --font-size-2xl: 1.75rem;  /* 28px */
+  --font-size-3xl: 2.25rem;  /* 36px */
+
+  /* Layout. */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --tap-target: 44px;
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --text: #000000;
+    --text-secondary: #1A1A1A;
+    --border: #000000;
+    --brand-text: #5A2D00;
+    --focus-ring: #000000;
+  }
 }
 
 * {
@@ -134,8 +187,17 @@ body {
   }
  
   .breadcrumb-link {
-    color: #FF9800;
+    color: var(--brand-text);
     font-weight: 500;
+    min-height: var(--tap-target);
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .breadcrumb-link:hover,
+  .breadcrumb-link:focus-visible {
+    color: var(--brand-text-strong);
+    text-decoration: underline;
   }
  
   .breadcrumb-current {
@@ -200,15 +262,15 @@ body {
   }
 
   .navbar-hamburger {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: var(--tap-target);
+    min-width: var(--tap-target);
     display: flex;
     align-items: center;
     justify-content: center;
     background: #F5F5F5;
     border: 1px solid #E0E0E0;
-    border-radius: 6px;
-    color: #FF9800;
+    border-radius: var(--radius);
+    color: var(--brand-text);
     font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -216,7 +278,8 @@ body {
 
   .navbar-hamburger:hover {
     background: #EEEEEE;
-    border-color: #FF9800;
+    border-color: var(--brand-text);
+    color: var(--brand-text-strong);
   }
 
   .navbar-hamburger:active {
@@ -361,9 +424,14 @@ body {
   button:focus-visible,
   a:focus-visible,
   input:focus-visible,
-  select:focus-visible {
-    outline: 3px solid rgba(255, 152, 0, 0.5);
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [role="option"]:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid var(--focus-ring);
     outline-offset: 2px;
+    border-radius: var(--radius);
   }
 .grid {
   display: grid;
@@ -442,18 +510,27 @@ body {
 .navbar-link {
   padding: 0.6rem 1rem;
   text-decoration: none;
-  color: #666666;
-  border-radius: 6px;
+  color: var(--text-secondary);
+  border-radius: var(--radius);
   transition: all 0.2s ease;
   font-size: 0.95rem;
   font-weight: 500;
   text-transform: capitalize;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-target);
 }
 
-.navbar-link:hover {
+.navbar-link:hover,
+.navbar-link:focus-visible {
   background: #F5F5F5;
-  color: #FF9800;
+  color: var(--brand-text);
+}
+
+.navbar-link[aria-current="page"] {
+  color: var(--brand-text);
+  background: rgba(255, 152, 0, 0.08);
+  font-weight: 600;
 }
 
 /* CTA Button Styles */
@@ -480,19 +557,21 @@ body {
 .cta-button-secondary {
   display: inline-block;
   background: transparent;
-  color: #FF9800;
+  color: var(--brand-text);
   padding: 1rem 2rem;
-  border-radius: 6px;
+  border-radius: var(--radius);
   text-decoration: none;
   font-weight: 600;
   font-size: 1rem;
-  border: 2px solid #FF9800;
+  border: 2px solid var(--brand-text);
   transition: all 0.2s ease;
   cursor: pointer;
+  min-height: var(--tap-target);
 }
 
-.cta-button-secondary:hover {
-  background: #FF9800;
+.cta-button-secondary:hover,
+.cta-button-secondary:focus-visible {
+  background: var(--brand-text);
   color: white;
 }
 
@@ -591,4 +670,104 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 152, 0, 0.5);
+}
+
+/* ============================================================
+   Accessibility primitives (skip link, sr-only, motion, contrast)
+   ============================================================ */
+
+/* Visually hidden — content is announced by screen readers only. */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip to content link — visible only when focused. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  z-index: 2000;
+  padding: 0.75rem 1rem;
+  background: var(--text);
+  color: #FFFFFF;
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 1rem;
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Lock body scroll while a drawer/modal is open. */
+.has-drawer-open {
+  overflow: hidden;
+}
+
+/* When the sidebar is closed it is `inert` — also drop pointer-events
+   defensively so that any old browser ignoring `inert` still won't activate. */
+[inert] {
+  pointer-events: none !important;
+}
+
+/* Status surfaces using semantic tokens. */
+.status-surface-success {
+  background: var(--bg-success);
+  color: var(--text-success);
+  border: 1px solid var(--text-success);
+}
+
+.status-surface-warning {
+  background: var(--bg-warning);
+  color: var(--text-warning);
+  border: 1px solid var(--text-warning);
+}
+
+.status-surface-error {
+  background: var(--bg-error);
+  color: var(--text-error);
+  border: 1px solid var(--text-error);
+}
+
+.status-surface-info {
+  background: var(--bg-info);
+  color: var(--text-info);
+  border: 1px solid var(--text-info);
+}
+
+/* Reduced-motion: disable non-essential motion globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Forced-colors: respect Windows High-Contrast Mode. */
+@media (forced-colors: active) {
+  .button,
+  .sign-in-button,
+  .cta-button-primary,
+  .cta-button-secondary,
+  .navbar-link,
+  .skip-link {
+    border: 1px solid CanvasText;
+    forced-color-adjust: none;
+  }
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -26,8 +25,6 @@ type Vehicle = {
 };
 
 export default function AssetsPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [activeTab, setActiveTab] = useState<"drivers" | "vehicles">("drivers");
 
   const [drivers] = useState<Driver[]>([
@@ -155,17 +152,17 @@ export default function AssetsPage() {
       case "available":
         return "✓ Available";
       case "on_trip":
-        return "🚚 On Trip";
+        return " On Trip";
       case "on_break":
-        return "☕ On Break";
+        return " On Break";
       case "off_duty":
-        return "⛔ Off Duty";
+        return " Off Duty";
       case "in_use":
-        return "🚚 In Use";
+        return " In Use";
       case "maintenance":
-        return "🔧 Maintenance";
+        return " Maintenance";
       case "inspection":
-        return "🔍 Inspection";
+        return " Inspection";
       default:
         return "Unknown";
     }
@@ -195,7 +192,7 @@ export default function AssetsPage() {
             borderRadius: "6px 6px 0 0",
           }}
         >
-          👥 Drivers ({drivers.length})
+           Drivers ({drivers.length})
         </button>
         <button
           onClick={() => setActiveTab("vehicles")}
@@ -209,7 +206,7 @@ export default function AssetsPage() {
             borderRadius: "6px 6px 0 0",
           }}
         >
-          🚗 Vehicles ({vehicles.length})
+           Vehicles ({vehicles.length})
         </button>
       </div>
 
@@ -243,14 +240,14 @@ export default function AssetsPage() {
                   {driver.assignedVehicle}
                 </p>
                 <p style={{ color: "#2196F3", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                  📱 {driver.phone}
+                   {driver.phone}
                 </p>
               </div>
 
               <div>
                 <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PERFORMANCE</p>
                 <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  ⭐ {driver.rating} • {driver.trips} trips
+                  ★ {driver.rating} • {driver.trips} trips
                 </p>
               </div>
 

@@ -110,7 +110,7 @@ export default function DriversPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          👨‍✈️ Manage Drivers
+          ‍ Manage Drivers
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           View driver profiles, assignments, attendance, compliance, and ratings. Monitor driver performance and availability.
@@ -222,7 +222,7 @@ export default function DriversPage() {
                     </span>
                   </div>
                   <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                    📞 {driver.phone} | ⭐ {driver.rating} | Trips: {driver.trips_completed}
+                     {driver.phone} | ★ {driver.rating} | Trips: {driver.trips_completed}
                   </p>
                   {driver.current_vehicle && (
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
@@ -235,7 +235,7 @@ export default function DriversPage() {
                     </p>
                   ) : (
                     <p style={{ margin: "0.25rem 0", color: "#F44336", fontSize: "0.85rem", fontWeight: 600 }}>
-                      ✗ Absent Today
+                       Absent Today
                     </p>
                   )}
                 </div>
@@ -266,7 +266,7 @@ export default function DriversPage() {
                         Rating
                       </p>
                       <p style={{ color: "#FF9800", fontWeight: 700 }}>
-                        ⭐ {driver.rating}
+                        ★ {driver.rating}
                       </p>
                     </div>
                     <div>

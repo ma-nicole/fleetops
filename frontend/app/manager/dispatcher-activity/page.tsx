@@ -119,7 +119,7 @@ export default function DispatcherActivityPage() {
           </div>
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Avg Rating</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#8B5CF6" }}>⭐ 4.7</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color: "#8B5CF6" }}>★ 4.7</div>
           </div>
         </div>
 
@@ -147,7 +147,7 @@ export default function DispatcherActivityPage() {
                       <td style={{ padding: "1rem", color: "#666" }}>{dispatcher.tripsAssigned}</td>
                       <td style={{ padding: "1rem", color: "#10B981", fontWeight: 600 }}>{dispatcher.tripsCompleted}</td>
                       <td style={{ padding: "1rem", color: "#F59E0B", fontWeight: 600 }}>{dispatcher.activeTrips}</td>
-                      <td style={{ padding: "1rem", fontWeight: 600 }}>⭐ {dispatcher.rating}</td>
+                      <td style={{ padding: "1rem", fontWeight: 600 }}>★ {dispatcher.rating}</td>
                       <td style={{ padding: "1rem" }}>
                         <span
                           style={{

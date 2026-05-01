@@ -106,7 +106,7 @@ export default function CustomersPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          👥 Manage Customers
+           Manage Customers
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           View and manage customer accounts. Monitor active bookings and customer status.
@@ -232,7 +232,7 @@ export default function CustomersPage() {
                     </span>
                   </div>
                   <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                    📧 {customer.email} | 📞 {customer.phone}
+                     {customer.email} |  {customer.phone}
                   </p>
                   {customer.company && (
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>

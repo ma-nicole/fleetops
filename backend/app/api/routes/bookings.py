@@ -4,11 +4,11 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.db import get_db
 from app.models.entities import Booking, BookingStatus, User, UserRole
-from app.schemas.analytics import CostPredictionRequest
 from app.schemas.booking import BookingCreate, BookingRead
-from app.services.costing import estimate_trip_cost
+from app.schemas.predict import TripCostPredictRequest
 from app.services.email_templates import EmailTemplate
 from app.services.notifications import send_email_notification
+from app.services.predictive.cost_model import predict_trip_cost
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -21,14 +21,12 @@ def create_booking(
     user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Create a new booking with cost estimation and confirmation email"""
-    estimate = estimate_trip_cost(
-        CostPredictionRequest(
+    prediction = predict_trip_cost(
+        TripCostPredictRequest(
             distance_km=120,
             cargo_weight_tons=payload.cargo_weight_tons,
-            fuel_price_per_liter=1.1,
-            labor_rate=18,
-            toll_rate=0.25,
-        )
+        ),
+        db=db,
     )
 
     booking = Booking(
@@ -38,7 +36,8 @@ def create_booking(
         service_type=payload.service_type,
         scheduled_date=payload.scheduled_date,
         cargo_weight_tons=payload.cargo_weight_tons,
-        estimated_cost=estimate.estimated_total,
+        estimated_cost=prediction.total_cost,
+        status=BookingStatus.PENDING_APPROVAL,
     )
 
     db.add(booking)

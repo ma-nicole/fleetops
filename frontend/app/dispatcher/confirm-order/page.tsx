@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import { DriverDataFlowService, DriverFlowBooking } from "@/lib/driverDataFlowService";
 
 export default function DispatcherConfirmOrderPage() {
-  useRoleGuard(["dispatcher"]);
   const [bookings, setBookings] = useState<DriverFlowBooking[]>([]);
   const dispatcher = "dispatcher-001";
 

@@ -54,10 +54,10 @@ export default function DriverRatingCard({ driverId, driverName, tripId }: Drive
   return (
     <div style={{ padding: "1rem", border: "1px solid #e5e7eb", borderRadius: "8px", background: "#f9fafb" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <h3 style={{ margin: 0 }}>👤 {driverName}</h3>
+        <h3 style={{ margin: 0 }}> {driverName}</h3>
         {averageRating !== null && (
           <div style={{ fontSize: "1.1rem", fontWeight: "bold", color: "#f59e0b" }}>
-            ⭐ {averageRating.toFixed(1)} / 5.0
+            ★ {averageRating.toFixed(1)} / 5.0
           </div>
         )}
       </div>
@@ -77,7 +77,7 @@ export default function DriverRatingCard({ driverId, driverName, tripId }: Drive
                 transition: "opacity 0.2s",
               }}
             >
-              ⭐
+              ★
             </button>
           ))}
           <button

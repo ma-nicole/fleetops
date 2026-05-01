@@ -65,7 +65,7 @@ export default function ServiceSelectionPage() {
         </Link>
       </div>
 
-      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>🔧 Select Service Type</h1>
+      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Select Service Type</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
         Choose a service package that fits your needs
       </p>

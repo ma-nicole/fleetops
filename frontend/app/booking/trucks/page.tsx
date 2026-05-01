@@ -91,7 +91,7 @@ export default function TruckSelectionPage() {
         </Link>
       </div>
 
-      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>🚚 Select Your Truck</h1>
+      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Select Your Truck</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
         Choose the right truck for your shipping needs
       </p>

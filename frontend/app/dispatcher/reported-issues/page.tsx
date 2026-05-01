@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -16,8 +15,6 @@ type ReportedIssue = {
 };
 
 export default function ReportedIssuesPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [issues] = useState<ReportedIssue[]>([
     {
       issueId: "ISS-2024-0001",
@@ -103,15 +100,15 @@ export default function ReportedIssuesPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "reported":
-        return "📋 Reported";
+        return " Reported";
       case "investigating":
-        return "🔍 Investigating";
+        return " Investigating";
       case "in_progress":
-        return "⚙️ In Progress";
+        return " In Progress";
       case "resolved":
-        return "✅ Resolved";
+        return " Resolved";
       case "closed":
-        return "🚫 Closed";
+        return " Closed";
       default:
         return "Unknown";
     }

@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getDashboardPath, type UserRole } from "./auth";
 
+/** Aligns with `require_roles(DISPATCHER, MANAGER, ADMIN)` on dispatch API routes. */
+export const DISPATCH_CONSOLE_ROLES: string[] = ["dispatcher", "manager", "admin"];
+
 /**
  * Hook to protect pages based on user role
  * Redirects unauthorized users to their role dashboard

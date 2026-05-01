@@ -1,40 +1,60 @@
 "use client";
 
+import Link from "next/link";
+
+type StatusKey =
+  | "pending"
+  | "confirmed"
+  | "in-transit"
+  | "delivered"
+  | "completed"
+  | "cancelled";
+
 type StatusBadgeProps = {
-  status: "pending" | "confirmed" | "in-transit" | "delivered" | "completed" | "cancelled";
+  status: StatusKey;
   label?: string;
 };
 
-export function StatusBadge({ status, label }: StatusBadgeProps) {
-  const statusConfig = {
-    pending: { icon: "⏳", color: "#FF9800", bg: "rgba(255, 152, 0, 0.1)", label: "Pending" },
-    confirmed: { icon: "✓", color: "#4CAF50", bg: "rgba(76, 175, 80, 0.1)", label: "Confirmed" },
-    "in-transit": { icon: "🚚", color: "#FF9800", bg: "rgba(255, 152, 0, 0.1)", label: "In Transit" },
-    delivered: { icon: "📍", color: "#4CAF50", bg: "rgba(76, 175, 80, 0.1)", label: "Delivered" },
-    completed: { icon: "✅", color: "#4CAF50", bg: "rgba(76, 175, 80, 0.1)", label: "Completed" },
-    cancelled: { icon: "✗", color: "#F44336", bg: "rgba(244, 67, 54, 0.1)", label: "Cancelled" },
-  };
+/**
+ * Status is conveyed via three channels — text label, distinct hue,
+ * and distinct border style (solid / dashed) — so it is never color-only.
+ */
+const statusConfig: Record<
+  StatusKey,
+  { text: string; bg: string; border: string; style: "solid" | "dashed"; label: string }
+> = {
+  pending:    { text: "#B25900", bg: "#FFF3E0", border: "#B25900", style: "solid",  label: "Pending" },
+  confirmed:  { text: "#0F6D6D", bg: "#E0F7F7", border: "#0F6D6D", style: "solid",  label: "Confirmed" },
+  "in-transit": { text: "#1D4ED8", bg: "#E0F2FE", border: "#1D4ED8", style: "solid",  label: "In Transit" },
+  delivered:  { text: "#2E7D32", bg: "#E8F5E9", border: "#2E7D32", style: "solid",  label: "Delivered" },
+  completed:  { text: "#1B5E20", bg: "#C8E6C9", border: "#1B5E20", style: "solid",  label: "Completed" },
+  cancelled:  { text: "#B91C1C", bg: "#FFEBEE", border: "#B91C1C", style: "dashed", label: "Cancelled" },
+};
 
+export function StatusBadge({ status, label }: StatusBadgeProps) {
   const config = statusConfig[status];
+  const displayLabel = label || config.label;
 
   return (
-    <div
+    <span
+      role="status"
+      aria-label={`Status: ${displayLabel}`}
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: "0.5rem",
-        padding: "0.5rem 1rem",
+        padding: "0.35rem 0.85rem",
         background: config.bg,
-        border: `1px solid ${config.color}`,
-        borderRadius: "20px",
-        color: config.color,
-        fontSize: "0.85rem",
-        fontWeight: 600,
+        border: `1.5px ${config.style} ${config.border}`,
+        borderRadius: "999px",
+        color: config.text,
+        fontSize: "0.82rem",
+        fontWeight: 700,
+        letterSpacing: "0.02em",
+        lineHeight: 1.2,
       }}
     >
-      <span style={{ fontSize: "1rem" }}>{config.icon}</span>
-      {label || config.label}
-    </div>
+      {displayLabel}
+    </span>
   );
 }
 
@@ -49,59 +69,64 @@ type EmptyStateProps = {
   };
 };
 
-export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
+export function EmptyState({ title, description, action }: EmptyStateProps) {
   return (
-    <div
+    <section
+      aria-labelledby="empty-state-title"
       style={{
         textAlign: "center",
         padding: "3rem 1rem",
         background: "#FAFAFA",
-        border: "2px dashed #E8E8E8",
+        border: "2px dashed #C8C8C8",
         borderRadius: "8px",
         display: "grid",
         gap: "1rem",
       }}
     >
-      <div style={{ fontSize: "4rem" }}>{icon}</div>
       <div>
-        <h2 style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>{title}</h2>
+        <h2 id="empty-state-title" style={{ margin: "0 0 0.5rem 0", fontSize: "1.3rem" }}>
+          {title}
+        </h2>
         <p style={{ margin: 0, color: "var(--text-secondary)" }}>{description}</p>
       </div>
-      {action && (
-        action.href ? (
-          <a
+      {action &&
+        (action.href ? (
+          <Link
             href={action.href}
             style={{
               display: "inline-block",
               padding: "0.75rem 1.5rem",
-              background: "#FF9800",
+              background: "var(--brand-text)",
               color: "white",
               borderRadius: "6px",
               textDecoration: "none",
               fontWeight: 600,
               marginTop: "0.5rem",
+              minHeight: "44px",
+              lineHeight: "1.5",
             }}
           >
             {action.label}
-          </a>
+          </Link>
         ) : (
           <button
+            type="button"
             onClick={action.onClick}
             style={{
               padding: "0.75rem 1.5rem",
-              background: "#FF9800",
+              background: "var(--brand-text)",
               color: "white",
               border: "none",
               borderRadius: "6px",
               fontWeight: 600,
               cursor: "pointer",
               marginTop: "0.5rem",
+              minHeight: "44px",
             }}
           >
             {action.label}
           </button>
-        )
-      )}
-    </div>
+        ))}
+    </section>
   );
 }

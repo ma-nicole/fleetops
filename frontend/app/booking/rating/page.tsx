@@ -78,7 +78,7 @@ export default function RatingPage() {
     return (
       <div style={{ padding: "2rem", maxWidth: "600px", margin: "0 auto" }}>
         <div style={{ padding: "2rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px", marginBottom: "2rem", textAlign: "center" }}>
-          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🙏</div>
+          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}></div>
           <h1 style={{ color: "#4CAF50", margin: "0 0 0.5rem 0" }}>Thank You!</h1>
           <p style={{ color: "#666666", margin: "0" }}>
             Your feedback helps us improve our service
@@ -88,7 +88,7 @@ export default function RatingPage() {
         <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9", marginBottom: "2rem" }}>
           <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Your Rating</h3>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <div style={{ fontSize: "2.5rem" }}>⭐</div>
+            <div style={{ fontSize: "2.5rem" }}>★</div>
             <div>
               <p style={{ color: "#FF9800", fontWeight: 700, fontSize: "1.5rem", margin: "0" }}>
                 {stars}.0 / 5.0
@@ -166,7 +166,7 @@ export default function RatingPage() {
               transition: "all 0.2s",
             }}
           >
-            ⭐
+            ★
           </button>
         ))}
       </div>
@@ -181,7 +181,7 @@ export default function RatingPage() {
         </Link>
       </div>
 
-      <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>⭐ Rate Your Experience</h1>
+      <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>★ Rate Your Experience</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
         Help us improve by rating your recent booking
       </p>
@@ -236,7 +236,7 @@ export default function RatingPage() {
                   fontSize: "2.5rem",
                 }}
               >
-                ⭐
+                ★
               </button>
             ))}
           </div>
@@ -252,12 +252,12 @@ export default function RatingPage() {
           </p>
 
           <StarRating
-            label="👨‍✈️ Driver Quality"
+            label="‍ Driver Quality"
             value={driverQuality}
             onChange={setDriverQuality}
           />
           <StarRating
-            label="🚚 Vehicle Condition"
+            label=" Vehicle Condition"
             value={vehicleCondition}
             onChange={setVehicleCondition}
           />
@@ -316,7 +316,7 @@ export default function RatingPage() {
       {/* Info Message */}
       <div style={{ padding: "1rem", background: "#E3F2FD", borderRadius: "6px", marginTop: "2rem" }}>
         <p style={{ color: "#1565C0", margin: "0", fontSize: "0.9rem" }}>
-          💡 Your feedback is important. All ratings are reviewed to help us maintain high service quality.
+           Your feedback is important. All ratings are reviewed to help us maintain high service quality.
         </p>
       </div>
     </div>

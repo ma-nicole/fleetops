@@ -98,7 +98,7 @@ export default function LoadingPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          📦 Confirm Loading / Unloading
+           Confirm Loading / Unloading
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Manage and confirm cargo loading and unloading operations at warehouses and distribution centers.

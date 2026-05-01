@@ -82,7 +82,7 @@ export default function PaymentPage() {
         }
 
         // Simulate email feedback
-        console.log("📧 Email sent to customer:", completedBooking.bookingId);
+        console.log(" Email sent to customer:", completedBooking.bookingId);
 
         router.push("/booking/receipt");
       }
@@ -102,7 +102,7 @@ export default function PaymentPage() {
         </Link>
       </div>
 
-      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>💳 Payment</h1>
+      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Payment</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
         Complete your payment to confirm your booking
       </p>
@@ -144,7 +144,7 @@ export default function PaymentPage() {
                   style={{ marginRight: "1rem" }}
                 />
                 <div>
-                  <strong style={{ color: "#1A1A1A" }}>💳 Credit/Debit Card</strong>
+                  <strong style={{ color: "#1A1A1A" }}> Credit/Debit Card</strong>
                   <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
                     Visa, Mastercard, American Express
                   </p>
@@ -161,7 +161,7 @@ export default function PaymentPage() {
                   style={{ marginRight: "1rem" }}
                 />
                 <div>
-                  <strong style={{ color: "#1A1A1A" }}>🏦 Bank Transfer</strong>
+                  <strong style={{ color: "#1A1A1A" }}> Bank Transfer</strong>
                   <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
                     Direct bank account transfer
                   </p>
@@ -334,7 +334,7 @@ export default function PaymentPage() {
             </button>
 
             <div style={{ fontSize: "0.85rem", color: "#999", marginTop: "1rem", textAlign: "center" }}>
-              🔒 Your payment is secure and encrypted
+               Your payment is secure and encrypted
             </div>
           </div>
         </div>

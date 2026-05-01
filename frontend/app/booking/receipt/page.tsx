@@ -88,7 +88,7 @@ Thank you for using FLEETOPS!
     <div style={{ padding: "2rem", maxWidth: "700px", margin: "0 auto" }}>
       {/* Success Banner */}
       <div style={{ padding: "2rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px", marginBottom: "2rem", textAlign: "center" }}>
-        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>✅</div>
+        <div style={{ fontSize: "3rem", marginBottom: "1rem" }}></div>
         <h1 style={{ color: "#4CAF50", margin: "0 0 0.5rem 0" }}>Payment Successful!</h1>
         <p style={{ color: "#666666", margin: "0" }}>
           Your booking is confirmed and payment has been processed
@@ -202,7 +202,7 @@ Thank you for using FLEETOPS!
             fontWeight: 600,
           }}
         >
-          📥 Download Receipt
+           Download Receipt
         </button>
         <Link
           href="/booking/status"
@@ -225,7 +225,7 @@ Thank you for using FLEETOPS!
 
       <div style={{ padding: "1rem", background: "#E3F2FD", borderRadius: "6px", marginBottom: "1rem" }}>
         <p style={{ color: "#1565C0", margin: "0", fontSize: "0.9rem" }}>
-          ✉️ A confirmation email has been sent to your email address with all booking details.
+           A confirmation email has been sent to your email address with all booking details.
         </p>
       </div>
 

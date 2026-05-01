@@ -55,7 +55,7 @@ export default function PayPage() {
 
   const getStatusBadge = (status: string) => {
     return status === "paid"
-      ? { color: "#4CAF50", label: "✅ Paid" }
+      ? { color: "#4CAF50", label: " Paid" }
       : { color: "#FF9800", label: "⏳ Pending" };
   };
 
@@ -174,7 +174,7 @@ export default function PayPage() {
 
       {/* Pay Info Card */}
       <div style={{ padding: "1.5rem", background: "#E3F2FD", borderRadius: "8px", border: "1px solid #2196F3" }}>
-        <p style={{ color: "#1565C0", fontWeight: "600", margin: "0" }}>💡 Pay Information:</p>
+        <p style={{ color: "#1565C0", fontWeight: "600", margin: "0" }}> Pay Information:</p>
         <ul style={{ color: "#1565C0", margin: "0.5rem 0 0 0", paddingLeft: "1.5rem" }}>
           <li>Base salary calculated on completed trips</li>
           <li>Distance bonuses applied per kilometer</li>

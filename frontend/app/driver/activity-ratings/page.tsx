@@ -75,7 +75,7 @@ export default function ActivityRatingsPage() {
             opacity: star <= rating ? 1 : 0.3,
           }}
         >
-          ⭐
+          ★
         </span>
       ))}
     </div>
@@ -195,7 +195,7 @@ export default function ActivityRatingsPage() {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <p style={{ color: "#9C27B0", fontSize: "1.2rem", fontWeight: "700", margin: "0" }}>
-                    {((rating.safety + rating.onTime + rating.professionalism + rating.customerService) / 4).toFixed(2)} ⭐
+                    {((rating.safety + rating.onTime + rating.professionalism + rating.customerService) / 4).toFixed(2)} ★
                   </p>
                 </div>
               </div>

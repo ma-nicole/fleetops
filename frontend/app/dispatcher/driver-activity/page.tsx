@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -17,8 +16,6 @@ type DriverActivity = {
 };
 
 export default function DriverActivityPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [activities] = useState<DriverActivity[]>([
     {
       driverId: "DRV-001",
@@ -97,11 +94,11 @@ export default function DriverActivityPage() {
       case "available":
         return "✓ Available";
       case "on_trip":
-        return "🚚 On Trip";
+        return " On Trip";
       case "on_break":
-        return "☕ On Break";
+        return " On Break";
       case "completed_shift":
-        return "✅ Shift Complete";
+        return " Shift Complete";
       default:
         return "Unknown";
     }
@@ -193,14 +190,14 @@ export default function DriverActivityPage() {
               <div>
                 <h3 style={{ color: "#1A1A1A", margin: "0" }}>{activity.driverName}</h3>
                 <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                  {activity.driverId} • ⭐ {activity.rating}
+                  {activity.driverId} • ★ {activity.rating}
                 </p>
               </div>
 
               <div>
                 <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LOCATION</p>
                 <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  📍 {activity.currentLocation}
+                   {activity.currentLocation}
                 </p>
               </div>
 

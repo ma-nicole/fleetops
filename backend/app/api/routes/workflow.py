@@ -20,10 +20,13 @@ from app.schemas.trip import (
 )
 from app.services.costing import estimate_trip_cost
 from app.services.email_templates import EmailTemplate
+from app.services.feedback_loop import record_trip_feedback
 from app.services.notifications import send_email_notification
+from app.services.predictive.cost_model import predict_trip_cost
 from app.services.routing import optimize_route
 from app.services.scheduler import find_available_driver, find_available_truck
 from app.schemas.analytics import CostPredictionRequest
+from app.schemas.predict import TripCostPredictRequest
 
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
@@ -55,15 +58,18 @@ def create_booking_request(
         cargo_description=payload.get("cargo_description"),
     )
 
-    # Estimate cost
-    estimate = estimate_trip_cost(
-        CostPredictionRequest(
-            distance_km=120,
-            cargo_weight_tons=booking_data.cargo_weight_tons,
-            fuel_price_per_liter=1.1,
-            labor_rate=18,
-            toll_rate=0.25,
-        )
+    # Use the paper §3.2.8 trip-cost predictor (regression-blended) for the customer-facing quote.
+    prediction = predict_trip_cost(
+        TripCostPredictRequest(
+            distance_km=float(payload.get("distance_km") or 120),
+            cargo_weight_tons=float(booking_data.cargo_weight_tons),
+            avg_speed_kmh=float(payload.get("avg_speed_kmh") or 50),
+            road_condition=str(payload.get("road_condition") or "highway"),
+            fuel_price_per_liter=float(payload.get("fuel_price_per_liter") or 60.0),
+            labor_rate_per_hour=float(payload.get("labor_rate_per_hour") or 100.0),
+            toll_rate_per_km=float(payload.get("toll_rate_per_km") or 1.5),
+        ),
+        db=db,
     )
 
     booking = Booking(
@@ -74,7 +80,7 @@ def create_booking_request(
         scheduled_date=booking_data.scheduled_date,
         cargo_weight_tons=booking_data.cargo_weight_tons,
         cargo_description=booking_data.cargo_description,
-        estimated_cost=estimate.estimated_total,
+        estimated_cost=prediction.total_cost,
         status=BookingStatus.PENDING_APPROVAL,
     )
 
@@ -420,6 +426,9 @@ def complete_delivery(
 
     db.commit()
     db.refresh(trip)
+
+    # Paper Fig 24 — drop predicted vs actual into the feedback store.
+    record_trip_feedback(db, trip)
 
     # Notify customer with receipt
     customer = db.query(User).filter(User.id == booking.customer_id).first()

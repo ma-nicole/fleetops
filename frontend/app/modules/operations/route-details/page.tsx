@@ -60,7 +60,7 @@ export default function RouteDetailsPage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          🗺️ Route Details & Navigation
+           Route Details & Navigation
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           View your assigned route requirements and alternative route options.
@@ -116,19 +116,19 @@ export default function RouteDetailsPage() {
 
           <div style={{ borderTop: "1px solid #E3F2FD", paddingTop: "1rem" }}>
             <p style={{ margin: "0.5rem 0", color: "#666666" }}>
-              <strong>📍 Pickup:</strong> {route.pickup_city}
+              <strong> Pickup:</strong> {route.pickup_city}
             </p>
             <p style={{ margin: "0.5rem 0", color: "#666666" }}>
-              <strong>📍 Dropoff:</strong> {route.dropoff_city}
+              <strong> Dropoff:</strong> {route.dropoff_city}
             </p>
             {route.cargo_restrictions && (
               <p style={{ margin: "0.5rem 0", color: "#666666" }}>
-                <strong>⚠️ Cargo Restrictions:</strong> {route.cargo_restrictions}
+                <strong> Cargo Restrictions:</strong> {route.cargo_restrictions}
               </p>
             )}
             {route.hazmat_required && (
               <p style={{ margin: "0.5rem 0", color: "#F44336", fontWeight: 600 }}>
-                <strong>🚨 Hazmat Required</strong>
+                <strong> Hazmat Required</strong>
               </p>
             )}
           </div>
@@ -145,7 +145,7 @@ export default function RouteDetailsPage() {
               fontWeight: 600,
             }}
           >
-            📱 Open GPS Navigation
+             Open GPS Navigation
           </button>
         </div>
 

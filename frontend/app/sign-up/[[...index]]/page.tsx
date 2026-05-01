@@ -5,20 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
 
-const roles = [
-  { value: "customer", label: "Customer" },
-  { value: "dispatcher", label: "Dispatcher" },
-  { value: "driver", label: "Driver" },
-  { value: "manager", label: "Manager" },
-];
-
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState("customer");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,17 +33,24 @@ export default function SignUpPage() {
           password,
           full_name: fullName,
           phone: phone || undefined,
-          role,
+          role: "customer",
         }),
         cache: "no-store",
       });
 
       if (!response.ok) {
         const body = await response.text();
-        throw new Error(body || "Unable to register");
+        let message = "Unable to register";
+        try {
+          const parsed = JSON.parse(body);
+          message = parsed.detail || message;
+        } catch {
+          if (body) message = body;
+        }
+        throw new Error(message);
       }
 
-      setSuccess("Account created successfully. Redirecting to sign in...");
+      setSuccess("Customer account created. Redirecting to sign in...");
       setTimeout(() => router.push("/sign-in"), 1200);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to register");
@@ -62,15 +61,18 @@ export default function SignUpPage() {
   return (
     <main style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
       <div style={{ width: 420, padding: 24, background: "rgba(255,255,255,0.04)", borderRadius: 16 }}>
-        <h1>Sign Up</h1>
+        <h1 style={{ marginBottom: 4 }}>Create a customer account</h1>
+        <p style={{ marginTop: 0, color: "rgba(255,255,255,0.7)", fontSize: "0.9rem" }}>
+          Self-registration is for customers only. Drivers, dispatchers, and managers receive their accounts from the administrator.
+        </p>
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16, marginTop: 16 }}>
           {error && (
-            <div aria-live="polite" style={{ color: "#ff6b6b", fontSize: "0.95rem" }}>
+            <div role="alert" aria-live="assertive" style={{ color: "#ff6b6b", fontSize: "0.95rem" }}>
               {error}
             </div>
           )}
           {success && (
-            <div aria-live="polite" style={{ color: "#8ce99a", fontSize: "0.95rem" }}>
+            <div role="status" aria-live="polite" style={{ color: "#8ce99a", fontSize: "0.95rem" }}>
               {success}
             </div>
           )}
@@ -106,13 +108,16 @@ export default function SignUpPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
-                placeholder="At least 6 characters"
+                minLength={8}
+                placeholder="At least 8 characters"
                 autoComplete="new-password"
                 style={{ width: "100%", minHeight: 44, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white", fontSize: "1rem" }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
+                aria-pressed={showPassword}
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 style={{ minHeight: 44, minWidth: 44, padding: "0 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.08)", color: "white", cursor: "pointer", fontSize: "0.9rem" }}
               >
                 {showPassword ? "Hide" : "Show"}
@@ -120,49 +125,30 @@ export default function SignUpPage() {
             </div>
           </label>
           <label style={{ display: "grid", gap: 8 }}>
-            Phone
+            Phone <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.6)" }}>(optional)</span>
             <input
               type="tel"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
-              placeholder="Optional"
+              placeholder="+63-917-…"
               autoComplete="tel"
               style={{ width: "100%", minHeight: 44, padding: 10, borderRadius: 8, border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.06)", color: "white", fontSize: "1rem" }}
             />
           </label>
-          <label style={{ display: "grid", gap: 8 }}>
-            Role
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.16)",
-                background: "#ffffff",
-                color: "#000000",
-                WebkitAppearance: "menulist",
-                MozAppearance: "menulist",
-              }}
-            >
-              {roles.map((option) => (
-                <option key={option.value} value={option.value} style={{ color: "#000000" }}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
           <button
             type="submit"
             disabled={isSubmitting}
+            aria-busy={isSubmitting}
             style={{ minHeight: 44, padding: 12, borderRadius: 10, border: "none", background: "#0ea5e9", color: "white", cursor: isSubmitting ? "not-allowed" : "pointer", fontSize: "1rem", fontWeight: 600 }}
           >
-            {isSubmitting ? "Registering…" : "Sign Up"}
+            {isSubmitting ? "Registering…" : "Create customer account"}
           </button>
         </form>
         <p style={{ marginTop: 16, color: "rgba(255,255,255,0.7)" }}>
-          Already have an account? <Link href="/sign-in">Login</Link>
+          Already have an account? <Link href="/sign-in">Sign in</Link>
+        </p>
+        <p style={{ marginTop: 8, color: "rgba(255,255,255,0.55)", fontSize: "0.85rem" }}>
+          Are you staff? Ask your administrator to create your account.
         </p>
       </div>
       <style jsx>{`

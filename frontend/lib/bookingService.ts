@@ -452,15 +452,15 @@ export class BookingService {
   static getStatusLabel(status: BookingStatus): string {
     const labels: Record<BookingStatus, string> = {
       pending_approval: "⏳ Pending Approval",
-      approved: "✅ Approved",
-      rejected: "❌ Rejected",
-      assigned: "📋 Assigned",
-      accepted: "👍 Accepted",
-      enroute: "🚗 Enroute",
-      loading: "📦 Loading",
-      out_for_delivery: "🚚 Out for Delivery",
-      completed: "✨ Completed",
-      cancelled: "❌ Cancelled",
+      approved: " Approved",
+      rejected: " Rejected",
+      assigned: " Assigned",
+      accepted: " Accepted",
+      enroute: " Enroute",
+      loading: " Loading",
+      out_for_delivery: " Out for Delivery",
+      completed: " Completed",
+      cancelled: " Cancelled",
     };
     return labels[status] || status;
   }

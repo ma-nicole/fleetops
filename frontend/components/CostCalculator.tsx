@@ -135,7 +135,7 @@ export default function CostCalculator({
       setCost(null);
     } catch (error) {
       const err = error as Error;
-      setMessage(`✗ Error: ${err.message}`);
+      setMessage(` Error: ${err.message}`);
       setMessageType("error");
     } finally {
       setIsSubmitting(false);
@@ -159,7 +159,7 @@ export default function CostCalculator({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span>📍 Pickup Location</span>
+              <span> Pickup Location</span>
               <span className="field-help" title="Where the shipment starts. Enter a city, warehouse, or dock.">?</span>
               {pickup.length >= 3 && !errors.pickup_location && <span className="field-valid">✓</span>}
             </label>
@@ -172,14 +172,14 @@ export default function CostCalculator({
             />
             {errors.pickup_location && (
               <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                ⚠️ {errors.pickup_location}
+                 {errors.pickup_location}
               </p>
             )}
           </div>
 
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span>🎯 Dropoff Location</span>
+              <span> Dropoff Location</span>
               <span className="field-help" title="Where the shipment should arrive.">?</span>
               {dropoff.length >= 3 && !errors.dropoff_location && <span className="field-valid">✓</span>}
             </label>
@@ -192,7 +192,7 @@ export default function CostCalculator({
             />
             {errors.dropoff_location && (
               <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                ⚠️ {errors.dropoff_location}
+                 {errors.dropoff_location}
               </p>
             )}
           </div>
@@ -201,7 +201,7 @@ export default function CostCalculator({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span>⚖️ Weight (tons)</span>
+              <span> Weight (tons)</span>
               <span className="field-help" title="Estimated cargo weight. Used for pricing and truck allocation.">?</span>
               {parseFloat(weight) > 0 && !errors.cargo_weight_tons && <span className="field-valid">✓</span>}
             </label>
@@ -218,14 +218,14 @@ export default function CostCalculator({
             />
             {errors.cargo_weight_tons && (
               <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                ⚠️ {errors.cargo_weight_tons}
+                 {errors.cargo_weight_tons}
               </p>
             )}
           </div>
 
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span>📦 Service Type</span>
+              <span> Service Type</span>
               <span className="field-help" title="Choose a fixed rate or a custom quote if the shipment needs special handling.">?</span>
             </label>
             <select
@@ -240,7 +240,7 @@ export default function CostCalculator({
 
           <div>
             <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span>📅 Schedule Date</span>
+              <span> Schedule Date</span>
               <span className="field-help" title="Past dates are disabled. Pick the earliest realistic delivery date.">?</span>
               {date && !errors.scheduled_date && <span className="field-valid">✓</span>}
             </label>
@@ -254,7 +254,7 @@ export default function CostCalculator({
             />
             {errors.scheduled_date && (
               <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                ⚠️ {errors.scheduled_date}
+                 {errors.scheduled_date}
               </p>
             )}
           </div>
@@ -328,7 +328,7 @@ export default function CostCalculator({
             fontSize: "1rem",
           }}
         >
-          {isSubmitting ? "🔄 Processing..." : "✓ Confirm & Book"}
+          {isSubmitting ? " Processing..." : "✓ Confirm & Book"}
         </button>
 
         {/* Message */}

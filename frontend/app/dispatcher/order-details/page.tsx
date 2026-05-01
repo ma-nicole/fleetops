@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -16,8 +15,6 @@ type OrderDetail = {
 };
 
 export default function OrderDetailsPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [order] = useState<OrderDetail>({
     id: "ORD-2024-0001",
     bookingId: "BK-2024-0001",
@@ -91,7 +88,7 @@ export default function OrderDetailsPage() {
               fontSize: "0.85rem",
             }}
           >
-            📅 {order.status.toUpperCase()}
+             {order.status.toUpperCase()}
           </span>
         </div>
       </div>
@@ -138,7 +135,7 @@ export default function OrderDetailsPage() {
 
       {/* Pickup Details */}
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>📦 Pickup Details</h2>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Pickup Details</h2>
         <div style={{ display: "grid", gap: "1rem" }}>
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ADDRESS</p>
@@ -165,7 +162,7 @@ export default function OrderDetailsPage() {
 
       {/* Delivery Details */}
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>🎯 Delivery Details</h2>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Delivery Details</h2>
         <div style={{ display: "grid", gap: "1rem" }}>
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ADDRESS</p>
@@ -200,7 +197,7 @@ export default function OrderDetailsPage() {
             background: "rgba(255, 152, 0, 0.05)",
           }}
         >
-          <h2 style={{ color: "#FF9800", marginBottom: "0.5rem" }}>⚠️ Special Instructions</h2>
+          <h2 style={{ color: "#FF9800", marginBottom: "0.5rem" }}> Special Instructions</h2>
           <p style={{ color: "#1A1A1A", margin: "0", lineHeight: "1.6" }}>
             {order.specialInstructions}
           </p>
@@ -221,7 +218,7 @@ export default function OrderDetailsPage() {
           }}
           onClick={() => alert("Assigning driver...")}
         >
-          👤 Assign Driver
+           Assign Driver
         </button>
         <button
           style={{
@@ -235,7 +232,7 @@ export default function OrderDetailsPage() {
           }}
           onClick={() => alert("Printing documents...")}
         >
-          🖨️ Print Documents
+           Print Documents
         </button>
         <Link
           href="/dispatcher/dashboard"

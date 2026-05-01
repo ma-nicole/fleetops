@@ -90,7 +90,7 @@ export default function AnalyticsPage() {
 
           <div style={{ background: "white", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
             <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>Avg Rating</div>
-            <div style={{ fontSize: "2.5rem", fontWeight: 900, color: "#8B5CF6" }}>⭐ {analytics.averageRating}</div>
+            <div style={{ fontSize: "2.5rem", fontWeight: 900, color: "#8B5CF6" }}>★ {analytics.averageRating}</div>
             <div style={{ fontSize: "0.8rem", color: "#999", marginTop: "0.5rem" }}>Customer satisfaction</div>
           </div>
         </div>

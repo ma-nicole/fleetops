@@ -162,7 +162,7 @@ export default function LaborTollsPage() {
         {/* Labor Records */}
         <div style={{ marginBottom: "3rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h2 style={{ color: "#1A1A1A", margin: 0 }}>💰 Labor Records</h2>
+            <h2 style={{ color: "#1A1A1A", margin: 0 }}> Labor Records</h2>
             <button
               onClick={() => setShowLaborForm(!showLaborForm)}
               style={{
@@ -284,7 +284,7 @@ export default function LaborTollsPage() {
         {/* Toll Records */}
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h2 style={{ color: "#1A1A1A", margin: 0 }}>🛣️ Toll Records</h2>
+            <h2 style={{ color: "#1A1A1A", margin: 0 }}> Toll Records</h2>
             <button
               onClick={() => setShowTollForm(!showTollForm)}
               style={{

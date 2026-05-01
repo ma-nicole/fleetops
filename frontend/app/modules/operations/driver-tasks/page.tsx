@@ -197,7 +197,7 @@ export default function DriverTaskListPage() {
         {/* Pending Tasks */}
         {pendingTasks.length > 0 && (
           <div style={{ marginBottom: "2rem" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>📌 Pending Pickups</h3>
+            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Pending Pickups</h3>
             <div style={{ display: "grid", gap: "0.75rem" }}>
               {pendingTasks.map((task) => (
                 <div
@@ -243,10 +243,10 @@ export default function DriverTaskListPage() {
 
                   <div style={{ marginBottom: "0.75rem" }}>
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                      📍 {task.pickup_location} → {task.dropoff_location}
+                       {task.pickup_location} → {task.dropoff_location}
                     </p>
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                      📦 {task.cargo_weight_tons}t | Customer: {task.customer_name}
+                       {task.cargo_weight_tons}t | Customer: {task.customer_name}
                     </p>
                     <p style={{ margin: "0.25rem 0", color: "#FF9800", fontWeight: 600 }}>
                       Estimated Cost: ${task.estimated_cost}
@@ -281,7 +281,7 @@ export default function DriverTaskListPage() {
         {/* In Transit Tasks */}
         {inTransitTasks.length > 0 && (
           <div style={{ marginBottom: "2rem" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>🚗 In Transit</h3>
+            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> In Transit</h3>
             <div style={{ display: "grid", gap: "0.75rem" }}>
               {inTransitTasks.map((task) => (
                 <div
@@ -327,10 +327,10 @@ export default function DriverTaskListPage() {
 
                   <div style={{ marginBottom: "0.75rem" }}>
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                      📍 {task.pickup_location} → {task.dropoff_location}
+                       {task.pickup_location} → {task.dropoff_location}
                     </p>
                     <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                      📦 {task.cargo_weight_tons}t | Customer: {task.customer_name}
+                       {task.cargo_weight_tons}t | Customer: {task.customer_name}
                     </p>
                   </div>
 

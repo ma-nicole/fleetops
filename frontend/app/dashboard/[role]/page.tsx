@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import Breadcrumbs from "@/components/Breadcrumbs";
+import CustomerPortalDashboard from "@/components/CustomerPortalDashboard";
 import KpiCard from "@/components/KpiCard";
-import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 
 const roleConfigs: Record<string, {
   title: string;
@@ -148,282 +148,28 @@ const roleConfigs: Record<string, {
 export default function RoleDashboardPage() {
   const params = useParams<{ role: string }>();
   const role = (params.role || "manager").toLowerCase();
+  const router = useRouter();
 
   const config = useMemo(() => roleConfigs[role] || roleConfigs.manager, [role]);
 
-  // Manager role gets the full analytics dashboard
+  useEffect(() => {
+    if (role === "manager") {
+      router.replace("/manager/dashboard");
+    }
+  }, [role, router]);
+
   if (role === "manager") {
-    return <AnalyticsDashboard />;
-  }
-
-  // Custom layout for customer dashboard
-  if (role === "customer") {
     return (
-      <main className="container" style={{ display: "grid", gap: "1.5rem", padding: "2rem 1rem" }}>
-        {/* Header with role tabs */}
-        <section style={{ display: "grid", gap: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: "2rem" }}>FleetTrack Analytics</h1>
-              <p style={{ margin: "0.5rem 0 0 0", color: "var(--text-secondary)", fontSize: "0.95rem" }}>Logistics Management System</p>
-            </div>
-          </div>
-
-          {/* Role tabs navigation */}
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            {Object.entries(roleConfigs).map(([roleKey, _]) => {
-              const isActive = roleKey === role;
-              const roleLabel = roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
-              return (
-                <a
-                  key={roleKey}
-                  href={`/dashboard/${roleKey}`}
-                  style={{
-                    padding: "0.75rem 1.25rem",
-                    borderRadius: "8px",
-                    border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
-                    background: isActive ? "rgba(255, 152, 0, 0.12)" : "transparent",
-                    color: isActive ? "var(--primary)" : "var(--text)",
-                    textDecoration: "none",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    fontSize: "0.95rem",
-                    fontWeight: isActive ? "600" : "500",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <span>{roleLabel} Dashboard</span>
-                </a>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Two-column layout: Tracking + Quick Booking */}
-        <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-          {/* Active Shipment Tracking - Left */}
-          <div className="card" style={{ display: "grid", gap: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ margin: 0 }}>Active Shipment Tracking</h2>
-              <a href="#" style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9rem" }}>View All</a>
-            </div>
-
-            {/* Order cards */}
-            <div style={{ display: "grid", gap: "1rem" }}>
-              {[
-                {
-                  id: "ORD-2024-1245",
-                  date: "Mar 11, 2026 · 8:30 AM",
-                  from: "Makati Business District",
-                  to: "Quezon City Hall",
-                  status: "In Transit",
-                  progress: 65,
-                  eta: "2:30 PM (On Time)",
-                },
-                {
-                  id: "ORD-2024-1246",
-                  date: "Mar 11, 2026 · 10:15 AM",
-                  from: "Manila Port Area",
-                  to: "Pasig Warehouse",
-                  status: "Delivered",
-                  progress: 100,
-                  eta: "Completed",
-                },
-              ].map((order) => (
-                <div
-                  key={order.id}
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    padding: "1rem",
-                    display: "grid",
-                    gap: "0.75rem",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                    <div>
-                      <div style={{ fontWeight: "600", marginBottom: "0.25rem" }}>{order.id}</div>
-                      <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Booked: {order.date}</div>
-                    </div>
-                    <span
-                      style={{
-                        padding: "0.35rem 0.75rem",
-                        borderRadius: "6px",
-                        fontSize: "0.85rem",
-                        fontWeight: "600",
-                        background: order.status === "In Transit" ? "rgba(255, 152, 0, 0.15)" : "rgba(76, 175, 80, 0.15)",
-                        color: order.status === "In Transit" ? "var(--primary)" : "var(--success)",
-                      }}
-                    >
-                      {order.status}
-                    </span>
-                  </div>
-
-                  <div style={{ display: "grid", gap: "0.5rem", fontSize: "0.9rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ color: "var(--success)", fontSize: "0.8rem" }}>●</span>
-                      <span style={{ color: "var(--text-secondary)" }}>From:</span>
-                      <span>{order.from}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ color: "var(--primary)", fontSize: "0.8rem" }}>●</span>
-                      <span style={{ color: "var(--text-secondary)" }}>To:</span>
-                      <span>{order.to}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gap: "0.5rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                      <span style={{ color: "var(--text-secondary)" }}>Delivery Progress</span>
-                      <span style={{ fontWeight: "600" }}>{order.progress}% Complete</span>
-                    </div>
-                    <div
-                      style={{
-                        height: "6px",
-                        background: "rgba(255, 152, 0, 0.1)",
-                        borderRadius: "3px",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${order.progress}%`,
-                          background: "var(--primary)",
-                          transition: "width 0.3s ease",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", color: order.status === "In Transit" ? "var(--success)" : "var(--text-secondary)" }}>
-                      <span>✓</span>
-                      <span>ETA: {order.eta}</span>
-                    </div>
-                    {order.status === "In Transit" && (
-                      <a href="#" style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9rem" }}>Track Live</a>
-                    )}
-                    {order.status === "Delivered" && (
-                      <a href="#" style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9rem" }}>View Receipt</a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Booking + Account Summary - Right */}
-          <div style={{ display: "grid", gap: "1.5rem" }}>
-            {/* Quick Booking Card - Action Buttons */}
-            <div className="card" style={{ display: "grid", gap: "1rem" }}>
-              <h2 style={{ margin: 0 }}>Quick Actions</h2>
-
-              <div style={{ display: "grid", gap: "0.75rem" }}>
-                <a
-                  href="/booking/trucks"
-                  style={{
-                    padding: "1rem",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: "linear-gradient(135deg, #F57C00, #FF9800)",
-                    color: "white",
-                    fontSize: "0.95rem",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    textDecoration: "none",
-                    textAlign: "center",
-                    transition: "all 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateY(-2px)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = "translateY(0)")}
-                >
-                  📱 Book Service
-                </a>
-
-                <a
-                  href="/booking/trucks"
-                  style={{
-                    padding: "0.75rem",
-                    borderRadius: "8px",
-                    border: "1px solid var(--border)",
-                    background: "transparent",
-                    color: "var(--primary)",
-                    fontSize: "0.9rem",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    textDecoration: "none",
-                    textAlign: "center",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  🚚 View Available Trucks
-                </a>
-
-                <a
-                  href="/booking/status"
-                  style={{
-                    padding: "0.75rem",
-                    borderRadius: "8px",
-                    border: "1px solid var(--border)",
-                    background: "transparent",
-                    color: "var(--primary)",
-                    fontSize: "0.9rem",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    textDecoration: "none",
-                    textAlign: "center",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  📋 View Booking Status
-                </a>
-
-                <a
-                  href="/modules/customer/support"
-                  style={{
-                    padding: "0.75rem",
-                    borderRadius: "8px",
-                    border: "1px solid var(--border)",
-                    background: "transparent",
-                    color: "var(--primary)",
-                    fontSize: "0.9rem",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    textDecoration: "none",
-                    textAlign: "center",
-                    transition: "all 0.2s ease",
-                  }}
-                >
-                  📞 Contact Us
-                </a>
-              </div>
-            </div>
-
-            {/* Account Summary Card */}
-            <div className="card" style={{ display: "grid", gap: "1rem" }}>
-              <h2 style={{ margin: 0 }}>Account Summary</h2>
-
-              <div style={{ display: "grid", gap: "1rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ color: "var(--text-secondary)" }}>Account Type</span>
-                  <span style={{ fontWeight: "600" }}>Premium</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ color: "var(--text-secondary)" }}>Member Since</span>
-                  <span style={{ fontWeight: "600" }}>Jan 2025</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+      <main className="container" style={{ display: "grid", gap: "0.75rem", padding: "2rem", textAlign: "center", minHeight: "40vh", placeContent: "center" }}>
+        <p style={{ margin: 0, color: "var(--text-secondary)" }}>Redirecting to manager dashboard…</p>
       </main>
     );
   }
 
-  // Default layout for other roles
+  if (role === "customer") {
+    return <CustomerPortalDashboard />;
+  }
+
   return (
     <main className="container" style={{ display: "grid", gap: "1rem" }}>
       <section className="card" style={{ display: "grid", gap: "1rem" }}>

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -17,8 +16,6 @@ type AccomplishmentReport = {
 };
 
 export default function AccomplishmentReportPage() {
-  useRoleGuard(["dispatcher"]);
-
   const [reports] = useState<AccomplishmentReport[]>([
     {
       reportId: "REP-2024-0001",
@@ -84,13 +81,13 @@ export default function AccomplishmentReportPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case "pending":
-        return "📋 Pending Review";
+        return " Pending Review";
       case "reviewed":
-        return "👀 Reviewed";
+        return " Reviewed";
       case "approved":
-        return "✅ Approved";
+        return " Approved";
       case "archived":
-        return "🗂️ Archived";
+        return " Archived";
       default:
         return "Unknown";
     }

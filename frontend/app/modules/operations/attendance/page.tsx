@@ -83,7 +83,7 @@ export default function AttendancePage() {
 
       <div style={{ marginTop: "2rem" }}>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>
-          ⏱️ Attendance Check-in
+          ⏱ Attendance Check-in
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Record your daily attendance. Check-in when you start your shift and check-out when you finish.
@@ -106,7 +106,7 @@ export default function AttendancePage() {
               fontWeight: 600,
             }}
           >
-            {showCheckIn ? "Cancel" : "📍 Check-in / Check-out"}
+            {showCheckIn ? "Cancel" : " Check-in / Check-out"}
           </button>
 
           {showCheckIn && (
@@ -142,7 +142,7 @@ export default function AttendancePage() {
                     fontWeight: 600,
                   }}
                 >
-                  ✗ Check-out Now
+                   Check-out Now
                 </button>
               </div>
             </div>

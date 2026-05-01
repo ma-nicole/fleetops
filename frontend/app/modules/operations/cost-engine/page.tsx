@@ -121,7 +121,7 @@ export default function CostComputationPage() {
         {/* Pending Computation */}
         {pendingTrips.length > 0 && (
           <div style={{ marginBottom: "3rem" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>📋 Awaiting Computation</h3>
+            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Awaiting Computation</h3>
             <p style={{ color: "#F44336", marginBottom: "1rem", fontWeight: 600 }}>
               These trips need cost components (fuel, labor, tolls) recorded before computation can proceed.
             </p>
