@@ -58,26 +58,16 @@ export default function SignInPage() {
     try {
       const data = await apiLogin(email.trim(), password).catch((err) => {
         if (err instanceof ApiError) {
-          let detail = "";
-          try {
-            const parsed = JSON.parse(err.body) as { detail?: unknown };
-            const d = parsed.detail;
-            if (typeof d === "string") detail = d;
-            else if (Array.isArray(d))
-              detail = d.map((x: { msg?: string }) => x.msg).filter(Boolean).join("; ");
-          } catch {
-            detail = err.body?.slice(0, 280) || "";
-          }
           if (err.status === 423) {
-            throw new Error(detail || "This account is temporarily locked. Please try again later.");
+            throw new Error(err.message || "This account is temporarily locked. Please try again later.");
           }
           if (err.status === 429) {
             throw new Error("Too many attempts. Please wait a few minutes before trying again.");
           }
           if (err.status === 401) {
-            throw new Error(detail || GENERIC_AUTH_ERROR);
+            throw new Error(err.message || GENERIC_AUTH_ERROR);
           }
-          throw new Error(detail || `Request failed (${err.status}).`);
+          throw new Error(err.message || `Request failed (${err.status}).`);
         }
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {

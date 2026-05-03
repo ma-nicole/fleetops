@@ -7,8 +7,9 @@ pipeline (predictive cost regression needs at least 5 historical trips,
 the time-series model prefers 12 months).
 
 Usage:
-  python seed_db.py          # seed only if DB has no users
-  python seed_db.py --force  # drop all tables, recreate, then seed (destructive)
+  python seed_db.py                    # seed only if DB has no users
+  python seed_db.py --force            # drop all tables, recreate, then seed (destructive)
+  python seed_db.py --repair-passwords # re-bcrypt every user as password "password" (local dev fix)
 """
 from __future__ import annotations
 
@@ -53,6 +54,25 @@ from app.models.entities import (  # noqa: E402
     User,
     UserRole,
 )
+
+
+def repair_user_password_hashes() -> None:
+    """Reset all stored password hashes to bcrypt('password'). For local dev when hashes are missing or invalid."""
+    if not settings.database_url or settings.database_url.startswith("sqlite"):
+        raise SystemExit(
+            "ERROR: SQLite is not supported.\n"
+            "Set DATABASE_URL=mysql+pymysql://... in backend/.env"
+        )
+    engine = create_engine(settings.database_url, pool_pre_ping=True)
+    with Session(engine) as db:
+        users = db.query(User).all()
+        if not users:
+            print("[SKIP] No users in database.")
+            return
+        for u in users:
+            u.password_hash = hash_password("password")
+        db.commit()
+        print(f"[OK] Re-hashed passwords for {len(users)} user(s). All use password: password")
 
 
 def seed_database(*, force: bool = False) -> None:
@@ -372,5 +392,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Drop all tables first (destructive), then recreate schema and seed.",
     )
+    parser.add_argument(
+        "--repair-passwords",
+        action="store_true",
+        help="Re-bcrypt every user's password as 'password' (fixes UnknownHashError / plain-text legacy rows).",
+    )
     args = parser.parse_args()
-    seed_database(force=args.force)
+    if args.repair_passwords:
+        repair_user_password_hashes()
+    else:
+        seed_database(force=args.force)

@@ -51,6 +51,21 @@ Frontend (Next.js 15.1.2)          Backend (FastAPI 0.115.6)        Data Layer (
 ### Prerequisites
 - Node.js 18+ | Python 3.12+ | XAMPP (with MySQL) | Git
 
+**Windows:** Prefer **`python -m pip`** instead of **`pip`** for installs. If `pip` fails with *Fatal error in launcher*, the `pip.exe` shortcut still points at an old Python. After installing Python (including **Python Install Manager** from the Store), **open a new terminal or restart Cursor** so PATH updates — otherwise `npm run setup` may not see Python yet. If it still fails, set **`FLEETOPS_PYTHON`** to the full path of **`python.exe`** (often under `%LOCALAPPDATA%\Programs\Python\Python3xx\`), then run **`npm run setup`** again.
+
+### Easiest: one terminal (API + web)
+
+From the **repository root** (after MySQL is running and `backend/.env` exists — see Steps 1–2):
+
+```bash
+npm run setup    # once — installs backend deps via `python -m pip` (auto-finds py/python) + frontend + root npm
+npm run dev
+```
+
+This runs **uvicorn** on port **8000** and **Next.js** on **3000** together; the web app waits until `GET /health` responds before opening the dev server. Stop with **Ctrl+C**.
+
+The **`scripts/resolve-python.mjs`** helper checks **`FLEETOPS_PYTHON`**, **`backend/.venv`**, common folders under **`%LOCALAPPDATA%\Programs\Python`**, **`py`**, then **`python`** on PATH — so a fresh install or a broken **`pip.exe`** shim usually still works after a new terminal session.
+
 ### Step 1: Setup XAMPP MySQL
 
 1. **Download & Install XAMPP:** https://www.apachefriends.org/
@@ -85,7 +100,7 @@ DATABASE_URL=mysql+pymysql://fleetopt:fleetopt@localhost:3306/fleetopt
 ```bash
 # Terminal 1 - From backend directory
 cd backend
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 
 # API will be available at http://localhost:8000
@@ -107,6 +122,14 @@ npm run dev
 # Frontend will be available at http://localhost:3000
 ```
 
+**Windows (one window):** From the repo root, after Steps 1–2 and `npm install` / `python -m pip install …` in the backend, run:
+
+```powershell
+.\dev.ps1
+```
+
+This starts **uvicorn** in the background, waits until `GET /health` succeeds, then runs **`npm run dev`**. Stop with Ctrl+C (the API job stops when Next.js exits).
+
 **Important:** Keep **Terminal 1** running with the backend (`uvicorn` on port **8000**). Without it, sign-in shows a connection error.
 
 The default `.env.local` uses **`NEXT_PUBLIC_API_URL=/api-proxy`** so the browser talks only to Next.js; Next forwards `/api-proxy/*` to `BACKEND_ORIGIN` (see `next.config.mjs`). Change `BACKEND_ORIGIN` if your API runs elsewhere.
@@ -117,6 +140,14 @@ The default `.env.local` uses **`NEXT_PUBLIC_API_URL=/api-proxy`** so the browse
 # Terminal 3 - From project root
 python seed_db.py
 ```
+
+If login returns **Invalid credentials** but you expect `password`, old rows may have a non-bcrypt `password_hash`. From project root:
+
+```bash
+python seed_db.py --repair-passwords
+```
+
+That sets **every** user’s password to **`password`** (development only).
 
 
 ### Test Credentials
@@ -463,7 +494,7 @@ python seed_db.py                 # Seed test data
 
 # Backend
 cd backend
-pip install -r requirements.txt   # Install deps (first time)
+python -m pip install -r requirements.txt   # Install deps (first time)
 python -m uvicorn app.main:app --reload --port 8000  # Start API
 
 # Frontend
@@ -490,9 +521,12 @@ RESEND_API_KEY=
 
 ### Frontend (.env.local)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=/api-proxy
+BACKEND_ORIGIN=http://127.0.0.1:8000
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 ```
+
+For a direct browser → API URL instead of the proxy, use `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api` (must include `/api`) and ensure the backend CORS settings allow your frontend origin.
 
 ---
 

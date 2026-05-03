@@ -250,8 +250,9 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
     (module) => userRole && module.roles.includes(userRole)
   );
 
-  // Auto-expand the module that contains the current page so the user can
-  // see where they are.
+  // Auto-expand the module that contains the current page when the route or
+  // role changes. Do not depend on expandedModules — that would re-run after
+  // every manual collapse and immediately re-expand the active section.
   useEffect(() => {
     if (!userRole) return;
     const containing = menuModules.find((module) =>
@@ -259,12 +260,11 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
         (item) => pathname === item.href || pathname.startsWith(item.href + "/")
       )
     );
-    if (containing && !expandedModules.includes(containing.label)) {
-      setExpandedModules((prev) =>
-        prev.includes(containing.label) ? prev : [...prev, containing.label]
-      );
-    }
-  }, [pathname, userRole, expandedModules]);
+    if (!containing) return;
+    setExpandedModules((prev) =>
+      prev.includes(containing.label) ? prev : [...prev, containing.label]
+    );
+  }, [pathname, userRole]);
 
   if (!userRole) return null;
 

@@ -14,8 +14,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-PH">
-      <body className={spaceGrotesk.className}>
+    <html lang="en-PH" suppressHydrationWarning>
+      <body className={spaceGrotesk.className} suppressHydrationWarning>
         <AppShell>{children}</AppShell>
       </body>
     </html>
