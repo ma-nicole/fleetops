@@ -98,7 +98,6 @@ const menuModules: MenuModule[] = [
       { label: "What-if Simulator", href: "/modules/analytics/whatif", roles: ["manager"] },
       { label: "Route Optimizer (A*)", href: "/modules/analytics/route-optimizer", roles: ["manager"] },
       { label: "Accuracy & Drift", href: "/modules/analytics/accuracy", roles: ["manager"] },
-      { label: "Analytics Dashboard", href: "/analytics/dashboard", roles: ["manager"] },
       { label: "Analytics Reports", href: "/analytics/reports", roles: ["manager"] },
       { label: "Trip Monitoring", href: "/manager/trip-monitoring", roles: ["manager"] },
       { label: "History", href: "/manager/history", roles: ["manager"] },

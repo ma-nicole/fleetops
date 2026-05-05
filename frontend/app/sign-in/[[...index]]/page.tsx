@@ -168,7 +168,7 @@ export default function SignInPage() {
             }
           />
           <div className="auth-password-meta">
-            <Link href="/support" className="auth-forgot-link">
+            <Link href="/forgot-password" className="auth-forgot-link">
               Forgot password?
             </Link>
           </div>

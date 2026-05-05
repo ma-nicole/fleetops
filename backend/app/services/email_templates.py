@@ -128,3 +128,32 @@ class EmailTemplate(BaseModel):
         </html>
         """
         return subject, html
+
+    @staticmethod
+    def password_reset(reset_link: str, expires_minutes: int) -> tuple[str, str]:
+        """Generate password reset email."""
+        subject = "Reset your FleetOpt password"
+        html = f"""
+        <html>
+            <body style="font-family: Arial, sans-serif; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #0f766e;">Password Reset Request</h2>
+
+                    <p>We received a request to reset your FleetOpt password.</p>
+                    <p>This link expires in <strong>{expires_minutes} minutes</strong>.</p>
+
+                    <p style="margin: 22px 0;">
+                        <a href="{reset_link}" style="background: #2563EB; color: #fff; padding: 10px 16px; border-radius: 6px; text-decoration: none;">
+                            Reset Password
+                        </a>
+                    </p>
+
+                    <p>If the button does not work, copy and paste this URL:</p>
+                    <p style="word-break: break-all;">{reset_link}</p>
+
+                    <p>If you did not request this, you can ignore this message.</p>
+                </div>
+            </body>
+        </html>
+        """
+        return subject, html

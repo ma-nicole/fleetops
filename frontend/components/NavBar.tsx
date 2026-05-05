@@ -50,15 +50,19 @@ export default function NavBar({
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
   const optionId = (index: number) => `${listboxId}-option-${index}`;
+  const isCustomer = userRole === "customer";
 
   const results = useMemo(() => {
+    const scopedIndex = searchIndex.filter((item) =>
+      item.href === "/booking" ? isCustomer : true
+    );
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return searchIndex.slice(0, 4);
-    return searchIndex.filter((item) => {
+    if (!normalized) return scopedIndex.slice(0, 4);
+    return scopedIndex.filter((item) => {
       const searchable = [item.label, ...item.keywords].join(" ").toLowerCase();
       return searchable.includes(normalized);
     });
-  }, [query]);
+  }, [isCustomer, query]);
 
   // Reset highlighted option whenever results change.
   useEffect(() => {
@@ -83,7 +87,7 @@ export default function NavBar({
         event.preventDefault();
         searchRef.current?.focus();
       }
-      if (isBookingShortcut) {
+      if (isBookingShortcut && isCustomer) {
         event.preventDefault();
         router.push("/booking");
       }
@@ -265,9 +269,11 @@ export default function NavBar({
       <div className="navbar-links">
         {showAuthedChrome && (
           <>
-            <Link href="/booking" className="navbar-link">
-              Booking
-            </Link>
+            {isCustomer && (
+              <Link href="/booking" className="navbar-link">
+                Booking
+              </Link>
+            )}
             {userRole && (
               <Link href={`/dashboard/${userRole}`} className="navbar-link">
                 {ROLE_LABELS[userRole] || `${userRole} dashboard`}

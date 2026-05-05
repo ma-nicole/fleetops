@@ -142,6 +142,10 @@ export type LoginResponse = {
   role?: string | null;
 };
 
+export type ForgotPasswordResponse = {
+  message: string;
+};
+
 export async function apiLogin(email: string, password: string): Promise<LoginResponse> {
   const response = await fetch(apiFullUrl("/auth/login"), {
     method: "POST",
@@ -150,6 +154,21 @@ export async function apiLogin(email: string, password: string): Promise<LoginRe
     cache: "no-store",
   });
   return handle<LoginResponse>(response);
+}
+
+export async function apiForgotPassword(email: string): Promise<ForgotPasswordResponse> {
+  return apiPost<ForgotPasswordResponse>("/auth/forgot-password", { email });
+}
+
+export type ResetPasswordResponse = {
+  message: string;
+};
+
+export async function apiResetPassword(token: string, newPassword: string): Promise<ResetPasswordResponse> {
+  return apiPost<ResetPasswordResponse>("/auth/reset-password", {
+    token,
+    new_password: newPassword,
+  });
 }
 
 /** Decode JWT payload segment (base64url); pads for browsers where `atob` requires it. */

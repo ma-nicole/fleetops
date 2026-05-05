@@ -2,7 +2,8 @@
 
 import type { CSSProperties } from "react";
 
-import { DIAL_CODE_OPTIONS } from "@/lib/dialCodes";
+import { DIAL_CODE_OPTIONS, getDialCodeOption } from "@/lib/dialCodes";
+import { digitsOnly } from "@/lib/formValidation";
 
 type Props = {
   dialCode: string;
@@ -30,6 +31,10 @@ export default function PhoneInputRow({
   nationalId,
 }: Props) {
   const dark = variant === "dark";
+  const opt = getDialCodeOption(dialCode);
+  const maxDigits = opt?.nationalMaxDigits;
+  const minDigits = opt?.nationalMinDigits;
+  const effectivePlaceholder = opt?.nationalPlaceholder ?? nationalPlaceholder;
   const fieldStyle: CSSProperties = dark
     ? {
         width: "100%",
@@ -60,7 +65,17 @@ export default function PhoneInputRow({
         <select
           id={selectId}
           value={dialCode}
-          onChange={(e) => onDialCodeChange(e.target.value)}
+          onChange={(e) => {
+            const nextDial = e.target.value;
+            onDialCodeChange(nextDial);
+
+            const nextOpt = getDialCodeOption(nextDial);
+            const nextMax = nextOpt?.nationalMaxDigits;
+            if (typeof nextMax === "number" && nextMax >= 1) {
+              const trimmed = digitsOnly(nationalNumber).slice(0, nextMax);
+              if (trimmed !== digitsOnly(nationalNumber)) onNationalChange(trimmed);
+            }
+          }}
           aria-invalid={!!error}
           aria-describedby={error ? `${nationalId ?? selectId}-phone-err` : undefined}
           style={fieldStyle}
@@ -76,16 +91,26 @@ export default function PhoneInputRow({
           type="tel"
           inputMode="numeric"
           autoComplete="tel-national"
-          placeholder={nationalPlaceholder}
+          placeholder={effectivePlaceholder}
           value={nationalNumber}
-          onChange={(e) => onNationalChange(e.target.value)}
+          onChange={(e) => {
+            const nextDigits = digitsOnly(e.target.value);
+            const limited = typeof maxDigits === "number" && maxDigits >= 1 ? nextDigits.slice(0, maxDigits) : nextDigits;
+            onNationalChange(limited);
+          }}
           aria-invalid={!!error}
           aria-describedby={error ? `${nationalId ?? selectId}-phone-err` : undefined}
           style={fieldStyle}
         />
       </div>
       <span style={{ fontSize: "0.8rem", color: dark ? "rgba(255,255,255,0.55)" : "#6B7280" }}>
-        Enter your mobile number without the country code.{optional ? " Leave blank if you prefer not to share a phone." : ""}
+        Enter your mobile number without the country code.
+        {typeof minDigits === "number" && typeof maxDigits === "number" && minDigits === maxDigits
+          ? ` (${maxDigits} digits)`
+          : typeof maxDigits === "number"
+            ? ` (up to ${maxDigits} digits)`
+            : ""}
+        {optional ? " Leave blank if you prefer not to share a phone." : ""}
       </span>
       {error ? (
         <span id={`${nationalId ?? selectId}-phone-err`} role="alert" style={{ color: dark ? "#ff9b9b" : "#991B1B", fontSize: "0.9rem" }}>

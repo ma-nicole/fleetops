@@ -7,8 +7,11 @@ import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
 import PhoneInputRow from "@/components/PhoneInputRow";
 import {
   validateCustomerPassword,
-  validateFullName,
-  validateOptionalInternationalPhone,
+  validateCompanyName,
+  validateConfirmPassword,
+  validateFirstName,
+  validateLastName,
+  validateRequiredInternationalPhone,
   isValidEmail,
   buildInternationalPhone,
 } from "@/lib/formValidation";
@@ -16,32 +19,46 @@ import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phoneDial, setPhoneDial] = useState(DEFAULT_DIAL_CODE);
   const [phoneNational, setPhoneNational] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{
-    fullName?: string;
+    firstName?: string;
+    lastName?: string;
     email?: string;
+    companyName?: string;
     password?: string;
+    confirmPassword?: string;
     phone?: string;
   }>({});
 
   const validate = (): boolean => {
     const next: typeof fieldErrors = {};
-    const fn = validateFullName(fullName);
-    if (fn) next.fullName = fn;
+    const fn = validateFirstName(firstName);
+    if (fn) next.firstName = fn;
+    const ln = validateLastName(lastName);
+    if (ln) next.lastName = ln;
 
     const mail = email.trim();
     if (!mail) next.email = "Email is required.";
     else if (!isValidEmail(mail)) next.email = "Enter a valid email address.";
 
+    const co = validateCompanyName(companyName);
+    if (co) next.companyName = co;
+
     const pw = validateCustomerPassword(password);
     if (pw) next.password = pw;
 
-    const ph = validateOptionalInternationalPhone(phoneDial, phoneNational);
+    const cpw = validateConfirmPassword(password, confirmPassword);
+    if (cpw) next.confirmPassword = cpw;
+
+    const ph = validateRequiredInternationalPhone(phoneDial, phoneNational);
     if (ph) next.phone = ph;
 
     setFieldErrors(next);
@@ -54,7 +71,8 @@ export default function RegisterPage() {
     if (!validate()) return;
 
     const combinedPhone = buildInternationalPhone(phoneDial, phoneNational);
-    const result = CustomerDataFlowService.register(fullName.trim(), email.trim(), password, combinedPhone || undefined);
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    const result = CustomerDataFlowService.register(fullName, email.trim(), password, combinedPhone || undefined);
     if (!result.ok) {
       setError(result.message);
       return;
@@ -73,26 +91,48 @@ export default function RegisterPage() {
         <p style={{ margin: 0, color: "#4B5563", fontSize: "0.9rem" }}>
           This form is for customers only. Drivers, dispatchers, and managers receive their accounts from the administrator.
         </p>
-        <label style={{ display: "grid", gap: "0.35rem" }}>
-          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Full name</span>
-          <input
-            value={fullName}
-            onChange={(e) => {
-              setFullName(e.target.value);
-              if (fieldErrors.fullName) setFieldErrors((p) => ({ ...p, fullName: undefined }));
-            }}
-            placeholder="Full name"
-            aria-invalid={!!fieldErrors.fullName}
-            style={{
-              padding: "0.7rem",
-              border: fieldErrors.fullName ? "2px solid #DC2626" : "1px solid #D1D5DB",
-              borderRadius: "6px",
-            }}
-          />
-          {fieldErrors.fullName && (
-            <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.fullName}</span>
-          )}
-        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>First name</span>
+            <input
+              value={firstName}
+              onChange={(e) => {
+                setFirstName(e.target.value);
+                if (fieldErrors.firstName) setFieldErrors((p) => ({ ...p, firstName: undefined }));
+              }}
+              placeholder="First name"
+              aria-invalid={!!fieldErrors.firstName}
+              style={{
+                padding: "0.7rem",
+                border: fieldErrors.firstName ? "2px solid #DC2626" : "1px solid #D1D5DB",
+                borderRadius: "6px",
+              }}
+            />
+            {fieldErrors.firstName && (
+              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.firstName}</span>
+            )}
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Last name</span>
+            <input
+              value={lastName}
+              onChange={(e) => {
+                setLastName(e.target.value);
+                if (fieldErrors.lastName) setFieldErrors((p) => ({ ...p, lastName: undefined }));
+              }}
+              placeholder="Last name"
+              aria-invalid={!!fieldErrors.lastName}
+              style={{
+                padding: "0.7rem",
+                border: fieldErrors.lastName ? "2px solid #DC2626" : "1px solid #D1D5DB",
+                borderRadius: "6px",
+              }}
+            />
+            {fieldErrors.lastName && (
+              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.lastName}</span>
+            )}
+          </label>
+        </div>
         <label style={{ display: "grid", gap: "0.35rem" }}>
           <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Email</span>
           <input
@@ -112,6 +152,26 @@ export default function RegisterPage() {
           />
           {fieldErrors.email && (
             <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.email}</span>
+          )}
+        </label>
+        <label style={{ display: "grid", gap: "0.35rem" }}>
+          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Company name</span>
+          <input
+            value={companyName}
+            onChange={(e) => {
+              setCompanyName(e.target.value);
+              if (fieldErrors.companyName) setFieldErrors((p) => ({ ...p, companyName: undefined }));
+            }}
+            placeholder="Company name"
+            aria-invalid={!!fieldErrors.companyName}
+            style={{
+              padding: "0.7rem",
+              border: fieldErrors.companyName ? "2px solid #DC2626" : "1px solid #D1D5DB",
+              borderRadius: "6px",
+            }}
+          />
+          {fieldErrors.companyName && (
+            <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.companyName}</span>
           )}
         </label>
         <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -135,9 +195,30 @@ export default function RegisterPage() {
             <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.password}</span>
           )}
         </label>
+        <label style={{ display: "grid", gap: "0.35rem" }}>
+          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Confirm password</span>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              if (fieldErrors.confirmPassword) setFieldErrors((p) => ({ ...p, confirmPassword: undefined }));
+            }}
+            placeholder="Repeat your password"
+            aria-invalid={!!fieldErrors.confirmPassword}
+            style={{
+              padding: "0.7rem",
+              border: fieldErrors.confirmPassword ? "2px solid #DC2626" : "1px solid #D1D5DB",
+              borderRadius: "6px",
+            }}
+          />
+          {fieldErrors.confirmPassword && (
+            <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.confirmPassword}</span>
+          )}
+        </label>
         <div style={{ display: "grid", gap: "0.35rem" }}>
           <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>
-            Phone <span style={{ fontWeight: 400, color: "#6B7280" }}>(optional)</span>
+            Phone
           </span>
           <PhoneInputRow
             dialCode={phoneDial}
@@ -150,7 +231,6 @@ export default function RegisterPage() {
               setPhoneNational(n);
               if (fieldErrors.phone) setFieldErrors((p) => ({ ...p, phone: undefined }));
             }}
-            optional
             error={fieldErrors.phone}
             nationalPlaceholder="9171234567"
             selectId="legacy-register-phone-cc"

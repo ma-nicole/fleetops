@@ -11,16 +11,22 @@ import {
   buildInternationalPhone,
   isValidEmail,
   validateCustomerPassword,
-  validateFullName,
-  validateOptionalInternationalPhone,
+  validateCompanyName,
+  validateConfirmPassword,
+  validateFirstName,
+  validateLastName,
+  validateRequiredInternationalPhone,
 } from "@/lib/formValidation";
 import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
 import { announce } from "@/lib/useAnnouncer";
 
 type FieldErrors = {
-  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
+  companyName?: string;
   password?: string;
+  confirmPassword?: string;
   phone?: string;
   terms?: string;
 };
@@ -28,8 +34,11 @@ type FieldErrors = {
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [phoneDial, setPhoneDial] = useState(DEFAULT_DIAL_CODE);
   const [phoneNational, setPhoneNational] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -49,17 +58,26 @@ export default function SignUpPage() {
 
   const validateFields = (): boolean => {
     const next: FieldErrors = {};
-    const nameErr = validateFullName(fullName);
-    if (nameErr) next.fullName = nameErr;
+    const fnErr = validateFirstName(firstName);
+    if (fnErr) next.firstName = fnErr;
+
+    const lnErr = validateLastName(lastName);
+    if (lnErr) next.lastName = lnErr;
 
     const mail = email.trim();
     if (!mail) next.email = "Email is required.";
     else if (!isValidEmail(mail)) next.email = "Enter a valid email address (e.g. you@example.com).";
 
+    const coErr = validateCompanyName(companyName);
+    if (coErr) next.companyName = coErr;
+
     const pwErr = validateCustomerPassword(password);
     if (pwErr) next.password = pwErr;
 
-    const phoneErr = validateOptionalInternationalPhone(phoneDial, phoneNational);
+    const cpwErr = validateConfirmPassword(password, confirmPassword);
+    if (cpwErr) next.confirmPassword = cpwErr;
+
+    const phoneErr = validateRequiredInternationalPhone(phoneDial, phoneNational);
     if (phoneErr) next.phone = phoneErr;
 
     if (!acceptedTerms) {
@@ -79,6 +97,7 @@ export default function SignUpPage() {
 
     const mail = email.trim();
     const combinedPhone = buildInternationalPhone(phoneDial, phoneNational);
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
     try {
       const response = await fetch(apiFullUrl("/auth/register"), {
@@ -89,8 +108,9 @@ export default function SignUpPage() {
         body: JSON.stringify({
           email: mail,
           password,
-          full_name: fullName.trim(),
-          phone: combinedPhone || undefined,
+          full_name: fullName,
+          company_name: companyName.trim(),
+          phone: combinedPhone,
           role: "customer",
         }),
         cache: "no-store",
@@ -159,18 +179,30 @@ export default function SignUpPage() {
           </div>
         ) : null}
 
-        <FloatingField
-          id="signup-full-name"
-          label="Full name"
-          autoComplete="name"
-          value={fullName}
-          onChange={(event) => {
-            setFullName(event.target.value);
-            if (fieldErrors.fullName) setFieldErrors((p) => ({ ...p, fullName: undefined }));
-          }}
-          error={fieldErrors.fullName}
-          hint={!fieldErrors.fullName ? "Legal name or how your company refers to you." : undefined}
-        />
+        <div className="auth-two-col">
+          <FloatingField
+            id="signup-first-name"
+            label="First name"
+            autoComplete="given-name"
+            value={firstName}
+            onChange={(event) => {
+              setFirstName(event.target.value);
+              if (fieldErrors.firstName) setFieldErrors((p) => ({ ...p, firstName: undefined }));
+            }}
+            error={fieldErrors.firstName}
+          />
+          <FloatingField
+            id="signup-last-name"
+            label="Last name"
+            autoComplete="family-name"
+            value={lastName}
+            onChange={(event) => {
+              setLastName(event.target.value);
+              if (fieldErrors.lastName) setFieldErrors((p) => ({ ...p, lastName: undefined }));
+            }}
+            error={fieldErrors.lastName}
+          />
+        </div>
 
         <FloatingField
           id="signup-email"
@@ -185,6 +217,18 @@ export default function SignUpPage() {
           }}
           error={fieldErrors.email}
           hint={!fieldErrors.email ? "Booking confirmations and receipts go here." : undefined}
+        />
+
+        <FloatingField
+          id="signup-company"
+          label="Company name"
+          autoComplete="organization"
+          value={companyName}
+          onChange={(event) => {
+            setCompanyName(event.target.value);
+            if (fieldErrors.companyName) setFieldErrors((p) => ({ ...p, companyName: undefined }));
+          }}
+          error={fieldErrors.companyName}
         />
 
         <FloatingField
@@ -212,13 +256,25 @@ export default function SignUpPage() {
           }
         />
 
+        <FloatingField
+          id="signup-confirm-password"
+          label="Confirm password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(event) => {
+            setConfirmPassword(event.target.value);
+            if (fieldErrors.confirmPassword) setFieldErrors((p) => ({ ...p, confirmPassword: undefined }));
+          }}
+          error={fieldErrors.confirmPassword}
+        />
+
         <div className="auth-phone-block">
           <div className="auth-field-label">
-            Phone <span className="auth-field-label-muted">(optional)</span>
+            Phone
           </div>
           <PhoneInputRow
             variant="light"
-            optional
             dialCode={phoneDial}
             nationalNumber={phoneNational}
             onDialCodeChange={(d) => {

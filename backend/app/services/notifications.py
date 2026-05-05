@@ -13,7 +13,7 @@ def send_email_notification(to_email: str, subject: str, html_body: str) -> bool
         resend.api_key = settings.resend_api_key
         response = resend.Emails.send(
             {
-                "from": "FleetOpt <notifications@fleetopt.com>",
+                "from": settings.email_from,
                 "to": [to_email],
                 "subject": subject,
                 "html": html_body,

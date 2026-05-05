@@ -44,6 +44,21 @@ def apply_runtime_schema_fixes() -> None:
             alters.append("ALTER TABLE users ADD COLUMN locked_until DATETIME NULL")
         else:
             alters.append("ALTER TABLE users ADD COLUMN locked_until DATETIME")
+    if "password_reset_token_hash" not in cols:
+        if dialect == "mysql":
+            alters.append("ALTER TABLE users ADD COLUMN password_reset_token_hash VARCHAR(255) NULL")
+        else:
+            alters.append("ALTER TABLE users ADD COLUMN password_reset_token_hash VARCHAR(255)")
+    if "password_reset_expires_at" not in cols:
+        if dialect == "mysql":
+            alters.append("ALTER TABLE users ADD COLUMN password_reset_expires_at DATETIME NULL")
+        else:
+            alters.append("ALTER TABLE users ADD COLUMN password_reset_expires_at DATETIME")
+    if "company_name" not in cols:
+        if dialect == "mysql":
+            alters.append("ALTER TABLE users ADD COLUMN company_name VARCHAR(255) NULL")
+        else:
+            alters.append("ALTER TABLE users ADD COLUMN company_name VARCHAR(255)")
     if not alters:
         return
     with engine.begin() as conn:

@@ -1053,6 +1053,18 @@ body {
   gap: 1.25rem;
 }
 
+.auth-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .auth-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
 .auth-banner {
   display: flex;
   align-items: flex-start;

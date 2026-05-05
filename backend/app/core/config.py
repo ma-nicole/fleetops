@@ -42,6 +42,8 @@ class Settings(BaseSettings):
 
     # Email notifications (optional)
     resend_api_key: str | None = None
+    email_from: str = "FleetOpt <notifications@fleetopt.com>"
+    password_reset_token_expire_minutes: int = 30
 
     # SMS notifications (optional)
     twilio_account_sid: str | None = None

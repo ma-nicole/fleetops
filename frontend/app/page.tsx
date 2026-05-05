@@ -72,12 +72,6 @@ export default function Home() {
             >
               {primaryLabel}
             </Link>
-            <Link
-              className="cta-button-secondary"
-              href="/dashboard/manager"
-            >
-              Analytics Dashboard
-            </Link>
           </div>
 
           {/* Stats */}
@@ -159,49 +153,6 @@ export default function Home() {
                 <p style={{ margin: "0.5rem 0 0 0", color: "#666666", lineHeight: 1.5 }}>{mod.desc}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Quick Access */}
-      <section
-        style={{
-          padding: "2rem 2rem 4rem",
-        }}
-      >
-        <div style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.25rem" }}>
-          <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
-            <h2 style={{ margin: 0, fontSize: "1.4rem" }}>Recent bookings</h2>
-            <div className="timeline">
-              <div className="timeline-step">
-                <span className="timeline-dot" />
-                <span>BK-2034 • Makati to Quezon City • In transit</span>
-              </div>
-              <div className="timeline-step">
-                <span className="timeline-dot" />
-                <span>BK-2035 • Bonifacio Global City to Parañaque • Pending payment</span>
-              </div>
-              <div className="timeline-step">
-                <span className="timeline-dot" />
-                <span>BK-2036 • Cebu IT Park to Mandaue • Delivered</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
-            <h2 style={{ margin: 0, fontSize: "1.4rem" }}>Role shortcuts</h2>
-            <div className="quick-action-grid">
-              {[
-                { label: "Customer dashboard", href: "/dashboard/customer", description: "Track bookings and payment history." },
-                { label: "Dispatcher console", href: "/dashboard/dispatcher", description: "Assign trips and resolve conflicts." },
-                { label: "Manager analytics", href: "/dashboard/manager", description: "Review KPIs, forecasts, and alerts." },
-              ].map((item) => (
-                <a key={item.href} href={item.href} className="quick-action-card">
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
-                </a>
-              ))}
-            </div>
           </div>
         </div>
       </section>

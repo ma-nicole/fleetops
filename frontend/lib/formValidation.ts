@@ -1,4 +1,4 @@
-import { DEFAULT_DIAL_CODE, DIAL_CODE_OPTIONS } from "@/lib/dialCodes";
+import { DEFAULT_DIAL_CODE, DIAL_CODE_OPTIONS, getDialCodeOption } from "@/lib/dialCodes";
 
 export function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -9,6 +9,33 @@ export function validateFullName(value: string): string | undefined {
   const t = value.trim();
   if (!t) return "Full name is required.";
   if (t.length < 3) return "Full name must be at least 3 characters.";
+  return undefined;
+}
+
+export function validateFirstName(value: string): string | undefined {
+  const t = value.trim();
+  if (!t) return "First name is required.";
+  if (t.length < 2) return "First name must be at least 2 characters.";
+  return undefined;
+}
+
+export function validateLastName(value: string): string | undefined {
+  const t = value.trim();
+  if (!t) return "Last name is required.";
+  if (t.length < 2) return "Last name must be at least 2 characters.";
+  return undefined;
+}
+
+export function validateCompanyName(value: string): string | undefined {
+  const t = value.trim();
+  if (!t) return "Company name is required.";
+  if (t.length < 2) return "Company name must be at least 2 characters.";
+  return undefined;
+}
+
+export function validateConfirmPassword(password: string, confirm: string): string | undefined {
+  if (!confirm) return "Please confirm your password.";
+  if (password !== confirm) return "Passwords do not match.";
   return undefined;
 }
 
@@ -50,6 +77,14 @@ export function buildInternationalPhone(dialCode: string, nationalDigits: string
 export function validateOptionalInternationalPhone(dialCode: string, nationalNumber: string): string | undefined {
   const n = digitsOnly(nationalNumber);
   if (!n) return undefined;
+  const opt = getDialCodeOption(dialCode);
+  if (opt?.nationalMinDigits && n.length < opt.nationalMinDigits) {
+    return "Phone number seems too short.";
+  }
+  if (opt?.nationalMaxDigits && n.length > opt.nationalMaxDigits) {
+    return "Phone number is too long for the selected country code.";
+  }
+
   const cc = digitsOnly(dialCode);
   const total = cc.length + n.length;
   if (total < 10) return "Phone number seems too short.";
