@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Booking } from "@/lib/workflowApi";
 
+const BOOKING_GENERAL = "general";
+
 export default function CustomerSupportPage() {
   useRoleGuard(["customer"]);
 
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [bookingId, setBookingId] = useState<number>(0);
+  /** "" = not chosen yet; BOOKING_GENERAL = not tied to a booking; otherwise numeric id as string */
+  const [bookingKey, setBookingKey] = useState("");
   const [rating, setRating] = useState(5);
   const [category, setCategory] = useState("service");
   const [message, setMessage] = useState("");
@@ -18,10 +21,7 @@ export default function CustomerSupportPage() {
 
   useEffect(() => {
     WorkflowApi.listBookings()
-      .then((b) => {
-        setBookings(b);
-        if (b.length) setBookingId(b[0].id);
-      })
+      .then((b) => setBookings(b))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load bookings"));
   }, []);
 
@@ -30,8 +30,8 @@ export default function CustomerSupportPage() {
     setError(null);
     setOkMsg(null);
 
-    if (!bookingId) {
-      setFieldErrors({ booking: "Please select a booking." });
+    if (!bookingKey) {
+      setFieldErrors({ booking: "Choose whether this is about a booking or general feedback." });
       return;
     }
 
@@ -40,14 +40,18 @@ export default function CustomerSupportPage() {
       return;
     }
 
+    const booking_id = bookingKey === BOOKING_GENERAL ? null : Number(bookingKey);
+
     try {
       await WorkflowApi.submitFeedback({
-        booking_id: bookingId,
+        booking_id,
         rating,
         category,
-        message,
+        message: message.trim() || undefined,
       });
-      setOkMsg("Thanks — your feedback has been recorded.");
+      setOkMsg(
+        "Thanks — your feedback has been saved. When email is configured for FleetOps, a copy is sent to the operations inbox as well.",
+      );
       setMessage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit feedback");
@@ -62,12 +66,13 @@ export default function CustomerSupportPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "grid", gap: 16 }}>
         <header>
           <h1 style={{ margin: 0 }}>Send feedback</h1>
           <p style={{ marginTop: 6, color: "#6B7280" }}>
-            Paper Customer DFD (Fig 14) — your feedback fuels the prescriptive analytics loop.
+            Share feedback about a specific booking or anything else (app, billing, service). Ratings and messages are stored
+            securely and can be emailed to FleetOps when your administrator sets up the inbox in the API.
           </p>
         </header>
 
@@ -80,25 +85,28 @@ export default function CustomerSupportPage() {
 
         <section style={card}>
           <label style={{ display: "grid", gap: 4 }}>
-            <span>Booking</span>
+            <span>Related booking (optional)</span>
             <select
-              value={bookingId}
+              value={bookingKey}
               onChange={(e) => {
-                setBookingId(Number(e.target.value));
+                setBookingKey(e.target.value);
                 if (fieldErrors.booking) setFieldErrors((f) => ({ ...f, booking: undefined }));
               }}
               aria-invalid={!!fieldErrors.booking}
               style={{ padding: 8, border: fieldErrors.booking ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: 6 }}
             >
-              <option value={0}>— pick a booking —</option>
+              <option value="">— Select: general or a booking —</option>
+              <option value={BOOKING_GENERAL}>General feedback (not about a specific booking)</option>
               {bookings.map((b) => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={String(b.id)}>
                   #{b.id} · {b.pickup_location} → {b.dropoff_location} ({b.status})
                 </option>
               ))}
             </select>
             {fieldErrors.booking && (
-              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.booking}</span>
+              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
+                {fieldErrors.booking}
+              </span>
             )}
           </label>
 
@@ -112,8 +120,8 @@ export default function CustomerSupportPage() {
               <option value="service">Overall service</option>
               <option value="driver">Driver</option>
               <option value="vehicle">Vehicle</option>
-              <option value="support">Support</option>
-              <option value="general">General</option>
+              <option value="support">Account / help</option>
+              <option value="general">General / other</option>
             </select>
           </label>
 
@@ -145,14 +153,16 @@ export default function CustomerSupportPage() {
               {message.length}/2000
             </span>
             {fieldErrors.message && (
-              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>{fieldErrors.message}</span>
+              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
+                {fieldErrors.message}
+              </span>
             )}
           </label>
 
           <button
             type="button"
             onClick={submit}
-            disabled={!bookingId}
+            disabled={!bookingKey}
             style={{
               marginTop: 14,
               padding: "10px 16px",
@@ -161,7 +171,7 @@ export default function CustomerSupportPage() {
               border: "none",
               borderRadius: 8,
               fontWeight: 600,
-              cursor: !bookingId ? "not-allowed" : "pointer",
+              cursor: !bookingKey ? "not-allowed" : "pointer",
             }}
           >
             Submit feedback

@@ -47,7 +47,7 @@ export default function FeedbackPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", minHeight: "100vh", background: "#FAFAFA" }}>
+    <main style={{ padding: "var(--page-main-padding)", minHeight: "100vh", background: "#FAFAFA" }}>
       <div style={{ maxWidth: "900px", margin: "0 auto", display: "grid", gap: "1rem" }}>
         <h1 style={{ margin: 0 }}>Email Feedback / Receipt</h1>
         <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1rem", display: "grid", gap: "0.5rem" }}>

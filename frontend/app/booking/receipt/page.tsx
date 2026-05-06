@@ -60,7 +60,7 @@ export default function ReceiptPage() {
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "700px", margin: "0 auto" }}>
+    <div style={{ padding: "var(--page-main-padding)", maxWidth: "700px", margin: "0 auto" }}>
       {/* Success Banner */}
       <div style={{ padding: "2rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px", marginBottom: "2rem", textAlign: "center" }}>
         <div style={{ fontSize: "3rem", marginBottom: "1rem" }}></div>

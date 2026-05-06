@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node ../scripts/ensure-backend-health.mjs",
-    "dev": "next dev",
+    "dev": "npm run dev --prefix ..",
+    "dev:web-only": "next dev",
     "dev:only": "next dev",
+    "check:api": "node ../scripts/ensure-backend-health.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

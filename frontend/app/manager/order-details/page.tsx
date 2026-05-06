@@ -37,7 +37,7 @@ export default function OrderDetailsPage() {
   });
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1000px", margin: "0 auto" }}>
         {/* Header */}
         <div style={{ marginBottom: "2rem" }}>

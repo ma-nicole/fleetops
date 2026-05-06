@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import PhoneInputRow from "@/components/PhoneInputRow";
+import { apiChangePassword } from "@/lib/api";
 import { useState } from "react";
 import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
 import {
@@ -58,6 +59,13 @@ export default function CustomerProfilePage() {
   const [phoneNational, setPhoneNational] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwSubmitting, setPwSubmitting] = useState(false);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
+
   const border = (key: FieldKey) =>
     fieldErrors[key] ? "2px solid #DC2626" : "1px solid #E8E8E8";
 
@@ -110,8 +118,41 @@ export default function CustomerProfilePage() {
     if (fieldErrors[key]) setFieldErrors((p) => ({ ...p, [key]: undefined }));
   };
 
+  const handleChangePassword = async () => {
+    setPwError(null);
+    setPwSuccess(null);
+    if (!currentPassword.trim()) {
+      setPwError("Enter your current password.");
+      return;
+    }
+    if (!newPassword || newPassword.length < 8) {
+      setPwError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError("New password and confirmation do not match.");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPwError("Choose a new password that is different from your current one.");
+      return;
+    }
+    setPwSubmitting(true);
+    try {
+      const res = await apiChangePassword(currentPassword, newPassword);
+      setPwSuccess(res.message || "Password updated.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (e) {
+      setPwError(e instanceof Error ? e.message : "Could not update password.");
+    } finally {
+      setPwSubmitting(false);
+    }
+  };
+
   return (
-    <div className="container" style={{ paddingTop: "2rem" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)" }}>
       <Breadcrumbs
         items={[
           { label: "Modules", href: "/dashboard/customer" },
@@ -445,6 +486,108 @@ export default function CustomerProfilePage() {
             </div>
           </div>
         )}
+
+        <div
+          className="card"
+          style={{
+            marginTop: "1.5rem",
+            padding: "1.5rem",
+            background: "rgba(255, 152, 0, 0.04)",
+            border: "1px solid #FFE0B2",
+          }}
+        >
+          <h3 style={{ color: "#1A1A1A", margin: "0 0 0.35rem 0" }}>Change password</h3>
+          <p style={{ color: "#666666", fontSize: "0.9rem", margin: "0 0 1rem 0" }}>
+            For your security, enter your current password and choose a new one (at least 8 characters).
+          </p>
+          {pwSuccess && (
+            <div role="status" style={{ background: "#D1FAE5", color: "#047857", padding: 12, borderRadius: 8, marginBottom: "1rem" }}>
+              {pwSuccess}
+            </div>
+          )}
+          {pwError && (
+            <div role="alert" style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8, marginBottom: "1rem" }}>
+              {pwError}
+            </div>
+          )}
+          <div style={{ display: "grid", gap: "1rem", maxWidth: 480 }}>
+            <div>
+              <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>Current password</label>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  if (pwError) setPwError(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  border: "1px solid #E8E8E8",
+                  borderRadius: "6px",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>New password</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  if (pwError) setPwError(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  border: "1px solid #E8E8E8",
+                  borderRadius: "6px",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>Confirm new password</label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (pwError) setPwError(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  border: "1px solid #E8E8E8",
+                  borderRadius: "6px",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleChangePassword}
+              disabled={pwSubmitting}
+              style={{
+                padding: "0.75rem 1.25rem",
+                background: "#FF9800",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: pwSubmitting ? "wait" : "pointer",
+                fontWeight: 600,
+                opacity: pwSubmitting ? 0.85 : 1,
+                width: "fit-content",
+              }}
+            >
+              {pwSubmitting ? "Updating…" : "Update password"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

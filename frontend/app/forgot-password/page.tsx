@@ -42,7 +42,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <main style={{ minHeight: "100vh", background: "#FAFAFA", padding: "2rem" }}>
+    <main style={{ minHeight: "100vh", background: "#FAFAFA", padding: "var(--page-main-padding)" }}>
       <form
         onSubmit={submit}
         style={{

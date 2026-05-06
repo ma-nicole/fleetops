@@ -20,7 +20,7 @@ type TripCost = {
 };
 
 export default function CostSummaryPage() {
-  useRoleGuard(["customer", "manager", "admin"]);
+  useRoleGuard(["manager", "admin"]);
 
   const [tripCosts] = useState<TripCost[]>([
     {
@@ -106,7 +106,7 @@ export default function CostSummaryPage() {
   };
 
   return (
-    <div className="container" style={{ paddingTop: "2rem" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)" }}>
       <Breadcrumbs
         items={[
           { label: "Modules", href: "/dashboard/manager" },

@@ -49,7 +49,7 @@ export default function RouteDetailsPage() {
   ];
 
   return (
-    <div className="container" style={{ paddingTop: "2rem" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)" }}>
       <Breadcrumbs
         items={[
           { label: "Modules", href: "/dashboard/driver" },

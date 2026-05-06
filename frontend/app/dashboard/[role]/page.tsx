@@ -120,10 +120,10 @@ const roleConfigs: Record<string, {
   },
   admin: {
     title: "Admin Control Center",
-    subtitle: "User management, pricing config, fleet inventory, and audit logs.",
+    subtitle: "User management, fleet inventory, and audit logs.",
     modules: [
       "User and role management",
-      "System settings and activity logs",
+      "Activity logs and oversight",
       "Fleet records and access controls",
       "Governance and policy enforcement",
     ],
@@ -135,13 +135,13 @@ const roleConfigs: Record<string, {
     quickActions: [
       { label: "Manage users", description: "Update access, roles, and onboarding status." },
       { label: "Review audit log", description: "Trace sensitive changes and approvals." },
-      { label: "Update pricing", description: "Adjust tariff and service rules." },
+      { label: "Fleet records", description: "Review trucks, assignments, and inventory status." },
     ],
     alerts: [
       { label: "2 policy exceptions found", tone: "alert" },
       { label: "Fleet inventory up to date", tone: "good" },
     ],
-    timeline: ["Users", "Roles", "Pricing", "Fleet", "Audit"],
+    timeline: ["Users", "Roles", "Fleet", "Audit"],
   },
 };
 
@@ -160,7 +160,7 @@ export default function RoleDashboardPage() {
 
   if (role === "manager") {
     return (
-      <main className="container" style={{ display: "grid", gap: "0.75rem", padding: "2rem", textAlign: "center", minHeight: "40vh", placeContent: "center" }}>
+      <main className="container" style={{ display: "grid", gap: "0.75rem", padding: "var(--page-main-padding)", textAlign: "center", minHeight: "40vh", placeContent: "center" }}>
         <p style={{ margin: 0, color: "var(--text-secondary)" }}>Redirecting to manager dashboard…</p>
       </main>
     );

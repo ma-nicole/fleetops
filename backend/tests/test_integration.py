@@ -487,6 +487,19 @@ class TestPaymentsAndFeedback:
         assert response.status_code == 200
         assert response.json()["rating"] == 5
 
+    def test_submit_general_feedback(self, client, test_users):
+        customer = test_users["customer"]
+        token = create_access_token(customer.email, customer.role.value)
+        response = client.post(
+            "/api/feedback",
+            json={"booking_id": None, "rating": 4, "message": "Great app experience", "category": "general"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["rating"] == 4
+        assert data["booking_id"] is None
+
 
 # ═══════════════════════════════════════════════════════════
 # SCHEDULE BOARD (paper Fig 16/17)

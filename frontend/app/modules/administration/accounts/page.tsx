@@ -26,7 +26,8 @@ export default function AccountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [resetResult, setResetResult] = useState<{ email: string; password: string } | null>(null);
+  const [detailUser, setDetailUser] = useState<AdminUser | null>(null);
+  const [knownInitialPasswords, setKnownInitialPasswords] = useState<Record<number, string>>({});
 
   const refresh = async () => {
     setLoading(true);
@@ -35,7 +36,7 @@ export default function AccountsPage() {
       const data = await adminApi.listUsers();
       setUsers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
       setLoading(false);
     }
@@ -55,85 +56,35 @@ export default function AccountsPage() {
     );
   });
 
-  const handleRoleChange = async (user: AdminUser, role: AdminUser["role"]) => {
-    try {
-      await adminApi.updateUser(user.id, { role });
-      announce(`Role updated to ${role} for ${user.email}`);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Update failed");
-    }
-  };
+  const openDetails = (user: AdminUser) => setDetailUser(user);
 
-  const handleReset = async (user: AdminUser) => {
-    if (!confirm(`Reset password for ${user.email}? A new temporary password will be generated.`)) return;
-    try {
-      const result = await adminApi.resetPassword(user.id);
-      setResetResult({ email: result.email, password: result.temporary_password });
-      announce("Password reset successfully.");
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Reset failed");
-    }
-  };
-
-  const handleLockToggle = async (user: AdminUser) => {
-    try {
-      if (user.is_locked) {
-        await adminApi.unlockUser(user.id);
-        announce(`${user.email} unlocked`);
-      } else {
-        if (!confirm(`Lock ${user.email}? They will not be able to sign in.`)) return;
-        await adminApi.lockUser(user.id);
-        announce(`${user.email} locked`);
-      }
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Action failed");
-    }
-  };
-
-  const handleDelete = async (user: AdminUser) => {
-    if (!confirm(`Permanently delete ${user.email}? This cannot be undone.`)) return;
-    try {
-      await adminApi.deleteUser(user.id);
-      announce(`${user.email} deleted`);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Delete failed");
-    }
-  };
+  const detailUserFresh = detailUser ? users.find((u) => u.id === detailUser.id) ?? detailUser : null;
 
   return (
-    <div className="container" style={{ paddingTop: "2rem", paddingBottom: "3rem" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)", paddingBottom: "2rem" }}>
       <Breadcrumbs
         items={[
           { label: "Modules", href: "/dashboard/admin" },
           { label: "System" },
-          { label: "Accounts" },
+          { label: "User Management" },
         ]}
       />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "1rem", marginTop: "1.5rem", marginBottom: "1.5rem" }}>
         <div>
-          <h1 style={{ margin: 0 }}>Account Management</h1>
+          <h1 style={{ margin: 0 }}>User Management</h1>
           <p style={{ margin: "0.25rem 0 0", color: "var(--text-secondary)" }}>
             {loading ? "Loading…" : `${users.length} total user${users.length === 1 ? "" : "s"}`}
           </p>
         </div>
-        <button type="button" className="button" onClick={() => setShowCreate(true)}>
-          + New User
-        </button>
-      </div>
-
-      <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
-        <label htmlFor="account-filter" className="sr-only">Filter accounts</label>
-        <input
-          id="account-filter"
-          className="input"
-          placeholder="Search by name, email, or role…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <button type="button" className="button" onClick={refresh} disabled={loading} aria-busy={loading} style={{ background: "#E0E0E0", color: "var(--text)" }}>
+            Refresh
+          </button>
+          <button type="button" className="button" onClick={() => setShowCreate(true)}>
+            + New User
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -142,22 +93,20 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {resetResult && (
-        <div role="alert" className="card" style={{ marginBottom: "1.5rem", border: "2px solid var(--text-success)", background: "var(--bg-success)" }}>
-          <strong>Temporary password generated for {resetResult.email}</strong>
-          <pre style={{ margin: "0.5rem 0", padding: "0.5rem", background: "white", borderRadius: 4, fontSize: "1.1rem", fontFamily: "monospace" }}>
-            {resetResult.password}
-          </pre>
-          <p style={{ margin: 0, fontSize: "0.85rem" }}>Share this securely. The user must change it on next login.</p>
-          <button type="button" className="button" style={{ marginTop: "0.75rem" }} onClick={() => setResetResult(null)}>
-            Done
-          </button>
-        </div>
-      )}
+      <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
+        <label htmlFor="user-filter" className="sr-only">Filter users</label>
+        <input
+          id="user-filter"
+          className="input"
+          placeholder="Search by name, email, or role…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
             <thead>
               <tr style={{ background: "#FAFAFA", borderBottom: "1px solid var(--border)" }}>
                 <th scope="col" style={th}>Name</th>
@@ -179,20 +128,7 @@ export default function AccountsPage() {
                 <tr key={user.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={td}>{user.full_name}</td>
                   <td style={td}>{user.email}</td>
-                  <td style={td}>
-                    <label className="sr-only" htmlFor={`role-${user.id}`}>Role for {user.email}</label>
-                    <select
-                      id={`role-${user.id}`}
-                      className="select"
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user, e.target.value as AdminUser["role"])}
-                      style={{ minWidth: 120 }}
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                  </td>
+                  <td style={td}>{user.role}</td>
                   <td style={td}>
                     {user.is_locked ? (
                       <span style={{ ...statusPill, background: "var(--bg-error)", color: "var(--text-error)", border: "1px solid var(--text-error)" }}>
@@ -205,17 +141,9 @@ export default function AccountsPage() {
                     )}
                   </td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                      <button type="button" style={actionBtn} onClick={() => handleReset(user)}>
-                        Reset password
-                      </button>
-                      <button type="button" style={actionBtn} onClick={() => handleLockToggle(user)}>
-                        {user.is_locked ? "Unlock" : "Lock"}
-                      </button>
-                      <button type="button" style={{ ...actionBtn, color: "var(--text-error)", borderColor: "var(--text-error)" }} onClick={() => handleDelete(user)}>
-                        Delete
-                      </button>
-                    </div>
+                    <button type="button" style={actionBtn} onClick={() => openDetails(user)}>
+                      View details
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -227,17 +155,134 @@ export default function AccountsPage() {
       {showCreate && (
         <CreateUserModal
           onClose={() => setShowCreate(false)}
-          onCreated={() => {
+          onCreated={(user, initialPassword) => {
+            setKnownInitialPasswords((prev) => ({ ...prev, [user.id]: initialPassword }));
             setShowCreate(false);
             refresh();
+            announce(`User ${user.email} created. Open their details to see the initial password.`);
           }}
+        />
+      )}
+
+      {detailUserFresh && (
+        <UserDetailsModal
+          user={detailUserFresh}
+          initialPassword={knownInitialPasswords[detailUserFresh.id]}
+          onClose={() => setDetailUser(null)}
         />
       )}
     </div>
   );
 }
 
-function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function UserDetailsModal({
+  user,
+  initialPassword,
+  onClose,
+}: {
+  user: AdminUser;
+  initialPassword: string | undefined;
+  onClose: () => void;
+}) {
+  const created = user.created_at ? formatDateTime(user.created_at) : "—";
+  const lockedUntil = user.locked_until ? formatDateTime(user.locked_until) : null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="user-details-title"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        display: "grid",
+        placeItems: "center",
+        zIndex: 2000,
+        padding: "1rem",
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="card"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "min(480px, 100%)", padding: "1.5rem", display: "grid", gap: "1rem" }}
+      >
+        <h2 id="user-details-title" style={{ margin: 0 }}>
+          User details
+        </h2>
+        <dl style={{ margin: 0, display: "grid", gap: "0.75rem" }}>
+          <DetailRow label="Full name" value={user.full_name} />
+          <DetailRow label="Email" value={user.email} />
+          <DetailRow label="Role" value={user.role} />
+          <DetailRow label="Phone" value={user.phone || "—"} />
+          <DetailRow
+            label="Status"
+            value={user.is_locked ? `Locked${lockedUntil ? ` until ${lockedUntil}` : ""}` : "Active"}
+          />
+          <DetailRow label="Failed sign-in attempts" value={String(user.failed_login_count)} />
+          <DetailRow label="Account created" value={created} />
+          <div style={{ display: "grid", gap: 4 }}>
+            <dt style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>Password</dt>
+            <dd style={{ margin: 0 }}>
+              {initialPassword !== undefined ? (
+                <code
+                  style={{
+                    display: "block",
+                    padding: "0.5rem 0.75rem",
+                    background: "var(--bg-muted, #f4f4f4)",
+                    borderRadius: 4,
+                    fontSize: "0.95rem",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {initialPassword}
+                </code>
+              ) : (
+                <span style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                  Login passwords are stored securely and cannot be shown for existing accounts. If you created this user
+                  in this session, the initial password appears here only for users you just added; refresh the page and
+                  it will no longer be available.
+                </span>
+              )}
+            </dd>
+          </div>
+        </dl>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button type="button" className="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <dt style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)" }}>{label}</dt>
+      <dd style={{ margin: 0, fontSize: "0.95rem" }}>{value}</dd>
+    </div>
+  );
+}
+
+function formatDateTime(iso: string) {
+  try {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function CreateUserModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (user: AdminUser, initialPassword: string) => void;
+}) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<AdminUser["role"]>("customer");
@@ -278,16 +323,17 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     if (!validate()) return;
     setSubmitting(true);
     const combinedPhone = buildInternationalPhone(phoneDial, phoneNational);
+    const initialPassword = password;
     try {
-      await adminApi.createUser({
+      const created = await adminApi.createUser({
         email: email.trim(),
         full_name: fullName.trim(),
         role,
         phone: combinedPhone || undefined,
-        password,
+        password: initialPassword,
       });
       announce(`User ${email.trim()} created.`);
-      onCreated();
+      onCreated(created, initialPassword);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create user";
       try {

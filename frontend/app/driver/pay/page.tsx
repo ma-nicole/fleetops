@@ -62,7 +62,7 @@ export default function PayPage() {
   };
 
   return (
-    <div style={{ padding: "2rem", display: "grid", gap: "2rem" }}>
+    <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem" }}>
       <div>
         <Link href="/driver/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
           ← Back to Dashboard

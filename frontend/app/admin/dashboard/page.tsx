@@ -47,12 +47,12 @@ export default function AdminDashboardPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.5rem" }}>
         <div>
           <h1 style={{ margin: "0 0 0.4rem", fontSize: "2rem", fontWeight: 900, color: "#1A1A1A" }}>Admin Dashboard</h1>
           <p style={{ margin: 0, color: "#666" }}>
-            Complete operations view across scheduling, monitoring, orders, and finance.
+            Complete operations view across scheduling, monitoring, and orders.
           </p>
         </div>
 
@@ -78,9 +78,7 @@ export default function AdminDashboardPage() {
             {[
               { label: "Manage Scheduling", href: "/admin/scheduling" },
               { label: "Trip Monitoring", href: "/admin/trip-monitoring" },
-              { label: "Analytics", href: "/admin/analytics" },
               { label: "Orders", href: "/admin/orders" },
-              { label: "Finance", href: "/admin/finance" },
             ].map((item) => (
               <Link
                 key={item.href}

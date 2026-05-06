@@ -56,7 +56,7 @@ export default function CustomerPaymentPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
         <header>
           <h1 style={{ margin: 0 }}>Pay for booking</h1>

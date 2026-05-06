@@ -55,7 +55,7 @@ export default function WhatIfPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 20 }}>
         <header>
           <h1 style={{ margin: 0 }}>What-If Cost Simulator</h1>

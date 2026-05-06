@@ -3,8 +3,7 @@
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CostCalculator from "@/components/CostCalculator";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
-import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
+import { useEffect } from "react";
 import { isAuthenticated } from "@/lib/auth";
 
 export default function BookingPage() {
@@ -14,38 +13,6 @@ export default function BookingPage() {
       router.push("/sign-in");
     }
   }, [router]);
-  const [serviceType, setServiceType] = useState("Standard");
-  const [pickup, setPickup] = useState("");
-  const [dropoff, setDropoff] = useState("");
-  const [load, setLoad] = useState("");
-  const [error, setError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<{ pickup?: string; dropoff?: string; load?: string }>({});
-
-  const validateLegacyBooking = (): boolean => {
-    const next: typeof fieldErrors = {};
-    const p = pickup.trim();
-    const d = dropoff.trim();
-    const l = load.trim();
-    if (!p || p.length < 3) next.pickup = "Pickup must be at least 3 characters.";
-    if (!d || d.length < 3) next.dropoff = "Dropoff must be at least 3 characters.";
-    if (p.length >= 3 && d.length >= 3 && p.toLowerCase() === d.toLowerCase()) {
-      next.dropoff = "Pickup and dropoff must be different.";
-    }
-    if (!l || l.length < 2) next.load = "Describe the load (at least 2 characters).";
-    setFieldErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
-  const createBooking = () => {
-    setError("");
-    if (!validateLegacyBooking()) return;
-    const result = CustomerDataFlowService.createBooking(serviceType, pickup, dropoff, load);
-    if (!result.ok) {
-      setError(result.message);
-      return;
-    }
-    router.push("/order-confirmation");
-  };
 
   return (
     <main className="container" style={{ display: "grid", gap: "1.5rem", padding: "2rem 1rem" }}>
@@ -81,58 +48,6 @@ export default function BookingPage() {
         </div>
 
         <CostCalculator />
-
-        <div style={{ borderTop: "1px solid #E8E8E8", paddingTop: "1rem", display: "grid", gap: "0.6rem" }}>
-          <h3 style={{ margin: 0 }}>Customer Data Flow Booking</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
-            <select value={serviceType} onChange={(e) => setServiceType(e.target.value)} style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}>
-              <option>Standard</option>
-              <option>Express</option>
-              <option>Heavy Load</option>
-            </select>
-            <input
-              value={load}
-              onChange={(e) => {
-                setLoad(e.target.value);
-                if (fieldErrors.load) setFieldErrors((f) => ({ ...f, load: undefined }));
-              }}
-              placeholder="Load details"
-              aria-invalid={!!fieldErrors.load}
-              style={{ padding: "0.7rem", border: fieldErrors.load ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: "6px" }}
-            />
-            <input
-              value={pickup}
-              onChange={(e) => {
-                setPickup(e.target.value);
-                if (fieldErrors.pickup) setFieldErrors((f) => ({ ...f, pickup: undefined }));
-              }}
-              placeholder="Pickup"
-              aria-invalid={!!fieldErrors.pickup}
-              style={{ padding: "0.7rem", border: fieldErrors.pickup ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: "6px" }}
-            />
-            <input
-              value={dropoff}
-              onChange={(e) => {
-                setDropoff(e.target.value);
-                if (fieldErrors.dropoff) setFieldErrors((f) => ({ ...f, dropoff: undefined }));
-              }}
-              placeholder="Dropoff"
-              aria-invalid={!!fieldErrors.dropoff}
-              style={{ padding: "0.7rem", border: fieldErrors.dropoff ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: "6px" }}
-            />
-          </div>
-          {(fieldErrors.pickup || fieldErrors.dropoff || fieldErrors.load) && (
-            <div role="alert" style={{ display: "grid", gap: "0.25rem", fontSize: "0.85rem", color: "#DC2626" }}>
-              {fieldErrors.pickup && <span>{fieldErrors.pickup}</span>}
-              {fieldErrors.dropoff && <span>{fieldErrors.dropoff}</span>}
-              {fieldErrors.load && <span>{fieldErrors.load}</span>}
-            </div>
-          )}
-          {error && <p style={{ margin: 0, color: "#DC2626" }}>{error}</p>}
-          <button onClick={createBooking} style={{ width: "fit-content", border: "none", borderRadius: "6px", background: "#10B981", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
-            Continue to Order Confirmation
-          </button>
-        </div>
       </section>
 
       {/* Info Cards */}
@@ -154,7 +69,7 @@ export default function BookingPage() {
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>
           <p style={{ margin: 0, fontSize: "1.1rem" }}>Transparent Costs</p>
           <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            See fuel, toll, and labor breakdown before confirming.
+            See estimated distance, fuel/route charge, and driver fee (10%) before confirming.
           </p>
         </div>
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>

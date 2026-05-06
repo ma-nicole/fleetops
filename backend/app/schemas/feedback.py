@@ -1,13 +1,22 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class FeedbackCreate(BaseModel):
-    booking_id: int
+    """booking_id may be omitted for general feedback not tied to a trip/booking."""
+
+    booking_id: int | None = None
     rating: int
-    message: str | None = None
+    message: str | None = Field(default=None, max_length=2000)
     category: str = "service"
+
+    @field_validator("booking_id")
+    @classmethod
+    def validate_booking_id(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("booking_id must be a positive integer when provided")
+        return v
 
     @field_validator("rating")
     @classmethod
@@ -28,7 +37,7 @@ class FeedbackCreate(BaseModel):
 
 class FeedbackRead(BaseModel):
     id: int
-    booking_id: int
+    booking_id: int | None
     customer_id: int
     category: str
     rating: int

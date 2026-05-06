@@ -83,7 +83,7 @@ export default function RatingPage() {
 
   if (submitted) {
     return (
-      <div style={{ padding: "2rem", maxWidth: "600px", margin: "0 auto" }}>
+      <div style={{ padding: "var(--page-main-padding)", maxWidth: "600px", margin: "0 auto" }}>
         <div style={{ padding: "2rem", background: "rgba(76, 175, 80, 0.15)", border: "2px solid #4CAF50", borderRadius: "8px", marginBottom: "2rem", textAlign: "center" }}>
           <div style={{ fontSize: "3rem", marginBottom: "1rem" }}></div>
           <h1 style={{ color: "#4CAF50", margin: "0 0 0.5rem 0" }}>Thank You!</h1>
@@ -181,7 +181,7 @@ export default function RatingPage() {
   );
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "700px", margin: "0 auto" }}>
+    <div style={{ padding: "var(--page-main-padding)", maxWidth: "700px", margin: "0 auto" }}>
       <div style={{ marginBottom: "2rem" }}>
         <Link href="/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: 600 }}>
           ← Back to Dashboard

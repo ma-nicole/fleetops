@@ -171,6 +171,17 @@ export async function apiResetPassword(token: string, newPassword: string): Prom
   });
 }
 
+export type ChangePasswordResponse = {
+  message: string;
+};
+
+export async function apiChangePassword(currentPassword: string, newPassword: string): Promise<ChangePasswordResponse> {
+  return apiPost<ChangePasswordResponse>("/auth/change-password", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
 /** Decode JWT payload segment (base64url); pads for browsers where `atob` requires it. */
 function decodeJwtPayloadJson(segment: string): Record<string, unknown> | null {
   try {

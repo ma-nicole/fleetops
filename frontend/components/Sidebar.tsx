@@ -142,18 +142,13 @@ const menuModules: MenuModule[] = [
       { label: "Scheduling", href: "/admin/scheduling", roles: ["admin"] },
       { label: "Trip Monitoring", href: "/admin/trip-monitoring", roles: ["admin"] },
       { label: "Orders", href: "/admin/orders", roles: ["admin"] },
-      { label: "Analytics", href: "/admin/analytics", roles: ["admin"] },
-      { label: "Finance", href: "/admin/finance", roles: ["admin"] },
     ],
   },
   {
     label: "System",
     roles: ["admin"],
     items: [
-      { label: "Authentication", href: "/modules/administration/authentication", roles: ["admin"] },
-      { label: "Access Control", href: "/modules/administration/access-control", roles: ["admin"] },
-      { label: "Accounts", href: "/modules/administration/accounts", roles: ["admin"] },
-      { label: "Settings", href: "/modules/administration/settings", roles: ["admin"] },
+      { label: "User Management", href: "/modules/administration/accounts", roles: ["admin"] },
     ],
   },
 
@@ -164,9 +159,6 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "New booking", href: "/booking", roles: ["customer"] },
       { label: "My Profile", href: "/modules/customer/profile", roles: ["customer"] },
-      { label: "Select Truck", href: "/booking/trucks", roles: ["customer"] },
-      { label: "Select Service", href: "/booking/services", roles: ["customer"] },
-      { label: "Checkout", href: "/booking/checkout", roles: ["customer"] },
       { label: "Payment", href: "/modules/customer/payment", roles: ["customer"] },
     ],
   },
@@ -176,8 +168,7 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Current Bookings", href: "/modules/operations/trips", roles: ["customer"] },
       { label: "Booking History", href: "/modules/customer/booking-history", roles: ["customer"] },
-      { label: "Cost Summary", href: "/modules/operations/cost-summary", roles: ["customer"] },
-      { label: "Support", href: "/modules/customer/support", roles: ["customer"] },
+      { label: "Feedback", href: "/modules/customer/support", roles: ["customer"] },
     ],
   },
 ];

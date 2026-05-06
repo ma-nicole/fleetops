@@ -88,7 +88,7 @@ export default function CostBreakdownPage() {
   const driverShare = stats.total * 0.7;
 
   return (
-    <div className="container" style={{ paddingTop: "2rem" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)" }}>
       <Breadcrumbs
         items={[
           { label: "Modules", href: "/dashboard/driver" },

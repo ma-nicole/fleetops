@@ -59,6 +59,20 @@ def apply_runtime_schema_fixes() -> None:
             alters.append("ALTER TABLE users ADD COLUMN company_name VARCHAR(255) NULL")
         else:
             alters.append("ALTER TABLE users ADD COLUMN company_name VARCHAR(255)")
+
+    if insp.has_table("feedback"):
+        fb_cols = {c["name"]: c for c in insp.get_columns("feedback")}
+        bk = fb_cols.get("booking_id")
+        if bk is not None and bk.get("nullable") is False:
+            if dialect == "mysql":
+                alters.append("ALTER TABLE feedback MODIFY COLUMN booking_id INT NULL")
+            else:
+                alters.append("ALTER TABLE feedback ALTER COLUMN booking_id DROP NOT NULL")
+        if dialect == "mysql":
+            alters.append("ALTER TABLE feedback MODIFY COLUMN message TEXT NULL")
+        else:
+            alters.append("ALTER TABLE feedback ALTER COLUMN message TYPE TEXT")
+
     if not alters:
         return
     with engine.begin() as conn:

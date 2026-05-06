@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { formatPhp } from "@/lib/appLocale";
+import { estimateBookingCost } from "@/lib/bookingRouteEstimate";
+import { MIN_BOOKING_SITES, getCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
 
 type CostEstimate = {
   estimated_fuel: number;
@@ -10,6 +13,8 @@ type CostEstimate = {
   estimated_labor: number;
   estimated_total: number;
 };
+
+type LiveCostEstimate = CostEstimate & { distance_km: number };
 
 type BookingResponse = {
   id: number;
@@ -21,16 +26,23 @@ type FormErrors = {
   [key: string]: string;
 };
 
+const DEFAULT_SERVICE_TYPE = "fixed";
+
+function siteMenuLabel(s: CustomerSite): string {
+  if (s.label) return `${s.label} — ${s.address}`;
+  return s.address;
+}
+
 export default function CostCalculator({
   onEstimate,
 }: {
   onEstimate?: (estimate: CostEstimate) => void;
 }) {
-  const [pickup, setPickup] = useState("");
-  const [dropoff, setDropoff] = useState("");
+  const [pickupId, setPickupId] = useState("");
+  const [dropoffId, setDropoffId] = useState("");
+  const [sites, setSites] = useState<CustomerSite[]>([]);
   const [weight, setWeight] = useState("1");
-  const [serviceType, setServiceType] = useState("fixed");
-  const [cost, setCost] = useState<CostEstimate | null>(null);
+  const [cost, setCost] = useState<LiveCostEstimate | null>(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [message, setMessage] = useState("");
@@ -38,58 +50,96 @@ export default function CostCalculator({
   const [date, setDate] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const today = new Date().toISOString().split("T")[0];
-
-  const progress = [pickup, dropoff, weight, date].filter(Boolean).length;
   const suggestedSlots = date ? ["08:00", "11:30", "14:00", "17:30"] : ["Select a date to see nearby slots"];
 
-  // Simulate cost calculation based on inputs
+  const hasEnoughSites = sites.length >= MIN_BOOKING_SITES;
+
+  const pickup = useMemo(() => sites.find((s) => s.id === pickupId)?.address ?? "", [sites, pickupId]);
+  const dropoff = useMemo(() => sites.find((s) => s.id === dropoffId)?.address ?? "", [sites, dropoffId]);
+
   useEffect(() => {
-    const calculateCost = async () => {
-      if (!pickup || !dropoff || !weight) return;
+    setSites(getCustomerSites());
+    return subscribeSitesChanged(() => setSites(getCustomerSites()));
+  }, []);
 
-      setLoading(true);
-      try {
-        // Simulated distance calculation (in production, use real geo API)
-        const pickupCode = pickup.toLowerCase().charCodeAt(0);
-        const dropoffCode = dropoff.toLowerCase().charCodeAt(0);
-        const distance = Math.abs(pickupCode - dropoffCode) * 10 + 50;
+  useEffect(() => {
+    const ids = new Set(sites.map((s) => s.id));
+    setPickupId((id) => (id && ids.has(id) ? id : ""));
+    setDropoffId((id) => (id && ids.has(id) ? id : ""));
+  }, [sites]);
 
-        // Call backend cost prediction API
-        const estimate = await apiFetch<CostEstimate>("/analytics/cost-predict", {
-          method: "POST",
-          body: JSON.stringify({
-            distance_km: distance,
-            cargo_weight_tons: parseFloat(weight) || 1,
-            fuel_price_per_liter: 1.1,
-            labor_rate: 18,
-            toll_rate: 0.25,
-          }),
+  useEffect(() => {
+    if (!hasEnoughSites) {
+      setCost(null);
+      setLoading(false);
+      return;
+    }
+
+    const p = pickup.trim();
+    const d = dropoff.trim();
+    const w = parseFloat(weight);
+
+    if (!pickupId || !dropoffId || pickupId === dropoffId || p.length < 3 || d.length < 3 || p.toLowerCase() === d.toLowerCase()) {
+      setCost(null);
+      setLoading(false);
+      return;
+    }
+
+    const effW = Number.isFinite(w) && w > 0 ? Math.min(50, w) : 1;
+
+    setLoading(true);
+    const timer = window.setTimeout(() => {
+      const breakdown = estimateBookingCost(pickup, dropoff, effW);
+      if (breakdown) {
+        const live: LiveCostEstimate = {
+          distance_km: breakdown.distanceKm,
+          estimated_fuel: breakdown.fuelRouteCharge,
+          estimated_toll: 0,
+          estimated_labor: breakdown.driverFee,
+          estimated_total: breakdown.total,
+        };
+        setCost(live);
+        onEstimate?.({
+          estimated_fuel: live.estimated_fuel,
+          estimated_toll: live.estimated_toll,
+          estimated_labor: live.estimated_labor,
+          estimated_total: live.estimated_total,
         });
-
-        setCost(estimate);
-        onEstimate?.(estimate);
-      } catch (error) {
-        console.error("Cost estimation failed:", error);
+      } else {
         setCost(null);
-      } finally {
-        setLoading(false);
       }
-    };
+      setLoading(false);
+    }, 300);
 
-    const timer = setTimeout(calculateCost, 500);
-    return () => clearTimeout(timer);
-  }, [pickup, dropoff, weight, onEstimate]);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [pickup, dropoff, weight, onEstimate, hasEnoughSites, pickupId, dropoffId]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!pickup || pickup.length < 3) {
-      newErrors.pickup_location = "Pickup location required (3+ chars)";
+    if (sites.length < MIN_BOOKING_SITES) {
+      newErrors.sites_min = `You need at least ${MIN_BOOKING_SITES} saved site addresses on your account before you can book.`;
     }
-    if (!dropoff || dropoff.length < 3) {
-      newErrors.dropoff_location = "Dropoff location required (3+ chars)";
+    if (!pickupId) {
+      newErrors.pickup_location = "Select a pickup address from your saved sites.";
+    } else if (!pickup || pickup.length < 3) {
+      newErrors.pickup_location = "Invalid pickup selection.";
     }
-    if (pickup.trim().length >= 3 && dropoff.trim().length >= 3 && pickup.trim().toLowerCase() === dropoff.trim().toLowerCase()) {
+    if (!dropoffId) {
+      newErrors.dropoff_location = "Select a dropoff address from your saved sites.";
+    } else if (!dropoff || dropoff.length < 3) {
+      newErrors.dropoff_location = "Invalid dropoff selection.";
+    }
+    if (pickupId && dropoffId && pickupId === dropoffId) {
+      newErrors.dropoff_location = "Pickup and dropoff must be different sites.";
+    }
+    if (
+      pickup.trim().length >= 3 &&
+      dropoff.trim().length >= 3 &&
+      pickup.trim().toLowerCase() === dropoff.trim().toLowerCase()
+    ) {
       newErrors.dropoff_location = "Pickup and dropoff must be different.";
     }
     if (parseFloat(weight) <= 0 || parseFloat(weight) > 50) {
@@ -109,7 +159,8 @@ export default function CostCalculator({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (sites.length < MIN_BOOKING_SITES) return;
     if (!validateForm()) return;
 
     setIsSubmitting(true);
@@ -119,7 +170,7 @@ export default function CostCalculator({
       const payload = {
         pickup_location: pickup,
         dropoff_location: dropoff,
-        service_type: serviceType,
+        service_type: DEFAULT_SERVICE_TYPE,
         scheduled_date: date,
         cargo_weight_tons: parseFloat(weight),
       };
@@ -131,11 +182,10 @@ export default function CostCalculator({
 
       setMessage(`✓ Booking #${data.id} created! Cost: ${formatPhp(data.estimated_cost)}`);
       setMessageType("success");
-      setPickup("");
-      setDropoff("");
+      setPickupId("");
+      setDropoffId("");
       setWeight("1");
       setDate("");
-      setServiceType("fixed");
       setCost(null);
     } catch (error) {
       const err = error as Error;
@@ -146,67 +196,136 @@ export default function CostCalculator({
     }
   };
 
+  const estimateHint = !hasEnoughSites
+    ? `Save at least ${MIN_BOOKING_SITES} sites on your dashboard — booking is disabled until then.`
+    : "Choose pickup and dropoff from your saved sites to see a live estimate.";
+
+  const canSubmit = hasEnoughSites && !!cost && !isSubmitting;
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div className="booking-progress" aria-label="Form completion">
-        <div>
-          <strong>Booking progress</strong>
-          <p>{progress}/4 fields completed</p>
+      {!hasEnoughSites && (
+        <div
+          role="alert"
+          style={{
+            padding: "1rem",
+            borderRadius: "10px",
+            background: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(220, 38, 38, 0.45)",
+            color: "#b91c1c",
+            fontSize: "0.95rem",
+          }}
+        >
+          <strong>Booking not available yet.</strong> Add at least {MIN_BOOKING_SITES} site addresses under{" "}
+          <Link href="/dashboard/customer" style={{ fontWeight: 700, color: "inherit" }}>
+            Customer dashboard → Sites
+          </Link>{" "}
+          before you can place a booking.
         </div>
-        <div className="booking-progress-bar" aria-hidden="true">
-          <span style={{ width: `${(progress / 4) * 100}%` }} />
-        </div>
-      </div>
+      )}
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: "1rem" }}>
-        {/* Input Fields */}
+        {errors.sites_min && (
+          <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: "0.9rem" }}>
+            {errors.sites_min}
+          </p>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span> Pickup Location</span>
-              <span className="field-help" title="Where the shipment starts. Enter a city, warehouse, or dock.">?</span>
-              {pickup.length >= 3 && !errors.pickup_location && <span className="field-valid">✓</span>}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                fontSize: "0.9rem",
+                color: "var(--text-secondary)",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <span>Pickup location</span>
+              <span className="field-help" title="Addresses come from Sites on your customer dashboard.">
+                ?
+              </span>
+              {pickupId && pickup.length >= 3 && !errors.pickup_location && <span className="field-valid">✓</span>}
             </label>
-            <input
-              className="input"
-              placeholder="e.g., Makati"
-              value={pickup}
-              onChange={(e) => setPickup(e.target.value)}
+            <select
+              className="select"
+              value={pickupId}
+              disabled={!hasEnoughSites}
+              onChange={(e) => {
+                setPickupId(e.target.value);
+                if (errors.pickup_location) setErrors((er) => ({ ...er, pickup_location: "" }));
+              }}
               style={errors.pickup_location ? { borderColor: "#F44336" } : {}}
-            />
+            >
+              <option value="">{hasEnoughSites ? "Select pickup address from your sites…" : "Add sites on your dashboard first…"}</option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {siteMenuLabel(s)}
+                </option>
+              ))}
+            </select>
             {errors.pickup_location && (
-              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                 {errors.pickup_location}
-              </p>
+              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>{errors.pickup_location}</p>
             )}
           </div>
 
           <div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span> Dropoff Location</span>
-              <span className="field-help" title="Where the shipment should arrive.">?</span>
-              {dropoff.length >= 3 && !errors.dropoff_location && <span className="field-valid">✓</span>}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                fontSize: "0.9rem",
+                color: "var(--text-secondary)",
+                marginBottom: "0.5rem",
+              }}
+            >
+              <span>Dropoff location</span>
+              <span className="field-help" title="Addresses come from Sites on your customer dashboard.">
+                ?
+              </span>
+              {dropoffId && dropoff.length >= 3 && !errors.dropoff_location && <span className="field-valid">✓</span>}
             </label>
-            <input
-              className="input"
-              placeholder="e.g., Quezon City"
-              value={dropoff}
-              onChange={(e) => setDropoff(e.target.value)}
+            <select
+              className="select"
+              value={dropoffId}
+              disabled={!hasEnoughSites}
+              onChange={(e) => {
+                setDropoffId(e.target.value);
+                if (errors.dropoff_location) setErrors((er) => ({ ...er, dropoff_location: "" }));
+              }}
               style={errors.dropoff_location ? { borderColor: "#F44336" } : {}}
-            />
+            >
+              <option value="">{hasEnoughSites ? "Select dropoff address from your sites…" : "Add sites on your dashboard first…"}</option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {siteMenuLabel(s)}
+                </option>
+              ))}
+            </select>
             {errors.dropoff_location && (
-              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                 {errors.dropoff_location}
-              </p>
+              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>{errors.dropoff_location}</p>
             )}
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                fontSize: "0.9rem",
+                color: "var(--text-secondary)",
+                marginBottom: "0.5rem",
+              }}
+            >
               <span> Weight (tons)</span>
-              <span className="field-help" title="Estimated cargo weight. Used for pricing and truck allocation.">?</span>
+              <span className="field-help" title="Estimated cargo weight. Used for pricing and truck allocation.">
+                ?
+              </span>
               {parseFloat(weight) > 0 && !errors.cargo_weight_tons && <span className="field-valid">✓</span>}
             </label>
             <input
@@ -218,34 +337,31 @@ export default function CostCalculator({
               placeholder="1"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
+              disabled={!hasEnoughSites}
               style={errors.cargo_weight_tons ? { borderColor: "#F44336" } : {}}
             />
             {errors.cargo_weight_tons && (
               <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                 {errors.cargo_weight_tons}
+                {errors.cargo_weight_tons}
               </p>
             )}
           </div>
 
           <div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
-              <span> Service Type</span>
-              <span className="field-help" title="Choose a fixed rate or a custom quote if the shipment needs special handling.">?</span>
-            </label>
-            <select
-              className="select"
-              value={serviceType}
-              onChange={(e) => setServiceType(e.target.value)}
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                fontSize: "0.9rem",
+                color: "var(--text-secondary)",
+                marginBottom: "0.5rem",
+              }}
             >
-              <option value="fixed">Fixed Rate</option>
-              <option value="customized">Custom Quote</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
               <span> Schedule Date</span>
-              <span className="field-help" title="Past dates are disabled. Pick the earliest realistic delivery date.">?</span>
+              <span className="field-help" title="Past dates are disabled. Pick the earliest realistic delivery date.">
+                ?
+              </span>
               {date && !errors.scheduled_date && <span className="field-valid">✓</span>}
             </label>
             <input
@@ -254,11 +370,12 @@ export default function CostCalculator({
               value={date}
               onChange={(e) => setDate(e.target.value)}
               min={today}
+              disabled={!hasEnoughSites}
               style={errors.scheduled_date ? { borderColor: "#F44336" } : {}}
             />
             {errors.scheduled_date && (
               <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                 {errors.scheduled_date}
+                {errors.scheduled_date}
               </p>
             )}
           </div>
@@ -272,7 +389,6 @@ export default function CostCalculator({
           ))}
         </div>
 
-        {/* Cost Summary Card */}
         {cost ? (
           <div
             style={{
@@ -281,53 +397,51 @@ export default function CostCalculator({
               borderRadius: "12px",
               padding: "1rem",
               display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "1rem",
+              gap: "0.75rem",
             }}
           >
-            <div>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Fuel</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                {formatPhp(cost.estimated_fuel)}
-              </p>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Toll</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                {formatPhp(cost.estimated_toll)}
-              </p>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Labor</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                {formatPhp(cost.estimated_labor)}
-              </p>
-            </div>
-            <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
-                {formatPhp(cost.estimated_total)}
-              </p>
+            <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
+              Estimated road distance: <strong style={{ color: "var(--text-primary)" }}>{cost.distance_km} km</strong>{" "}
+              (reference map + analytics model)
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem" }}>
+              <div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Fuel & distance</p>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
+                  {formatPhp(cost.estimated_fuel)}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Driver (10%)</p>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
+                  {formatPhp(cost.estimated_labor)}
+                </p>
+              </div>
+              <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total estimate</p>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
+                  {formatPhp(cost.estimated_total)}
+                </p>
+              </div>
             </div>
           </div>
         ) : (
-          <div className="booking-placeholder">Enter shipment details to see a live estimate.</div>
+          <div className="booking-placeholder">{estimateHint}</div>
         )}
 
-        {loading && (
+        {loading && hasEnoughSites && (
           <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
             ⏳ Calculating cost...
           </div>
         )}
 
-        {/* Submit Button */}
         <button
           className="button"
           type="submit"
-          disabled={isSubmitting || !cost}
+          disabled={!canSubmit}
           style={{
-            opacity: isSubmitting || !cost ? 0.5 : 1,
-            cursor: isSubmitting || !cost ? "not-allowed" : "pointer",
+            opacity: !canSubmit ? 0.5 : 1,
+            cursor: !canSubmit ? "not-allowed" : "pointer",
             padding: "1rem",
             fontSize: "1rem",
           }}
@@ -335,7 +449,6 @@ export default function CostCalculator({
           {isSubmitting ? " Processing..." : "✓ Confirm & Book"}
         </button>
 
-        {/* Message */}
         {message && (
           <div
             style={{

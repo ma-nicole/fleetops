@@ -66,7 +66,7 @@ export default function BookingApprovalsPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.5rem" }}>
         <div>
           <Link href="/manager/dashboard" style={{ color: "#0EA5E9", textDecoration: "none" }}>

@@ -45,14 +45,14 @@ export default function TripTrackPage() {
 
   if (error) {
     return (
-      <main style={{ padding: "2rem" }}>
+      <main style={{ padding: "var(--page-main-padding)" }}>
         <p style={{ color: "#B91C1C" }}>{error}</p>
       </main>
     );
   }
   if (!trip) {
     return (
-      <main style={{ padding: "2rem" }}>
+      <main style={{ padding: "var(--page-main-padding)" }}>
         <p>Loading…</p>
       </main>
     );
@@ -61,7 +61,7 @@ export default function TripTrackPage() {
   const progress = STATUS_PROGRESS[trip.status] ?? 0;
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 800, margin: "0 auto", display: "grid", gap: 16 }}>
         <header>
           <h1 style={{ margin: 0 }}>Trip #{trip.id}</h1>

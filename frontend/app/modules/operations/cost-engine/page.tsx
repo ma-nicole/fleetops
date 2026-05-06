@@ -75,7 +75,7 @@ export default function CostComputationPage() {
   };
 
   return (
-    <div className="container" style={{ paddingTop: "2rem" }}>
+    <div className="container" style={{ paddingTop: "var(--space-3)" }}>
       <Breadcrumbs
         items={[
           { label: "Modules", href: "/dashboard/manager" },

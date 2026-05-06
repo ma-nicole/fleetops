@@ -24,7 +24,7 @@ export default function CreateBookingFlowPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "900px", margin: "0 auto", display: "grid", gap: "1rem" }}>
         <h1 style={{ margin: 0 }}>Create Booking</h1>
         <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1rem", display: "grid", gap: "0.75rem" }}>

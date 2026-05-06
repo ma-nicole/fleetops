@@ -442,11 +442,11 @@ class Feedback(Base):
     __tablename__ = "feedback"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    booking_id: Mapped[int | None] = mapped_column(ForeignKey("bookings.id"), nullable=True, index=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     category: Mapped[str] = mapped_column(String(50), default="service")
     rating: Mapped[int] = mapped_column(Integer, default=5)
-    message: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

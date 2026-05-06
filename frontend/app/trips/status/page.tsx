@@ -21,7 +21,7 @@ export default function TripStatusPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1100px", margin: "0 auto", display: "grid", gap: "1rem" }}>
         <h1 style={{ margin: 0 }}>Trip Status</h1>
         <section style={{ display: "grid", gap: "0.75rem" }}>

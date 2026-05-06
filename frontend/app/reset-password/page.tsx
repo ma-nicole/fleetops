@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { ApiError, apiResetPassword } from "@/lib/api";
 import { validateConfirmPassword, validateCustomerPassword } from "@/lib/formValidation";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const params = useSearchParams();
   const token = params.get("token") ?? "";
 
@@ -51,79 +51,90 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <main style={{ minHeight: "100vh", background: "#FAFAFA", padding: "2rem" }}>
-      <form
-        onSubmit={submit}
+    <form
+      onSubmit={submit}
+      style={{
+        maxWidth: "460px",
+        margin: "0 auto",
+        background: "#FFFFFF",
+        border: "1px solid #E8E8E8",
+        borderRadius: "10px",
+        padding: "1.2rem",
+        display: "grid",
+        gap: "0.8rem",
+      }}
+    >
+      <h1 style={{ margin: 0 }}>Set new password</h1>
+      <p style={{ margin: 0, color: "#4B5563", fontSize: "0.9rem" }}>
+        Create a new password for your account.
+      </p>
+
+      <label style={{ display: "grid", gap: "0.35rem" }}>
+        <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>New password</span>
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="At least 8 characters"
+          style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
+        />
+      </label>
+
+      <label style={{ display: "grid", gap: "0.35rem" }}>
+        <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Confirm password</span>
+        <input
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Repeat your new password"
+          style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
+        />
+      </label>
+
+      {error ? (
+        <p role="alert" style={{ margin: 0, color: "#DC2626" }}>
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p role="status" style={{ margin: 0, color: "#166534" }}>
+          {message}
+        </p>
+      ) : null}
+
+      <button
+        type="submit"
+        disabled={isSubmitting}
         style={{
-          maxWidth: "460px",
-          margin: "0 auto",
-          background: "#FFFFFF",
-          border: "1px solid #E8E8E8",
-          borderRadius: "10px",
-          padding: "1.2rem",
-          display: "grid",
-          gap: "0.8rem",
+          border: "none",
+          borderRadius: "6px",
+          background: "#3B82F6",
+          color: "white",
+          fontWeight: 600,
+          padding: "0.65rem 1rem",
+          cursor: isSubmitting ? "not-allowed" : "pointer",
         }}
       >
-        <h1 style={{ margin: 0 }}>Set new password</h1>
-        <p style={{ margin: 0, color: "#4B5563", fontSize: "0.9rem" }}>
-          Create a new password for your account.
-        </p>
+        {isSubmitting ? "Updating..." : "Update password"}
+      </button>
 
-        <label style={{ display: "grid", gap: "0.35rem" }}>
-          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>New password</span>
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="At least 8 characters"
-            style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: "0.35rem" }}>
-          <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Confirm password</span>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Repeat your new password"
-            style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
-          />
-        </label>
-
-        {error ? (
-          <p role="alert" style={{ margin: 0, color: "#DC2626" }}>
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p role="status" style={{ margin: 0, color: "#166534" }}>
-            {message}
-          </p>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{
-            border: "none",
-            borderRadius: "6px",
-            background: "#3B82F6",
-            color: "white",
-            fontWeight: 600,
-            padding: "0.65rem 1rem",
-            cursor: isSubmitting ? "not-allowed" : "pointer",
-          }}
-        >
-          {isSubmitting ? "Updating..." : "Update password"}
-        </button>
-
-        <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none", fontSize: "0.9rem" }}>
-          Back to login
-        </Link>
-      </form>
-    </main>
+      <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none", fontSize: "0.9rem" }}>
+        Back to login
+      </Link>
+    </form>
   );
 }
 
+export default function ResetPasswordPage() {
+  return (
+    <main style={{ minHeight: "100vh", background: "#FAFAFA", padding: "var(--page-main-padding)" }}>
+      <Suspense
+        fallback={
+          <div style={{ maxWidth: "460px", margin: "0 auto", padding: "1.2rem", color: "#6B7280" }}>Loading…</div>
+        }
+      >
+        <ResetPasswordForm />
+      </Suspense>
+    </main>
+  );
+}

@@ -38,7 +38,7 @@ export default function OrderDetailsPage() {
   });
 
   return (
-    <div style={{ padding: "2rem", display: "grid", gap: "2rem", maxWidth: "1000px" }}>
+    <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem", maxWidth: "1000px" }}>
       <div>
         <Link href="/dispatcher/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
           ← Back to Dashboard

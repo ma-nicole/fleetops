@@ -9,7 +9,7 @@ export default function TripLogsPage() {
   return (
     <Suspense
       fallback={
-        <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+        <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
           <p style={{ color: "#6B7280" }}>Loading trip logs…</p>
         </main>
       }
@@ -84,7 +84,7 @@ function TripLogsContent() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 900, margin: "0 auto", display: "grid", gap: 16 }}>
         <header>
           <h1 style={{ margin: 0 }}>Trip Logs</h1>

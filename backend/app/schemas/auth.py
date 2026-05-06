@@ -93,3 +93,26 @@ class ResetPasswordRequest(BaseModel):
 
 class ResetPasswordResponse(BaseModel):
     message: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("current_password")
+    @classmethod
+    def current_not_empty(cls, v: str) -> str:
+        if not (v or "").strip():
+            raise ValueError("Current password is required")
+        return v
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if not v or len(v) < 8:
+            raise ValueError("New password must be at least 8 characters")
+        return v
+
+
+class ChangePasswordResponse(BaseModel):
+    message: str

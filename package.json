@@ -7,7 +7,7 @@
     "install:backend": "node scripts/pip-install-backend.mjs",
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "node scripts/run-uvicorn.mjs",
-    "dev:web": "wait-on http://127.0.0.1:8000/health -t 120000 && cd frontend && npm run dev"
+    "dev:web": "wait-on http://127.0.0.1:8000/health -t 120000 && npm run dev:web-only --prefix frontend"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

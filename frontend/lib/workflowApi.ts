@@ -146,7 +146,7 @@ export const WorkflowApi = {
 
   // Feedback
   submitFeedback: (payload: {
-    booking_id: number;
+    booking_id?: number | null;
     rating: number;
     message?: string;
     category?: string;

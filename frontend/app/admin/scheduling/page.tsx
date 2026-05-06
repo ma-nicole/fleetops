@@ -1,9 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { AdminFlowService, AdminSchedule } from "@/lib/adminFlowService";
+import { AdminFlowService, type AdminSchedule } from "@/lib/adminFlowService";
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map((x) => parseInt(x, 10));
+  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+}
+
+const STATUS_SORT_ORDER: Record<AdminSchedule["status"], number> = {
+  scheduled: 0,
+  enroute: 1,
+  completed: 2,
+};
+
+function routeMatchesFilter(route: string, raw: string): boolean {
+  const q = raw.trim().toLowerCase();
+  if (!q) return true;
+  const r = route.toLowerCase();
+  if (r.includes(q)) return true;
+  if ((q === "qc" || q === "q.c.") && r.includes("quezon")) return true;
+  return false;
+}
+
+type SortKey = "startEta" | "status";
 
 export default function AdminSchedulingPage() {
   useRoleGuard(["admin", "manager"]);
@@ -14,6 +36,10 @@ export default function AdminSchedulingPage() {
   const [vehicle, setVehicle] = useState("TRK-001");
   const [startTime, setStartTime] = useState("08:00");
   const [eta, setEta] = useState("10:00");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [statusFilter, setStatusFilter] = useState<"all" | AdminSchedule["status"]>("all");
+  const [routeFilter, setRouteFilter] = useState("");
   const LOCATION_OPTIONS = [
     "Makati",
     "Quezon City",
@@ -47,8 +73,63 @@ export default function AdminSchedulingPage() {
     setDropoff(LOCATION_OPTIONS[1]);
   };
 
+  const toggleSort = (key: SortKey) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+    } else {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    }
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let list = schedules;
+    if (statusFilter !== "all") {
+      list = list.filter((s) => s.status === statusFilter);
+    }
+    const q = routeFilter.trim();
+    if (q) {
+      list = list.filter((s) => routeMatchesFilter(s.route, q));
+    }
+    if (!sortKey) return list;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      if (sortKey === "startEta") {
+        const sa = timeToMinutes(a.startTime);
+        const sb = timeToMinutes(b.startTime);
+        if (sa !== sb) return (sa - sb) * dir;
+        return (timeToMinutes(a.eta) - timeToMinutes(b.eta)) * dir;
+      }
+      const oa = STATUS_SORT_ORDER[a.status];
+      const ob = STATUS_SORT_ORDER[b.status];
+      if (oa !== ob) return (oa - ob) * dir;
+      return a.id.localeCompare(b.id) * dir;
+    });
+  }, [schedules, statusFilter, routeFilter, sortKey, sortDir]);
+
+  const thBtn: React.CSSProperties = {
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    font: "inherit",
+    fontWeight: 600,
+    color: "#111827",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.35rem",
+  };
+
+  const selectFilterStyle: React.CSSProperties = {
+    padding: "0.5rem 0.65rem",
+    border: "1px solid #D1D5DB",
+    borderRadius: "6px",
+    fontSize: "0.9rem",
+    minWidth: 140,
+  };
+
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
@@ -103,17 +184,96 @@ export default function AdminSchedulingPage() {
           </p>
         )}
 
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-end",
+            gap: "1rem",
+            padding: "1rem",
+            background: "white",
+            border: "1px solid #E8E8E8",
+            borderRadius: "10px",
+          }}
+        >
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ fontSize: "0.75rem", color: "#6B7280", fontWeight: 600 }}>Filter by status</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              style={selectFilterStyle}
+              aria-label="Filter schedules by status"
+            >
+              <option value="all">All statuses</option>
+              <option value="scheduled">Scheduled (not started)</option>
+              <option value="enroute">Enroute (on the way)</option>
+              <option value="completed">Completed</option>
+            </select>
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem", flex: "1 1 200px" }}>
+            <span style={{ fontSize: "0.75rem", color: "#6B7280", fontWeight: 600 }}>Filter by route / location</span>
+            <input
+              type="search"
+              value={routeFilter}
+              onChange={(e) => setRouteFilter(e.target.value)}
+              placeholder="e.g. Quezon City, QC, Makati…"
+              style={{
+                padding: "0.5rem 0.65rem",
+                border: "1px solid #D1D5DB",
+                borderRadius: "6px",
+                fontSize: "0.9rem",
+                width: "100%",
+                maxWidth: 320,
+              }}
+              aria-label="Filter routes containing this text"
+            />
+          </label>
+          <p style={{ margin: 0, fontSize: "0.85rem", color: "#6B7280", alignSelf: "center" }}>
+            Showing <strong>{filteredAndSorted.length}</strong> of {schedules.length}
+            {statusFilter !== "all" || routeFilter.trim() ? " (filtered)" : ""}
+          </p>
+        </div>
+
         <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E8E8E8" }}>
-              <th style={{ padding: "0.75rem", textAlign: "left" }}>Schedule</th><th style={{ padding: "0.75rem", textAlign: "left" }}>Route</th><th style={{ padding: "0.75rem", textAlign: "left" }}>Driver</th><th style={{ padding: "0.75rem", textAlign: "left" }}>Vehicle</th><th style={{ padding: "0.75rem", textAlign: "left" }}>Start/ETA</th><th style={{ padding: "0.75rem", textAlign: "left" }}>Status</th>
-            </tr></thead>
+            <thead>
+              <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E8E8E8" }}>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Schedule</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Route</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Driver</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Vehicle</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }} aria-sort={sortKey === "startEta" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                  <button type="button" style={thBtn} onClick={() => toggleSort("startEta")}>
+                    Start/ETA
+                    <span style={{ fontSize: "0.85rem", opacity: sortKey === "startEta" ? 1 : 0.35 }} aria-hidden>
+                      {sortKey === "startEta" ? (sortDir === "asc" ? "↑" : "↓") : "⇅"}
+                    </span>
+                  </button>
+                </th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }} aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                  <button type="button" style={thBtn} onClick={() => toggleSort("status")}>
+                    Status
+                    <span style={{ fontSize: "0.85rem", opacity: sortKey === "status" ? 1 : 0.35 }} aria-hidden>
+                      {sortKey === "status" ? (sortDir === "asc" ? "↑" : "↓") : "⇅"}
+                    </span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
             <tbody>
-              {schedules.map((s) => (
+              {filteredAndSorted.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: "2rem", textAlign: "center", color: "#6B7280" }}>
+                    No schedules match your filters. Try &ldquo;All statuses&rdquo; or clear the route search.
+                  </td>
+                </tr>
+              ) : (
+                filteredAndSorted.map((s) => (
                 <tr key={s.id} style={{ borderBottom: "1px solid #E8E8E8" }}>
                   <td style={{ padding: "0.75rem", fontWeight: 700 }}>{s.id}</td><td style={{ padding: "0.75rem" }}>{s.route}</td><td style={{ padding: "0.75rem" }}>{s.driver}</td><td style={{ padding: "0.75rem" }}>{s.vehicle}</td><td style={{ padding: "0.75rem" }}>{s.startTime} / {s.eta}</td><td style={{ padding: "0.75rem", textTransform: "capitalize" }}>{s.status}</td>
                 </tr>
-              ))}
+                ))
+              )}
             </tbody>
           </table>
         </section>

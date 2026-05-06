@@ -11,7 +11,7 @@ export default function AnalyticsDashboardPage() {
   const pipeline = useMemo(() => AnalyticsPipelineService.runPipeline(), []);
 
   return (
-    <main style={{ padding: "2rem", minHeight: "100vh", background: "#FAFAFA" }}>
+    <main style={{ padding: "var(--page-main-padding)", minHeight: "100vh", background: "#FAFAFA" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
           <div>

@@ -98,7 +98,7 @@ export default function PaymentPage() {
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "900px", margin: "0 auto" }}>
+    <div style={{ padding: "var(--page-main-padding)", maxWidth: "900px", margin: "0 auto" }}>
       <div style={{ marginBottom: "2rem" }}>
         <Link href="/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: 600 }}>
           ← Back to Dashboard

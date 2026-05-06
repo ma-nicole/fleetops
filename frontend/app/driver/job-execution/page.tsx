@@ -66,7 +66,7 @@ export default function DriverJobExecutionPage() {
   ];
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.5rem", gridTemplateColumns: "1fr 330px" }}>
         <section className="card" style={{ padding: "1.25rem" }}>
           <Link href="/driver/dashboard" style={{ color: "#0EA5E9", textDecoration: "none" }}>← Dashboard</Link>

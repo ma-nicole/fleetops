@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 /**
  * Public contact page — reachable while logged out (e.g. from sign-in).
- * Booking-linked feedback stays under /modules/customer/support (customer-only).
+ * Customer feedback form lives under /modules/customer/support (customer-only).
  */
 export default function PublicSupportPage() {
   return (
@@ -34,12 +34,13 @@ export default function PublicSupportPage() {
         </section>
 
         <section style={{ display: "grid", gap: "0.75rem" }}>
-          <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)" }}>Booking-specific feedback</h2>
+          <h2 style={{ margin: 0, fontSize: "var(--font-size-lg)" }}>Customer feedback (signed in)</h2>
           <p style={{ margin: 0, color: "var(--text-secondary)", lineHeight: 1.55 }}>
             <Link href="/sign-in" className="auth-text-link">
               Sign in
             </Link>{" "}
-            first. In the customer portal, open <strong>Support</strong> in the sidebar to send feedback tied to a booking — an active session is required.
+            first. In the customer portal, open <strong>Feedback</strong> in the sidebar to send comments about a specific booking or general feedback
+            — an active session is required.
           </p>
         </section>
 

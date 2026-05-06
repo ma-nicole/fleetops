@@ -115,7 +115,7 @@ function DispatcherJobAssignmentsInner() {
   const driverContext = fromDriverId || fromDriverName;
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 16 }}>
         <header>
           <h1 style={{ margin: 0 }}>Job Assignment Wizard</h1>
@@ -318,7 +318,7 @@ function DispatcherJobAssignmentsInner() {
 
 function JobAssignmentsFallback() {
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <p style={{ color: "#6B7280" }}>Loading job assignment…</p>
     </main>
   );

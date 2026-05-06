@@ -15,14 +15,14 @@ export default function AdminOrdersPage() {
   }, []);
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <Link href="/admin/analytics" style={{ color: "#0EA5E9", textDecoration: "none" }}>← Analytics</Link>
+            <Link href="/admin/trip-monitoring" style={{ color: "#0EA5E9", textDecoration: "none" }}>← Trip Monitoring</Link>
             <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Order Details</h1>
           </div>
-          <Link href="/admin/finance" style={{ textDecoration: "none", background: "#3B82F6", color: "white", padding: "0.6rem 1rem", borderRadius: "6px", fontWeight: 600 }}>Next: Finance</Link>
+          <Link href="/admin/dashboard" style={{ textDecoration: "none", background: "#3B82F6", color: "white", padding: "0.6rem 1rem", borderRadius: "6px", fontWeight: 600 }}>Admin Dashboard</Link>
         </div>
 
         <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", overflow: "hidden" }}>

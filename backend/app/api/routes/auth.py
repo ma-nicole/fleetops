@@ -17,6 +17,8 @@ from app.core.config import settings
 from app.db import get_db
 from app.models.entities import User, UserRole
 from app.schemas.auth import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     ResetPasswordRequest,
@@ -163,6 +165,31 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     user.locked_until = None
     db.commit()
     return ResetPasswordResponse(message="Password updated successfully.")
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Authenticated user updates password (requires current password)."""
+    if not user.password_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="This account does not use a password. Use your identity provider or reset link instead.",
+        )
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from the current password.")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.failed_login_count = 0
+    user.locked_until = None
+    db.add(user)
+    db.commit()
+    return ChangePasswordResponse(message="Password updated successfully.")
 
 
 @router.post("/logout")

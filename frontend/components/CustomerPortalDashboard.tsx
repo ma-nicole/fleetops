@@ -4,34 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
-import DashboardRoleTabs from "@/components/DashboardRoleTabs";
 import KpiCard from "@/components/KpiCard";
 import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/appLocale";
+import {
+  MIN_BOOKING_SITES,
+  addCustomerSite,
+  getCustomerSites,
+  hasMinimumSitesForBooking,
+  removeCustomerSite,
+  subscribeSitesChanged,
+  type CustomerSite,
+} from "@/lib/customerSites";
 import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
-
-function bookingProgress(status: Booking["status"]): number {
-  switch (status) {
-    case "pending_approval":
-      return 15;
-    case "approved":
-      return 28;
-    case "assigned":
-    case "accepted":
-      return 45;
-    case "enroute":
-    case "loading":
-      return 72;
-    case "out_for_delivery":
-      return 85;
-    case "completed":
-      return 100;
-    case "cancelled":
-    case "rejected":
-      return 0;
-    default:
-      return 35;
-  }
-}
 
 function bookingLabel(status: Booking["status"]): string {
   switch (status) {
@@ -78,6 +62,10 @@ export default function CustomerPortalDashboard() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sites, setSites] = useState<CustomerSite[]>([]);
+  const [newSiteLabel, setNewSiteLabel] = useState("");
+  const [newSiteAddress, setNewSiteAddress] = useState("");
+  const [siteFormError, setSiteFormError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +85,11 @@ export default function CustomerPortalDashboard() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    setSites(getCustomerSites());
+    return subscribeSitesChanged(() => setSites(getCustomerSites()));
   }, []);
 
   const activeBookings = useMemo(
@@ -137,8 +130,6 @@ export default function CustomerPortalDashboard() {
     return prioritized.slice(0, 4);
   }, [activeBookings]);
 
-  const historyRows = useMemo(() => bookings.slice(0, 8), [bookings]);
-
   const txRows = useMemo(
     () =>
       payments
@@ -154,23 +145,8 @@ export default function CustomerPortalDashboard() {
   );
 
   return (
-    <main style={{ display: "grid", gap: "1.5rem", padding: "1.5rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
+    <main style={{ display: "grid", gap: "1.5rem", padding: "1rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto", width: "100%", display: "grid", gap: "1.5rem" }}>
-        <section style={{ display: "grid", gap: "0.85rem" }}>
-          <div>
-            <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.06em" }}>FleetOpt Analytics</p>
-            <h1 style={{ margin: "0.15rem 0 0", fontSize: "1.35rem", fontWeight: 800 }}>Philippine logistics hub</h1>
-          </div>
-          <DashboardRoleTabs active="customer" />
-
-          <div>
-            <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Customer portal</h2>
-            <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-              Bookings, shipments, and payments in one place — amounts are in Philippine peso (PHP); dates and times use Manila (PHT).
-            </p>
-          </div>
-        </section>
-
         {loading && <p style={{ color: "var(--text-secondary)" }}>Loading your data…</p>}
         {error && (
           <div role="alert" style={{ background: "var(--bg-error)", color: "var(--text-error)", padding: 12, borderRadius: 8 }}>
@@ -203,7 +179,14 @@ export default function CustomerPortalDashboard() {
               <KpiCard label="Fulfillment snapshot" value={`${kpis.rate}%`} delta="Completed vs all bookings" trend={kpis.rate >= 90 ? "up" : "flat"} tone={kpis.rate >= 90 ? "success" : "neutral"} />
             </section>
 
-            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: "1.5rem" }}>
+            <section
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
+                gap: "1.5rem",
+                alignItems: "start",
+              }}
+            >
               <div className="card" style={{ display: "grid", gap: "1rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                   <h2 style={{ margin: 0 }}>Shipment tracking</h2>
@@ -213,11 +196,12 @@ export default function CustomerPortalDashboard() {
                 </div>
 
                 {activeShow.length === 0 ? (
-                  <p style={{ margin: 0, color: "var(--text-secondary)" }}>No active bookings — create one from Quick booking.</p>
+                  <p style={{ margin: 0, color: "var(--text-secondary)" }}>
+                    No active bookings — save at least {MIN_BOOKING_SITES} sites, then use New booking.
+                  </p>
                 ) : (
                   <div style={{ display: "grid", gap: "1rem" }}>
                     {activeShow.map((order) => {
-                      const progress = bookingProgress(order.status);
                       const lbl = bookingLabel(order.status);
                       return (
                         <div
@@ -242,15 +226,6 @@ export default function CustomerPortalDashboard() {
                             <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
                             <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
                           </div>
-                          <div style={{ display: "grid", gap: "0.35rem" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                              <span style={{ color: "var(--text-secondary)" }}>Progress</span>
-                              <span style={{ fontWeight: "600" }}>{progress}%</span>
-                            </div>
-                            <div style={{ height: "6px", background: "rgba(255, 152, 0, 0.15)", borderRadius: "999px", overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${progress}%`, background: "var(--brand-text-strong)", transition: "width 0.3s ease" }} />
-                            </div>
-                          </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem", flexWrap: "wrap", gap: "0.35rem" }}>
                             <span style={{ color: "var(--text-secondary)" }}>
                               Estimate <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
@@ -268,23 +243,134 @@ export default function CustomerPortalDashboard() {
 
               <div style={{ display: "grid", gap: "1.25rem" }}>
                 <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
-                  <h2 style={{ margin: 0 }}>Quick booking</h2>
-                  <CustomerCtaPrimary href="/booking">+ New booking</CustomerCtaPrimary>
-                  <CustomerCtaGhost href="/modules/customer/profile">Your profile</CustomerCtaGhost>
-                  <CustomerCtaGhost href="/modules/customer/booking-history">Booking history</CustomerCtaGhost>
-                  <div style={{ padding: "0.75rem", borderRadius: 10, border: "1px dashed var(--border)", fontSize: "0.85rem", background: "#fff" }}>
-                    <strong>Reminder:</strong> Standard vs customized pricing is configured on checkout. Trucks and cargo details are editable before you pay.
+                  <h2 style={{ margin: 0 }}>Sites</h2>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    Save warehouse or delivery addresses on your account. You need at least {MIN_BOOKING_SITES} sites before you
+                    can create a booking.
+                  </p>
+                  <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>
+                    {sites.length} saved · minimum {MIN_BOOKING_SITES} to book
+                  </p>
+                  {sites.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>No sites yet — add your first address below.</p>
+                  ) : (
+                    <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.5rem" }}>
+                      {sites.map((s) => (
+                        <li
+                          key={s.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                            alignItems: "start",
+                            fontSize: "0.85rem",
+                            padding: "0.5rem 0",
+                            borderBottom: "1px solid var(--border)",
+                          }}
+                        >
+                          <span>
+                            {s.label ? (
+                              <>
+                                <strong>{s.label}</strong>
+                                <br />
+                              </>
+                            ) : null}
+                            <span style={{ color: "var(--text-secondary)" }}>{s.address}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeCustomerSite(s.id)}
+                            style={{
+                              border: "1px solid var(--border)",
+                              background: "#fff",
+                              borderRadius: 6,
+                              fontSize: "0.72rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              padding: "0.25rem 0.45rem",
+                              color: "#b91c1c",
+                              flexShrink: 0,
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div style={{ display: "grid", gap: "0.45rem" }}>
+                    <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Label (optional)</label>
+                    <input
+                      className="input"
+                      value={newSiteLabel}
+                      onChange={(e) => {
+                        setNewSiteLabel(e.target.value);
+                        if (siteFormError) setSiteFormError(null);
+                      }}
+                      placeholder="e.g., Main warehouse"
+                    />
+                    <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Site address</label>
+                    <input
+                      className="input"
+                      value={newSiteAddress}
+                      onChange={(e) => {
+                        setNewSiteAddress(e.target.value);
+                        if (siteFormError) setSiteFormError(null);
+                      }}
+                      placeholder="e.g., Makati warehouse, Metro Manila"
+                    />
+                    {siteFormError && (
+                      <p role="alert" style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-error, #DC2626)" }}>
+                        {siteFormError}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className="button"
+                      style={{ marginTop: "0.25rem" }}
+                      onClick={() => {
+                        const res = addCustomerSite(newSiteAddress, newSiteLabel);
+                        if (!res.ok) {
+                          setSiteFormError(res.message);
+                          return;
+                        }
+                        setNewSiteAddress("");
+                        setNewSiteLabel("");
+                        setSiteFormError(null);
+                        setSites(getCustomerSites());
+                      }}
+                    >
+                      Add site
+                    </button>
                   </div>
+                  {hasMinimumSitesForBooking() ? (
+                    <CustomerCtaPrimary href="/booking">+ New booking</CustomerCtaPrimary>
+                  ) : (
+                    <div
+                      style={{
+                        padding: "0.85rem",
+                        borderRadius: 10,
+                        textAlign: "center",
+                        fontWeight: 700,
+                        background: "#E5E7EB",
+                        color: "#6B7280",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      Add {MIN_BOOKING_SITES - sites.length} more site{MIN_BOOKING_SITES - sites.length === 1 ? "" : "s"} to enable booking
+                    </div>
+                  )}
+                  <CustomerCtaGhost href="/modules/customer/profile">Your profile</CustomerCtaGhost>
                 </div>
 
                 <div className="card" style={{ display: "grid", gap: "1rem" }}>
                   <h2 style={{ margin: 0 }}>Account</h2>
                   <RowKv label="Member reference" value={`Customer ID (session)`} />
                   <RowKv
-                    label="Support"
+                    label="Feedback"
                     value={
                       <Link href="/modules/customer/support" style={{ color: "var(--brand-text-strong)", fontWeight: 600 }}>
-                        Contact support
+                        Send feedback
                       </Link>
                     }
                   />
@@ -312,44 +398,6 @@ export default function CustomerPortalDashboard() {
                 </div>
               </div>
             </section>
-
-            <section className="card" style={{ display: "grid", gap: "1rem", overflowX: "auto" }}>
-              <h2 style={{ margin: 0 }}>Booking history</h2>
-              {historyRows.length === 0 ? (
-                <p style={{ margin: 0, color: "var(--text-secondary)" }}>No bookings yet — start with New booking.</p>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520, fontSize: "0.88rem" }}>
-                  <thead>
-                    <tr style={{ background: "#F3F4F6", textAlign: "left" }}>
-                      <th style={{ padding: "0.65rem", fontWeight: 700 }}>ID</th>
-                      <th style={{ padding: "0.65rem", fontWeight: 700 }}>Date</th>
-                      <th style={{ padding: "0.65rem", fontWeight: 700 }}>Route</th>
-                      <th style={{ padding: "0.65rem", fontWeight: 700 }}>Service</th>
-                      <th style={{ padding: "0.65rem", fontWeight: 700 }}>Amount</th>
-                      <th style={{ padding: "0.65rem", fontWeight: 700 }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyRows.map((row) => (
-                      <tr key={row.id} style={{ borderBottom: "1px solid #eef2ff" }}>
-                        <td style={{ padding: "0.65rem", fontWeight: 600 }}>#{row.id}</td>
-                        <td style={{ padding: "0.65rem", color: "var(--text-secondary)" }}>{formatShortDate(row.created_at)}</td>
-                        <td style={{ padding: "0.65rem" }}>
-                          {(row.pickup_location || "").slice(0, 24)}
-                          {row.pickup_location && row.pickup_location.length > 24 ? "…" : ""} → {(row.dropoff_location || "").slice(0, 24)}
-                          {row.dropoff_location && row.dropoff_location.length > 24 ? "…" : ""}
-                        </td>
-                        <td style={{ padding: "0.65rem", color: "var(--text-secondary)", textTransform: "capitalize" }}>{row.service_type}</td>
-                        <td style={{ padding: "0.65rem" }}>{formatPhpWhole(Number(row.estimated_cost))}</td>
-                        <td style={{ padding: "0.65rem" }}>
-                          <ShipmentBadgeTiny label={bookingLabel(row.status)} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
           </>
         )}
       </div>
@@ -371,10 +419,6 @@ function ShipmentBadge({ status }: { status: string }) {
   if (s.includes("deliver") || s.includes("complet")) return <span style={{ ...badgeBase, background: "rgba(5,150,105,0.12)", color: "#047857" }}>{status}</span>;
   if (s.includes("pending") || s.includes("approv")) return <span style={{ ...badgeBase, background: "rgba(251,191,36,0.35)", color: "#92400e" }}>{status}</span>;
   return <span style={{ ...badgeBase, background: "#F3F4F6", color: "#475569" }}>{status}</span>;
-}
-
-function ShipmentBadgeTiny({ label }: { label: string }) {
-  return <ShipmentBadge status={label} />;
 }
 
 function RowKv({ label, value }: { label: string; value: ReactNode }) {

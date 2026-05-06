@@ -67,7 +67,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         tabIndex={-1}
         style={{
           marginLeft: showAuthedChrome && isSidebarOpen && !isMobile ? "280px" : "0",
-          marginTop: "76px",
+          marginTop: 0,
           transition: "margin-left 0.3s ease",
           outline: "none",
         }}

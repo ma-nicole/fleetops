@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # Email notifications (optional)
     resend_api_key: str | None = None
     email_from: str = "FleetOpt <notifications@fleetopt.com>"
+    # Inbox for customer feedback (e.g. FleetOps Gmail). Uses Resend when RESEND_API_KEY is set.
+    feedback_inbox_email: str | None = Field(default=None, description="Recipient for customer feedback emails")
     password_reset_token_expire_minutes: int = 30
 
     # SMS notifications (optional)

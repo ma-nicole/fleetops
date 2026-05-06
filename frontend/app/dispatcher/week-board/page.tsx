@@ -68,7 +68,7 @@ export default function WeekBoardPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", background: "#FAFAFA", minHeight: "100vh" }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1400, margin: "0 auto", display: "grid", gap: 20 }}>
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>

@@ -36,7 +36,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ padding: "2rem", minHeight: "100vh", background: "#FAFAFA" }}>
+    <main style={{ padding: "var(--page-main-padding)", minHeight: "100vh", background: "#FAFAFA" }}>
       <form
         onSubmit={submit}
         style={{ maxWidth: "460px", margin: "0 auto", background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1.2rem", display: "grid", gap: "0.7rem" }}

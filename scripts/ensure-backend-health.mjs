@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Runs before `npm run dev` in frontend/. Ensures FastAPI is listening so
- * `/api-proxy` rewrites do not return opaque 500 HTML.
+ * Optional manual check: from frontend/, `npm run check:api`.
+ * Probes BACKEND_ORIGIN or http://127.0.0.1:8000/health.
  */
 import fs from "node:fs";
 import path from "node:path";
