@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { announce } from "@/lib/useAnnouncer";
 
 type OrderDetail = {
   id: string;
@@ -15,6 +18,7 @@ type OrderDetail = {
 };
 
 export default function OrderDetailsPage() {
+  const router = useRouter();
   const [order] = useState<OrderDetail>({
     id: "ORD-2024-0001",
     bookingId: "BK-2024-0001",
@@ -207,6 +211,7 @@ export default function OrderDetailsPage() {
       {/* Action Buttons */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
         <button
+          type="button"
           style={{
             padding: "0.75rem",
             background: "#FF9800",
@@ -216,11 +221,15 @@ export default function OrderDetailsPage() {
             cursor: "pointer",
             fontWeight: "600",
           }}
-          onClick={() => alert("Assigning driver...")}
+          onClick={() => {
+            announce(`Opening job assignments for booking ${order.bookingId}`);
+            router.push("/dispatcher/job-assignments");
+          }}
         >
            Assign Driver
         </button>
         <button
+          type="button"
           style={{
             padding: "0.75rem",
             background: "#4CAF50",
@@ -230,7 +239,10 @@ export default function OrderDetailsPage() {
             cursor: "pointer",
             fontWeight: "600",
           }}
-          onClick={() => alert("Printing documents...")}
+          onClick={() => {
+            announce("Opening print dialog for this order summary");
+            window.print();
+          }}
         >
            Print Documents
         </button>

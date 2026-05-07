@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { announce } from "@/lib/useAnnouncer";
+
 export default function LogReportPage() {
   const [formData, setFormData] = useState({
     reportType: "",
@@ -17,8 +19,10 @@ export default function LogReportPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [validationHint, setValidationHint] = useState<string | null>(null);
 
   const handleInputChange = (field: string, value: string) => {
+    setValidationHint(null);
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -27,13 +31,17 @@ export default function LogReportPage() {
 
   const handleSubmit = () => {
     if (!formData.reportType || !formData.date || !formData.vehiclePlate || !formData.description) {
-      alert("Please fill in all required fields");
+      const msg = "Complete report type, date, vehicle plate, and description.";
+      setValidationHint(msg);
+      announce(msg, "assertive");
       return;
     }
 
     setIsSubmitting(true);
     setTimeout(() => {
       setIsSubmitting(false);
+      setValidationHint(null);
+      announce("Log report submitted");
       setSubmitted(true);
       setFormData({
         reportType: "",
@@ -83,6 +91,12 @@ export default function LogReportPage() {
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Log Report</h1>
         <p style={{ color: "#666666", margin: "0" }}>Record maintenance, cost, and route changes</p>
       </div>
+
+      {validationHint ? (
+        <div role="alert" style={{ padding: "0.85rem 1rem", borderRadius: "8px", background: "rgba(244,67,54,0.1)", border: "1px solid #f44336", color: "#b71c1c" }}>
+          {validationHint}
+        </div>
+      ) : null}
 
       <div style={{ padding: "2rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
         <h2 style={{ color: "#1A1A1A", marginBottom: "1.5rem" }}>Report Details</h2>

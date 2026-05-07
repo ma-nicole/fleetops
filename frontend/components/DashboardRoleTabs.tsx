@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import type { UserRole } from "@/lib/auth";
+import { AUTH_CHANGE_EVENT, getUserRole, type UserRole } from "@/lib/auth";
 
 const TABS = [
   { role: "manager" as const, label: "Manager", href: "/manager/dashboard" },
@@ -34,14 +34,14 @@ function tabsForSignedInRole(role: string | null): readonly (typeof TABS)[number
  */
 export default function DashboardRoleTabs({ active }: Props) {
   const [viewerRole, setViewerRole] = useState<string | null>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("userRole") : null,
+    typeof window !== "undefined" ? getUserRole() : null,
   );
 
   useEffect(() => {
-    const sync = () => setViewerRole(localStorage.getItem("userRole"));
+    const sync = () => setViewerRole(getUserRole());
     sync();
-    window.addEventListener("fleetops:auth-change", sync);
-    return () => window.removeEventListener("fleetops:auth-change", sync);
+    window.addEventListener(AUTH_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(AUTH_CHANGE_EVENT, sync);
   }, []);
 
   const visible = useMemo(() => tabsForSignedInRole(viewerRole), [viewerRole]);

@@ -8,12 +8,17 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, require_roles
 from app.db import get_db
+from app.core.config import settings as app_settings
 from app.models.entities import (
     PricingConfig,
     ServiceType,
     Truck,
     User,
     UserRole,
+)
+from app.services.booking_freight_knobs import (
+    booking_freight_knobs_to_dict,
+    ensure_booking_freight_row,
 )
 
 
@@ -40,6 +45,18 @@ class PricingUpdatePayload(BaseModel):
     base_rate: float | None = Field(default=None, ge=0)
     labor_rate: float | None = Field(default=None, ge=0)
     helper_rate: float | None = Field(default=None, ge=0)
+
+
+class BookingFreightSettingsUpdate(BaseModel):
+    """Single-row knobs for `/customer/route-estimate` and booking creation."""
+
+    diesel_price_php_per_liter: float = Field(..., ge=1.0, le=500.0)
+    truck_fuel_efficiency_kmpl: float = Field(..., ge=0.5, le=80.0)
+    trip_wear_misc_php_per_km: float = Field(..., ge=0.0, le=500.0)
+    trip_depreciation_rate: float = Field(..., ge=0.0, le=5.0)
+    helper_pay_php_per_trip: float = Field(..., ge=0.0, le=500_000.0)
+    driver_freight_commission_rate: float = Field(..., ge=0.0, le=1.0)
+    cargo_weight_multiplier_per_ton: float = Field(..., ge=0.0, le=10.0)
 
 
 def _serialize_user(user: User) -> dict:
@@ -212,6 +229,36 @@ def get_stats(
         "locked_accounts": locked,
         "total_failed_logins": failed_total,
     }
+
+
+# ---------- Booking route-estimate freight knobs (diesel, driver %, etc.) ----------
+
+@router.get("/booking-freight-settings")
+def get_booking_freight_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    row = ensure_booking_freight_row(db, app_settings)
+    return booking_freight_knobs_to_dict(row)
+
+
+@router.put("/booking-freight-settings")
+def put_booking_freight_settings(
+    payload: BookingFreightSettingsUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    row = ensure_booking_freight_row(db, app_settings)
+    row.diesel_price_php_per_liter = payload.diesel_price_php_per_liter
+    row.truck_fuel_efficiency_kmpl = payload.truck_fuel_efficiency_kmpl
+    row.trip_wear_misc_php_per_km = payload.trip_wear_misc_php_per_km
+    row.trip_depreciation_rate = payload.trip_depreciation_rate
+    row.helper_pay_php_per_trip = payload.helper_pay_php_per_trip
+    row.driver_freight_commission_rate = payload.driver_freight_commission_rate
+    row.cargo_weight_multiplier_per_ton = payload.cargo_weight_multiplier_per_ton
+    db.commit()
+    db.refresh(row)
+    return booking_freight_knobs_to_dict(row)
 
 
 # ---------- Pricing config (Settings page) ----------

@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getDashboardPath, type UserRole } from "@/lib/auth";
 import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
 import { formatPhp } from "@/lib/appLocale";
+import { useAuthStatus } from "@/lib/useAuthStatus";
 
 export default function PaymentPage() {
   const router = useRouter();
+  const { role } = useAuthStatus();
   const booking = useMemo(() => CustomerDataFlowService.getCurrentBooking(), []);
   const [method, setMethod] = useState("Credit Card");
   const [error, setError] = useState("");
@@ -32,7 +35,19 @@ export default function PaymentPage() {
           {!booking ? (
             <>
               <p style={{ margin: 0, color: "#666" }}>No booking found.</p>
-              <Link href="/booking" style={{ color: "#2563EB", textDecoration: "none" }}>Create booking first</Link>
+              {role === "customer" ? (
+                <Link href="/booking" style={{ color: "#2563EB", textDecoration: "none" }}>
+                  Create booking first
+                </Link>
+              ) : role ? (
+                <Link href={getDashboardPath(role as UserRole)} style={{ color: "#2563EB", textDecoration: "none" }}>
+                  Go to dashboard
+                </Link>
+              ) : (
+                <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none" }}>
+                  Sign in
+                </Link>
+              )}
             </>
           ) : (
             <>

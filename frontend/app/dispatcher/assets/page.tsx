@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { announce } from "@/lib/useAnnouncer";
 
 type Driver = {
   id: string;
@@ -25,7 +28,9 @@ type Vehicle = {
 };
 
 export default function AssetsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"drivers" | "vehicles">("drivers");
+  const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
 
   const [drivers] = useState<Driver[]>([
     {
@@ -80,7 +85,7 @@ export default function AssetsPage() {
     },
   ]);
 
-  const [vehicles] = useState<Vehicle[]>([
+  const [vehicles, setVehicles] = useState<Vehicle[]>([
     {
       id: "VEH-001",
       plate: "AUV-2024-1440",
@@ -266,6 +271,7 @@ export default function AssetsPage() {
                   {getStatusLabel(driver.status)}
                 </span>
                 <button
+                  type="button"
                   style={{
                     padding: "0.4rem 0.75rem",
                     background: "#2196F3",
@@ -276,7 +282,10 @@ export default function AssetsPage() {
                     fontWeight: "600",
                     fontSize: "0.75rem",
                   }}
-                  onClick={() => alert("Assign trip to " + driver.name)}
+                  onClick={() => {
+                    announce(`Opening assignments to schedule ${driver.name}`);
+                    router.push(`/dispatcher/job-assignments?fromDriver=${encodeURIComponent(driver.id)}&driverName=${encodeURIComponent(driver.name)}`);
+                  }}
                 >
                   Assign
                 </button>
@@ -363,8 +372,9 @@ export default function AssetsPage() {
                 />
               </div>
 
-              <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button
+                  type="button"
                   style={{
                     padding: "0.4rem 0.75rem",
                     background: "#2196F3",
@@ -375,12 +385,19 @@ export default function AssetsPage() {
                     fontWeight: "600",
                     fontSize: "0.75rem",
                   }}
-                  onClick={() => alert("View details for " + vehicle.plate)}
+                  onClick={() => {
+                    setExpandedVehicleId((prev) => {
+                      const next = prev === vehicle.id ? null : vehicle.id;
+                      announce(next ? `Showing details for ${vehicle.plate}` : "Vehicle details hidden");
+                      return next;
+                    });
+                  }}
                 >
-                  View Details
+                  {expandedVehicleId === vehicle.id ? "Hide details" : "View Details"}
                 </button>
                 {vehicle.status === "maintenance" && (
                   <button
+                    type="button"
                     style={{
                       padding: "0.4rem 0.75rem",
                       background: "#4CAF50",
@@ -391,12 +408,58 @@ export default function AssetsPage() {
                       fontWeight: "600",
                       fontSize: "0.75rem",
                     }}
-                    onClick={() => alert("Marking as available...")}
+                    onClick={() => {
+                      setVehicles((prev) =>
+                        prev.map((v) =>
+                          v.id === vehicle.id ? { ...v, status: "available" as const, fuelLevel: v.fuelLevel || 40 } : v,
+                        ),
+                      );
+                      announce(`${vehicle.plate} marked available`);
+                    }}
                   >
                     Mark Available
                   </button>
                 )}
               </div>
+
+              {expandedVehicleId === vehicle.id && (
+                <div
+                  style={{
+                    marginTop: "0.75rem",
+                    padding: "0.85rem",
+                    background: "#fff",
+                    border: "1px solid #E0E0E0",
+                    borderRadius: "6px",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  <p style={{ margin: "0 0 0.35rem 0", fontWeight: 700 }}>{vehicle.id}</p>
+                  <p style={{ margin: 0, color: "#555" }}>
+                    Type {vehicle.type}; odometer {vehicle.mileage.toLocaleString()} km; fuel {vehicle.fuelLevel}%; driver:{" "}
+                    {vehicle.driver ?? "Unassigned"}.
+                  </p>
+                  <button
+                    type="button"
+                    style={{
+                      marginTop: "0.65rem",
+                      padding: "0.35rem 0.65rem",
+                      background: "#FF9800",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                      fontSize: "0.75rem",
+                    }}
+                    onClick={() => {
+                      announce(`Opening trip monitoring filtered view for ${vehicle.plate}`);
+                      router.push("/dispatcher/trip-monitoring");
+                    }}
+                  >
+                    Open trip monitoring
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

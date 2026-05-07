@@ -73,6 +73,33 @@ def apply_runtime_schema_fixes() -> None:
         else:
             alters.append("ALTER TABLE feedback ALTER COLUMN message TYPE TEXT")
 
+    if insp.has_table("customer_saved_sites"):
+        ss_cols = {c["name"] for c in insp.get_columns("customer_saved_sites")}
+        v64 = "VARCHAR(64) NULL"
+        blob = "TEXT NULL"
+        additions: list[tuple[str, str]] = [
+            ("street", blob),
+            ("barangay", blob),
+            ("city_municipality", blob),
+            ("province", blob),
+            ("postal_code", v64),
+        ]
+        for col, ddl_suffix in additions:
+            if col not in ss_cols:
+                alters.append(f"ALTER TABLE customer_saved_sites ADD COLUMN {col} {ddl_suffix}")
+
+    if insp.has_table("bookings"):
+        bk_cols = {c["name"] for c in insp.get_columns("bookings")}
+        if "scheduled_time_slot" not in bk_cols:
+            if dialect == "mysql":
+                alters.append(
+                    "ALTER TABLE bookings ADD COLUMN scheduled_time_slot VARCHAR(8) NOT NULL DEFAULT '08:00'"
+                )
+            else:
+                alters.append(
+                    "ALTER TABLE bookings ADD COLUMN scheduled_time_slot VARCHAR(8) NOT NULL DEFAULT '08:00'"
+                )
+
     if not alters:
         return
     with engine.begin() as conn:

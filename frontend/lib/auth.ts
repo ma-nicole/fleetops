@@ -2,6 +2,7 @@
 
 import { decodeJwtRole } from "./api";
 
+export const AUTH_CHANGE_EVENT = "fleetops:auth-change";
 export type UserRole = "driver" | "helper" | "dispatcher" | "manager" | "admin" | "customer";
 
 export const ROLE_DASHBOARDS: Record<UserRole, string> = {
@@ -24,8 +25,7 @@ export const ROLE_ERROR_MESSAGES: Record<UserRole, string> = {
 
 export function getUserRole(): UserRole | null {
   if (typeof window === "undefined") return null;
-  const role = localStorage.getItem("userRole");
-  return (role as UserRole) || null;
+  return coerceRole(localStorage.getItem("userRole"));
 }
 
 export function setUserRole(role: UserRole): void {
@@ -37,21 +37,58 @@ export function setUserRole(role: UserRole): void {
 const KNOWN_ROLES: UserRole[] = ["driver", "helper", "dispatcher", "manager", "admin", "customer"];
 
 function coerceRole(value: string | null | undefined): UserRole | null {
-  if (!value) return null;
-  return KNOWN_ROLES.includes(value as UserRole) ? (value as UserRole) : null;
+  if (!value || typeof value !== "string") return null;
+  const key = value.trim().toLowerCase();
+  return KNOWN_ROLES.includes(key as UserRole) ? (key as UserRole) : null;
 }
 
-/** Prefer `preferredRole` from API login body; then JWT; default customer. */
+/** Prefer JWT `role` claim, then persisted `userRole` (fixes stale storage vs token). */
+export function getEffectiveRole(): UserRole | null {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+  if (token) {
+    const jwtRole = coerceRole(decodeJwtRole(token));
+    if (jwtRole) return jwtRole;
+  }
+  return getUserRole();
+}
+
+/** Prefer JWT `role` (authoritative signed claim), then login body echo. Omits persistence until `/auth/me` if both missing. */
 export function setAuthSession(token: string, preferredRole?: string | null): UserRole | null {
   if (typeof window === "undefined") return null;
   window.localStorage.setItem("token", token);
   window.localStorage.setItem("authToken", token);
   const fromJwt = coerceRole(decodeJwtRole(token));
-  const role: UserRole = coerceRole(preferredRole ?? undefined) ?? fromJwt ?? "customer";
-  window.localStorage.setItem("userRole", role);
-  window.localStorage.setItem("preferredLoginRole", role);
-  window.dispatchEvent(new CustomEvent("fleetops:auth-change"));
-  return role;
+  const fromBody = coerceRole(preferredRole ?? undefined);
+  const resolved = fromJwt ?? fromBody;
+  if (resolved) {
+    window.localStorage.setItem("userRole", resolved);
+    window.localStorage.setItem("preferredLoginRole", resolved);
+  } else {
+    window.localStorage.removeItem("userRole");
+    window.localStorage.removeItem("preferredLoginRole");
+  }
+  window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT));
+  return resolved;
+}
+
+/**
+ * After tokens are saved, reconcile `userRole` from `GET /auth/me` so it always matches DB
+ * even if proxies or echoes return a mismatched login body.
+ */
+export async function reconcileRoleFromServer(): Promise<UserRole | null> {
+  try {
+    const { apiGet } = await import("./api");
+    const me = await apiGet<{ role: string }>("/auth/me");
+    const r = coerceRole(typeof me.role === "string" ? me.role : null);
+    if (!r || typeof window === "undefined") return null;
+    window.localStorage.setItem("userRole", r);
+    window.localStorage.setItem("preferredLoginRole", r);
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT));
+    return r;
+  } catch {
+    return null;
+  }
 }
 
 export function getDashboardPath(role: UserRole): string {
@@ -79,7 +116,7 @@ export function clearAuth(): void {
     localStorage.removeItem("userRole");
     localStorage.removeItem("preferredLoginRole");
     localStorage.removeItem("customer_current_user");
-    window.dispatchEvent(new CustomEvent("fleetops:auth-change"));
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT));
   }
 }
 

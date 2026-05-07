@@ -174,6 +174,26 @@ export default function DispatcherDashboard() {
 
         <section
           style={{
+            ...card,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.5rem",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ fontWeight: 700, fontSize: "0.88rem", width: "100%", marginBottom: 2 }}>
+            Analytics decision support
+          </span>
+          <GhostLink href="/modules/analytics/predictions">Operational predictions</GhostLink>
+          <GhostLink href="/modules/analytics/whatif">What‑if</GhostLink>
+          <GhostLink href="/modules/analytics/route-optimizer">Route optimizer</GhostLink>
+          <GhostLink href="/modules/analytics/operations-snapshot">Live data snapshot</GhostLink>
+          <GhostLink href="/modules/analytics/accuracy">Model accuracy</GhostLink>
+          <GhostLink href="/modules/analytics/reports">Report map</GhostLink>
+        </section>
+
+        <section
+          style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
             gap: "1rem",

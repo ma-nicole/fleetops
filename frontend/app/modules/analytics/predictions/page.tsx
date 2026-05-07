@@ -10,7 +10,7 @@ import {
 import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
 export default function PredictionsPage() {
-  useRoleGuard(["manager", "admin", "dispatcher", "customer"]);
+  useRoleGuard(["dispatcher", "manager", "admin"]);
 
   const [costInput, setCostInput] = useState({
     distance_km: 120,

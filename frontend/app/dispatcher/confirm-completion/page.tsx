@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { announce } from "@/lib/useAnnouncer";
 
 type PendingTrip = {
   tripId: string;
@@ -42,6 +44,7 @@ export default function ConfirmCompletionPage() {
   ]);
 
   const [selectedTrip, setSelectedTrip] = useState<string | null>(null);
+  const [formHint, setFormHint] = useState<string | null>(null);
   const [confirmData, setConfirmData] = useState({
     receiptSignature: "",
     damageReport: "",
@@ -51,6 +54,17 @@ export default function ConfirmCompletionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmed, setConfirmed] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = new URLSearchParams(window.location.search).get("trip");
+    if (!raw) return;
+    const match = trips.find((t) => t.tripId === raw);
+    if (match) {
+      setSelectedTrip(raw);
+      announce(`Selected ${raw} from link`);
+    }
+  }, [trips]);
+
   const handleInputChange = (field: string, value: string | boolean) => {
     setConfirmData((prev) => ({
       ...prev,
@@ -59,20 +73,25 @@ export default function ConfirmCompletionPage() {
   };
 
   const handleConfirm = () => {
+    setFormHint(null);
     if (!selectedTrip) {
-      alert("Please select a trip to confirm");
+      setFormHint("Select a trip card on the left first.");
+      announce("Select a trip to confirm", "assertive");
       return;
     }
 
     if (!confirmData.receiptSignature) {
-      alert("Please confirm receipt signature");
+      setFormHint("Receipt / signature acknowledgment is required.");
+      announce("Add receipt confirmation before submitting", "assertive");
       return;
     }
 
     setIsSubmitting(true);
     setTimeout(() => {
       setIsSubmitting(false);
+      setFormHint(null);
       setConfirmed(selectedTrip);
+      announce(`${selectedTrip} confirmed and archived`);
       setSelectedTrip(null);
       setConfirmData({
         receiptSignature: "",
@@ -107,6 +126,22 @@ export default function ConfirmCompletionPage() {
         </div>
       )}
 
+      {formHint && (
+        <div
+          role="alert"
+          style={{
+            padding: "0.85rem 1rem",
+            background: "rgba(244, 67, 54, 0.1)",
+            border: "1px solid #F44336",
+            borderRadius: "8px",
+            color: "#B71C1C",
+            fontSize: "0.9rem",
+          }}
+        >
+          {formHint}
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
         {/* Trips List */}
         <div>
@@ -115,7 +150,10 @@ export default function ConfirmCompletionPage() {
             {trips.map((trip) => (
               <div
                 key={trip.tripId}
-                onClick={() => setSelectedTrip(trip.tripId)}
+                onClick={() => {
+                  setFormHint(null);
+                  setSelectedTrip(trip.tripId);
+                }}
                 style={{
                   padding: "1rem",
                   border: selectedTrip === trip.tripId ? "2px solid #FF9800" : "1px solid #E8E8E8",

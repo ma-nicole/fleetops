@@ -132,6 +132,13 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   });
 }
 
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  return apiFetch<T>(path, {
+    method: "PUT",
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   return apiFetch<T>(path, { method: "DELETE" });
 }
@@ -200,7 +207,9 @@ export function decodeJwtRole(token: string): string | null {
   if (parts.length !== 3) return null;
   const payload = decodeJwtPayloadJson(parts[1]);
   const role = payload?.role;
-  return typeof role === "string" ? role : null;
+  if (typeof role !== "string") return null;
+  const t = role.trim().toLowerCase();
+  return t ? t : null;
 }
 
 /** JWT `sub` — backend uses user email as subject for local auth. */

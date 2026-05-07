@@ -88,6 +88,9 @@ def train_cost_model_endpoint(
 @router.get("/feedback-summary", response_model=FeedbackSummaryResponse)
 def feedback_summary_endpoint(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
+    _: User = Depends(
+        require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)
+    ),
 ):
+    """Read-only model health; training remains manager/admin only."""
     return feedback_summary(db)

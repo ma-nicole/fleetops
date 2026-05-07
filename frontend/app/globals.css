@@ -81,12 +81,16 @@ body {
   background: #FAFAFA;
   min-height: 100vh;
   line-height: 1.6;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 /* Primary app content: navbar is in normal flow, so no extra top margin. */
 #main {
   margin-top: 0;
   scroll-margin-top: var(--space-2);
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 a {
@@ -98,6 +102,7 @@ a {
   max-width: 1160px;
   margin: 0 auto;
   padding: var(--container-padding-y) 1rem;
+  width: 100%;
 }
 
 .card {
@@ -276,6 +281,32 @@ body {
     border: 1px solid #E0E0E0;
     color: var(--text-secondary);
     background: #FAFAFA;
+  }
+
+  .booking-slot-selectable {
+    font: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+
+  .booking-slot-selectable:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .booking-slot-pill--selected {
+    border-color: var(--accent);
+    color: var(--brand-text-strong);
+    background: rgba(255, 152, 0, 0.12);
+    font-weight: 600;
+  }
+
+  .booking-slot-pill--taken {
+    border-style: dashed;
+  }
+
+  .booking-slot-selectable:not(:disabled):hover {
+    border-color: var(--brand-text);
   }
  
   .booking-placeholder {

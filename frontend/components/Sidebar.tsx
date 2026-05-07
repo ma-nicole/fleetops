@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { isAuthenticated } from "@/lib/auth";
+import { AUTH_CHANGE_EVENT, getEffectiveRole, isAuthenticated } from "@/lib/auth";
 import { useFocusTrap } from "@/lib/useAnnouncer";
 
 type SubMenuItem = {
@@ -64,6 +64,18 @@ const menuModules: MenuModule[] = [
       { label: "Job Assignment", href: "/dispatcher/job-assignments", roles: ["dispatcher"] },
       { label: "Route Optimizer", href: "/modules/analytics/route-optimizer", roles: ["dispatcher"] },
       { label: "What-if Simulator", href: "/modules/analytics/whatif", roles: ["dispatcher"] },
+      { label: "Operational predictions", href: "/modules/analytics/predictions", roles: ["dispatcher"] },
+      {
+        label: "Live data snapshot",
+        href: "/modules/analytics/operations-snapshot",
+        roles: ["dispatcher"],
+      },
+      { label: "Model accuracy (read-only)", href: "/modules/analytics/accuracy", roles: ["dispatcher"] },
+      {
+        label: "Analytics report guide",
+        href: "/modules/analytics/reports",
+        roles: ["dispatcher"],
+      },
       { label: "Schedules", href: "/dispatcher/schedules", roles: ["dispatcher"] },
       { label: "Order Details", href: "/dispatcher/order-details", roles: ["dispatcher"] },
       { label: "Trip Monitoring", href: "/dispatcher/trip-monitoring", roles: ["dispatcher"] },
@@ -95,6 +107,7 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Dashboard", href: "/manager/dashboard", roles: ["manager"] },
       { label: "Predictive (Cost/Fuel/Maint.)", href: "/modules/analytics/predictions", roles: ["manager"] },
+      { label: "Live data marts", href: "/modules/analytics/operations-snapshot", roles: ["manager"] },
       { label: "What-if Simulator", href: "/modules/analytics/whatif", roles: ["manager"] },
       { label: "Route Optimizer (A*)", href: "/modules/analytics/route-optimizer", roles: ["manager"] },
       { label: "Accuracy & Drift", href: "/modules/analytics/accuracy", roles: ["manager"] },
@@ -139,6 +152,7 @@ const menuModules: MenuModule[] = [
     roles: ["admin"],
     items: [
       { label: "Dashboard", href: "/admin/dashboard", roles: ["admin"] },
+      { label: "Diesel price", href: "/modules/administration/booking-estimate-cost", roles: ["admin"] },
       { label: "Scheduling", href: "/admin/scheduling", roles: ["admin"] },
       { label: "Trip Monitoring", href: "/admin/trip-monitoring", roles: ["admin"] },
       { label: "Orders", href: "/admin/orders", roles: ["admin"] },
@@ -149,6 +163,8 @@ const menuModules: MenuModule[] = [
     roles: ["admin"],
     items: [
       { label: "User Management", href: "/modules/administration/accounts", roles: ["admin"] },
+      { label: "Diesel & booking estimates", href: "/modules/administration/booking-estimate-cost", roles: ["admin"] },
+      { label: "Live data marts", href: "/modules/analytics/operations-snapshot", roles: ["admin"] },
     ],
   },
 
@@ -203,13 +219,24 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isAuthenticated()) {
-      const role = window.localStorage.getItem("userRole") || "customer";
-      setUserRole(role);
-    } else {
-      setUserRole(null);
-    }
-  }, []);
+
+    const syncRole = () => {
+      if (!isAuthenticated()) {
+        setUserRole(null);
+        return;
+      }
+      // Match NavBar / guards: JWT role first — never default to "customer" or staff lose admin menu (e.g. diesel settings).
+      setUserRole(getEffectiveRole());
+    };
+
+    syncRole();
+    window.addEventListener(AUTH_CHANGE_EVENT, syncRole);
+    window.addEventListener("storage", syncRole);
+    return () => {
+      window.removeEventListener(AUTH_CHANGE_EVENT, syncRole);
+      window.removeEventListener("storage", syncRole);
+    };
+  }, [pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

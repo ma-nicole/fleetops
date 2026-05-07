@@ -19,22 +19,10 @@ type CustomerProfile = {
   email: string;
   phone: string;
   company: string;
-  address: string;
-  city: string;
-  postal_code: string;
   business_type: string;
-  monthly_volume: number;
 };
 
-type FieldKey =
-  | "name"
-  | "email"
-  | "phone"
-  | "company"
-  | "address"
-  | "city"
-  | "postal_code"
-  | "business_type";
+type FieldKey = "name" | "email" | "phone" | "company" | "business_type";
 
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
@@ -46,11 +34,7 @@ export default function CustomerProfilePage() {
     email: "john@example.com",
     phone: "+639171234567",
     company: "Smith Logistics",
-    address: "123 Business Ave",
-    city: "Makati City",
-    postal_code: "10001",
     business_type: "Logistics Company",
-    monthly_volume: 45,
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -65,6 +49,12 @@ export default function CustomerProfilePage() {
   const [pwSubmitting, setPwSubmitting] = useState(false);
   const [pwSuccess, setPwSuccess] = useState<string | null>(null);
   const [pwError, setPwError] = useState<string | null>(null);
+
+  const gridCols = {
+    display: "grid",
+    gap: "1rem",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+  };
 
   const border = (key: FieldKey) =>
     fieldErrors[key] ? "2px solid #DC2626" : "1px solid #E8E8E8";
@@ -83,9 +73,6 @@ export default function CustomerProfilePage() {
     if (phoneErr) next.phone = phoneErr;
 
     if (formData.company.trim().length < 2) next.company = "Company must be at least 2 characters.";
-    if (formData.address.trim().length < 5) next.address = "Enter a complete street address.";
-    if (formData.city.trim().length < 2) next.city = "City is required.";
-    if (formData.postal_code.trim().length < 3) next.postal_code = "Postal code is required.";
     if (formData.business_type.trim().length < 2) next.business_type = "Business type is required.";
 
     setFieldErrors(next);
@@ -198,13 +185,7 @@ export default function CustomerProfilePage() {
             <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>
               Edit Profile
             </h3>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "1rem",
-              }}
-            >
+            <div style={gridCols}>
               <div>
                 <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>
                   Name
@@ -300,81 +281,9 @@ export default function CustomerProfilePage() {
                   <p role="alert" style={{ color: "#DC2626", fontSize: "0.85rem", margin: "0.35rem 0 0 0" }}>{fieldErrors.company}</p>
                 )}
               </div>
-              <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => {
-                    setFormData({ ...formData, address: e.target.value });
-                    clearFieldError("address");
-                  }}
-                  aria-invalid={!!fieldErrors.address}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: border("address"),
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
-                {fieldErrors.address && (
-                  <p role="alert" style={{ color: "#DC2626", fontSize: "0.85rem", margin: "0.35rem 0 0 0" }}>{fieldErrors.address}</p>
-                )}
-              </div>
-              <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>
-                  City
-                </label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => {
-                    setFormData({ ...formData, city: e.target.value });
-                    clearFieldError("city");
-                  }}
-                  aria-invalid={!!fieldErrors.city}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: border("city"),
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
-                {fieldErrors.city && (
-                  <p role="alert" style={{ color: "#DC2626", fontSize: "0.85rem", margin: "0.35rem 0 0 0" }}>{fieldErrors.city}</p>
-                )}
-              </div>
-              <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>
-                  Postal Code
-                </label>
-                <input
-                  type="text"
-                  value={formData.postal_code}
-                  onChange={(e) => {
-                    setFormData({ ...formData, postal_code: e.target.value });
-                    clearFieldError("postal_code");
-                  }}
-                  aria-invalid={!!fieldErrors.postal_code}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: border("postal_code"),
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
-                {fieldErrors.postal_code && (
-                  <p role="alert" style={{ color: "#DC2626", fontSize: "0.85rem", margin: "0.35rem 0 0 0" }}>{fieldErrors.postal_code}</p>
-                )}
-              </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem" }}>
-                  Business Type
+                  Business type
                 </label>
                 <input
                   type="text"
@@ -412,18 +321,12 @@ export default function CustomerProfilePage() {
                 fontWeight: 600,
               }}
             >
-              Save Changes
+              Save changes
             </button>
           </div>
         ) : (
           <div className="card" style={{ padding: "1.5rem" }}>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "2rem",
-              }}
-            >
+            <div style={gridCols}>
               <div>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: "1rem 0 0.5rem 0" }}>
                   <strong>Name</strong>
@@ -445,39 +348,18 @@ export default function CustomerProfilePage() {
                 <p style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>
                   {profile.phone}
                 </p>
-
-                <p style={{ color: "#666666", fontSize: "0.9rem", margin: "1rem 0 0.5rem 0" }}>
-                  <strong>Company</strong>
-                </p>
-                <p style={{ color: "#1A1A1A", margin: 0 }}>
-                  {profile.company}
-                </p>
               </div>
 
               <div>
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: "1rem 0 0.5rem 0" }}>
-                  <strong>Address</strong>
+                  <strong>Company</strong>
                 </p>
                 <p style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>
-                  {profile.address}
+                  {profile.company}
                 </p>
 
                 <p style={{ color: "#666666", fontSize: "0.9rem", margin: "1rem 0 0.5rem 0" }}>
-                  <strong>City</strong>
-                </p>
-                <p style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>
-                  {profile.city}
-                </p>
-
-                <p style={{ color: "#666666", fontSize: "0.9rem", margin: "1rem 0 0.5rem 0" }}>
-                  <strong>Postal Code</strong>
-                </p>
-                <p style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>
-                  {profile.postal_code}
-                </p>
-
-                <p style={{ color: "#666666", fontSize: "0.9rem", margin: "1rem 0 0.5rem 0" }}>
-                  <strong>Business Type</strong>
+                  <strong>Business type</strong>
                 </p>
                 <p style={{ color: "#1A1A1A", margin: 0 }}>
                   {profile.business_type}

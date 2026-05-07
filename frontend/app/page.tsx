@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+
+import { getDashboardPath, type UserRole } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/useAuthStatus";
 
 const modules = [
   { icon: "", title: "Booking Workflow", desc: "Create trips with real-time cost estimation" },
@@ -11,17 +14,39 @@ const modules = [
   { icon: "", title: "Admin Control", desc: "Configure fleet, roles, and pricing" },
 ];
 
+/** Customer-only booking CTA; all other roles get their dashboard (same source as NavBar). */
+function homePrimaryCta(
+  isLoggedIn: boolean | null,
+  role: UserRole | null,
+): { href: string; label: string; kind: "link" | "placeholder" } {
+  if (isLoggedIn === null) {
+    return { href: "/", label: "Checking session…", kind: "placeholder" };
+  }
+  if (!isLoggedIn) {
+    return { href: "/sign-in", label: "Login to Book", kind: "link" };
+  }
+  if (role === "customer") {
+    return { href: "/booking", label: "Create Booking", kind: "link" };
+  }
+  if (role === "admin") {
+    return { href: getDashboardPath("admin"), label: "Open admin dashboard", kind: "link" };
+  }
+  if (role === "manager") {
+    return { href: getDashboardPath("manager"), label: "Open manager dashboard", kind: "link" };
+  }
+  if (role === "dispatcher") {
+    return { href: getDashboardPath("dispatcher"), label: "Open dispatcher console", kind: "link" };
+  }
+  if (role === "driver" || role === "helper") {
+    return { href: getDashboardPath("driver"), label: "Open driver dashboard", kind: "link" };
+  }
+  return { href: "/sign-in", label: "Sign in", kind: "link" };
+}
+
 export default function Home() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isLoggedIn, role } = useAuthStatus();
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsLoggedIn(!!window.localStorage.getItem("token"));
-    }
-  }, []);
-
-  const primaryHref = isLoggedIn ? "/booking" : "/sign-in";
-  const primaryLabel = isLoggedIn ? "Create Booking" : "Login to Book";
+  const primary = useMemo(() => homePrimaryCta(isLoggedIn, role), [isLoggedIn, role]);
 
   return (
     <main style={{ minHeight: "100vh", background: "#FAFAFA" }}>
@@ -64,14 +89,21 @@ export default function Home() {
             </p>
           </div>
 
-          {/* CTA Buttons */}
+          {/* CTA Buttons — must match NavBar role (useAuthStatus), never show Create Booking for staff */}
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
-            <Link
-              className="cta-button-primary"
-              href={primaryHref}
-            >
-              {primaryLabel}
-            </Link>
+            {primary.kind === "placeholder" ? (
+              <span
+                className="cta-button-primary"
+                style={{ opacity: 0.72, cursor: "default", pointerEvents: "none" }}
+                aria-busy="true"
+              >
+                {primary.label}
+              </span>
+            ) : (
+              <Link className="cta-button-primary" href={primary.href}>
+                {primary.label}
+              </Link>
+            )}
           </div>
 
           {/* Stats */}
@@ -167,11 +199,27 @@ export default function Home() {
         }}
       >
         <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.5rem", color: "#1A1A1A" }}>Ready to optimize your fleet?</h3>
-        <p style={{ margin: "0 0 2rem 0", color: "#666666" }}>Start with a booking or explore a role dashboard</p>
+        <p style={{ margin: "0 0 2rem 0", color: "#666666" }}>
+          {isLoggedIn !== true
+            ? "Sign in to book a shipment or open your company workspace."
+            : role === "customer"
+              ? "Continue with a new booking or manage your trips."
+              : "Open your dashboard to run dispatch, analytics, or administration."}
+        </p>
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-          <Link href={primaryHref} className="cta-button-primary">
-            {isLoggedIn ? "Start Now" : "Login to Start"}
-          </Link>
+          {primary.kind === "placeholder" ? (
+            <span
+              className="cta-button-primary"
+              style={{ opacity: 0.72, cursor: "default", pointerEvents: "none" }}
+              aria-busy="true"
+            >
+              Checking session…
+            </span>
+          ) : (
+            <Link href={primary.href} className="cta-button-primary">
+              {!isLoggedIn ? "Login to Start" : primary.label}
+            </Link>
+          )}
         </div>
       </section>
     </main>

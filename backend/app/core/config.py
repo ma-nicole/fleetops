@@ -52,6 +52,59 @@ class Settings(BaseSettings):
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
 
+    # Geocoding (optional) — Google preferred for production; else OSM Nominatim (rate-limited)
+    google_maps_geocoding_api_key: str | None = Field(
+        default=None,
+        description="Google Geocoding API key. If unset, Nominatim is used with GEOCODING_USER_AGENT.",
+    )
+    geocoding_user_agent: str = Field(
+        default="FleetOpt/1.0 (+https://localhost)",
+        description='HTTP User-Agent sent to Nominatim (must identify your app; include contact URL or email).',
+    )
+
+    # Booking route estimate — align with frontend NEXT_PUBLIC_* for browser fallback.
+    diesel_price_php_per_liter: float = Field(
+        default=74.75,
+        ge=40.0,
+        le=200.0,
+        description="Retail diesel ₱/L (update weekly after DOE oil price bulletin — usually Tuesdays).",
+    )
+    truck_fuel_efficiency_kmpl: float = Field(
+        default=4.5,
+        ge=2.5,
+        le=12.0,
+        description="Blended laden truck km/L.",
+    )
+    trip_wear_misc_php_per_km: float = Field(
+        default=3.75,
+        ge=0.0,
+        le=50.0,
+        description="Extras per km (tires, lubes, sundry)—excluding diesel liters.",
+    )
+    trip_depreciation_rate: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=0.5,
+        description="Ten percent–style depreciation: fraction multiplied by diesel+wear subtotal (default 0.10).",
+    )
+    helper_pay_php_per_trip: float = Field(
+        default=220.0,
+        ge=0.0,
+        description="Helper allowance PHP per booked leg.",
+    )
+    driver_freight_commission_rate: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=0.45,
+        description="Driver pay as a fraction of freight base before driver fee is invoiced.",
+    )
+    cargo_weight_multiplier_per_ton: float = Field(
+        default=0.07,
+        ge=0.0,
+        le=0.5,
+        description="Loads above 1t increase liters & wear proportionally.",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

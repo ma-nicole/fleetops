@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getDashboardPath, type UserRole } from "@/lib/auth";
 import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
+import { useAuthStatus } from "@/lib/useAuthStatus";
 
 export default function OrderConfirmationPage() {
   const router = useRouter();
+  const { role } = useAuthStatus();
   const booking = useMemo(() => CustomerDataFlowService.getCurrentBooking(), []);
   const [error, setError] = useState("");
 
@@ -28,7 +31,19 @@ export default function OrderConfirmationPage() {
           {!booking ? (
             <>
               <p style={{ margin: 0, color: "#666" }}>No booking found. Please create a booking first.</p>
-              <Link href="/booking" style={{ color: "#2563EB", textDecoration: "none" }}>Go to Booking</Link>
+              {role === "customer" ? (
+                <Link href="/booking" style={{ color: "#2563EB", textDecoration: "none" }}>
+                  Go to booking
+                </Link>
+              ) : role ? (
+                <Link href={getDashboardPath(role as UserRole)} style={{ color: "#2563EB", textDecoration: "none" }}>
+                  Go to dashboard
+                </Link>
+              ) : (
+                <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none" }}>
+                  Sign in
+                </Link>
+              )}
             </>
           ) : (
             <>

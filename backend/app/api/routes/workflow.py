@@ -18,6 +18,7 @@ from app.schemas.trip import (
     TripRead, TripStatusUpdate, TripAcceptRequest, TripDeliveryProof,
     TripIssueReport, TripIssueRead
 )
+from app.services.booking_schedule import slot_available
 from app.services.costing import estimate_trip_cost
 from app.services.email_templates import EmailTemplate
 from app.services.feedback_loop import record_trip_feedback
@@ -54,6 +55,7 @@ def create_booking_request(
         dropoff_location=payload.get("dropoff_location"),
         service_type=ServiceType(payload.get("service_type", "customized")),
         scheduled_date=payload.get("scheduled_date"),
+        scheduled_time_slot=str(payload.get("scheduled_time_slot") or "").strip(),
         cargo_weight_tons=payload.get("cargo_weight_tons"),
         cargo_description=payload.get("cargo_description"),
     )
@@ -72,12 +74,19 @@ def create_booking_request(
         db=db,
     )
 
+    if not slot_available(db, booking_data.scheduled_date, booking_data.scheduled_time_slot):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="That pickup time is already reserved for this date. Pick another slot.",
+        )
+
     booking = Booking(
         customer_id=user.id,
         pickup_location=booking_data.pickup_location,
         dropoff_location=booking_data.dropoff_location,
         service_type=booking_data.service_type,
         scheduled_date=booking_data.scheduled_date,
+        scheduled_time_slot=booking_data.scheduled_time_slot,
         cargo_weight_tons=booking_data.cargo_weight_tons,
         cargo_description=booking_data.cargo_description,
         estimated_cost=prediction.total_cost,

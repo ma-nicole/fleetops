@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Breadcrumbs from "@/components/Breadcrumbs";
-import { getDashboardPath, type UserRole } from "@/lib/auth";
+import { getDashboardPath, getEffectiveRole, type UserRole } from "@/lib/auth";
 import { APP_LOCALE, APP_TIMEZONE, formatPhpWhole } from "@/lib/appLocale";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Booking, type BookingStatus } from "@/lib/workflowApi";
@@ -42,6 +42,16 @@ function StatusBadge({ status }: { status: BookingStatus }) {
 
 type FilterMode = "active" | "all" | BookingStatus;
 
+const OPERATIONAL_STATUSES: BookingStatus[] = [
+  "pending_approval",
+  "approved",
+  "assigned",
+  "accepted",
+  "enroute",
+  "loading",
+  "out_for_delivery",
+];
+
 export default function TripRecordsPage() {
   useRoleGuard(["customer", "dispatcher", "manager", "admin"]);
 
@@ -67,7 +77,7 @@ export default function TripRecordsPage() {
   }, []);
 
   useEffect(() => {
-    const r = (typeof window !== "undefined" && (localStorage.getItem("userRole") as UserRole)) || null;
+    const r = typeof window !== "undefined" ? getEffectiveRole() : null;
     setRole(r);
     if (r === "customer") setFilter("active");
     else setFilter("all");
@@ -77,13 +87,24 @@ export default function TripRecordsPage() {
     load();
   }, [load]);
 
+  const isCustomer = role === "customer";
+
   const filtered = useMemo(() => {
     let rows = bookings;
-    if (filter === "active") {
+
+    if (isCustomer) {
       rows = rows.filter((b) => !TERMINAL.includes(b.status));
-    } else if (filter !== "all") {
-      rows = rows.filter((b) => b.status === filter);
     }
+
+    if (filter === "active") {
+      if (!isCustomer) {
+        rows = rows.filter((b) => !TERMINAL.includes(b.status));
+      }
+    } else if (filter !== "all") {
+      const statusOnly = filter as BookingStatus;
+      rows = rows.filter((b) => b.status === statusOnly);
+    }
+
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(
@@ -95,9 +116,8 @@ export default function TripRecordsPage() {
       );
     }
     return rows;
-  }, [bookings, filter, search]);
+  }, [bookings, filter, search, isCustomer]);
 
-  const isCustomer = role === "customer";
   const dashboardHref = role ? getDashboardPath(role) : "/";
 
   const crumbs = [
@@ -131,7 +151,7 @@ export default function TripRecordsPage() {
         </h1>
         <p style={{ color: "#6B7280", margin: 0, fontSize: "0.95rem" }}>
           {isCustomer
-            ? "Live list of your shipments. Filter by status, search by place or booking number, or cancel an open booking."
+            ? "Shipments in progress. Completed, cancelled, or rejected bookings appear under Booking history."
             : "Operations view of bookings in the system (newest first). Use filters to narrow the list."}
         </p>
       </header>
@@ -142,7 +162,7 @@ export default function TripRecordsPage() {
           marginBottom: "1rem",
           display: "grid",
           gap: "0.75rem",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(140px, 220px)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
           alignItems: "end",
         }}
       >
@@ -158,18 +178,31 @@ export default function TripRecordsPage() {
         <label style={{ display: "grid", gap: 6 }}>
           <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#374151" }}>Status</span>
           <select className="select" value={filter} onChange={(e) => setFilter(e.target.value as FilterMode)}>
-            {isCustomer && <option value="active">Active bookings only</option>}
-            <option value="all">All statuses</option>
-            <option value="pending_approval">Pending approval</option>
-            <option value="approved">Approved</option>
-            <option value="assigned">Assigned</option>
-            <option value="accepted">Accepted</option>
-            <option value="enroute">En route</option>
-            <option value="loading">Loading</option>
-            <option value="out_for_delivery">Out for delivery</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="rejected">Rejected</option>
+            {isCustomer ? (
+              <>
+                <option value="active">All active bookings</option>
+                {OPERATIONAL_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
+              </>
+            ) : (
+              <>
+                <option value="all">All statuses</option>
+                <option value="active">Active bookings only</option>
+                {OPERATIONAL_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
+                {TERMINAL.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
         </label>
       </div>
@@ -193,7 +226,7 @@ export default function TripRecordsPage() {
       ) : filtered.length === 0 ? (
         <div className="card" style={{ padding: "1.5rem", color: "#6B7280" }}>
           {isCustomer
-            ? "No bookings match this filter. Try “All statuses” or create a booking."
+            ? "No bookings match this filter yet. Create a booking or check Booking history for completed or closed shipments."
             : "No bookings match this filter."}
         </div>
       ) : (

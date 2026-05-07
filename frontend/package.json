@@ -12,6 +12,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "countries-list": "^3.3.0",
     "fleetops": "file:..",
     "jspdf": "^4.2.1",
     "next": "15.1.2",

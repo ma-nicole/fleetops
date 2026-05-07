@@ -109,6 +109,35 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    saved_sites: Mapped[list["CustomerSavedSite"]] = relationship(
+        "CustomerSavedSite",
+        back_populates="customer",
+        cascade="all, delete-orphan",
+    )
+
+
+class CustomerSavedSite(Base):
+    """Customer warehouse / delivery addresses (persist beyond browser session)."""
+
+    __tablename__ = "customer_saved_sites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address: Mapped[str] = mapped_column(Text, nullable=False)
+    street: Mapped[str | None] = mapped_column(Text, nullable=True)
+    barangay: Mapped[str | None] = mapped_column(Text, nullable=True)
+    city_municipality: Mapped[str | None] = mapped_column(Text, nullable=True)
+    province: Mapped[str | None] = mapped_column(Text, nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    customer: Mapped["User"] = relationship("User", back_populates="saved_sites")
+
 
 # ------------------------------------------------------------------
 # Fleet & catalog
@@ -183,6 +212,8 @@ class Booking(Base):
     dropoff_location: Mapped[str] = mapped_column(String(255), nullable=False)
     service_type: Mapped[ServiceType] = mapped_column(SAEnum(ServiceType), nullable=False)
     scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
+    """One of the four shared daily windows (fleet capacity: one active booking per slot)."""
+    scheduled_time_slot: Mapped[str] = mapped_column(String(8), nullable=False, default="08:00")
     cargo_weight_tons: Mapped[float] = mapped_column(Float, nullable=False)
     cargo_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
@@ -341,6 +372,22 @@ class MaintenanceRecord(Base):
     next_service_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class BookingFreightSettings(Base):
+    """Singleton row (id=1): customer booking estimate knobs — editable by admin (diesel, driver %, etc.)."""
+
+    __tablename__ = "booking_freight_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    diesel_price_php_per_liter: Mapped[float] = mapped_column(Float, nullable=False)
+    truck_fuel_efficiency_kmpl: Mapped[float] = mapped_column(Float, nullable=False)
+    trip_wear_misc_php_per_km: Mapped[float] = mapped_column(Float, nullable=False)
+    trip_depreciation_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    helper_pay_php_per_trip: Mapped[float] = mapped_column(Float, nullable=False)
+    driver_freight_commission_rate: Mapped[float] = mapped_column(Float, nullable=False)
+    cargo_weight_multiplier_per_ton: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class PricingConfig(Base):

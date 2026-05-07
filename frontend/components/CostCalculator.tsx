@@ -4,8 +4,11 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { formatPhp } from "@/lib/appLocale";
-import { estimateBookingCost } from "@/lib/bookingRouteEstimate";
-import { MIN_BOOKING_SITES, getCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
+import { BOOKING_TIME_SLOTS } from "@/lib/bookingSlots";
+import { estimateBookingCost, estimateUsesGeocodedBoth, type BookingEstimateBreakdown } from "@/lib/bookingRouteEstimate";
+import { validateCustomerSiteAddress } from "@/lib/formValidation";
+import { MIN_BOOKING_SITES, loadCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
+import { WorkflowApi } from "@/lib/workflowApi";
 
 type CostEstimate = {
   estimated_fuel: number;
@@ -26,7 +29,77 @@ type FormErrors = {
   [key: string]: string;
 };
 
+type RouteEstimateApiResponse = {
+  distance_km: number;
+  diesel_liters: number;
+  diesel_cost_php: number;
+  wear_misc_php: number;
+  depreciation_php: number;
+  helper_pay_php: number;
+  freight_base_php: number;
+  fuel_route_charge: number;
+  driver_fee: number;
+  estimated_total: number;
+  diesel_price_per_liter: number;
+  driver_commission_pct: number;
+  pickup_resolution: string;
+  dropoff_resolution: string;
+  estimate_tier: string;
+};
+
+/** Line items mirrored from backend / browser fallback breakdown. */
+type FreightLineDetail = {
+  diesel_liters: number;
+  diesel_cost_php: number;
+  wear_misc_php: number;
+  depreciation_php: number;
+  helper_pay_php: number;
+  freight_base_php: number;
+  diesel_price_per_liter: number;
+  driver_commission_pct: number;
+};
+
+function freightLinesFromPayload(data: RouteEstimateApiResponse): FreightLineDetail {
+  return {
+    diesel_liters: data.diesel_liters,
+    diesel_cost_php: data.diesel_cost_php,
+    wear_misc_php: data.wear_misc_php,
+    depreciation_php: data.depreciation_php,
+    helper_pay_php: data.helper_pay_php,
+    freight_base_php: data.freight_base_php,
+    diesel_price_per_liter: data.diesel_price_per_liter,
+    driver_commission_pct: data.driver_commission_pct,
+  };
+}
+
+function freightLinesFromBreakdown(b: BookingEstimateBreakdown): FreightLineDetail {
+  return {
+    diesel_liters: b.dieselLiters,
+    diesel_cost_php: b.dieselCostPhp,
+    wear_misc_php: b.wearMiscPhp,
+    depreciation_php: b.depreciationPhp,
+    helper_pay_php: b.helperPayPhp,
+    freight_base_php: b.freightBasePhp,
+    diesel_price_per_liter: b.dieselPricePerLiter,
+    driver_commission_pct: b.driverCommissionPct,
+  };
+}
+
+type EstimateGeoMeta = Pick<
+  RouteEstimateApiResponse,
+  "pickup_resolution" | "dropoff_resolution" | "estimate_tier"
+>;
+
 const DEFAULT_SERVICE_TYPE = "fixed";
+
+function geocodeProviderNote(geo: EstimateGeoMeta | null): string | null {
+  if (!geo) return null;
+  const google = geo.pickup_resolution === "google" || geo.dropoff_resolution === "google";
+  const nom = geo.pickup_resolution === "nominatim" || geo.dropoff_resolution === "nominatim";
+  if (google) return "Pins: Google Geocoding API.";
+  if (nom) return "Pins: OpenStreetMap (Nominatim).";
+  return null;
+}
 
 function siteMenuLabel(s: CustomerSite): string {
   if (s.label) return `${s.label} — ${s.address}`;
@@ -48,18 +121,43 @@ export default function CostCalculator({
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
   const [date, setDate] = useState("");
+  const [pickedSlot, setPickedSlot] = useState<string>("");
+  const [slotAvailability, setSlotAvailability] = useState<Record<string, boolean>>({});
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsFetchError, setSlotsFetchError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [estimateGeo, setEstimateGeo] = useState<EstimateGeoMeta | null>(null);
+  const [freightLines, setFreightLines] = useState<FreightLineDetail | null>(null);
   const today = new Date().toISOString().split("T")[0];
-  const suggestedSlots = date ? ["08:00", "11:30", "14:00", "17:30"] : ["Select a date to see nearby slots"];
 
   const hasEnoughSites = sites.length >= MIN_BOOKING_SITES;
 
   const pickup = useMemo(() => sites.find((s) => s.id === pickupId)?.address ?? "", [sites, pickupId]);
   const dropoff = useMemo(() => sites.find((s) => s.id === dropoffId)?.address ?? "", [sites, dropoffId]);
 
+  const showApproximateEstimateWarning = useMemo(() => {
+    if (estimateGeo) {
+      const { pickup_resolution: pr, dropoff_resolution: dr, estimate_tier: t } = estimateGeo;
+      if (pr === "none" || dr === "none") return true;
+      if (t !== "geocoded") return true;
+      return false;
+    }
+    return !estimateUsesGeocodedBoth(pickup, dropoff);
+  }, [estimateGeo, pickup, dropoff]);
+
+  const providerNote = useMemo(() => geocodeProviderNote(estimateGeo), [estimateGeo]);
+
   useEffect(() => {
-    setSites(getCustomerSites());
-    return subscribeSitesChanged(() => setSites(getCustomerSites()));
+    let cancelled = false;
+    const refresh = () => {
+      loadCustomerSites()
+        .then((list) => {
+          if (!cancelled) setSites(list);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    return subscribeSitesChanged(refresh);
   }, []);
 
   useEffect(() => {
@@ -70,7 +168,57 @@ export default function CostCalculator({
 
   useEffect(() => {
     if (!hasEnoughSites) {
+      setSlotAvailability({});
+      setPickedSlot("");
+      setSlotsFetchError(null);
+      setSlotsLoading(false);
+      return;
+    }
+    if (!date) {
+      setSlotAvailability({});
+      setPickedSlot("");
+      setSlotsFetchError(null);
+      setSlotsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSlotsLoading(true);
+    setSlotsFetchError(null);
+    setPickedSlot("");
+
+    void WorkflowApi.bookingPickupSlotAvailability(date)
+      .then((res) => {
+        if (cancelled) return;
+        const next: Record<string, boolean> = {};
+        for (const s of BOOKING_TIME_SLOTS) {
+          // Only explicit `false` from the API blocks a slot; missing/unknown → still clickable.
+          next[s] = res.slots?.[s] !== false;
+        }
+        setSlotAvailability(next);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          const next: Record<string, boolean> = {};
+          for (const s of BOOKING_TIME_SLOTS) next[s] = true;
+          setSlotAvailability(next);
+          setSlotsFetchError(e instanceof Error ? e.message : "Could not load pickup windows.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSlotsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [date, hasEnoughSites]);
+
+  useEffect(() => {
+    if (!hasEnoughSites) {
       setCost(null);
+      setEstimateGeo(null);
+      setFreightLines(null);
       setLoading(false);
       return;
     }
@@ -81,37 +229,86 @@ export default function CostCalculator({
 
     if (!pickupId || !dropoffId || pickupId === dropoffId || p.length < 3 || d.length < 3 || p.toLowerCase() === d.toLowerCase()) {
       setCost(null);
+      setEstimateGeo(null);
+      setFreightLines(null);
       setLoading(false);
       return;
     }
 
     const effW = Number.isFinite(w) && w > 0 ? Math.min(50, w) : 1;
 
+    let cancelled = false;
+    const ac = new AbortController();
     setLoading(true);
+
     const timer = window.setTimeout(() => {
-      const breakdown = estimateBookingCost(pickup, dropoff, effW);
-      if (breakdown) {
-        const live: LiveCostEstimate = {
-          distance_km: breakdown.distanceKm,
-          estimated_fuel: breakdown.fuelRouteCharge,
-          estimated_toll: 0,
-          estimated_labor: breakdown.driverFee,
-          estimated_total: breakdown.total,
-        };
-        setCost(live);
-        onEstimate?.({
-          estimated_fuel: live.estimated_fuel,
-          estimated_toll: live.estimated_toll,
-          estimated_labor: live.estimated_labor,
-          estimated_total: live.estimated_total,
-        });
-      } else {
-        setCost(null);
-      }
-      setLoading(false);
-    }, 300);
+      void (async () => {
+        try {
+          const data = await apiFetch<RouteEstimateApiResponse>("/customer/route-estimate", {
+            method: "POST",
+            body: JSON.stringify({
+              pickup_location: pickup,
+              dropoff_location: dropoff,
+              weight_tons: effW,
+            }),
+            signal: ac.signal,
+          });
+          if (cancelled) return;
+          const live: LiveCostEstimate = {
+            distance_km: data.distance_km,
+            estimated_fuel: data.fuel_route_charge,
+            estimated_toll: 0,
+            estimated_labor: data.driver_fee,
+            estimated_total: data.estimated_total,
+          };
+          setCost(live);
+          setEstimateGeo({
+            pickup_resolution: data.pickup_resolution,
+            dropoff_resolution: data.dropoff_resolution,
+            estimate_tier: data.estimate_tier,
+          });
+          setFreightLines(freightLinesFromPayload(data));
+          onEstimate?.({
+            estimated_fuel: live.estimated_fuel,
+            estimated_toll: live.estimated_toll,
+            estimated_labor: live.estimated_labor,
+            estimated_total: live.estimated_total,
+          });
+        } catch (e: unknown) {
+          if (cancelled) return;
+          if (e instanceof DOMException && e.name === "AbortError") return;
+          const breakdown = estimateBookingCost(pickup, dropoff, effW);
+          if (breakdown) {
+            const live: LiveCostEstimate = {
+              distance_km: breakdown.distanceKm,
+              estimated_fuel: breakdown.fuelRouteCharge,
+              estimated_toll: 0,
+              estimated_labor: breakdown.driverFee,
+              estimated_total: breakdown.total,
+            };
+            setCost(live);
+            setEstimateGeo(null);
+            setFreightLines(freightLinesFromBreakdown(breakdown));
+            onEstimate?.({
+              estimated_fuel: live.estimated_fuel,
+              estimated_toll: live.estimated_toll,
+              estimated_labor: live.estimated_labor,
+              estimated_total: live.estimated_total,
+            });
+          } else {
+            setCost(null);
+            setEstimateGeo(null);
+            setFreightLines(null);
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+    }, 220);
 
     return () => {
+      cancelled = true;
+      ac.abort();
       window.clearTimeout(timer);
     };
   }, [pickup, dropoff, weight, onEstimate, hasEnoughSites, pickupId, dropoffId]);
@@ -126,11 +323,17 @@ export default function CostCalculator({
       newErrors.pickup_location = "Select a pickup address from your saved sites.";
     } else if (!pickup || pickup.length < 3) {
       newErrors.pickup_location = "Invalid pickup selection.";
+    } else {
+      const pu = validateCustomerSiteAddress(pickup);
+      if (pu) newErrors.pickup_location = `${pu} Update this site under Customer dashboard → Sites.`;
     }
     if (!dropoffId) {
       newErrors.dropoff_location = "Select a dropoff address from your saved sites.";
     } else if (!dropoff || dropoff.length < 3) {
       newErrors.dropoff_location = "Invalid dropoff selection.";
+    } else {
+      const dr = validateCustomerSiteAddress(dropoff);
+      if (dr) newErrors.dropoff_location = `${dr} Update this site under Customer dashboard → Sites.`;
     }
     if (pickupId && dropoffId && pickupId === dropoffId) {
       newErrors.dropoff_location = "Pickup and dropoff must be different sites.";
@@ -147,12 +350,25 @@ export default function CostCalculator({
     }
     if (!date) {
       newErrors.scheduled_date = "Schedule date required";
+    } else {
+      const selectedDate = new Date(date);
+      if (selectedDate < new Date(today)) {
+        newErrors.scheduled_date = "Cannot book past dates";
+      } else if (
+        !slotsLoading &&
+        BOOKING_TIME_SLOTS.length > 0 &&
+        BOOKING_TIME_SLOTS.every((s) => slotAvailability[s] === false)
+      ) {
+        newErrors.scheduled_date = "This date has no open pickup windows — all four slots are already booked.";
+      }
     }
-    const selectedDate = new Date(date);
-    if (selectedDate < new Date(today)) {
-      newErrors.scheduled_date = "Cannot book past dates";
+    if (date && !slotsLoading) {
+      if (!pickedSlot) {
+        newErrors.scheduled_time_slot = "Choose a pickup time window.";
+      } else if (slotAvailability[pickedSlot] === false) {
+        newErrors.scheduled_time_slot = "That time is no longer available — choose another slot.";
+      }
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -172,6 +388,7 @@ export default function CostCalculator({
         dropoff_location: dropoff,
         service_type: DEFAULT_SERVICE_TYPE,
         scheduled_date: date,
+        scheduled_time_slot: pickedSlot,
         cargo_weight_tons: parseFloat(weight),
       };
 
@@ -186,7 +403,10 @@ export default function CostCalculator({
       setDropoffId("");
       setWeight("1");
       setDate("");
+      setPickedSlot("");
       setCost(null);
+      setEstimateGeo(null);
+      setFreightLines(null);
     } catch (error) {
       const err = error as Error;
       setMessage(` Error: ${err.message}`);
@@ -198,9 +418,15 @@ export default function CostCalculator({
 
   const estimateHint = !hasEnoughSites
     ? `Save at least ${MIN_BOOKING_SITES} sites on your dashboard — booking is disabled until then.`
-    : "Choose pickup and dropoff from your saved sites to see a live estimate.";
+    : "Select pickup and dropoff — server geocoding runs when you save (needs backend online).";
 
-  const canSubmit = hasEnoughSites && !!cost && !isSubmitting;
+  const canSubmit =
+    hasEnoughSites &&
+    !!cost &&
+    !isSubmitting &&
+    !!pickedSlot &&
+    slotAvailability[pickedSlot] !== false &&
+    !slotsLoading;
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
@@ -230,7 +456,13 @@ export default function CostCalculator({
             {errors.sites_min}
           </p>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+            gap: "1rem",
+          }}
+        >
           <div>
             <label
               style={{
@@ -310,7 +542,126 @@ export default function CostCalculator({
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        {loading && hasEnoughSites && (
+          <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            Calculating estimate…
+          </div>
+        )}
+
+        {cost ? (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(82, 183, 136, 0.1), rgba(82, 183, 136, 0.05))",
+              border: "1px solid rgba(82, 183, 136, 0.3)",
+              borderRadius: "12px",
+              padding: "1rem",
+              display: "grid",
+              gap: "0.75rem",
+            }}
+          >
+            <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
+              Estimated road distance: <strong style={{ color: "var(--text-primary)" }}>{cost.distance_km} km</strong>{" "}
+              (geocoded straight-line × road factor; fuel uses DOE-style diesel ₱/L from server config)
+            </p>
+            {providerNote ? (
+              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
+                {providerNote}{" "}
+                <span title="Driving distance/tolls may differ.">Not door-to-door driving km.</span>
+              </p>
+            ) : !estimateGeo ? (
+              <p style={{ margin: 0, fontSize: "0.78rem", color: "#b45309" }}>
+                Browser-only estimate — start the FleetOpt API to use Google/OSM geocoding on the server.
+              </p>
+            ) : null}
+            {freightLines ? (
+              <>
+                <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+                  Update retail diesel <strong>₱{freightLines.diesel_price_per_liter.toFixed(2)}/L</strong> weekly (after DOE bulletin,
+                  usually Tuesdays) in <code style={{ fontSize: "0.74rem" }}>backend/.env</code> —
+                  <span style={{ marginLeft: "0.25rem" }}>optional public fallbacks: </span>
+                  <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER</code>.
+                </p>
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: "1.15rem",
+                    fontSize: "0.8rem",
+                    color: "var(--text-secondary)",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  <li>Diesel {freightLines.diesel_liters.toFixed(2)} L → {formatPhp(freightLines.diesel_cost_php)}</li>
+                  <li>Wear / misc (per km) → {formatPhp(freightLines.wear_misc_php)}</li>
+                  <li>Depreciation surcharge (10% of diesel + wear stack) → {formatPhp(freightLines.depreciation_php)}</li>
+                  <li>Helper allowance → {formatPhp(freightLines.helper_pay_php)}</li>
+                </ul>
+              </>
+            ) : null}
+            {showApproximateEstimateWarning && (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.82rem",
+                  color: "#92400E",
+                  background: "rgba(251, 191, 36, 0.12)",
+                  border: "1px solid rgba(245, 158, 11, 0.35)",
+                  borderRadius: "8px",
+                  padding: "0.5rem 0.65rem",
+                }}
+              >
+                Rough distance / pins — improve site addresses for tighter geocoding (this does not replace DOE diesel
+                postings; update fuel price in .env when advisories move).
+              </p>
+            )}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+                gap: "1rem",
+              }}
+            >
+              <div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Freight base</p>
+                <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                  diesel + wear + depreciation + helper
+                </p>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
+                  {formatPhp(cost.estimated_fuel)}
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                  Driver ({freightLines ? `${freightLines.driver_commission_pct}%` : "15%"} of freight base)
+                </p>
+                <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                  commission on gross freight row
+                </p>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
+                  {formatPhp(cost.estimated_labor)}
+                </p>
+              </div>
+              <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total estimate</p>
+                <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                  freight base + driver commission
+                </p>
+                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
+                  {formatPhp(cost.estimated_total)}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          !loading && <div className="booking-placeholder">{estimateHint}</div>
+        )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+            gap: "1rem",
+          }}
+        >
           <div>
             <label
               style={{
@@ -322,7 +673,7 @@ export default function CostCalculator({
                 marginBottom: "0.5rem",
               }}
             >
-              <span> Weight (tons)</span>
+              <span>Weight (tons)</span>
               <span className="field-help" title="Estimated cargo weight. Used for pricing and truck allocation.">
                 ?
               </span>
@@ -368,7 +719,14 @@ export default function CostCalculator({
               className="input"
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setErrors((er) => ({
+                  ...er,
+                  scheduled_date: "",
+                  scheduled_time_slot: "",
+                }));
+              }}
               min={today}
               disabled={!hasEnoughSites}
               style={errors.scheduled_date ? { borderColor: "#F44336" } : {}}
@@ -381,59 +739,64 @@ export default function CostCalculator({
           </div>
         </div>
 
-        <div className="booking-slot-strip" aria-label="Suggested booking slots">
-          {suggestedSlots.map((slot) => (
-            <span key={slot} className="booking-slot-pill">
-              {slot}
-            </span>
-          ))}
-        </div>
+        {slotsFetchError && hasEnoughSites && date && (
+          <p role="alert" style={{ margin: 0, color: "#b45309", fontSize: "0.85rem" }}>
+            {slotsFetchError}
+          </p>
+        )}
 
-        {cost ? (
-          <div
+        <div>
+          <span
             style={{
-              background: "linear-gradient(135deg, rgba(82, 183, 136, 0.1), rgba(82, 183, 136, 0.05))",
-              border: "1px solid rgba(82, 183, 136, 0.3)",
-              borderRadius: "12px",
-              padding: "1rem",
-              display: "grid",
-              gap: "0.75rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              fontSize: "0.9rem",
+              color: "var(--text-secondary)",
+              marginBottom: "0.5rem",
             }}
           >
-            <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
-              Estimated road distance: <strong style={{ color: "var(--text-primary)" }}>{cost.distance_km} km</strong>{" "}
-              (reference map + analytics model)
+            <span>Pickup time window</span>
+            <span className="field-help" title="Four shared slots per day. Another customer’s active booking blocks a slot.">
+              ?
+            </span>
+            {pickedSlot && !errors.scheduled_time_slot && <span className="field-valid">✓</span>}
+          </span>
+          {!date ? (
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+              Choose a schedule date to see which pickup windows are still open.
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem" }}>
-              <div>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Fuel & distance</p>
-                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                  {formatPhp(cost.estimated_fuel)}
-                </p>
-              </div>
-              <div>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Driver (10%)</p>
-                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                  {formatPhp(cost.estimated_labor)}
-                </p>
-              </div>
-              <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total estimate</p>
-                <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
-                  {formatPhp(cost.estimated_total)}
-                </p>
-              </div>
+          ) : slotsLoading ? (
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Checking open slots…</p>
+          ) : (
+            <div className="booking-slot-strip" role="radiogroup" aria-label="Pickup time slots">
+              {BOOKING_TIME_SLOTS.map((slot) => {
+                const taken = slotAvailability[slot] === false;
+                const selected = pickedSlot === slot;
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={!hasEnoughSites || taken}
+                    onClick={() => {
+                      setPickedSlot(slot);
+                      if (errors.scheduled_time_slot) setErrors((er) => ({ ...er, scheduled_time_slot: "" }));
+                    }}
+                    className={`booking-slot-pill booking-slot-selectable${selected ? " booking-slot-pill--selected" : ""}${taken ? " booking-slot-pill--taken" : ""}`}
+                  >
+                    {slot}
+                    {taken ? " (full)" : ""}
+                  </button>
+                );
+              })}
             </div>
-          </div>
-        ) : (
-          <div className="booking-placeholder">{estimateHint}</div>
-        )}
-
-        {loading && hasEnoughSites && (
-          <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            ⏳ Calculating cost...
-          </div>
-        )}
+          )}
+          {errors.scheduled_time_slot && (
+            <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.35rem 0 0 0" }}>{errors.scheduled_time_slot}</p>
+          )}
+        </div>
 
         <button
           className="button"

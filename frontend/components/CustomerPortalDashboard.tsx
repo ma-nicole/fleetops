@@ -9,8 +9,7 @@ import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/ap
 import {
   MIN_BOOKING_SITES,
   addCustomerSite,
-  getCustomerSites,
-  hasMinimumSitesForBooking,
+  loadCustomerSites,
   removeCustomerSite,
   subscribeSitesChanged,
   type CustomerSite,
@@ -64,7 +63,11 @@ export default function CustomerPortalDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [newSiteLabel, setNewSiteLabel] = useState("");
-  const [newSiteAddress, setNewSiteAddress] = useState("");
+  const [newSiteStreet, setNewSiteStreet] = useState("");
+  const [newSiteBrgy, setNewSiteBrgy] = useState("");
+  const [newSiteCity, setNewSiteCity] = useState("");
+  const [newSiteProvince, setNewSiteProvince] = useState("");
+  const [newSitePostal, setNewSitePostal] = useState("");
   const [siteFormError, setSiteFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -88,8 +91,18 @@ export default function CustomerPortalDashboard() {
   }, []);
 
   useEffect(() => {
-    setSites(getCustomerSites());
-    return subscribeSitesChanged(() => setSites(getCustomerSites()));
+    let cancelled = false;
+    const refresh = () => {
+      loadCustomerSites()
+        .then((list) => {
+          if (!cancelled) setSites(list);
+        })
+        .catch((e) => {
+          console.error(e);
+        });
+    };
+    refresh();
+    return subscribeSitesChanged(refresh);
   }, []);
 
   const activeBookings = useMemo(
@@ -245,8 +258,9 @@ export default function CustomerPortalDashboard() {
                 <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
                   <h2 style={{ margin: 0 }}>Sites</h2>
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                    Save warehouse or delivery addresses on your account. You need at least {MIN_BOOKING_SITES} sites before you
-                    can create a booking.
+                    Use separate fields: street, district or village, city or municipality, province, and zip code —
+                    the full line is built automatically for bookings and estimates. You need at least {MIN_BOOKING_SITES} sites
+                    before you can book.
                   </p>
                   <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>
                     {sites.length} saved · minimum {MIN_BOOKING_SITES} to book
@@ -275,11 +289,42 @@ export default function CustomerPortalDashboard() {
                                 <br />
                               </>
                             ) : null}
-                            <span style={{ color: "var(--text-secondary)" }}>{s.address}</span>
+                            {s.street ? (
+                              <span style={{ color: "var(--text-secondary)", lineHeight: 1.55, display: "block" }}>
+                                <span>
+                                  <strong>Street:</strong> {s.street}
+                                </span>
+                                <br />
+                                <span>
+                                  <strong>District / village:</strong> {s.barangay ?? "—"}
+                                </span>
+                                <br />
+                                <span>
+                                  <strong>City / municipality:</strong> {s.cityMunicipality ?? "—"}
+                                </span>
+                                <br />
+                                <span>
+                                  <strong>Province:</strong> {s.province ?? "—"} ·{" "}
+                                  <strong>Zip:</strong> {s.postalCode ?? "—"}
+                                </span>
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--text-secondary)" }}>{s.address}</span>
+                            )}
                           </span>
                           <button
                             type="button"
-                            onClick={() => removeCustomerSite(s.id)}
+                            onClick={() => {
+                              const summary =
+                                s.label?.trim() ||
+                                (s.street ? [s.street, s.cityMunicipality].filter(Boolean).join(", ") : s.address.trim()) ||
+                                "this site";
+                              const ok = window.confirm(
+                                `Are you sure you want to delete this saved site?\n\n${summary}`,
+                              );
+                              if (!ok) return;
+                              void removeCustomerSite(s.id).catch(() => undefined);
+                            }}
                             style={{
                               border: "1px solid var(--border)",
                               background: "#fff",
@@ -299,7 +344,9 @@ export default function CustomerPortalDashboard() {
                     </ul>
                   )}
                   <div style={{ display: "grid", gap: "0.45rem" }}>
-                    <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Label (optional)</label>
+                    <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                      Site name (optional)
+                    </label>
                     <input
                       className="input"
                       value={newSiteLabel}
@@ -307,18 +354,80 @@ export default function CustomerPortalDashboard() {
                         setNewSiteLabel(e.target.value);
                         if (siteFormError) setSiteFormError(null);
                       }}
-                      placeholder="e.g., Main warehouse"
+                      placeholder="e.g. Main warehouse"
                     />
-                    <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>Site address</label>
-                    <input
-                      className="input"
-                      value={newSiteAddress}
-                      onChange={(e) => {
-                        setNewSiteAddress(e.target.value);
-                        if (siteFormError) setSiteFormError(null);
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                        gap: "0.45rem",
                       }}
-                      placeholder="e.g., Makati warehouse, Metro Manila"
-                    />
+                    >
+                      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", marginTop: "0.2rem", gridColumn: "1 / -1" }}>
+                        Street
+                        <input
+                          className="input"
+                          value={newSiteStreet}
+                          onChange={(e) => {
+                            setNewSiteStreet(e.target.value);
+                            if (siteFormError) setSiteFormError(null);
+                          }}
+                          placeholder="Building / house no., street name"
+                          autoComplete="street-address"
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                        District / village
+                        <input
+                          className="input"
+                          value={newSiteBrgy}
+                          onChange={(e) => {
+                            setNewSiteBrgy(e.target.value);
+                            if (siteFormError) setSiteFormError(null);
+                          }}
+                          placeholder="e.g. Bagong Nayon"
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                        City / municipality
+                        <input
+                          className="input"
+                          value={newSiteCity}
+                          onChange={(e) => {
+                            setNewSiteCity(e.target.value);
+                            if (siteFormError) setSiteFormError(null);
+                          }}
+                          placeholder="e.g. Rodriguez"
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                        Province
+                        <input
+                          className="input"
+                          value={newSiteProvince}
+                          onChange={(e) => {
+                            setNewSiteProvince(e.target.value);
+                            if (siteFormError) setSiteFormError(null);
+                          }}
+                          placeholder="e.g. Rizal"
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)" }}>
+                        Zip code
+                        <input
+                          className="input"
+                          value={newSitePostal}
+                          onChange={(e) => {
+                            setNewSitePostal(e.target.value);
+                            if (siteFormError) setSiteFormError(null);
+                          }}
+                          placeholder="e.g. 1860"
+                          inputMode="numeric"
+                          autoComplete="postal-code"
+                        />
+                      </label>
+                    </div>
                     {siteFormError && (
                       <p role="alert" style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-error, #DC2626)" }}>
                         {siteFormError}
@@ -329,21 +438,35 @@ export default function CustomerPortalDashboard() {
                       className="button"
                       style={{ marginTop: "0.25rem" }}
                       onClick={() => {
-                        const res = addCustomerSite(newSiteAddress, newSiteLabel);
-                        if (!res.ok) {
-                          setSiteFormError(res.message);
-                          return;
-                        }
-                        setNewSiteAddress("");
-                        setNewSiteLabel("");
-                        setSiteFormError(null);
-                        setSites(getCustomerSites());
+                        void (async () => {
+                          const res = await addCustomerSite(
+                            {
+                              street: newSiteStreet,
+                              barangay: newSiteBrgy,
+                              cityMunicipality: newSiteCity,
+                              province: newSiteProvince,
+                              postalCode: newSitePostal,
+                            },
+                            newSiteLabel,
+                          );
+                          if (!res.ok) {
+                            setSiteFormError(res.message);
+                            return;
+                          }
+                          setNewSiteStreet("");
+                          setNewSiteBrgy("");
+                          setNewSiteCity("");
+                          setNewSiteProvince("");
+                          setNewSitePostal("");
+                          setNewSiteLabel("");
+                          setSiteFormError(null);
+                        })();
                       }}
                     >
                       Add site
                     </button>
                   </div>
-                  {hasMinimumSitesForBooking() ? (
+                  {sites.length >= MIN_BOOKING_SITES ? (
                     <CustomerCtaPrimary href="/booking">+ New booking</CustomerCtaPrimary>
                   ) : (
                     <div
@@ -360,7 +483,6 @@ export default function CustomerPortalDashboard() {
                       Add {MIN_BOOKING_SITES - sites.length} more site{MIN_BOOKING_SITES - sites.length === 1 ? "" : "s"} to enable booking
                     </div>
                   )}
-                  <CustomerCtaGhost href="/modules/customer/profile">Your profile</CustomerCtaGhost>
                 </div>
 
                 <div className="card" style={{ display: "grid", gap: "1rem" }}>

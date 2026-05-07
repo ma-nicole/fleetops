@@ -3,10 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-import { isAuthenticated, getUserRole, type UserRole } from "./auth";
-
-const AUTH_CHANGE_EVENT = "fleetops:auth-change";
-
+import { isAuthenticated, getEffectiveRole, AUTH_CHANGE_EVENT, type UserRole } from "./auth";
 /**
  * Notify every `useAuthStatus` listener that auth state has changed.
  * Call after login, logout, or any mutation to the auth localStorage keys.
@@ -29,7 +26,7 @@ type AuthStatus = {
  *   - mount (after hydration)
  *   - pathname change (covers same-tab navigations after login/logout)
  *   - `storage` events (other tabs)
- *   - the in-app `fleetops:auth-change` event (this tab, after sign-in/out)
+ *   - the in-app auth change event ({@link AUTH_CHANGE_EVENT})
  */
 export function useAuthStatus(): AuthStatus {
   const [status, setStatus] = useState<AuthStatus>({ isLoggedIn: null, role: null });
@@ -39,7 +36,7 @@ export function useAuthStatus(): AuthStatus {
     const refresh = () => {
       setStatus({
         isLoggedIn: isAuthenticated(),
-        role: getUserRole(),
+        role: getEffectiveRole(),
       });
     };
 

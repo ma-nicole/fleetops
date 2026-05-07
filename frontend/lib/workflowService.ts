@@ -7,6 +7,7 @@ export interface Booking {
   dropoff_location: string;
   service_type: string;
   scheduled_date: string;
+  scheduled_time_slot?: string;
   cargo_weight_tons: number;
   cargo_description?: string;
   estimated_cost: number;

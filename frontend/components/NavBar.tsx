@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import NavBarAuth from "./NavBarAuth";
+import { getDashboardPath, type UserRole as AuthUserRole } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/useAuthStatus";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -93,7 +94,7 @@ export default function NavBar({
               </Link>
             )}
             {userRole && (
-              <Link href={`/dashboard/${userRole}`} className="navbar-link">
+              <Link href={getDashboardPath(userRole as AuthUserRole)} className="navbar-link">
                 {ROLE_LABELS[userRole] || `${userRole} dashboard`}
               </Link>
             )}

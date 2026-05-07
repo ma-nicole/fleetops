@@ -125,16 +125,35 @@ export default function CustomerSupportPage() {
             </select>
           </label>
 
-          <label style={{ display: "grid", gap: 4, marginTop: 12 }}>
-            <span>Rating ({rating} ★)</span>
-            <input
-              type="range"
-              min={1}
-              max={5}
-              value={rating}
-              onChange={(e) => setRating(Number(e.target.value))}
-            />
-          </label>
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            <span>Rating ({rating} of 5)</span>
+            <div role="radiogroup" aria-label="Star rating" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[1, 2, 3, 4, 5].map((star) => {
+                const active = rating >= star;
+                return (
+                  <button
+                    key={star}
+                    type="button"
+                    role="radio"
+                    aria-checked={rating === star}
+                    onClick={() => setRating(star)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "1.75rem",
+                      lineHeight: 1,
+                      padding: "2px 4px",
+                      color: active ? "#F59E0B" : "#D1D5DB",
+                    }}
+                    title={`${star} star${star === 1 ? "" : "s"}`}
+                  >
+                    ★
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <label style={{ display: "grid", gap: 4, marginTop: 12 }}>
             <span>Message (optional)</span>

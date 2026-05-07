@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { announce } from "@/lib/useAnnouncer";
+
 type ReportedIssue = {
   issueId: string;
   reportedBy: string;
@@ -15,7 +17,7 @@ type ReportedIssue = {
 };
 
 export default function ReportedIssuesPage() {
-  const [issues] = useState<ReportedIssue[]>([
+  const [issues, setIssues] = useState<ReportedIssue[]>([
     {
       issueId: "ISS-2024-0001",
       reportedBy: "Carlos Rodriguez (Driver)",
@@ -64,6 +66,46 @@ export default function ReportedIssuesPage() {
       status: "reported",
     },
   ]);
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const patchIssue = (issueId: string, patch: Partial<ReportedIssue>) => {
+    setIssues((prev) => prev.map((i) => (i.issueId === issueId ? { ...i, ...patch } : i)));
+  };
+
+  const escalate = (issue: ReportedIssue) => {
+    const nextSeverity: ReportedIssue["severity"] =
+      issue.severity === "low"
+        ? "medium"
+        : issue.severity === "medium"
+          ? "high"
+          : issue.severity === "high"
+            ? "critical"
+            : "critical";
+    patchIssue(issue.issueId, { severity: nextSeverity, status: "investigating" });
+    announce(`Issue ${issue.issueId} escalated to ${nextSeverity.replace("_", " ")} severity`);
+  };
+
+  const assignToTeam = (issue: ReportedIssue) => {
+    patchIssue(issue.issueId, {
+      status: "in_progress",
+      assignedTo: issue.assignedTo ?? "Operations — Dispatch Desk",
+    });
+    announce(`Issue ${issue.issueId} assigned`);
+  };
+
+  const markResolved = (issue: ReportedIssue) => {
+    patchIssue(issue.issueId, { status: "resolved" });
+    announce(`Issue ${issue.issueId} marked resolved`);
+  };
+
+  const toggleDetails = (issueId: string) => {
+    setExpandedId((prev) => {
+      const next = prev === issueId ? null : issueId;
+      announce(next ? `Showing details for ${issueId}` : "Details hidden");
+      return next;
+    });
+  };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -287,7 +329,7 @@ export default function ReportedIssuesPage() {
                       fontWeight: "600",
                       fontSize: "0.85rem",
                     }}
-                    onClick={() => alert("Escalating issue " + issue.issueId)}
+                    onClick={() => escalate(issue)}
                   >
                     Escalate
                   </button>
@@ -302,7 +344,7 @@ export default function ReportedIssuesPage() {
                       fontWeight: "600",
                       fontSize: "0.85rem",
                     }}
-                    onClick={() => alert("Assigning to team...")}
+                    onClick={() => assignToTeam(issue)}
                   >
                     Assign
                   </button>
@@ -320,7 +362,7 @@ export default function ReportedIssuesPage() {
                     fontWeight: "600",
                     fontSize: "0.85rem",
                   }}
-                  onClick={() => alert("Marking as resolved...")}
+                  onClick={() => markResolved(issue)}
                 >
                   Mark Resolved
                 </button>
@@ -336,11 +378,32 @@ export default function ReportedIssuesPage() {
                   fontWeight: "600",
                   fontSize: "0.85rem",
                 }}
-                onClick={() => alert("Viewing details for " + issue.issueId)}
+                type="button"
+                onClick={() => toggleDetails(issue.issueId)}
               >
-                View Details
+                {expandedId === issue.issueId ? "Hide details" : "View Details"}
               </button>
             </div>
+
+            {expandedId === issue.issueId && (
+              <div
+                style={{
+                  marginTop: "0.75rem",
+                  padding: "1rem",
+                  background: "#fff",
+                  border: "1px dashed #BDBDBD",
+                  borderRadius: "6px",
+                  fontSize: "0.88rem",
+                  color: "#424242",
+                }}
+              >
+                <p style={{ margin: "0 0 0.5rem 0", fontWeight: 700 }}>Audit trail</p>
+                <p style={{ margin: 0 }}>
+                  Full narrative: {issue.description} — Last update: escalate or assign updates status in this list; FleetOpt
+                  will sync with the API when ticketing is wired.
+                </p>
+              </div>
+            )}
           </div>
         ))}
       </div>

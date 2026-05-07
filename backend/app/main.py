@@ -10,6 +10,8 @@ from app.api.routes import (
     bookings,
     clerk_auth,
     completion,
+    customer_route_estimate,
+    customer_sites,
     dispatch,
     driver,
     feedback,
@@ -75,6 +77,8 @@ app.include_router(workflow.router, prefix="/api", dependencies=_api_deps)
 app.include_router(payments.router, prefix="/api", dependencies=_api_deps)
 app.include_router(feedback.router, prefix="/api", dependencies=_api_deps)
 app.include_router(completion.router, prefix="/api", dependencies=_api_deps)
+app.include_router(customer_sites.router, prefix="/api", dependencies=_api_deps)
+app.include_router(customer_route_estimate.router, prefix="/api", dependencies=_api_deps)
 app.include_router(schedule.router, prefix="/api", dependencies=_api_deps)
 app.include_router(analytics_predict.router, prefix="/api", dependencies=_api_deps)
 app.include_router(analytics_prescribe.router, prefix="/api", dependencies=_api_deps)

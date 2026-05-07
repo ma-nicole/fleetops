@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ApiError, apiLogin } from "@/lib/api";
-import { setAuthSession, type UserRole as AuthUserRole, getDashboardPath } from "@/lib/auth";
+import {
+  getDashboardPath,
+  getUserRole,
+  reconcileRoleFromServer,
+  setAuthSession,
+  type UserRole as AuthUserRole,
+} from "@/lib/auth";
 import { announce } from "@/lib/useAnnouncer";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import FloatingField from "@/components/auth/FloatingField";
@@ -78,7 +84,9 @@ export default function SignInPage() {
         throw new Error(GENERIC_AUTH_ERROR);
       });
 
-      const resolvedRole = setAuthSession(data.access_token, data.role) ?? "customer";
+      setAuthSession(data.access_token, data.role);
+      await reconcileRoleFromServer();
+      const resolvedRole = getUserRole() ?? "customer";
       announce("Signed in. Redirecting to your dashboard.");
       router.push(getDashboardPath(resolvedRole as AuthUserRole));
     } catch (err) {
@@ -130,7 +138,7 @@ export default function SignInPage() {
 
         <FloatingField
           id="signin-email"
-          label="Work email"
+          label="Email"
           type="email"
           autoComplete="email"
           inputMode="email"

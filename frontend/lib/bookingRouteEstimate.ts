@@ -1,26 +1,24 @@
 /**
- * Client-side route estimate for booking analytics (demo / UX).
- * Uses Metro Manila reference points + haversine distance, then:
- * — Fuel & distance charge: ₱/km × km × weight factor
- * — Driver fee: 10% of that subtotal
- * — Total: subtotal + driver fee
+ * Distance estimate (keyword fallback) + freight pricing matching backend `customer_freight_pricing`.
  */
+
+import { bookingPricingKnobs } from "@/lib/bookingPricingEnv";
 
 export type BookingEstimateBreakdown = {
   distanceKm: number;
-  /** Combined fuel + distance-based route charge (pre-driver). */
+  dieselLiters: number;
+  dieselCostPhp: number;
+  wearMiscPhp: number;
+  depreciationPhp: number;
+  helperPayPhp: number;
+  freightBasePhp: number;
   fuelRouteCharge: number;
-  /** 10% driver fee on subtotal. */
-  driverFee: number;
-  /** Subtotal before driver cut. */
   subtotalBeforeDriver: number;
+  dieselPricePerLiter: number;
+  driverCommissionPct: number;
+  driverFee: number;
   total: number;
 };
-
-/** Blended ₱ per km (fuel consumption + route wear) — analytics teaching default. */
-const PHP_PER_KM = 16.5;
-
-const DRIVER_COMMISSION_RATE = 0.1;
 
 const METRO_CENTER = { lat: 14.5995, lon: 120.9842 };
 
@@ -49,6 +47,15 @@ const NCR_POINTS: Record<string, { lat: number; lon: number }> = {
   cavite: { lat: 14.4793, lon: 120.897 },
   batangas: { lat: 13.7565, lon: 121.0583 },
   bulacan: { lat: 14.7927, lon: 120.8788 },
+  rizal: { lat: 14.7668, lon: 121.1448 },
+  rodriguez: { lat: 14.7668, lon: 121.1448 },
+  montalban: { lat: 14.7668, lon: 121.1448 },
+  laguna: { lat: 14.2167, lon: 121.1667 },
+  "santa rosa": { lat: 14.3122, lon: 121.1115 },
+  pampanga: { lat: 15.0794, lon: 120.6199 },
+  "san fernando": { lat: 15.0292, lon: 120.6828 },
+  bataan: { lat: 14.6794, lon: 120.5369 },
+  "nueva ecija": { lat: 15.4865, lon: 121.0072 },
 };
 
 function normalizeKey(s: string): string {
@@ -77,6 +84,15 @@ function findCoord(input: string): { lat: number; lon: number } | null {
   return null;
 }
 
+/** True when the text matches a built-in reference point (better distance accuracy). */
+export function hasResolvedRoutePoint(address: string): boolean {
+  return findCoord(address.trim()) !== null;
+}
+
+export function estimateUsesGeocodedBoth(pickup: string, dropoff: string): boolean {
+  return hasResolvedRoutePoint(pickup) && hasResolvedRoutePoint(dropoff);
+}
+
 function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -88,7 +104,6 @@ function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: num
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Road distance ≈ crow-flies × factor (typical urban). */
 const ROAD_FACTOR = 1.28;
 
 function heuristicKm(pickup: string, dropoff: string): number {
@@ -103,6 +118,9 @@ export function estimateDistanceKm(pickup: string, dropoff: string): number {
   const d = findCoord(dropoff);
   if (p && d) {
     const crow = haversineKm(p, d);
+    if (crow < 0.001 && normalizeKey(pickup) !== normalizeKey(dropoff)) {
+      return heuristicKm(pickup, dropoff);
+    }
     return Math.round(crow * ROAD_FACTOR * 10) / 10;
   }
   if (p && !d) {
@@ -114,6 +132,45 @@ export function estimateDistanceKm(pickup: string, dropoff: string): number {
     return Math.round(crow * ROAD_FACTOR * 10) / 10;
   }
   return heuristicKm(pickup, dropoff);
+}
+
+function weightFactorTons(weightTons: number, coef: number): number {
+  const w =
+    Number.isFinite(weightTons) && weightTons > 0 ? Math.min(50, Math.max(0.1, weightTons)) : 1;
+  return 1 + Math.max(0, w - 1) * coef;
+}
+
+/** Same math as backend `customer_freight_pricing` using `bookingPricingKnobs()`. */
+export function freightPricingFromKm(kmRaw: number, weightTonsRaw: number): BookingEstimateBreakdown {
+  const knobs = bookingPricingKnobs();
+  const km = Number(kmRaw);
+  const wf = weightFactorTons(weightTonsRaw, knobs.cargoWeightMultiplierPerTon);
+  const kmpl = Math.max(1.5, knobs.truckKmPerLiter);
+  const liters = Math.max(0, (km * wf) / kmpl);
+  const dieselCost = liters * knobs.dieselPricePhpPerLiter;
+  const wear = km * knobs.tripWearPhpPerKm * wf;
+  const core = dieselCost + wear;
+  const depreciation = core * knobs.tripDepreciationRate;
+  const opsStack = core + depreciation;
+  const freightBase = opsStack + knobs.helperPhpPerTrip;
+  const driverFee = Math.round(freightBase * knobs.driverCommissionRate * 100) / 100;
+  const total = Math.round((freightBase + driverFee) * 100) / 100;
+
+  return {
+    distanceKm: Math.round(km * 10) / 10,
+    dieselLiters: Math.round(liters * 100) / 100,
+    dieselCostPhp: Math.round(dieselCost * 100) / 100,
+    wearMiscPhp: Math.round(wear * 100) / 100,
+    depreciationPhp: Math.round(depreciation * 100) / 100,
+    helperPayPhp: Math.round(knobs.helperPhpPerTrip * 100) / 100,
+    freightBasePhp: Math.round(freightBase * 100) / 100,
+    fuelRouteCharge: Math.round(freightBase * 100) / 100,
+    subtotalBeforeDriver: Math.round(freightBase * 100) / 100,
+    dieselPricePerLiter: Math.round(knobs.dieselPricePhpPerLiter * 100) / 100,
+    driverCommissionPct: Math.round(knobs.driverCommissionRate * 10000) / 100,
+    driverFee,
+    total,
+  };
 }
 
 export function estimateBookingCost(
@@ -128,16 +185,5 @@ export function estimateBookingCost(
 
   const w = Number.isFinite(weightTons) && weightTons > 0 ? Math.min(50, weightTons) : 1;
   const km = estimateDistanceKm(p, d);
-  const weightFactor = 1 + Math.max(0, w - 1) * 0.07;
-  const subtotalBeforeDriver = km * PHP_PER_KM * weightFactor;
-  const driverFee = Math.round(subtotalBeforeDriver * DRIVER_COMMISSION_RATE * 100) / 100;
-  const total = Math.round((subtotalBeforeDriver + driverFee) * 100) / 100;
-
-  return {
-    distanceKm: km,
-    fuelRouteCharge: Math.round(subtotalBeforeDriver * 100) / 100,
-    driverFee,
-    subtotalBeforeDriver: Math.round(subtotalBeforeDriver * 100) / 100,
-    total,
-  };
+  return freightPricingFromKm(km, w);
 }

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getDashboardPath, type UserRole } from "./auth";
+import { getDashboardPath, getEffectiveRole, type UserRole } from "./auth";
 
 /** Aligns with `require_roles(DISPATCHER, MANAGER, ADMIN)` on dispatch API routes. */
 export const DISPATCH_CONSOLE_ROLES: string[] = ["dispatcher", "manager", "admin"];
@@ -15,15 +15,13 @@ export function useRoleGuard(allowedRoles: string[]) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const userRole = localStorage.getItem("userRole");
-    
-    // If no role stored, redirect to login
+    const userRole = getEffectiveRole();
+
     if (!userRole) {
       router.push("/sign-in");
       return;
     }
 
-    // If user's role is not in allowed roles, redirect to their own dashboard
     if (!allowedRoles.includes(userRole)) {
       router.push(getDashboardPath(userRole as UserRole));
       return;

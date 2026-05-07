@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+import { announce } from "@/lib/useAnnouncer";
 
 type Booking = {
   id: string;
@@ -18,6 +21,11 @@ type Booking = {
 };
 
 export default function ScheduledBookingsPage() {
+  const router = useRouter();
+  const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [filterPriority, setFilterPriority] = useState<string>("All");
+  const [filterDateMin, setFilterDateMin] = useState<string>("");
+
   const [bookings] = useState<Booking[]>([
     {
       id: "BK-2024-0001",
@@ -82,6 +90,28 @@ export default function ScheduledBookingsPage() {
       priority: "low",
     },
   ]);
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      if (filterStatus !== "All") {
+        const map: Record<string, Booking["status"] | undefined> = {
+          Pending: "pending",
+          Confirmed: "confirmed",
+          Scheduled: "scheduled",
+          Assigned: "assigned",
+          "In Transit": "in_transit",
+        };
+        const want = map[filterStatus];
+        if (want !== undefined && b.status !== want) return false;
+      }
+      if (filterPriority !== "All") {
+        const key = filterPriority.toLowerCase() as Booking["priority"];
+        if (b.priority !== key) return false;
+      }
+      if (filterDateMin && b.scheduledDate < filterDateMin) return false;
+      return true;
+    });
+  }, [bookings, filterDateMin, filterPriority, filterStatus]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -161,6 +191,8 @@ export default function ScheduledBookingsPage() {
             Status
           </label>
           <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
             style={{
               width: "100%",
               padding: "0.6rem",
@@ -181,6 +213,8 @@ export default function ScheduledBookingsPage() {
             Priority
           </label>
           <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
             style={{
               width: "100%",
               padding: "0.6rem",
@@ -201,6 +235,8 @@ export default function ScheduledBookingsPage() {
           </label>
           <input
             type="date"
+            value={filterDateMin}
+            onChange={(e) => setFilterDateMin(e.target.value)}
             style={{
               width: "100%",
               padding: "0.6rem",
@@ -213,7 +249,10 @@ export default function ScheduledBookingsPage() {
 
       {/* Bookings List */}
       <div style={{ display: "grid", gap: "1rem" }}>
-        {bookings.map((booking) => (
+        {filteredBookings.length === 0 ? (
+          <p style={{ margin: 0, color: "#666" }}>No bookings match your filters.</p>
+        ) : null}
+        {filteredBookings.map((booking) => (
           <div
             key={booking.id}
             style={{
@@ -338,6 +377,7 @@ export default function ScheduledBookingsPage() {
                 </Link>
                 {booking.status === "pending" && (
                   <button
+                    type="button"
                     style={{
                       padding: "0.5rem 1rem",
                       background: "#FF9800",
@@ -348,7 +388,10 @@ export default function ScheduledBookingsPage() {
                       fontSize: "0.85rem",
                       cursor: "pointer",
                     }}
-                    onClick={() => alert("Assign driver to " + booking.id)}
+                    onClick={() => {
+                      announce(`Opening job assignments for ${booking.id}`);
+                      router.push("/dispatcher/job-assignments");
+                    }}
                   >
                     Assign
                   </button>

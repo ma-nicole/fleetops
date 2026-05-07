@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import {
@@ -10,12 +11,18 @@ import {
 import { formatDateTime } from "@/lib/appLocale";
 
 export default function AccuracyMonitoringPage() {
-  useRoleGuard(["manager", "admin"]);
+  useRoleGuard(["dispatcher", "manager", "admin"]);
 
+  const [userRole, setUserRole] = useState<string | null>(() =>
+    typeof window !== "undefined" ? window.localStorage.getItem("userRole") : null,
+  );
   const [summary, setSummary] = useState<FeedbackSummaryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [retraining, setRetraining] = useState(false);
+
+  const canRetrain =
+    userRole === "manager" || userRole === "admin";
 
   const refresh = async () => {
     setLoading(true);
@@ -57,28 +64,44 @@ export default function AccuracyMonitoringPage() {
         <header>
           <h1 style={{ margin: 0 }}>Model Accuracy & Feedback</h1>
           <p style={{ marginTop: 6, color: "#6B7280" }}>
-            Paper §3.5.10 + Fig 24 — predicted vs actual feedback loop. MAE/MAPE/RMSE per model with drift detection (MAPE &gt; 25% triggers retraining).
+            Paper §3.5.10 + Fig 24 — predicted vs actual feedback loop. MAE/MAPE/RMSE per model with drift detection
+            {canRetrain ? " (MAPE &gt; 25% triggers retraining)." : "."}{" "}
+            {userRole === "dispatcher" && (
+              <span>
+                Dispatcher view is <strong>read-only</strong>. Escalate drift to a manager to retrain.{" "}
+                <Link href="/modules/analytics/operations-snapshot" style={{ color: "#4F46E5", fontWeight: 600 }}>
+                  Live data snapshot
+                </Link>
+              </span>
+            )}
           </p>
         </header>
 
         <section style={card}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>Status</h2>
-            <button
-              onClick={triggerRetrain}
-              disabled={retraining}
-              style={{
-                padding: "8px 14px",
-                background: "#7C3AED",
-                color: "white",
-                border: "none",
-                borderRadius: 8,
-                cursor: retraining ? "not-allowed" : "pointer",
-                fontWeight: 600,
-              }}
-            >
-              {retraining ? "Retraining…" : "Retrain cost model"}
-            </button>
+            {canRetrain ? (
+              <button
+                type="button"
+                onClick={triggerRetrain}
+                disabled={retraining}
+                style={{
+                  padding: "8px 14px",
+                  background: "#7C3AED",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: retraining ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {retraining ? "Retraining…" : "Retrain cost model"}
+              </button>
+            ) : (
+              <span style={{ fontSize: 13, color: "#6B7280", fontWeight: 600 }}>
+                Training restricted to manager/admin
+              </span>
+            )}
           </div>
           {loading && <p>Loading…</p>}
           {error && <p style={{ color: "#B91C1C" }}>{error}</p>}

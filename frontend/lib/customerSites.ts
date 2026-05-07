@@ -1,34 +1,84 @@
 /**
- * Saved site addresses for customers (browser localStorage).
- * At least {@link MIN_BOOKING_SITES} sites are required before creating a booking.
+ * Saved site addresses for customers — persisted on the API per logged-in customer
+ * so they survive sign-out/sign-in (unlike legacy browser-only storage).
+ *
+ * Migrates `fleetopt_customer_sites_v1` once when the account has no server rows yet.
  */
+
+import { ApiError, apiDelete, apiGet, apiPost } from "./api";
+import { AUTH_CHANGE_EVENT } from "./auth";
+import { validateCustomerSiteStructuredFields, type CustomerSiteAddressPartsInput } from "./formValidation";
 
 export const MIN_BOOKING_SITES = 2;
 export const SITES_CHANGED_EVENT = "fleetopt-customer-sites-changed";
-const STORAGE_KEY = "fleetopt_customer_sites_v1";
+
+const LEGACY_STORAGE_KEY = "fleetopt_customer_sites_v1";
 
 export type CustomerSite = {
   id: string;
   address: string;
   label?: string;
+  street?: string;
+  barangay?: string;
+  cityMunicipality?: string;
+  province?: string;
+  postalCode?: string;
 };
 
-function readRaw(): CustomerSite[] {
+type SavedSiteDTO = {
+  id: number;
+  address: string;
+  label: string | null;
+  street: string | null;
+  barangay: string | null;
+  city_municipality: string | null;
+  province: string | null;
+  postal_code: string | null;
+};
+
+type LegacyCustomerSite = {
+  id: string;
+  address: string;
+  label?: string;
+};
+
+function dtoToSite(d: SavedSiteDTO): CustomerSite {
+  const address = String(d.address).trim();
+  return {
+    id: String(d.id),
+    address,
+    ...(d.label && String(d.label).trim() ? { label: String(d.label).trim() } : {}),
+    ...(d.street && String(d.street).trim() ? { street: String(d.street).trim() } : {}),
+    ...(d.barangay && String(d.barangay).trim() ? { barangay: String(d.barangay).trim() } : {}),
+    ...(d.city_municipality && String(d.city_municipality).trim()
+      ? { cityMunicipality: String(d.city_municipality).trim() }
+      : {}),
+    ...(d.province && String(d.province).trim() ? { province: String(d.province).trim() } : {}),
+    ...(d.postal_code && String(d.postal_code).trim() ? { postalCode: String(d.postal_code).trim() } : {}),
+  };
+}
+
+function emitSitesChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(SITES_CHANGED_EVENT));
+}
+
+function readLegacySites(): LegacyCustomerSite[] {
   if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter(
-        (row): row is CustomerSite =>
+        (row): row is LegacyCustomerSite =>
           row != null &&
           typeof row === "object" &&
           "id" in row &&
           "address" in row &&
-          typeof (row as CustomerSite).id === "string" &&
-          typeof (row as CustomerSite).address === "string",
+          typeof (row as LegacyCustomerSite).id === "string" &&
+          typeof (row as LegacyCustomerSite).address === "string",
       )
       .map((s) => ({
         id: s.id,
@@ -41,49 +91,100 @@ function readRaw(): CustomerSite[] {
   }
 }
 
-function writeRaw(sites: CustomerSite[]): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sites));
-  window.dispatchEvent(new CustomEvent(SITES_CHANGED_EVENT));
+async function fetchSitesFromApi(): Promise<CustomerSite[]> {
+  const rows = await apiGet<SavedSiteDTO[]>("/customer/sites");
+  return rows.map(dtoToSite);
 }
 
-export function getCustomerSites(): CustomerSite[] {
-  return readRaw();
-}
-
-export function addCustomerSite(address: string, label?: string): { ok: true; site: CustomerSite } | { ok: false; message: string } {
-  const trimmed = address.trim();
-  if (trimmed.length < 3) {
-    return { ok: false, message: "Address must be at least 3 characters." };
+async function migrateLegacyThenRefresh(): Promise<CustomerSite[]> {
+  const legacy = readLegacySites();
+  if (legacy.length === 0) {
+    return [];
   }
-  const sites = readRaw();
-  const site: CustomerSite = {
-    id: `site-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    address: trimmed,
-    ...(label?.trim() ? { label: label.trim() } : {}),
-  };
-  writeRaw([...sites, site]);
-  return { ok: true, site };
+  for (const s of legacy) {
+    await apiPost<SavedSiteDTO>("/customer/sites", {
+      address: s.address.trim(),
+      label: s.label?.trim() ? s.label.trim() : null,
+    }).catch(() => undefined);
+  }
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+  }
+  const after = await fetchSitesFromApi();
+  emitSitesChanged();
+  return after;
 }
 
-export function removeCustomerSite(id: string): void {
-  writeRaw(readRaw().filter((s) => s.id !== id));
+/** Load sites from API; migrates legacy localStorage once when the account has zero server rows. */
+export async function loadCustomerSites(): Promise<CustomerSite[]> {
+  try {
+    let sites = await fetchSitesFromApi();
+    if (sites.length === 0) {
+      const migrated = await migrateLegacyThenRefresh();
+      if (migrated.length > 0) {
+        sites = migrated;
+      }
+    }
+    return sites;
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+      return [];
+    }
+    throw e;
+  }
 }
 
-export function hasMinimumSitesForBooking(): boolean {
-  return readRaw().length >= MIN_BOOKING_SITES;
+export async function addCustomerSite(
+  parts: CustomerSiteAddressPartsInput,
+  label?: string,
+): Promise<{ ok: true; site: CustomerSite } | { ok: false; message: string }> {
+  const v = validateCustomerSiteStructuredFields(parts);
+  if (v) {
+    return { ok: false, message: v };
+  }
+  try {
+    const row = await apiPost<SavedSiteDTO>("/customer/sites", {
+      label: label?.trim() ? label.trim() : null,
+      street: parts.street.trim(),
+      barangay: parts.barangay.trim(),
+      city_municipality: parts.cityMunicipality.trim(),
+      province: parts.province.trim(),
+      postal_code: parts.postalCode.trim(),
+    });
+    const site = dtoToSite(row);
+    emitSitesChanged();
+    return { ok: true, site };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, message: e.message };
+    return { ok: false, message: e instanceof Error ? e.message : "Could not save site." };
+  }
+}
+
+export async function removeCustomerSite(id: string): Promise<void> {
+  await apiDelete(`/customer/sites/${encodeURIComponent(id)}`);
+  emitSitesChanged();
 }
 
 export function subscribeSitesChanged(handler: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   const onCustom = () => handler();
+  const onAuth = () => handler();
   const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) handler();
+    if (
+      e.key === "token" ||
+      e.key === "authToken" ||
+      e.key === "userRole" ||
+      e.key === LEGACY_STORAGE_KEY
+    ) {
+      handler();
+    }
   };
   window.addEventListener(SITES_CHANGED_EVENT, onCustom);
+  window.addEventListener(AUTH_CHANGE_EVENT, onAuth);
   window.addEventListener("storage", onStorage);
   return () => {
     window.removeEventListener(SITES_CHANGED_EVENT, onCustom);
+    window.removeEventListener(AUTH_CHANGE_EVENT, onAuth);
     window.removeEventListener("storage", onStorage);
   };
 }

@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, field_validator
 
+from app.constants.booking_time_slots import BOOKING_TIME_SLOTS
 from app.models.entities import BookingStatus, ServiceType
 
 
@@ -10,6 +11,7 @@ class BookingCreate(BaseModel):
     dropoff_location: str
     service_type: ServiceType
     scheduled_date: date
+    scheduled_time_slot: str
     cargo_weight_tons: float
     cargo_description: str | None = None
 
@@ -27,6 +29,21 @@ class BookingCreate(BaseModel):
             raise ValueError("Location must be at least 3 characters")
         return v.strip()
 
+    @field_validator("scheduled_time_slot")
+    @classmethod
+    def validate_time_slot(cls, v: str) -> str:
+        t = (v or "").strip()
+        if t not in BOOKING_TIME_SLOTS:
+            raise ValueError(f"Time slot must be one of: {', '.join(BOOKING_TIME_SLOTS)}")
+        return t
+
+
+class BookingScheduleAvailabilityRead(BaseModel):
+    """scheduled_time_slot → True when the slot has capacity (no blocking booking)."""
+
+    scheduled_date: date
+    slots: dict[str, bool]
+
 
 class BookingRead(BaseModel):
     id: int
@@ -35,6 +52,7 @@ class BookingRead(BaseModel):
     dropoff_location: str
     service_type: ServiceType
     scheduled_date: date
+    scheduled_time_slot: str
     cargo_weight_tons: float
     cargo_description: str | None
     estimated_cost: float

@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { announce } from "@/lib/useAnnouncer";
 
 type OngoingOperation = {
   tripId: string;
   driverId: string;
   driverName: string;
+  driverPhone: string;
   vehiclePlate: string;
   status: "pending" | "started" | "in_transit" | "arrived" | "loading" | "unloading";
   currentLocation: string;
@@ -18,11 +22,14 @@ type OngoingOperation = {
 };
 
 export default function OngoingOperationsPage() {
+  const router = useRouter();
+
   const [operations] = useState<OngoingOperation[]>([
     {
       tripId: "TRIP-001",
       driverId: "DRV-001",
       driverName: "Carlos Rodriguez",
+      driverPhone: "+639171234567",
       vehiclePlate: "AUV-2024-1440",
       status: "in_transit",
       currentLocation: "EDSA, Makati",
@@ -36,6 +43,7 @@ export default function OngoingOperationsPage() {
       tripId: "TRIP-002",
       driverId: "DRV-002",
       driverName: "Maria Santos",
+      driverPhone: "+639172345678",
       vehiclePlate: "AUV-2024-1441",
       status: "loading",
       currentLocation: "Quezon City Depot",
@@ -49,6 +57,7 @@ export default function OngoingOperationsPage() {
       tripId: "TRIP-003",
       driverId: "DRV-003",
       driverName: "Juan Dela Cruz",
+      driverPhone: "+639173456789",
       vehiclePlate: "AUV-2024-1442",
       status: "started",
       currentLocation: "Caloocan Pickup Point",
@@ -62,6 +71,7 @@ export default function OngoingOperationsPage() {
       tripId: "TRIP-004",
       driverId: "DRV-005",
       driverName: "Miguel Reyes",
+      driverPhone: "+639175678901",
       vehiclePlate: "AUV-2024-1444",
       status: "arrived",
       currentLocation: "Santa Rosa Destination",
@@ -289,6 +299,7 @@ export default function OngoingOperationsPage() {
             {/* Action Buttons */}
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button
+                type="button"
                 style={{
                   padding: "0.5rem 1rem",
                   background: "#2196F3",
@@ -299,11 +310,16 @@ export default function OngoingOperationsPage() {
                   fontWeight: "600",
                   fontSize: "0.85rem",
                 }}
-                onClick={() => alert("Viewing route for " + op.tripId)}
+                onClick={() => {
+                  const q = encodeURIComponent(`${op.currentLocation}, Philippines`);
+                  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
+                  announce(`Opened map for ${op.tripId}`);
+                }}
               >
                 View Route
               </button>
               <button
+                type="button"
                 style={{
                   padding: "0.5rem 1rem",
                   background: "#FF9800",
@@ -314,12 +330,22 @@ export default function OngoingOperationsPage() {
                   fontWeight: "600",
                   fontSize: "0.85rem",
                 }}
-                onClick={() => alert("Contacting driver " + op.driverName)}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      await navigator.clipboard.writeText(op.driverPhone);
+                      announce(`Copied ${op.driverName}'s number`);
+                    } catch {
+                      announce(`Call ${op.driverName} at ${op.driverPhone}`, "assertive");
+                    }
+                  })();
+                }}
               >
                 Contact Driver
               </button>
               {op.status === "arrived" && (
                 <button
+                  type="button"
                   style={{
                     padding: "0.5rem 1rem",
                     background: "#4CAF50",
@@ -330,7 +356,10 @@ export default function OngoingOperationsPage() {
                     fontWeight: "600",
                     fontSize: "0.85rem",
                   }}
-                  onClick={() => alert("Confirming delivery for " + op.tripId)}
+                  onClick={() => {
+                    announce(`Opening confirmation for ${op.tripId}`);
+                    router.push(`/dispatcher/confirm-completion?trip=${encodeURIComponent(op.tripId)}`);
+                  }}
                 >
                   Confirm Delivery
                 </button>

@@ -22,6 +22,7 @@ export type Booking = {
   dropoff_location: string;
   service_type: "fixed" | "customized";
   scheduled_date: string;
+  scheduled_time_slot: string;
   cargo_weight_tons: number;
   cargo_description: string | null;
   estimated_cost: number;
@@ -79,11 +80,16 @@ export type Payment = {
 export const WorkflowApi = {
   // Bookings
   listBookings: () => apiGet<Booking[]>("/bookings"),
+  bookingPickupSlotAvailability: (scheduled_date: string) =>
+    apiGet<{ scheduled_date: string; slots: Record<string, boolean> }>(
+      `/bookings/schedule-availability?scheduled_date=${encodeURIComponent(scheduled_date)}`,
+    ),
   createBooking: (payload: {
     pickup_location: string;
     dropoff_location: string;
     service_type: "fixed" | "customized";
     scheduled_date: string;
+    scheduled_time_slot: string;
     cargo_weight_tons: number;
     cargo_description?: string | null;
   }) => apiPost<Booking>("/bookings", payload),

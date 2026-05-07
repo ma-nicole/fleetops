@@ -161,6 +161,7 @@ class TestBookingWorkflow:
                 "dropoff_location": "City B",
                 "service_type": "fixed",
                 "scheduled_date": (datetime.now() + timedelta(days=1)).date().isoformat(),
+                "scheduled_time_slot": "08:00",
                 "cargo_weight_tons": 10.5,
             },
             headers={"Authorization": f"Bearer {token}"},

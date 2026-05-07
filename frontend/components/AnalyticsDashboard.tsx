@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { getDashboardPath, type UserRole } from "@/lib/auth";
+import { useAuthStatus } from "@/lib/useAuthStatus";
 import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 import { StatusBadge, EmptyState } from "./StatusBadge";
 import { SkeletonGrid } from "./Skeleton";
@@ -104,6 +106,7 @@ function SimpleChart({ data }: { data: { label: string; value: number }[] }) {
 
 export default function AnalyticsDashboard() {
   const router = useRouter();
+  const { role } = useAuthStatus();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -185,20 +188,24 @@ export default function AnalyticsDashboard() {
   }
 
   if (!stats) {
+    const emptyAction =
+      role === "customer"
+        ? { label: "Create Booking", href: "/booking" }
+        : role != null
+          ? { label: "Open dashboard", href: getDashboardPath(role as UserRole) }
+          : { label: "Sign in", href: "/sign-in" };
+
+    const emptyDescription =
+      role === "customer"
+        ? "Start creating bookings to see analytics here."
+        : "Operational metrics populate as bookings and trips move through the workflow. Open your console to continue.";
+
     return (
       <main className="container" style={{ display: "grid", gap: "2rem", padding: "1.5rem" }}>
         <section>
           <h1 style={{ margin: "0 0 1rem 0" }}>Fleet Analytics Dashboard</h1>
         </section>
-        <EmptyState
-          icon=""
-          title="No Data Yet"
-          description="Start creating bookings to see analytics here."
-          action={{
-            label: "Create Booking",
-            href: "/booking",
-          }}
-        />
+        <EmptyState icon="" title="No Data Yet" description={emptyDescription} action={emptyAction} />
       </main>
     );
   }
