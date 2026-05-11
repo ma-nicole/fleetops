@@ -21,6 +21,12 @@ from app.services.email_templates import EmailTemplate
 from app.services.notifications import send_email_notification
 from app.services.routing import optimize_route as legacy_optimize_route
 from app.services.scheduler import find_available_driver, find_available_helper, find_available_truck
+from app.constants.fleet_capacity import FLEET_TRUCK_COUNT, trucks_required_for_cargo
+from app.services.booking_schedule import (
+    driver_free_for_booking,
+    helper_free_for_booking,
+    truck_free_for_booking,
+)
 
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
@@ -151,6 +157,82 @@ def dispatcher_dashboard(
     }
 
 
+@router.get("/roster")
+def dispatch_roster(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Trucks and crew available to the dispatcher (fleet sized at four tractors)."""
+    trucks = (
+        db.query(Truck)
+        .filter(Truck.status == "available")
+        .order_by(Truck.id)
+        .limit(FLEET_TRUCK_COUNT)
+        .all()
+    )
+    drivers = (
+        db.query(User)
+        .filter(User.role == UserRole.DRIVER)
+        .order_by(User.id)
+        .limit(FLEET_TRUCK_COUNT)
+        .all()
+    )
+    helpers = db.query(User).filter(User.role == UserRole.HELPER).order_by(User.full_name).all()
+    return {
+        "trucks": [{"id": t.id, "code": t.code, "capacity_tons": float(t.capacity_tons or 0)} for t in trucks],
+        "drivers": [{"id": u.id, "name": u.full_name} for u in drivers],
+        "helpers": [{"id": u.id, "name": u.full_name} for u in helpers],
+    }
+
+
+@router.get("/assignments-board")
+def assignments_board(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Trips already assigned — used for capacity and dispatcher oversight."""
+    driver_u = aliased(User)
+    helper_u = aliased(User)
+    rows = (
+        db.query(Trip, Booking, driver_u, helper_u, Truck)
+        .join(Booking, Booking.id == Trip.booking_id)
+        .join(Truck, Truck.id == Trip.truck_id)
+        .outerjoin(driver_u, driver_u.id == Trip.driver_id)
+        .outerjoin(helper_u, helper_u.id == Trip.helper_id)
+        .filter(Trip.status != TripStatus.CANCELLED)
+        .order_by(Booking.scheduled_date.desc(), Trip.id.desc())
+        .limit(200)
+        .all()
+    )
+    out = []
+    for tr, bk, dr, hp, tk in rows:
+        out.append(
+            {
+                "trip_id": tr.id,
+                "trip_status": tr.status.value if hasattr(tr.status, "value") else str(tr.status),
+                "booking_id": bk.id,
+                "customer_id": bk.customer_id,
+                "pickup_location": bk.pickup_location,
+                "dropoff_location": bk.dropoff_location,
+                "scheduled_date": bk.scheduled_date.isoformat(),
+                "scheduled_time_slot": bk.scheduled_time_slot,
+                "cargo_weight_tons": bk.cargo_weight_tons,
+                "booking_status": bk.status.value if hasattr(bk.status, "value") else str(bk.status),
+                "truck_id": tk.id,
+                "truck_code": tk.code,
+                "driver_id": dr.id if dr else None,
+                "driver_name": dr.full_name if dr else None,
+                "helper_id": hp.id if hp else None,
+                "helper_name": hp.full_name if hp else None,
+                "helper_progress_status": getattr(tr, "helper_progress_status", None),
+                "distance_km": tr.distance_km,
+                "current_latitude": tr.current_latitude,
+                "current_longitude": tr.current_longitude,
+            }
+        )
+    return {"assignments": out}
+
+
 class ManualAssignment(BaseModel):
     truck_id: int | None = None
     driver_id: int | None = None
@@ -181,6 +263,21 @@ def assign_trip(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
+    need = trucks_required_for_cargo(booking.cargo_weight_tons)
+    active = (
+        db.query(Trip)
+        .filter(
+            Trip.booking_id == booking.id,
+            ~Trip.status.in_({TripStatus.COMPLETED, TripStatus.CANCELLED}),
+        )
+        .count()
+    )
+    if active >= need:
+        raise HTTPException(
+            status_code=400,
+            detail="This booking already has the required number of truck assignments.",
+        )
+
     payload = payload or ManualAssignment()
 
     truck: Truck | None = None
@@ -199,14 +296,21 @@ def assign_trip(
         ).first()
 
     if not truck:
-        truck = find_available_truck(db, booking.scheduled_date)
+        truck = find_available_truck(db, booking.scheduled_date, booking)
     if not driver:
-        driver = find_available_driver(db, booking.scheduled_date)
+        driver = find_available_driver(db, booking.scheduled_date, booking)
     if not helper:
-        helper = find_available_helper(db, booking.scheduled_date)
+        helper = find_available_helper(db, booking.scheduled_date, booking)
 
     if not truck or not driver:
-        raise HTTPException(status_code=400, detail="No available truck/driver")
+        raise HTTPException(status_code=400, detail="No available truck/driver for this window")
+
+    if not truck_free_for_booking(db, truck.id, booking):
+        raise HTTPException(status_code=400, detail="Selected truck is already booked for an overlapping run")
+    if not driver_free_for_booking(db, driver.id, booking):
+        raise HTTPException(status_code=400, detail="Selected driver is already booked for an overlapping run")
+    if helper is not None and not helper_free_for_booking(db, helper.id, booking):
+        raise HTTPException(status_code=400, detail="Selected helper is already booked for an overlapping run")
 
     if payload.route_path:
         route = {"path": payload.route_path, "score": payload.distance_km or 120, "weight": "cost"}

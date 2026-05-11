@@ -1,384 +1,328 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
+import { useRoleGuard } from "@/lib/useRoleGuard";
+import { WorkflowApi, type Booking } from "@/lib/workflowApi";
 
-type BookingData = {
-  bookingId: number;
-  truck: any;
-  service: any;
-  pickupLocation: string;
-  dropoffLocation: string;
-  shipmentDate: string;
-  cargoWeight: string;
-  cargoDescription: string;
-  totalCost: number;
-  createdAt: string;
-};
-
-export default function PaymentPage() {
+function BookingPaymentInner() {
   useRoleGuard(["customer"]);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const bookingIdRaw = searchParams.get("bookingId");
 
-  const [bookingData, setBookingData] = useState<BookingData | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("gcash");
-  const [cardName, setCardName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [method, setMethod] = useState<"gcash" | "bank">("gcash");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+
+  const bookingId = bookingIdRaw ? Number.parseInt(bookingIdRaw, 10) : NaN;
+
+  const loadBooking = useCallback(async () => {
+    if (!Number.isFinite(bookingId)) {
+      setLoadError("Missing booking.");
+      return;
+    }
+    try {
+      const b = await WorkflowApi.getBooking(bookingId);
+      setBooking(b);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Could not load booking.");
+    }
+  }, [bookingId]);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const data = window.localStorage.getItem("bookingData");
-      if (data) {
-        setBookingData(JSON.parse(data));
-      } else {
-        router.push("/dashboard");
-      }
+    void loadBooking();
+  }, [loadBooking]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const lower = file.name.toLowerCase();
+    const extOk =
+      lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".pdf");
+    if (!extOk) {
+      setUploadError("Only JPEG, PNG, and PDF files are allowed.");
+      setSelectedFile(null);
+      setFileName("");
+      return;
     }
-  }, [router]);
-
-  const validatePayment = () => {
-    const newErrors: { [key: string]: string } = {};
-
-    if (paymentMethod === "credit_card") {
-      if (!cardName.trim()) newErrors.cardName = "Name is required";
-      if (!cardNumber.replace(/\s/g, "").match(/^\d{13,19}$/)) newErrors.cardNumber = "Invalid card number";
-      if (!expiryDate.match(/^\d{2}\/\d{2}$/)) newErrors.expiryDate = "Use MM/YY format";
-      if (!cvv.match(/^\d{3,4}$/)) newErrors.cvv = "Invalid CVV";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handlePayment = async () => {
-    if (!validatePayment()) {
-      setShowErrors(true);
+    if (file.type && !["image/jpeg", "image/png", "application/pdf"].includes(file.type)) {
+      setUploadError("Only JPEG, PNG, and PDF files are allowed.");
+      setSelectedFile(null);
+      setFileName("");
       return;
     }
 
-    setIsProcessing(true);
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setUploadError("File size must not exceed 5MB.");
+      setSelectedFile(null);
+      setFileName("");
+      return;
+    }
 
-    // Simulate payment processing
-    setTimeout(() => {
-      if (bookingData) {
-        const completedBooking = {
-          ...bookingData,
-          status: "paid",
-          paymentMethod,
-          paymentDate: new Date().toISOString(),
-          paymentId: Math.floor(100000 + Math.random() * 900000),
-        };
-
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("completedBooking", JSON.stringify(completedBooking));
-          window.localStorage.removeItem("selectedTruck");
-          window.localStorage.removeItem("selectedService");
-          window.localStorage.removeItem("bookingData");
-        }
-
-        // Simulate email feedback
-        console.log(" Email sent to customer:", completedBooking.bookingId);
-
-        router.push("/booking/receipt");
-      }
-      setIsProcessing(false);
-    }, 2000);
+    setSelectedFile(file);
+    setFileName(file.name);
+    setUploadError("");
   };
 
-  if (!bookingData) {
-    return <div style={{ padding: "2rem" }}>Loading...</div>;
+  const handleUploadProof = async () => {
+    if (!selectedFile || !Number.isFinite(bookingId)) return;
+
+    setIsUploading(true);
+    setUploadError("");
+
+    try {
+      await WorkflowApi.submitPaymentProof(bookingId, method, selectedFile);
+      setUploadSuccess(true);
+      setTimeout(() => {
+        router.push("/modules/customer/payment");
+      }, 1200);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (!Number.isFinite(bookingId)) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto" }}>
+        <p style={{ color: "#991B1B" }}>Invalid payment link.</p>
+        <Link href="/booking" style={{ color: "#FF9800", fontWeight: 600 }}>
+          ← Back to booking
+        </Link>
+      </div>
+    );
   }
 
+  if (loadError || !booking) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto" }}>
+        <p style={{ color: "#6B7280" }}>{loadError || "Loading…"}</p>
+        <Link href="/booking" style={{ color: "#FF9800", fontWeight: 600 }}>
+          ← Back to booking
+        </Link>
+      </div>
+    );
+  }
+
+  const total = booking.estimated_cost;
+
   return (
-    <div style={{ padding: "var(--page-main-padding)", maxWidth: "900px", margin: "0 auto" }}>
+    <div style={{ padding: "var(--page-main-padding)", maxWidth: 900, margin: "0 auto" }}>
       <div style={{ marginBottom: "2rem" }}>
-        <Link href="/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: 600 }}>
-          ← Back to Dashboard
+        <Link href="/booking" style={{ color: "#FF9800", textDecoration: "none", fontWeight: 600 }}>
+          ← Back to booking
         </Link>
       </div>
 
-      <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Payment</h1>
+      <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>Pay for your booking</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
-        Payments are in Philippine peso (PHP). You can use GCash, Maya, bank transfer, or card — all amounts are quoted in PHP.
+        Use the details below, then upload proof of payment (JPEG, PNG, or PDF). An admin will verify your payment.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem" }}>
-        {/* Payment Form */}
-        <div>
-          {/* Booking Summary */}
-          <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", marginBottom: "2rem", background: "#F9F9F9" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Booking Summary</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "2rem" }}>
+        <div style={{ display: "grid", gap: "1.25rem" }}>
+          <section
+            style={{
+              padding: "1.5rem",
+              border: "1px solid #E8E8E8",
+              borderRadius: "8px",
+              background: "#F9F9F9",
+            }}
+          >
+            <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Booking summary</h3>
             <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-              <strong>Booking ID:</strong> #{bookingData.bookingId}
+              <strong>Booking:</strong> #{booking.id}
             </p>
             <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-              <strong>From:</strong> {bookingData.pickupLocation}
+              <strong>From:</strong> {booking.pickup_location}
             </p>
             <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-              <strong>To:</strong> {bookingData.dropoffLocation}
+              <strong>To:</strong> {booking.dropoff_location}
             </p>
             <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-              <strong>Date:</strong> {bookingData.shipmentDate}
+              <strong>Date:</strong> {String(booking.scheduled_date)}
             </p>
-            <p style={{ color: "#FF9800", fontWeight: 600, margin: "1rem 0 0 0" }}>
-              Amount: {formatPhp(bookingData.totalCost)}
+            <p style={{ color: "#FF9800", fontWeight: 700, margin: "1rem 0 0 0" }}>Amount due: {formatPhp(total)}</p>
+          </section>
+
+          <section>
+            <label style={{ display: "grid", gap: "0.35rem", marginBottom: "1rem" }}>
+              <span style={{ fontWeight: 600, color: "#374151" }}>How did you pay?</span>
+              <select
+                className="select"
+                value={method}
+                onChange={(e) => setMethod(e.target.value as "gcash" | "bank")}
+              >
+                <option value="gcash">GCash</option>
+                <option value="bank">Bank transfer</option>
+              </select>
+            </label>
+
+            {method === "gcash" ? (
+              <div
+                style={{
+                  padding: "1.5rem",
+                  border: "1px solid #E8E8E8",
+                  borderRadius: "8px",
+                  marginBottom: "1rem",
+                  background: "#FFFBF0",
+                }}
+              >
+                <h4 style={{ margin: "0 0 0.8rem 0", color: "#1A1A1A" }}>GCash</h4>
+                <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.95rem" }}>
+                  Use the mobile number and merchant name provided by your FleetOps administrator. Do not send payment to
+                  any number shown on unofficial channels.
+                </p>
+                <p style={{ color: "#666666", fontSize: "0.85rem", margin: 0 }}>
+                  Send {formatPhp(total)} and use booking #{booking.id} in the payment note when possible.
+                </p>
+              </div>
+            ) : (
+              <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#FFFBF0" }}>
+                <h4 style={{ margin: "0 0 0.8rem 0", color: "#1A1A1A" }}>Bank transfer</h4>
+                <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.95rem" }}>
+                  Transfer only to the official bank account issued by FleetOps operations (branch, account name, and
+                  number are shared out-of-band or in your contract).
+                </p>
+                <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.85rem" }}>
+                  <strong>Reference:</strong> Booking #{booking.id}
+                </p>
+                <p style={{ color: "#FF9800", fontWeight: 700, margin: "0.75rem 0 0 0" }}>Amount: {formatPhp(total)}</p>
+              </div>
+            )}
+          </section>
+
+          <section style={{ padding: "1.5rem", border: "2px dashed #3B82F6", borderRadius: "8px", background: "#EFF6FF" }}>
+            <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Upload proof of payment</h3>
+            <p style={{ color: "#666666", fontSize: "0.9rem", marginBottom: "1rem" }}>
+              JPEG, PNG, or PDF only (max 5MB).
             </p>
-          </div>
 
-          {/* Payment Method Selection */}
-          <div style={{ marginBottom: "2rem" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Payment Method</h3>
-            <div style={{ display: "grid", gap: "1rem" }}>
-              <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "gcash" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="gcash"
-                  checked={paymentMethod === "gcash"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ marginRight: "1rem" }}
-                />
-                <div>
-                  <strong style={{ color: "#1A1A1A" }}>GCash</strong>
-                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    Send payment via GCash app (Philippines).
-                  </p>
-                </div>
-              </label>
+            {uploadError && (
+              <div
+                style={{
+                  padding: "0.75rem",
+                  background: "#FEE2E2",
+                  color: "#991B1B",
+                  borderRadius: "6px",
+                  marginBottom: "1rem",
+                  fontSize: "0.9rem",
+                }}
+              >
+                {uploadError}
+              </div>
+            )}
 
-              <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "maya" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="maya"
-                  checked={paymentMethod === "maya"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ marginRight: "1rem" }}
-                />
-                <div>
-                  <strong style={{ color: "#1A1A1A" }}>Maya</strong>
-                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    Send payment via Maya wallet (Philippines).
-                  </p>
-                </div>
-              </label>
+            {uploadSuccess && (
+              <div
+                style={{
+                  padding: "0.75rem",
+                  background: "#D1FAE5",
+                  color: "#047857",
+                  borderRadius: "6px",
+                  marginBottom: "1rem",
+                  fontSize: "0.9rem",
+                }}
+              >
+                ✓ Proof submitted. Redirecting to payment history…
+              </div>
+            )}
 
-              <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "credit_card" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="credit_card"
-                  checked={paymentMethod === "credit_card"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ marginRight: "1rem" }}
-                />
-                <div>
-                  <strong style={{ color: "#1A1A1A" }}>Credit / debit card</strong>
-                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    Visa, Mastercard — billed in PHP.
-                  </p>
-                </div>
-              </label>
-
-              <label style={{ display: "flex", alignItems: "center", padding: "1rem", border: "1px solid #E8E8E8", borderRadius: "6px", cursor: "pointer", background: paymentMethod === "bank_transfer" ? "rgba(255, 152, 0, 0.1)" : "#FFFFFF" }}>
-                <input
-                  type="radio"
-                  name="payment"
-                  value="bank_transfer"
-                  checked={paymentMethod === "bank_transfer"}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ marginRight: "1rem" }}
-                />
-                <div>
-                  <strong style={{ color: "#1A1A1A" }}>Bank transfer (Philippines)</strong>
-                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    Direct deposit to a local bank account (PHP).
-                  </p>
-                </div>
+            <div
+              style={{
+                padding: "1.5rem",
+                border: "2px dashed #D1D5DB",
+                borderRadius: "8px",
+                textAlign: "center",
+                background: "white",
+                marginBottom: "1rem",
+              }}
+            >
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                onChange={handleFileSelect}
+                disabled={isUploading || uploadSuccess}
+                style={{ display: "none" }}
+                id="file-upload"
+              />
+              <label htmlFor="file-upload" style={{ display: "block", cursor: "pointer", color: "#3B82F6" }}>
+                <p style={{ margin: "0 0 0.25rem 0", fontWeight: 600, color: "#1A1A1A" }}>Choose file</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#666666" }}>{fileName || "No file selected"}</p>
               </label>
             </div>
-          </div>
 
-          {/* Card Details Form */}
-          {paymentMethod === "credit_card" && (
-            <div style={{ display: "grid", gap: "1rem", padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-              <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Card Details</h3>
-
-              <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem", color: "#1A1A1A" }}>
-                  Cardholder Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Juan Dela Cruz"
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: errors.cardName ? "2px solid #F44336" : "1px solid #E8E8E8",
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                  }}
-                />
-                {errors.cardName && <p style={{ color: "#F44336", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>{errors.cardName}</p>}
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem", color: "#1A1A1A" }}>
-                  Card Number *
-                </label>
-                <input
-                  type="text"
-                  placeholder="1234 5678 9012 3456"
-                  value={cardNumber}
-                  onChange={(e) => {
-                    let value = e.target.value.replace(/\s/g, "");
-                    let formatted = value.match(/.{1,4}/g)?.join(" ") || value;
-                    setCardNumber(formatted);
-                  }}
-                  maxLength={19}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: errors.cardNumber ? "2px solid #F44336" : "1px solid #E8E8E8",
-                    borderRadius: "6px",
-                    boxSizing: "border-box",
-                    fontFamily: "monospace",
-                  }}
-                />
-                {errors.cardNumber && <p style={{ color: "#F44336", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>{errors.cardNumber}</p>}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem" }}>
-                <div>
-                  <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem", color: "#1A1A1A" }}>
-                    Expiry Date (MM/YY) *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="12/25"
-                    value={expiryDate}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, "");
-                      if (value.length >= 2) {
-                        value = value.slice(0, 2) + "/" + value.slice(2, 4);
-                      }
-                      setExpiryDate(value);
-                    }}
-                    maxLength={5}
-                    style={{
-                      width: "100%",
-                      padding: "0.75rem",
-                      border: errors.expiryDate ? "2px solid #F44336" : "1px solid #E8E8E8",
-                      borderRadius: "6px",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  {errors.expiryDate && <p style={{ color: "#F44336", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>{errors.expiryDate}</p>}
-                </div>
-
-                <div>
-                  <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem", color: "#1A1A1A" }}>
-                    CVV *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="123"
-                    value={cvv}
-                    onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    maxLength={4}
-                    style={{
-                      width: "100%",
-                      padding: "0.75rem",
-                      border: errors.cvv ? "2px solid #F44336" : "1px solid #E8E8E8",
-                      borderRadius: "6px",
-                      boxSizing: "border-box",
-                      fontFamily: "monospace",
-                    }}
-                  />
-                  {errors.cvv && <p style={{ color: "#F44336", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>{errors.cvv}</p>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {paymentMethod === "bank_transfer" && (
-            <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-              <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Bank transfer (PHP)</h3>
-              <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                <strong>Bank:</strong> BDO Unibank (sample — replace with your company&apos;s live account details)
-              </p>
-              <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                <strong>Account name:</strong> FleetOpt Logistics Inc.
-              </p>
-              <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                <strong>Account number:</strong> 001234567890
-              </p>
-              <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.85rem" }}>
-                Reference on deposit slip: Booking #{bookingData.bookingId}
-              </p>
-              <p style={{ color: "#FF9800", fontWeight: 600, margin: "1rem 0 0 0" }}>
-                Halaga na ililipat: {formatPhp(bookingData.totalCost)}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Price Summary */}
-        <div style={{ position: "sticky", top: "2rem" }}>
-          <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Payment Summary</h3>
-
-            <div style={{ marginBottom: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", color: "#666666" }}>
-                <span>Service:</span>
-                <span>{formatPhp(Number(bookingData.service.base_price))}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", color: "#666666" }}>
-                <span>Distance Charge:</span>
-                <span>{formatPhp(bookingData.totalCost - Number(bookingData.service.base_price))}</span>
-              </div>
-            </div>
-
-            <div style={{ borderTop: "1px solid #E8E8E8", paddingTop: "1rem", marginBottom: "1.5rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <strong style={{ color: "#1A1A1A" }}>Total:</strong>
-                <strong style={{ color: "#FF9800", fontSize: "1.5rem" }}>{formatPhp(bookingData.totalCost)}</strong>
-              </div>
-            </div>
+            {selectedFile && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedFile(null);
+                  setFileName("");
+                }}
+                style={{
+                  padding: "0.4rem 0.8rem",
+                  background: "#F3F4F6",
+                  border: "1px solid #D1D5DB",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  marginBottom: "1rem",
+                }}
+              >
+                Clear selection
+              </button>
+            )}
 
             <button
-              onClick={handlePayment}
-              disabled={isProcessing}
+              type="button"
+              onClick={() => void handleUploadProof()}
+              disabled={!selectedFile || isUploading || uploadSuccess}
               style={{
                 width: "100%",
                 padding: "0.75rem",
-                background: isProcessing ? "#CCC" : "#FF9800",
+                background: selectedFile && !isUploading && !uploadSuccess ? "#10B981" : "#D1D5DB",
                 color: "white",
                 border: "none",
                 borderRadius: "6px",
-                cursor: isProcessing ? "not-allowed" : "pointer",
+                cursor: selectedFile && !isUploading && !uploadSuccess ? "pointer" : "not-allowed",
                 fontWeight: 600,
               }}
             >
-              {isProcessing ? "Processing Payment..." : "Complete Payment"}
+              {isUploading ? "Uploading…" : "Submit proof"}
             </button>
-
-            <div style={{ fontSize: "0.85rem", color: "#999", marginTop: "1rem", textAlign: "center" }}>
-               Your payment is secure and encrypted
-            </div>
-          </div>
+          </section>
         </div>
+
+        <aside style={{ position: "sticky", top: "2rem", alignSelf: "start" }}>
+          <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
+            <h3 style={{ color: "#1A1A1A", marginTop: 0 }}>Status</h3>
+            <p style={{ margin: 0, color: "#6B7280", fontSize: "0.9rem" }}>
+              After you submit proof, status will show as <strong>for verification</strong> in payment history until an
+              admin reviews it.
+            </p>
+          </div>
+        </aside>
       </div>
     </div>
+  );
+}
+
+export default function BookingPaymentPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--page-main-padding)" }}>Loading…</div>}>
+      <BookingPaymentInner />
+    </Suspense>
   );
 }

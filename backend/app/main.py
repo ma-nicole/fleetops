@@ -1,5 +1,6 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.routes import (
@@ -15,6 +16,7 @@ from app.api.routes import (
     dispatch,
     driver,
     feedback,
+    helper_ops,
     manager,
     payments,
     ratings,
@@ -25,8 +27,8 @@ from app.api.routes import (
 from app.core.config import settings
 from app.db import apply_runtime_schema_fixes, engine, get_db
 from app.models.base import Base
-from app.models import erd_entities  # noqa: F401 - ensure ERD tables are registered
-from app.models import entities  # noqa: F401 - ensure new entities are registered
+from app.models import entities  # noqa: F401 - ensure ORM tables are registered
+from app.services.route_estimate import PreciseDistanceUnavailable
 
 
 def require_db(db=Depends(get_db)) -> None:
@@ -34,6 +36,12 @@ def require_db(db=Depends(get_db)) -> None:
 
 
 app = FastAPI(title=settings.app_name)
+
+
+@app.exception_handler(PreciseDistanceUnavailable)
+async def precise_distance_unavailable_handler(_request: Request, exc: PreciseDistanceUnavailable) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": exc.detail})
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +74,7 @@ app.include_router(auth.router, prefix="/api", dependencies=_api_deps)
 app.include_router(bookings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(dispatch.router, prefix="/api", dependencies=_api_deps)
 app.include_router(driver.router, prefix="/api", dependencies=_api_deps)
+app.include_router(helper_ops.router, prefix="/api", dependencies=_api_deps)
 app.include_router(manager.router, prefix="/api", dependencies=_api_deps)
 app.include_router(admin.router, prefix="/api", dependencies=_api_deps)
 app.include_router(ratings.router, prefix="/api", dependencies=_api_deps)

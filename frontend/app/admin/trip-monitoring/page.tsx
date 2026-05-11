@@ -82,7 +82,7 @@ export default function AdminTripMonitoringPage() {
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <Link href="/admin/scheduling" style={{ color: "#0EA5E9", textDecoration: "none" }}>← Scheduling</Link>
+            <Link href="/admin/payment-approval" style={{ color: "#0EA5E9", textDecoration: "none" }}>← Payment approval</Link>
             <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Trip Execution & Monitoring</h1>
           </div>
           <Link href="/admin/orders" style={{ textDecoration: "none", background: "#3B82F6", color: "white", padding: "0.6rem 1rem", borderRadius: "6px", fontWeight: 600 }}>Next: Orders</Link>

@@ -5,13 +5,22 @@ from datetime import datetime, timedelta
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.db import get_db
 from app.models.entities import (
-    Booking, BookingStatus, Trip, TripStatus, User, UserRole,
-    Truck, TripIssue
+    Booking,
+    BookingStatus,
+    Trip,
+    TripStatus,
+    User,
+    UserRole,
+    Truck,
+    TripIssue,
+    Payment,
+    PaymentStatus,
 )
 from app.schemas.booking import BookingApprovalRequest, BookingRead
 from app.schemas.trip import (
@@ -19,6 +28,7 @@ from app.schemas.trip import (
     TripIssueReport, TripIssueRead
 )
 from app.services.booking_schedule import slot_available
+from app.constants.fleet_capacity import cargo_exceeds_fleet, trucks_required_for_cargo
 from app.services.costing import estimate_trip_cost
 from app.services.email_templates import EmailTemplate
 from app.services.feedback_loop import record_trip_feedback
@@ -74,10 +84,23 @@ def create_booking_request(
         db=db,
     )
 
-    if not slot_available(db, booking_data.scheduled_date, booking_data.scheduled_time_slot):
+    if cargo_exceeds_fleet(float(booking_data.cargo_weight_tons)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cargo exceeds simultaneous fleet capacity (four trucks × 42 t). Split the load.",
+        )
+
+    if not slot_available(
+        db,
+        booking_data.scheduled_date,
+        booking_data.scheduled_time_slot,
+        float(booking_data.cargo_weight_tons),
+        booking_data.pickup_location,
+        booking_data.dropoff_location,
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="That pickup time is already reserved for this date. Pick another slot.",
+            detail="Not enough free trucks for this pickup window and route duration. Pick another slot.",
         )
 
     booking = Booking(
@@ -120,19 +143,43 @@ def get_pending_bookings(
     return bookings
 
 
+def _booking_open_for_dispatch(db: Session, booking: Booking) -> bool:
+    if booking.status in {
+        BookingStatus.CANCELLED,
+        BookingStatus.REJECTED,
+        BookingStatus.COMPLETED,
+    }:
+        return False
+    need = trucks_required_for_cargo(booking.cargo_weight_tons)
+    active = (
+        db.query(Trip)
+        .filter(
+            Trip.booking_id == booking.id,
+            ~Trip.status.in_({TripStatus.COMPLETED, TripStatus.CANCELLED}),
+        )
+        .count()
+    )
+    return active < need
+
+
 @router.get("/booking/assignable", response_model=list[BookingRead])
 def get_assignable_bookings_for_dispatch(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
-    """Approved bookings waiting for dispatcher assignment (Job Assignment wizard)."""
-    bookings = (
+    """Verified-payment bookings that still need truck/driver/helper assignment."""
+    verified = exists().where(
+        Payment.booking_id == Booking.id,
+        Payment.status == PaymentStatus.VERIFIED,
+    )
+    rows = (
         db.query(Booking)
-        .filter(Booking.status == BookingStatus.APPROVED)
+        .filter(verified)
+        .filter(Booking.status.in_([BookingStatus.APPROVED, BookingStatus.ASSIGNED]))
         .order_by(Booking.created_at.desc())
         .all()
     )
-    return bookings
+    return [b for b in rows if _booking_open_for_dispatch(db, b)]
 
 
 @router.post("/booking/{booking_id}/approve", response_model=BookingRead)
@@ -206,8 +253,8 @@ def create_job_from_booking(
         )
 
     # Find available truck and driver
-    truck = find_available_truck(db, booking.scheduled_date)
-    driver = find_available_driver(db, booking.scheduled_date)
+    truck = find_available_truck(db, booking.scheduled_date, booking)
+    driver = find_available_driver(db, booking.scheduled_date, booking)
 
     if not truck or not driver:
         raise HTTPException(

@@ -17,55 +17,7 @@ type ReportedIssue = {
 };
 
 export default function ReportedIssuesPage() {
-  const [issues, setIssues] = useState<ReportedIssue[]>([
-    {
-      issueId: "ISS-2024-0001",
-      reportedBy: "Carlos Rodriguez (Driver)",
-      issueType: "Vehicle Maintenance",
-      severity: "medium",
-      description: "Vehicle AUV-2024-1440 - Strange noise from engine, needs inspection",
-      reportedDate: "2024-04-10 10:15 AM",
-      status: "investigating",
-      assignedTo: "Maintenance Team",
-    },
-    {
-      issueId: "ISS-2024-0002",
-      reportedBy: "Maria Santos (Driver)",
-      issueType: "Traffic Issue",
-      severity: "low",
-      description: "Severe traffic jam on EDSA causing delay to TRIP-002, estimated 45 mins late",
-      reportedDate: "2024-04-10 11:30 AM",
-      status: "reported",
-    },
-    {
-      issueId: "ISS-2024-0003",
-      reportedBy: "Customer - ABC Retail",
-      issueType: "Delivery Issue",
-      severity: "high",
-      description: "Item damaged during delivery - electronics package broken, compensation requested",
-      reportedDate: "2024-04-09 03:45 PM",
-      status: "in_progress",
-      assignedTo: "Claims Department",
-    },
-    {
-      issueId: "ISS-2024-0004",
-      reportedBy: "Juan Dela Cruz (Driver)",
-      issueType: "Fuel/Refuel",
-      severity: "medium",
-      description: "Vehicle fuel gauge showing incorrect reading, filled 60L but gauge shows 50%",
-      reportedDate: "2024-04-08 09:00 AM",
-      status: "resolved",
-    },
-    {
-      issueId: "ISS-2024-0005",
-      reportedBy: "Dispatcher Station",
-      issueType: "Route Issue",
-      severity: "low",
-      description: "Road closure on alternate route, recommending detour for upcoming trips",
-      reportedDate: "2024-04-10 02:30 PM",
-      status: "reported",
-    },
-  ]);
+  const [issues, setIssues] = useState<ReportedIssue[]>([]);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -228,7 +180,21 @@ export default function ReportedIssuesPage() {
 
       {/* Issues List */}
       <div style={{ display: "grid", gap: "1rem" }}>
-        {issues.map((issue) => (
+        {issues.length === 0 ? (
+          <div
+            style={{
+              padding: "2rem",
+              border: "1px solid #E8E8E8",
+              borderRadius: "8px",
+              background: "#FAFAFA",
+              color: "#666666",
+              textAlign: "center",
+            }}
+          >
+            <p style={{ margin: 0 }}>No reported issues yet. Driver-reported trip issues will list here when that feed is connected.</p>
+          </div>
+        ) : (
+          issues.map((issue) => (
           <div
             key={issue.issueId}
             style={{
@@ -405,7 +371,8 @@ export default function ReportedIssuesPage() {
               </div>
             )}
           </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

@@ -205,7 +205,7 @@ export default function DriverDashboardPage() {
           />
           <KpiCard label="Distance (loaded trips)" value={`${totalKmToday.toFixed(1)} km`} delta={`Avg ${trips.length ? (totalKmToday / trips.length).toFixed(1) : "0"} km / trip`} />
           <KpiCard label="Fuel (cost rollup)" value={fuelToday ? formatPhpWhole(fuelToday) : "—"} delta="Based on logged trip fuel_cost" tone="neutral" />
-          <KpiCard label="Completion rate (sample)" value={`${completedRate}%`} delta={salary?.rating != null ? `Rating ${salary.rating.toFixed(1)} / 5` : salary?.compliance_status || "Compliance on profile"} tone="success" />
+          <KpiCard label="Completion rate" value={`${completedRate}%`} delta={salary?.rating != null ? `Rating ${salary.rating.toFixed(1)} / 5` : salary?.compliance_status || "Compliance on profile"} tone="success" />
         </section>
 
         <section

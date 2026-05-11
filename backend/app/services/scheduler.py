@@ -9,48 +9,70 @@ from sqlalchemy.orm import Session
 from app.models.entities import Booking, Trip, Truck, User, UserRole
 
 
-def find_available_truck(db: Session, scheduled_date: date) -> Truck | None:
-    scheduled_truck_ids = (
-        db.query(Trip.truck_id)
-        .join(Booking, Booking.id == Trip.booking_id)
-        .filter(Booking.scheduled_date == scheduled_date)
-        .all()
-    )
-    blocked_ids = {row[0] for row in scheduled_truck_ids}
+def find_available_truck(db: Session, scheduled_date: date, booking: Booking | None = None) -> Truck | None:
+    from app.services.booking_schedule import truck_free_for_booking
 
-    query = db.query(Truck).filter(Truck.status == "available")
-    if blocked_ids:
-        query = query.filter(~Truck.id.in_(blocked_ids))
-    return query.first()
-
-
-def find_available_driver(db: Session, scheduled_date: date) -> User | None:
-    scheduled_driver_ids = (
-        db.query(Trip.driver_id)
-        .join(Booking, Booking.id == Trip.booking_id)
-        .filter(Booking.scheduled_date == scheduled_date)
-        .all()
-    )
-    blocked_ids = {row[0] for row in scheduled_driver_ids}
-
-    query = db.query(User).filter(User.role == UserRole.DRIVER)
-    if blocked_ids:
-        query = query.filter(~User.id.in_(blocked_ids))
-    return query.first()
+    query = db.query(Truck).filter(Truck.status == "available").order_by(Truck.id)
+    candidates = query.all()
+    if booking is None:
+        scheduled_truck_ids = (
+            db.query(Trip.truck_id)
+            .join(Booking, Booking.id == Trip.booking_id)
+            .filter(Booking.scheduled_date == scheduled_date)
+            .all()
+        )
+        blocked_ids = {row[0] for row in scheduled_truck_ids}
+        if blocked_ids:
+            candidates = [t for t in candidates if t.id not in blocked_ids]
+        return candidates[0] if candidates else None
+    for truck in candidates:
+        if truck_free_for_booking(db, truck.id, booking):
+            return truck
+    return None
 
 
-def find_available_helper(db: Session, scheduled_date: date) -> User | None:
-    scheduled_helper_ids = (
-        db.query(Trip.helper_id)
-        .join(Booking, Booking.id == Trip.booking_id)
-        .filter(Booking.scheduled_date == scheduled_date, Trip.helper_id.isnot(None))
-        .all()
-    )
-    blocked_ids = {row[0] for row in scheduled_helper_ids if row[0] is not None}
-    query = db.query(User).filter(User.role == UserRole.HELPER)
-    if blocked_ids:
-        query = query.filter(~User.id.in_(blocked_ids))
-    return query.first()
+def find_available_driver(db: Session, scheduled_date: date, booking: Booking | None = None) -> User | None:
+    from app.services.booking_schedule import driver_free_for_booking
+
+    query = db.query(User).filter(User.role == UserRole.DRIVER).order_by(User.id)
+    candidates = query.all()
+    if booking is None:
+        scheduled_driver_ids = (
+            db.query(Trip.driver_id)
+            .join(Booking, Booking.id == Trip.booking_id)
+            .filter(Booking.scheduled_date == scheduled_date)
+            .all()
+        )
+        blocked_ids = {row[0] for row in scheduled_driver_ids}
+        if blocked_ids:
+            candidates = [u for u in candidates if u.id not in blocked_ids]
+        return candidates[0] if candidates else None
+    for user in candidates:
+        if driver_free_for_booking(db, user.id, booking):
+            return user
+    return None
+
+
+def find_available_helper(db: Session, scheduled_date: date, booking: Booking | None = None) -> User | None:
+    from app.services.booking_schedule import helper_free_for_booking
+
+    query = db.query(User).filter(User.role == UserRole.HELPER).order_by(User.id)
+    candidates = query.all()
+    if booking is None:
+        scheduled_helper_ids = (
+            db.query(Trip.helper_id)
+            .join(Booking, Booking.id == Trip.booking_id)
+            .filter(Booking.scheduled_date == scheduled_date, Trip.helper_id.isnot(None))
+            .all()
+        )
+        blocked_ids = {row[0] for row in scheduled_helper_ids if row[0] is not None}
+        if blocked_ids:
+            candidates = [u for u in candidates if u.id not in blocked_ids]
+        return candidates[0] if candidates else None
+    for user in candidates:
+        if helper_free_for_booking(db, user.id, booking):
+            return user
+    return None
 
 
 def _week_dates(week_iso: str | None) -> list[date]:

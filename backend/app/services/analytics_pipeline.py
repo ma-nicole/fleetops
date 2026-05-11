@@ -105,7 +105,7 @@ def run_pipeline(db: Session) -> dict[str, Any]:
             BookingStatus.OUT_FOR_DELIVERY,
         }
     )
-    total_revenue = sum(p.amount for p in payments if p.status == PaymentStatus.PAID)
+    total_revenue = sum(p.amount for p in payments if p.status == PaymentStatus.VERIFIED)
     receivables = sum(b.estimated_cost for b in bookings if b.status == BookingStatus.COMPLETED) - total_revenue
 
     avg_trip_cost = (

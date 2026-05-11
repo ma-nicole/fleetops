@@ -462,7 +462,7 @@ class TestPaymentsAndFeedback:
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["status"] == "paid"
+        assert body["status"] == "for_verification"
         assert body["amount"] == 2500
 
     def test_finance_summary(self, client, test_users):

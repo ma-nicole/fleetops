@@ -52,14 +52,73 @@ class Settings(BaseSettings):
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
 
-    # Geocoding (optional) — Google preferred for production; else OSM Nominatim (rate-limited)
+    # Geocoding — Google (paid API key) optional; if unset, OSM Nominatim is used (no API key; rate-limited).
     google_maps_geocoding_api_key: str | None = Field(
         default=None,
-        description="Google Geocoding API key. If unset, Nominatim is used with GEOCODING_USER_AGENT.",
+        description=(
+            "Google Geocoding API key (optional). Often browser/referrer-restricted for Maps JS. "
+            "Backend geocoding from FastAPI needs GOOGLE_MAPS_SERVER_API_KEY if this key is websites-only."
+        ),
+    )
+    google_maps_server_api_key: str | None = Field(
+        default=None,
+        description=(
+            "Server-side Google key for Geocoding + Directions from this API (IP restriction or none in dev). "
+            "Use when GOOGLE_MAPS_GEOCODING_API_KEY is HTTP-referrer-only — otherwise those calls fail and you get Nominatim/OSRM."
+        ),
     )
     geocoding_user_agent: str = Field(
         default="FleetOpt/1.0 (+https://localhost)",
         description='HTTP User-Agent sent to Nominatim (must identify your app; include contact URL or email).',
+    )
+
+    # Road km — Google Directions (closest to Google Maps driving distance) when key available.
+    google_maps_directions_api_key: str | None = Field(
+        default=None,
+        description=(
+            "Google Directions API key for server routes. Enable Directions API. "
+            "If empty, falls back to GOOGLE_MAPS_SERVER_API_KEY then geocoding key when GOOGLE_DIRECTIONS_FALLBACK…=true."
+        ),
+    )
+    google_directions_fallback_to_geocoding_key: bool = Field(
+        default=True,
+        description="If no dedicated directions key, use server key then GOOGLE_MAPS_GEOCODING_API_KEY for Directions.",
+    )
+    use_google_directions_for_routing: bool = Field(
+        default=True,
+        description="When a directions-capable key is available, call Google Directions before ORS/OSRM for road km.",
+    )
+
+    # Driving distance (road km) after geocoding — OSRM / OpenRouteService (OpenStreetMap-based).
+    openrouteservice_api_key: str | None = Field(
+        default=None,
+        description="Optional OpenRouteService API key (free tier). Tried before OSRM when set.",
+    )
+    use_truck_route_profile: bool = Field(
+        default=True,
+        description=(
+            "If true, OpenRouteService uses driving-hgv (heavy goods / truck-friendly restrictions). "
+            "If false, uses driving-car. Public OSRM demo has no HGV profile — see OSRM_ROUTE_PROFILE."
+        ),
+    )
+    osrm_route_base_url: str = Field(
+        default="https://router.project-osrm.org",
+        description="OSRM route endpoint base (no trailing path). Public demo or self-hosted.",
+    )
+    osrm_route_profile: str = Field(
+        default="driving",
+        description=(
+            "OSRM profile segment in /route/v1/{profile}/… Default 'driving' matches public demo (car-oriented). "
+            "Self-hosted OSRM with a truck/HGV profile: set to that profile name."
+        ),
+    )
+    use_osrm_driving_distance: bool = Field(
+        default=True,
+        description="If true, request OSRM driving distance when ORS key is unset or fails.",
+    )
+    require_routed_distance: bool = Field(
+        default=True,
+        description="If true, refuse heuristics / straight-line km — only Google Directions / OSRM / ORS road km (or same-location zero).",
     )
 
     # Booking route estimate — align with frontend NEXT_PUBLIC_* for browser fallback.

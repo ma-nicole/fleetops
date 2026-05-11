@@ -1,8 +1,11 @@
-"""Payment endpoints (paper §3.2.4 Customer DFD + Fig 14)."""
+"""Payment endpoints — proof upload + admin verification (Customer DFD payment lifecycle)."""
 from datetime import datetime
+from pathlib import Path
 from secrets import token_hex
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
@@ -24,8 +27,26 @@ from app.schemas.payment import (
 )
 from app.services.notifications import send_email_notification
 
-
 router = APIRouter(prefix="/payments", tags=["payments"])
+
+UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "payment_proofs"
+
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".pdf"}
+
+
+def _ensure_upload_dir() -> None:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _validate_upload(filename: str, _content_type: str | None) -> str:
+    lower = filename.lower()
+    ext = Path(lower).suffix
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail="Proof must be a JPEG, PNG, or PDF file.",
+        )
+    return ext
 
 
 @router.post("", response_model=PaymentRead)
@@ -34,6 +55,7 @@ def create_payment(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
+    """Legacy/internal: record a payment row without proof. Stays in for_verification until proof upload."""
     booking = db.query(Booking).filter(Booking.id == payload.booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -41,6 +63,7 @@ def create_payment(
         raise HTTPException(status_code=403, detail="Not your booking")
 
     if booking.status not in {
+        BookingStatus.PENDING_APPROVAL,
         BookingStatus.APPROVED,
         BookingStatus.ASSIGNED,
         BookingStatus.ACCEPTED,
@@ -69,26 +92,104 @@ def create_payment(
         customer_id=booking.customer_id,
         method=payload.method,
         amount=payload.amount,
-        status=PaymentStatus.PROCESSING,
+        status=PaymentStatus.FOR_VERIFICATION,
         reference=f"PAY-{token_hex(4).upper()}",
     )
     db.add(payment)
     db.commit()
     db.refresh(payment)
+    return payment
 
-    # Simulate gateway response: cash + card succeed; gcash/bank succeed; failure simulated rarely
-    if payload.method in {"card", "gcash", "bank", "cash"}:
-        payment.status = PaymentStatus.PAID
-        payment.paid_at = datetime.utcnow()
+
+@router.post("/submit-proof", response_model=PaymentRead)
+async def submit_payment_proof(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+    booking_id: int = Form(...),
+    method: str = Form("gcash"),
+    file: UploadFile = File(...),
+):
+    _ensure_upload_dir()
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your booking")
+    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REJECTED):
+        raise HTTPException(status_code=400, detail="Cannot submit payment for this booking.")
+
+    method = (method or "gcash").lower().strip()
+    if method not in {"gcash", "bank", "card", "cash"}:
+        raise HTTPException(status_code=400, detail="Invalid payment method")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File required")
+    ext = _validate_upload(file.filename, file.content_type)
+    amount = round(float(booking.estimated_cost or 0), 2)
+
+    existing = (
+        db.query(Payment)
+        .filter(Payment.booking_id == booking_id)
+        .order_by(Payment.id.desc())
+        .first()
+    )
+    if existing:
+        if existing.status == PaymentStatus.VERIFIED:
+            raise HTTPException(status_code=400, detail="Payment already verified for this booking.")
+        if existing.status == PaymentStatus.FOR_VERIFICATION and existing.proof_storage_path:
+            raise HTTPException(status_code=400, detail="Proof already submitted — wait for admin review.")
+
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File must be 5MB or smaller.")
+
+    uid = uuid4().hex
+    stored_name = f"b{booking_id}_{uid}{ext}"
+    rel_path = f"payment_proofs/{stored_name}"
+    abs_path = UPLOAD_DIR / stored_name
+    abs_path.write_bytes(raw)
+
+    if existing and existing.status == PaymentStatus.REJECTED:
+        pay = existing
+        pay.method = method
+        pay.amount = amount
+        pay.status = PaymentStatus.FOR_VERIFICATION
+        pay.reference = pay.reference or f"PAY-{token_hex(4).upper()}"
+        pay.paid_at = None
+        pay.refunded_at = None
+        pay.proof_original_filename = file.filename
+        pay.proof_storage_path = rel_path
+        pay.proof_uploaded_at = datetime.utcnow()
+        pay.reviewed_at = None
+        pay.reviewed_by_id = None
         db.commit()
-        db.refresh(payment)
+        db.refresh(pay)
+        return pay
 
-        send_email_notification(
-            to_email=user.email,
-            subject=f"Payment received for booking #{booking.id}",
-            html_body=f"<p>We received ₱{payload.amount:.2f} via {payload.method}. Reference: {payment.reference}</p>",
-        )
+    transaction = Transaction(
+        booking_id=booking.id,
+        customer_id=booking.customer_id,
+        type="booking",
+        amount=amount,
+    )
+    db.add(transaction)
+    db.flush()
 
+    payment = Payment(
+        booking_id=booking.id,
+        transaction_id=transaction.id,
+        customer_id=booking.customer_id,
+        method=method,
+        amount=amount,
+        status=PaymentStatus.FOR_VERIFICATION,
+        reference=f"PAY-{token_hex(4).upper()}",
+        proof_original_filename=file.filename,
+        proof_storage_path=rel_path,
+        proof_uploaded_at=datetime.utcnow(),
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
     return payment
 
 
@@ -117,6 +218,141 @@ def list_booking_payments(
     return db.query(Payment).filter(Payment.booking_id == booking_id).order_by(Payment.created_at.desc()).all()
 
 
+@router.get("/finance/summary", response_model=FinanceSummary)
+def finance_summary(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
+):
+    payments = db.query(Payment).all()
+    bookings = db.query(Booking).all()
+
+    verified = sum(p.amount for p in payments if p.status == PaymentStatus.VERIFIED)
+    refunded = sum(p.amount for p in payments if p.status == PaymentStatus.REFUNDED)
+    rejected = sum(p.amount for p in payments if p.status == PaymentStatus.REJECTED)
+    pending_verification = sum(
+        p.amount for p in payments if p.status == PaymentStatus.FOR_VERIFICATION
+    )
+
+    completed_revenue = sum(b.estimated_cost for b in bookings if b.status == BookingStatus.COMPLETED)
+    receivables = max(0.0, completed_revenue - verified)
+
+    by_method: dict[str, float] = {}
+    for p in payments:
+        if p.status == PaymentStatus.VERIFIED:
+            by_method[p.method] = round(by_method.get(p.method, 0) + p.amount, 2)
+
+    verified_count = sum(1 for p in payments if p.status == PaymentStatus.VERIFIED)
+    avg_ticket = round(verified / verified_count, 2) if verified_count else 0
+
+    return FinanceSummary(
+        total_revenue=round(float(completed_revenue), 2),
+        total_paid=round(float(verified), 2),
+        total_pending=round(float(pending_verification), 2),
+        total_failed=round(float(rejected), 2),
+        total_refunded=round(float(refunded), 2),
+        receivables=round(float(receivables), 2),
+        payments_count=len(payments),
+        average_ticket=avg_ticket,
+        by_method=by_method,
+    )
+
+
+@router.get("/{payment_id}/proof", response_class=FileResponse)
+def download_payment_proof(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if user.role == UserRole.CUSTOMER and payment.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role not in {UserRole.ADMIN, UserRole.MANAGER} and payment.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if not payment.proof_storage_path:
+        raise HTTPException(status_code=404, detail="No proof file on record")
+
+    base = Path(__file__).resolve().parents[3] / "uploads"
+    path = base / payment.proof_storage_path
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Proof file missing on server")
+
+    fname = payment.proof_original_filename or path.name
+    return FileResponse(
+        path,
+        filename=fname,
+        media_type="application/octet-stream",
+    )
+
+
+@router.post("/{payment_id}/verify", response_model=PaymentRead)
+def verify_payment(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    reviewer: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.status != PaymentStatus.FOR_VERIFICATION:
+        raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be approved")
+    if not payment.proof_storage_path:
+        raise HTTPException(status_code=400, detail="No proof uploaded for this payment")
+
+    payment.status = PaymentStatus.VERIFIED
+    payment.paid_at = datetime.utcnow()
+    payment.reviewed_at = datetime.utcnow()
+    payment.reviewed_by_id = reviewer.id
+
+    book = db.query(Booking).filter(Booking.id == payment.booking_id).first()
+    if book and book.status == BookingStatus.PENDING_APPROVAL:
+        book.status = BookingStatus.APPROVED
+        book.approved_by_id = reviewer.id
+        book.approved_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(payment)
+
+    cust = db.query(User).filter(User.id == payment.customer_id).first()
+    if cust and cust.email:
+        send_email_notification(
+            to_email=cust.email,
+            subject=f"Payment verified for booking #{payment.booking_id}",
+            html_body=f"<p>Your payment ({payment.reference}) was verified. Booking #{payment.booking_id} is cleared for processing.</p>",
+        )
+    return payment
+
+
+@router.post("/{payment_id}/reject", response_model=PaymentRead)
+def reject_payment(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    reviewer: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.status != PaymentStatus.FOR_VERIFICATION:
+        raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be rejected")
+
+    payment.status = PaymentStatus.REJECTED
+    payment.paid_at = None
+    payment.reviewed_at = datetime.utcnow()
+    payment.reviewed_by_id = reviewer.id
+    db.commit()
+    db.refresh(payment)
+
+    cust = db.query(User).filter(User.id == payment.customer_id).first()
+    if cust and cust.email:
+        send_email_notification(
+            to_email=cust.email,
+            subject=f"Payment proof needs correction — booking #{payment.booking_id}",
+            html_body=f"<p>We could not verify payment {payment.reference}. Please submit a new proof from the payment page.</p>",
+        )
+    return payment
+
+
 @router.post("/{payment_id}/refund", response_model=PaymentRead)
 def refund_payment(
     payment_id: int,
@@ -127,48 +363,11 @@ def refund_payment(
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if payment.status != PaymentStatus.PAID:
-        raise HTTPException(status_code=400, detail="Only paid payments can be refunded")
+    if payment.status != PaymentStatus.VERIFIED:
+        raise HTTPException(status_code=400, detail="Only verified payments can be refunded")
 
     payment.status = PaymentStatus.REFUNDED
     payment.refunded_at = datetime.utcnow()
     db.commit()
     db.refresh(payment)
     return payment
-
-
-@router.get("/finance/summary", response_model=FinanceSummary)
-def finance_summary(
-    db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
-):
-    payments = db.query(Payment).all()
-    bookings = db.query(Booking).all()
-
-    paid = sum(p.amount for p in payments if p.status == PaymentStatus.PAID)
-    refunded = sum(p.amount for p in payments if p.status == PaymentStatus.REFUNDED)
-    failed = sum(p.amount for p in payments if p.status == PaymentStatus.FAILED)
-    pending = sum(p.amount for p in payments if p.status in {PaymentStatus.PENDING, PaymentStatus.PROCESSING})
-
-    completed_revenue = sum(b.estimated_cost for b in bookings if b.status == BookingStatus.COMPLETED)
-    receivables = max(0.0, completed_revenue - paid)
-
-    by_method: dict[str, float] = {}
-    for p in payments:
-        if p.status == PaymentStatus.PAID:
-            by_method[p.method] = round(by_method.get(p.method, 0) + p.amount, 2)
-
-    paid_count = sum(1 for p in payments if p.status == PaymentStatus.PAID)
-    avg_ticket = round(paid / paid_count, 2) if paid_count else 0
-
-    return FinanceSummary(
-        total_revenue=round(float(completed_revenue), 2),
-        total_paid=round(float(paid), 2),
-        total_pending=round(float(pending), 2),
-        total_failed=round(float(failed), 2),
-        total_refunded=round(float(refunded), 2),
-        receivables=round(float(receivables), 2),
-        payments_count=len(payments),
-        average_ticket=avg_ticket,
-        by_method=by_method,
-    )

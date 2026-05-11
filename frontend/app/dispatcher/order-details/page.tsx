@@ -1,45 +1,97 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 import { announce } from "@/lib/useAnnouncer";
+import { WorkflowApi, type Booking } from "@/lib/workflowApi";
+import { formatPhp } from "@/lib/appLocale";
 
-type OrderDetail = {
-  id: string;
-  bookingId: string;
-  customer: string;
-  status: string;
-  items: Array<{ name: string; quantity: number; weight: string }>;
-  pickupDetails: { address: string; contactPerson: string; phone: string };
-  deliveryDetails: { address: string; contactPerson: string; phone: string };
-  specialInstructions: string;
-};
-
-export default function OrderDetailsPage() {
+function OrderDetailsInner() {
   const router = useRouter();
-  const [order] = useState<OrderDetail>({
-    id: "ORD-2024-0001",
-    bookingId: "BK-2024-0001",
-    customer: "ABC Retail Corp",
-    status: "scheduled",
-    items: [
-      { name: "Electronic Items", quantity: 25, weight: "450 kg" },
-      { name: "Appliance Units", quantity: 8, weight: "400 kg" },
-    ],
-    pickupDetails: {
-      address: "123 Manila Warehouse Lane, Navotas, Metro Manila",
-      contactPerson: "Mr. John Smith",
-      phone: "+63-2-1234-5678",
-    },
-    deliveryDetails: {
-      address: "456 Makati Business Center, Makati, Metro Manila",
-      contactPerson: "Ms. Jane Doe",
-      phone: "+63-2-8765-4321",
-    },
-    specialInstructions: "Handle with care - Fragile electronics. Require unloading assistance at delivery site.",
-  });
+  const searchParams = useSearchParams();
+  const bookingIdRaw = searchParams.get("booking_id") || searchParams.get("booking");
+
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!!bookingIdRaw);
+
+  useEffect(() => {
+    if (!bookingIdRaw) {
+      setBooking(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    const id = Number(bookingIdRaw);
+    if (!Number.isFinite(id) || id <= 0) {
+      setError("Invalid booking id.");
+      setBooking(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    WorkflowApi.getBooking(id)
+      .then((b) => {
+        if (!cancelled) setBooking(b);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setBooking(null);
+          setError(e instanceof Error ? e.message : "Could not load booking.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingIdRaw]);
+
+  if (!bookingIdRaw) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "1.5rem", maxWidth: "1000px" }}>
+        <div>
+          <Link href="/dispatcher/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
+            ← Back to Dashboard
+          </Link>
+          <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Order details</h1>
+          <p style={{ color: "#666666", margin: "0" }}>Open a booking from assignments or append <code>?booking_id=</code> to this URL.</p>
+        </div>
+        <div style={{ padding: "2rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#FAFAFA", color: "#666" }}>
+          <p style={{ margin: 0 }}>No booking selected. Use the job assignments board and link to this page with a booking id.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)" }}>
+        <p style={{ color: "#666" }}>Loading booking…</p>
+      </div>
+    );
+  }
+
+  if (error || !booking) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "1rem", maxWidth: "1000px" }}>
+        <Link href="/dispatcher/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
+          ← Back to Dashboard
+        </Link>
+        <div style={{ padding: "1rem", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px" }}>{error || "Booking not found."}</div>
+      </div>
+    );
+  }
+
+  const scheduled =
+    typeof booking.scheduled_date === "string"
+      ? booking.scheduled_date
+      : (booking.scheduled_date as unknown as Date)?.toISOString?.().slice(0, 10) ?? "—";
 
   return (
     <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem", maxWidth: "1000px" }}>
@@ -47,11 +99,10 @@ export default function OrderDetailsPage() {
         <Link href="/dispatcher/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
           ← Back to Dashboard
         </Link>
-        <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Order Details</h1>
-        <p style={{ color: "#666666", margin: "0" }}>Complete order information and delivery instructions</p>
+        <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Order details</h1>
+        <p style={{ color: "#666666", margin: "0" }}>Booking #{booking.id} · Customer #{booking.customer_id}</p>
       </div>
 
-      {/* Order Header */}
       <div
         style={{
           padding: "1.5rem",
@@ -60,155 +111,43 @@ export default function OrderDetailsPage() {
           background: "rgba(33, 150, 243, 0.05)",
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "2rem", marginBottom: "1rem" }}>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ORDER ID</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.3rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              {order.id}
-            </p>
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "1rem" }}>
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>BOOKING ID</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.3rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              {order.bookingId}
-            </p>
+            <p style={{ color: "#1A1A1A", fontSize: "1.3rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>#{booking.id}</p>
           </div>
           <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CUSTOMER</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              {order.customer}
-            </p>
+            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>STATUS</p>
+            <p style={{ color: "#1A1A1A", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{booking.status}</p>
           </div>
         </div>
-
-        <div>
-          <span
-            style={{
-              padding: "0.5rem 1rem",
-              background: "#2196F3",
-              color: "white",
-              borderRadius: "4px",
-              fontWeight: "600",
-              fontSize: "0.85rem",
-            }}
-          >
-             {order.status.toUpperCase()}
-          </span>
-        </div>
+        <p style={{ margin: 0, color: "#374151" }}>
+          <strong>Window:</strong> {scheduled} {booking.scheduled_time_slot}
+        </p>
+        <p style={{ margin: "0.5rem 0 0 0", color: "#374151" }}>
+          <strong>Quoted:</strong> {formatPhp(booking.estimated_cost)}
+        </p>
       </div>
 
-      {/* Items List */}
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Order Items</h2>
-        <div style={{ display: "grid", gap: "0.75rem" }}>
-          {order.items.map((item, idx) => (
-            <div
-              key={idx}
-              style={{
-                padding: "1rem",
-                border: "1px solid #E8E8E8",
-                borderRadius: "6px",
-                background: "#F9F9F9",
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: "1rem",
-              }}
-            >
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ITEM NAME</p>
-                <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {item.name}
-                </p>
-              </div>
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>QUANTITY</p>
-                <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {item.quantity} units
-                </p>
-              </div>
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>WEIGHT</p>
-                <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {item.weight}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Cargo</h2>
+        <p style={{ margin: 0, color: "#333" }}>
+          {booking.cargo_weight_tons} t
+          {booking.cargo_description ? ` — ${booking.cargo_description}` : ""}
+        </p>
       </div>
 
-      {/* Pickup Details */}
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Pickup Details</h2>
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ADDRESS</p>
-            <p style={{ color: "#1A1A1A", margin: "0.5rem 0 0 0" }}>
-              {order.pickupDetails.address}
-            </p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <div>
-              <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CONTACT PERSON</p>
-              <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-                {order.pickupDetails.contactPerson}
-              </p>
-            </div>
-            <div>
-              <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PHONE</p>
-              <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-                {order.pickupDetails.phone}
-              </p>
-            </div>
-          </div>
-        </div>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Pickup</h2>
+        <p style={{ margin: 0, color: "#1A1A1A" }}>{booking.pickup_location}</p>
+        <p style={{ margin: "0.75rem 0 0 0", fontSize: "0.9rem", color: "#666" }}>Contact details use customer account records in administration.</p>
       </div>
 
-      {/* Delivery Details */}
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}> Delivery Details</h2>
-        <div style={{ display: "grid", gap: "1rem" }}>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ADDRESS</p>
-            <p style={{ color: "#1A1A1A", margin: "0.5rem 0 0 0" }}>
-              {order.deliveryDetails.address}
-            </p>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <div>
-              <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CONTACT PERSON</p>
-              <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-                {order.deliveryDetails.contactPerson}
-              </p>
-            </div>
-            <div>
-              <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PHONE</p>
-              <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-                {order.deliveryDetails.phone}
-              </p>
-            </div>
-          </div>
-        </div>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Delivery</h2>
+        <p style={{ margin: 0, color: "#1A1A1A" }}>{booking.dropoff_location}</p>
       </div>
 
-      {/* Special Instructions */}
-      {order.specialInstructions && (
-        <div
-          style={{
-            padding: "1.5rem",
-            border: "2px solid #FF9800",
-            borderRadius: "8px",
-            background: "rgba(255, 152, 0, 0.05)",
-          }}
-        >
-          <h2 style={{ color: "#FF9800", marginBottom: "0.5rem" }}> Special Instructions</h2>
-          <p style={{ color: "#1A1A1A", margin: "0", lineHeight: "1.6" }}>
-            {order.specialInstructions}
-          </p>
-        </div>
-      )}
-
-      {/* Action Buttons */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
         <button
           type="button"
@@ -222,11 +161,11 @@ export default function OrderDetailsPage() {
             fontWeight: "600",
           }}
           onClick={() => {
-            announce(`Opening job assignments for booking ${order.bookingId}`);
+            announce(`Opening job assignments for booking ${booking.id}`);
             router.push("/dispatcher/job-assignments");
           }}
         >
-           Assign Driver
+          Job assignments
         </button>
         <button
           type="button"
@@ -244,7 +183,7 @@ export default function OrderDetailsPage() {
             window.print();
           }}
         >
-           Print Documents
+          Print
         </button>
         <Link
           href="/dispatcher/dashboard"
@@ -259,9 +198,17 @@ export default function OrderDetailsPage() {
             fontWeight: "600",
           }}
         >
-          Back to Dashboard
+          Dashboard
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function OrderDetailsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--page-main-padding)" }}>Loading…</div>}>
+      <OrderDetailsInner />
+    </Suspense>
   );
 }

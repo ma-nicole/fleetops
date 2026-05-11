@@ -74,9 +74,9 @@ def finance_overview(
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
 ):
     payments = db.query(Payment).all()
-    paid = sum(p.amount for p in payments if p.status == PaymentStatus.PAID)
+    paid = sum(p.amount for p in payments if p.status == PaymentStatus.VERIFIED)
     refunded = sum(p.amount for p in payments if p.status == PaymentStatus.REFUNDED)
-    pending = sum(p.amount for p in payments if p.status in {PaymentStatus.PENDING, PaymentStatus.PROCESSING})
+    pending = sum(p.amount for p in payments if p.status == PaymentStatus.FOR_VERIFICATION)
     completed_total = (
         db.query(func.sum(Booking.estimated_cost))
         .filter(Booking.status == BookingStatus.COMPLETED)

@@ -25,7 +25,7 @@ const menuModules: MenuModule[] = [
     roles: ["driver"],
     items: [
       { label: "Dashboard", href: "/driver/dashboard", roles: ["driver"] },
-      { label: "Scheduled Trips", href: "/driver/scheduled-trips", roles: ["driver"] },
+      { label: "Scheduled Bookings", href: "/driver/scheduled-trips", roles: ["driver"] },
       { label: "Order Details", href: "/driver/order-details", roles: ["driver"] },
       { label: "Update Trip Status", href: "/driver/update-status", roles: ["driver"] },
     ],
@@ -51,6 +51,38 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Completion Report", href: "/driver/completion-report", roles: ["driver"] },
       { label: "Activity & Ratings", href: "/driver/activity-ratings", roles: ["driver"] },
+    ],
+  },
+
+  {
+    label: "Active Operations",
+    roles: ["helper"],
+    items: [
+      { label: "Dashboard", href: "/driver/dashboard", roles: ["helper"] },
+      { label: "Bookings", href: "/helper/bookings", roles: ["helper"] },
+      { label: "Order Details", href: "/driver/order-details", roles: ["helper"] },
+      { label: "Update Trip Status", href: "/driver/update-status", roles: ["helper"] },
+    ],
+  },
+  {
+    label: "Schedule & Pay",
+    roles: ["helper"],
+    items: [
+      { label: "Designated Schedule", href: "/driver/schedule", roles: ["helper"] },
+      { label: "Total Pay", href: "/driver/pay", roles: ["helper"] },
+    ],
+  },
+  {
+    label: "Vehicle",
+    roles: ["helper"],
+    items: [{ label: "Vehicle Status", href: "/driver/vehicle-status", roles: ["helper"] }],
+  },
+  {
+    label: "Reports & Ratings",
+    roles: ["helper"],
+    items: [
+      { label: "Completion Report", href: "/driver/completion-report", roles: ["helper"] },
+      { label: "Activity & Ratings", href: "/driver/activity-ratings", roles: ["helper"] },
     ],
   },
 
@@ -120,7 +152,7 @@ const menuModules: MenuModule[] = [
     label: "Operations",
     roles: ["manager"],
     items: [
-      { label: "Scheduling", href: "/manager/scheduling", roles: ["manager"] },
+      { label: "Payment approval", href: "/admin/payment-approval", roles: ["manager"] },
       { label: "Order Details", href: "/manager/orders", roles: ["manager"] },
       { label: "Accomplishment Report", href: "/manager/accomplishment-report", roles: ["manager"] },
       { label: "Pending Bookings", href: "/manager/pending-bookings", roles: ["manager"] },
@@ -152,8 +184,8 @@ const menuModules: MenuModule[] = [
     roles: ["admin"],
     items: [
       { label: "Dashboard", href: "/admin/dashboard", roles: ["admin"] },
-      { label: "Diesel price", href: "/modules/administration/booking-estimate-cost", roles: ["admin"] },
-      { label: "Scheduling", href: "/admin/scheduling", roles: ["admin"] },
+      { label: "Calculations", href: "/modules/administration/booking-estimate-cost", roles: ["admin"] },
+      { label: "Payment Approval", href: "/admin/payment-approval", roles: ["admin"] },
       { label: "Trip Monitoring", href: "/admin/trip-monitoring", roles: ["admin"] },
       { label: "Orders", href: "/admin/orders", roles: ["admin"] },
     ],
@@ -163,7 +195,6 @@ const menuModules: MenuModule[] = [
     roles: ["admin"],
     items: [
       { label: "User Management", href: "/modules/administration/accounts", roles: ["admin"] },
-      { label: "Diesel & booking estimates", href: "/modules/administration/booking-estimate-cost", roles: ["admin"] },
       { label: "Live data marts", href: "/modules/analytics/operations-snapshot", roles: ["admin"] },
     ],
   },

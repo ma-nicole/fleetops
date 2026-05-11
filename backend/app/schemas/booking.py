@@ -18,8 +18,9 @@ class BookingCreate(BaseModel):
     @field_validator("cargo_weight_tons")
     @classmethod
     def validate_weight(cls, v: float) -> float:
-        if v <= 0 or v > 50:
-            raise ValueError("Cargo weight must be between 0.1 and 50 tons")
+        # Four trucks × 42 t = 168 t max per synchronized convoy.
+        if v <= 0 or v > 168:
+            raise ValueError("Cargo weight must be between 0.1 and 168 metric tons (fleet limit)")
         return v
 
     @field_validator("pickup_location", "dropoff_location")
@@ -39,7 +40,7 @@ class BookingCreate(BaseModel):
 
 
 class BookingScheduleAvailabilityRead(BaseModel):
-    """scheduled_time_slot → True when the slot has capacity (no blocking booking)."""
+    """scheduled_time_slot → True when four trucks can still serve this load (ETA overlap)."""
 
     scheduled_date: date
     slots: dict[str, bool]

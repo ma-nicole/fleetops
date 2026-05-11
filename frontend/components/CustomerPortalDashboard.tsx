@@ -112,7 +112,7 @@ export default function CustomerPortalDashboard() {
 
   const kpis = useMemo(() => {
     const totalOrders = bookings.length;
-    const paid = payments.filter((p) => p.status === "paid");
+    const paid = payments.filter((p) => p.status === "verified");
     const spent = paid.reduce((s, p) => s + p.amount, 0);
     const done = bookings.filter((b) => b.status === "completed").length;
     const rate = totalOrders ? Math.round((done / totalOrders) * 1000) / 10 : 0;
@@ -146,7 +146,7 @@ export default function CustomerPortalDashboard() {
   const txRows = useMemo(
     () =>
       payments
-        .filter((p) => p.status === "paid")
+        .filter((p) => p.status === "verified")
         .slice(0, 5)
         .map((p) => ({
           id: p.id,

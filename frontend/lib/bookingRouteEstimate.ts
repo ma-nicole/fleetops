@@ -136,7 +136,7 @@ export function estimateDistanceKm(pickup: string, dropoff: string): number {
 
 function weightFactorTons(weightTons: number, coef: number): number {
   const w =
-    Number.isFinite(weightTons) && weightTons > 0 ? Math.min(50, Math.max(0.1, weightTons)) : 1;
+    Number.isFinite(weightTons) && weightTons > 0 ? Math.min(168, Math.max(0.1, weightTons)) : 1;
   return 1 + Math.max(0, w - 1) * coef;
 }
 
@@ -183,7 +183,7 @@ export function estimateBookingCost(
   if (p.length < 3 || d.length < 3) return null;
   if (p.toLowerCase() === d.toLowerCase()) return null;
 
-  const w = Number.isFinite(weightTons) && weightTons > 0 ? Math.min(50, weightTons) : 1;
+  const w = Number.isFinite(weightTons) && weightTons > 0 ? Math.min(168, weightTons) : 1;
   const km = estimateDistanceKm(p, d);
   return freightPricingFromKm(km, w);
 }

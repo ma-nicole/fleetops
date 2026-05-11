@@ -15,7 +15,7 @@ router = APIRouter(prefix="/customer", tags=["customer"])
 class RouteEstimateRequest(BaseModel):
     pickup_location: str = Field(..., max_length=4000)
     dropoff_location: str = Field(..., max_length=4000)
-    weight_tons: float = Field(default=1.0, ge=0.1, le=50.0)
+    weight_tons: float = Field(default=1.0, ge=0.1, le=168.0)
 
     @field_validator("pickup_location", "dropoff_location", mode="before")
     @classmethod
@@ -41,6 +41,26 @@ class RouteEstimateResponse(BaseModel):
     pickup_resolution: str
     dropoff_resolution: str
     estimate_tier: str
+    routing_method: str
+    pickup_lat: float | None = None
+    pickup_lng: float | None = None
+    dropoff_lat: float | None = None
+    dropoff_lng: float | None = None
+
+
+class MapsJsKeyResponse(BaseModel):
+    """Browser may load Maps JS with this key (referrer-restricted); mirrors server geocoding key."""
+
+    api_key: str | None = None
+
+
+@router.get("/maps-js-key", response_model=MapsJsKeyResponse)
+def customer_maps_js_key(
+    _customer: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    """Expose `GOOGLE_MAPS_GEOCODING_API_KEY` for the embedded map when `NEXT_PUBLIC_*` is unset."""
+    k = ((settings.google_maps_geocoding_api_key or "").strip() or (settings.google_maps_server_api_key or "").strip())
+    return MapsJsKeyResponse(api_key=k or None)
 
 
 @router.post("/route-estimate", response_model=RouteEstimateResponse)
@@ -49,11 +69,16 @@ def estimate_customer_route(
     db: Session = Depends(get_db),
     _customer: User = Depends(require_roles(UserRole.CUSTOMER)),
 ):
-    km, p_res, d_res, tier = estimate_road_distance_km(
+    est = estimate_road_distance_km(
         payload.pickup_location,
         payload.dropoff_location,
         settings,
     )
+    km = est.distance_km
+    p_res = est.pickup_provider
+    d_res = est.dropoff_provider
+    tier = est.tier
+    routing_method = est.routing_method
     knobs = resolve_booking_freight_knobs(db, settings)
     pricing = customer_freight_pricing(km, payload.weight_tons, knobs)
     return RouteEstimateResponse(
@@ -72,4 +97,9 @@ def estimate_customer_route(
         pickup_resolution=p_res,
         dropoff_resolution=d_res,
         estimate_tier=tier,
+        routing_method=routing_method,
+        pickup_lat=est.pickup_lat,
+        pickup_lng=est.pickup_lng,
+        dropoff_lat=est.dropoff_lat,
+        dropoff_lng=est.dropoff_lng,
     )

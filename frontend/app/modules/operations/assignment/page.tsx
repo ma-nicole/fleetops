@@ -1,9 +1,41 @@
 "use client";
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import TripAssignment, { Trip, Driver, Vehicle } from "@/components/TripAssignment";
+import { WorkflowApi, type Booking } from "@/lib/workflowApi";
+
+type BoardAssignment = {
+  trip_id: number;
+  trip_status: string;
+  booking_id: number;
+  pickup_location: string;
+  dropoff_location: string;
+  scheduled_date: string;
+  scheduled_time_slot: string;
+  cargo_weight_tons: number;
+  truck_code: string;
+  driver_name: string | null;
+};
+
+function bookingToTrip(b: Booking): Trip {
+  const date =
+    typeof b.scheduled_date === "string"
+      ? b.scheduled_date
+      : (b.scheduled_date as unknown as Date)?.toISOString?.().slice(0, 10) ?? "";
+  return {
+    id: b.id,
+    pickup_location: b.pickup_location,
+    dropoff_location: b.dropoff_location,
+    cargo_weight_tons: b.cargo_weight_tons,
+    scheduled_date: date,
+    scheduled_time: b.scheduled_time_slot,
+    status: "pending",
+    customer_name: `Customer #${b.customer_id}`,
+    estimated_cost: b.estimated_cost,
+  };
+}
 
 export default function DispatcherAssignmentPage() {
   useRoleGuard(["dispatcher", "manager", "admin"]);
@@ -11,127 +43,66 @@ export default function DispatcherAssignmentPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [assignments, setAssignments] = useState<BoardAssignment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Mock data - in production, fetch from backend
-  useEffect(() => {
-    setTrips([
-      {
-        id: 1,
-        pickup_location: "Makati CBD",
-        dropoff_location: "Batangas City",
-        cargo_weight_tons: 5,
-        scheduled_date: "2026-04-29",
-        scheduled_time: "09:00",
-        status: "pending",
-        customer_name: "John Doe",
-        estimated_cost: 450,
-      },
-      {
-        id: 2,
-        pickup_location: "Bonifacio Global City",
-        dropoff_location: "Parañaque City",
-        cargo_weight_tons: 8,
-        scheduled_date: "2026-04-29",
-        scheduled_time: "11:30",
-        status: "pending",
-        customer_name: "Jane Smith",
-        estimated_cost: 620,
-      },
-      {
-        id: 3,
-        pickup_location: "Quezon City",
-        dropoff_location: "Laoag City",
-        cargo_weight_tons: 3,
-        scheduled_date: "2026-04-30",
-        scheduled_time: "08:00",
-        status: "pending",
-        customer_name: "Mike Johnson",
-        estimated_cost: 380,
-      },
-    ]);
-
-    setDrivers([
-      {
-        id: 101,
-        name: "Carlos Rodriguez",
-        status: "available",
-        phone: "(555) 123-4567",
-      },
-      {
-        id: 102,
-        name: "Sarah Williams",
-        status: "available",
-        phone: "(555) 234-5678",
-      },
-      {
-        id: 103,
-        name: "James Murphy",
-        status: "available",
-        phone: "(555) 345-6789",
-      },
-    ]);
-
-    setVehicles([
-      {
-        id: 201,
-        plate_number: "NFR 5847",
-        model: "Volvo FH16",
-        capacity_tons: 15,
-        status: "available",
-      },
-      {
-        id: 202,
-        plate_number: "NFR 3421",
-        model: "Scania R440",
-        capacity_tons: 12,
-        status: "available",
-      },
-      {
-        id: 203,
-        plate_number: "XYZ 9012",
-        model: "DAF XF105",
-        capacity_tons: 10,
-        status: "available",
-      },
-    ]);
+  const refresh = useCallback(async () => {
+    setListError(null);
+    try {
+      const [list, roster, board] = await Promise.all([
+        WorkflowApi.assignableBookings(),
+        WorkflowApi.dispatchRoster().catch(() => null),
+        WorkflowApi.dispatchAssignmentsBoard().catch(() => null),
+      ]);
+      setTrips(list.map(bookingToTrip));
+      setDrivers(
+        (roster?.drivers ?? []).map((d) => ({
+          id: d.id,
+          name: d.name,
+          status: "available",
+        }))
+      );
+      setVehicles(
+        (roster?.trucks ?? []).map((t) => ({
+          id: t.id,
+          plate_number: t.code,
+          model: "Truck",
+          capacity_tons: t.capacity_tons,
+          status: "available",
+        }))
+      );
+      setAssignments((board?.assignments as BoardAssignment[] | undefined) ?? []);
+    } catch (e) {
+      setTrips([]);
+      setDrivers([]);
+      setVehicles([]);
+      setAssignments([]);
+      setListError(e instanceof Error ? e.message : "Could not load dispatch data.");
+    }
   }, []);
 
-  const handleAssign = (tripId: number, driverId: number, vehicleId: number) => {
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleAssign = async (bookingId: number, driverId: number, vehicleId: number) => {
+    setActionError(null);
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setTrips((prev) =>
-        prev.map((trip) =>
-          trip.id === tripId
-            ? {
-                ...trip,
-                status: "assigned",
-                assigned_driver: drivers.find((d) => d.id === driverId)?.name,
-                assigned_vehicle: vehicles.find((v) => v.id === vehicleId)?.plate_number,
-              }
-            : trip
-        )
-      );
-
-      setDrivers((prev) =>
-        prev.map((driver) =>
-          driver.id === driverId ? { ...driver, status: "on_trip" } : driver
-        )
-      );
-
-      setVehicles((prev) =>
-        prev.map((vehicle) =>
-          vehicle.id === vehicleId ? { ...vehicle, status: "in_use" } : vehicle
-        )
-      );
-
+    try {
+      await WorkflowApi.manualAssign(bookingId, { truck_id: vehicleId, driver_id: driverId });
+      await refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Assignment failed.");
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
-  const assignedTrips = trips.filter((t) => t.status === "assigned");
+  const assignedTrips = assignments.filter(
+    (a) => a.trip_status !== "completed" && a.trip_status !== "cancelled"
+  );
 
   return (
     <div className="container" style={{ paddingTop: "var(--space-3)" }}>
@@ -148,6 +119,23 @@ export default function DispatcherAssignmentPage() {
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
           Assign drivers and vehicles to pending trips. Match capacity to cargo weight and optimize dispatch schedule.
         </p>
+
+        {listError ? (
+          <div
+            className="card"
+            style={{ marginBottom: "1rem", background: "#FEE2E2", color: "#991B1B", padding: "0.75rem 1rem" }}
+          >
+            {listError}
+          </div>
+        ) : null}
+        {actionError ? (
+          <div
+            className="card"
+            style={{ marginBottom: "1rem", background: "#FEE2E2", color: "#991B1B", padding: "0.75rem 1rem" }}
+          >
+            {actionError}
+          </div>
+        ) : null}
 
         {/* Stats */}
         <div
@@ -190,10 +178,10 @@ export default function DispatcherAssignmentPage() {
         {/* Recently Assigned */}
         {assignedTrips.length > 0 && (
           <div style={{ marginTop: "2rem" }}>
-            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Recently Assigned Trips</h3>
+            <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Active assignments</h3>
             <div style={{ display: "grid", gap: "0.75rem" }}>
-              {assignedTrips.map((trip) => (
-                <div key={trip.id} className="card" style={{ padding: "1rem" }}>
+              {assignedTrips.map((row) => (
+                <div key={row.trip_id} className="card" style={{ padding: "1rem" }}>
                   <div
                     style={{
                       display: "flex",
@@ -202,12 +190,14 @@ export default function DispatcherAssignmentPage() {
                     }}
                   >
                     <div>
-                      <strong style={{ color: "#1A1A1A" }}>Trip #{trip.id}</strong>
+                      <strong style={{ color: "#1A1A1A" }}>
+                        Trip #{row.trip_id} · Booking #{row.booking_id}
+                      </strong>
                       <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                        {trip.pickup_location} → {trip.dropoff_location}
+                        {row.pickup_location} → {row.dropoff_location}
                       </p>
                       <p style={{ margin: "0.25rem 0", color: "#666666", fontSize: "0.9rem" }}>
-                         {trip.assigned_vehicle} |  {trip.assigned_driver}
+                        {row.truck_code} | {row.driver_name ?? "—"} · {row.scheduled_date} {row.scheduled_time_slot}
                       </p>
                     </div>
                     <span
@@ -220,7 +210,7 @@ export default function DispatcherAssignmentPage() {
                         fontWeight: 600,
                       }}
                     >
-                      {trip.status}
+                      {row.trip_status}
                     </span>
                   </div>
                 </div>

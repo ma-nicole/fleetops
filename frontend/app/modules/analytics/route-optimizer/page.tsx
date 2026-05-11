@@ -1,28 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsApi, type RouteOptimizeResponse } from "@/lib/analyticsApi";
 import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
-const SAMPLE_NODES = [
-  "Hub-Pampanga",
-  "SMC-Plant-Bulacan",
-  "Hub-Manila-North",
-  "Hub-Cabanatuan",
-  "Hub-Baguio",
-  "Customer-Pasig",
-  "Customer-QC",
-  "Customer-Makati",
-  "Customer-Manila",
-  "Customer-Caloocan",
-];
-
 export default function RouteOptimizerPage() {
   useRoleGuard(["manager", "admin", "dispatcher"]);
 
-  const [origin, setOrigin] = useState(SAMPLE_NODES[0]);
-  const [destination, setDestination] = useState(SAMPLE_NODES[7]);
+  const [origin, setOrigin] = useState("");
+  const [destination, setDestination] = useState("");
   const [weight, setWeight] = useState<"cost" | "distance" | "time">("cost");
   const [cargo, setCargo] = useState(10);
   const [departureHour, setDepartureHour] = useState(8);
@@ -31,12 +18,18 @@ export default function RouteOptimizerPage() {
   const [error, setError] = useState<string | null>(null);
 
   const run = async () => {
+    const o = origin.trim();
+    const d = destination.trim();
+    if (o.length < 3 || d.length < 3) {
+      setError("Enter an origin and destination (at least 3 characters each).");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const response = await AnalyticsApi.optimizeRoute({
-        origin,
-        destination,
+        origin: o,
+        destination: d,
         weight,
         cargo_weight_tons: cargo,
         departure_hour: departureHour,
@@ -49,7 +42,7 @@ export default function RouteOptimizerPage() {
     }
   };
 
-  const card: React.CSSProperties = {
+  const card: CSSProperties = {
     background: "white",
     border: "1px solid #E5E7EB",
     borderRadius: 12,
@@ -69,26 +62,20 @@ export default function RouteOptimizerPage() {
         <section style={card}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
             <Field label="Origin">
-              <select
+              <input
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
+                placeholder="e.g. warehouse or city landmark"
                 style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6, width: "100%" }}
-              >
-                {SAMPLE_NODES.map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </select>
+              />
             </Field>
             <Field label="Destination">
-              <select
+              <input
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
+                placeholder="e.g. delivery site"
                 style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6, width: "100%" }}
-              >
-                {SAMPLE_NODES.map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </select>
+              />
             </Field>
             <Field label="Optimize for">
               <select
@@ -236,9 +223,9 @@ export default function RouteOptimizerPage() {
   );
 }
 
-const tdStyle: React.CSSProperties = { padding: "6px 8px", borderBottom: "1px solid #E5E7EB", textAlign: "left" };
+const tdStyle: CSSProperties = { padding: "6px 8px", borderBottom: "1px solid #E5E7EB", textAlign: "left" };
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label style={{ display: "grid", gap: 4 }}>
       <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{label}</span>

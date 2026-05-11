@@ -52,7 +52,7 @@ export default function AdminDashboardPage() {
         <div>
           <h1 style={{ margin: "0 0 0.4rem", fontSize: "2rem", fontWeight: 900, color: "#1A1A1A" }}>Admin Dashboard</h1>
           <p style={{ margin: 0, color: "#666" }}>
-            Complete operations view across scheduling, monitoring, and orders.
+            Complete operations view across payment verification, trip monitoring, and orders.
           </p>
         </div>
 
@@ -76,7 +76,7 @@ export default function AdminDashboardPage() {
           <h3 style={{ margin: "0 0 0.8rem 0" }}>Quick actions</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.75rem" }}>
             {[
-              { label: "Manage Scheduling", href: "/admin/scheduling" },
+              { label: "Payment Approval", href: "/admin/payment-approval" },
               { label: "Trip Monitoring", href: "/admin/trip-monitoring" },
               { label: "Orders", href: "/admin/orders" },
             ].map((item) => (
@@ -102,9 +102,9 @@ export default function AdminDashboardPage() {
 
         <section style={{ background: "#fff", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
-            <h3 style={{ margin: 0 }}>Recent schedules</h3>
-            <Link href="/admin/scheduling" style={{ color: "#2563EB", textDecoration: "none", fontWeight: 600 }}>
-              View all
+            <h3 style={{ margin: 0 }}>Operations snapshot</h3>
+            <Link href="/admin/payment-approval" style={{ color: "#2563EB", textDecoration: "none", fontWeight: 600 }}>
+              Payment approvals
             </Link>
           </div>
           <div style={{ display: "grid", gap: "0.55rem" }}>

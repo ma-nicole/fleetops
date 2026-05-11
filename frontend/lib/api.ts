@@ -125,6 +125,19 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   });
 }
 
+export async function apiPostMultipart<T>(path: string, formData: FormData): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const response = await fetch(apiFullUrl(path), {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+  });
+  return handle<T>(response);
+}
+
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   return apiFetch<T>(path, {
     method: "PATCH",

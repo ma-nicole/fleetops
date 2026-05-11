@@ -20,20 +20,12 @@ export default function BookingPage() {
         <Breadcrumbs
           items={[
             { label: "Home", href: "/" },
-            { label: "Booking" },
-            { label: "Payment" },
-            { label: "Confirmation" },
+            { label: "New booking" },
           ]}
         />
         <div>
           <h1 style={{ margin: "0 0 0.5rem 0", fontSize: "2rem" }}>Create Booking Request</h1>
           <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>Fill in your shipment details below. Cost updates in real-time.</p>
-        </div>
-
-        <div className="booking-stepper" aria-label="Booking progress">
-          <span className="booking-step is-active">1. Details</span>
-          <span className="booking-step">2. Payment</span>
-          <span className="booking-step">3. Confirmation</span>
         </div>
 
         <div className="booking-tip-grid">
@@ -42,8 +34,8 @@ export default function BookingPage() {
             <span>Updates while you type pickup, dropoff, and weight.</span>
           </div>
           <div className="booking-tip-card">
-            <strong>Fast start</strong>
-            <span>Try Makati → Quezon City to see a sample estimate.</span>
+            <strong>Accurate estimate</strong>
+            <span>Pickup, dropoff, and tonnage drive the live quote—fill them in carefully.</span>
           </div>
         </div>
 

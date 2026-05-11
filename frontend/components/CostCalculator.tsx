@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { apiFetch, ApiError } from "@/lib/api";
 import { formatPhp } from "@/lib/appLocale";
 import { BOOKING_TIME_SLOTS } from "@/lib/bookingSlots";
-import { estimateBookingCost, estimateUsesGeocodedBoth, type BookingEstimateBreakdown } from "@/lib/bookingRouteEstimate";
+import { estimateUsesGeocodedBoth, type BookingEstimateBreakdown } from "@/lib/bookingRouteEstimate";
 import { validateCustomerSiteAddress } from "@/lib/formValidation";
 import { MIN_BOOKING_SITES, loadCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
 import { WorkflowApi } from "@/lib/workflowApi";
+import GoogleRoutePreviewMap from "@/components/GoogleRoutePreviewMap";
+
+const MAPS_JS_KEY_PUBLIC = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ?? "";
 
 type CostEstimate = {
   estimated_fuel: number;
@@ -45,6 +49,11 @@ type RouteEstimateApiResponse = {
   pickup_resolution: string;
   dropoff_resolution: string;
   estimate_tier: string;
+  routing_method: string;
+  pickup_lat?: number | null;
+  pickup_lng?: number | null;
+  dropoff_lat?: number | null;
+  dropoff_lng?: number | null;
 };
 
 /** Line items mirrored from backend / browser fallback breakdown. */
@@ -87,8 +96,28 @@ function freightLinesFromBreakdown(b: BookingEstimateBreakdown): FreightLineDeta
 
 type EstimateGeoMeta = Pick<
   RouteEstimateApiResponse,
-  "pickup_resolution" | "dropoff_resolution" | "estimate_tier"
+  | "pickup_resolution"
+  | "dropoff_resolution"
+  | "estimate_tier"
+  | "routing_method"
+  | "pickup_lat"
+  | "pickup_lng"
+  | "dropoff_lat"
+  | "dropoff_lng"
 >;
+
+function routePreviewCoords(geo: EstimateGeoMeta | null): {
+  pickupLat: number;
+  pickupLng: number;
+  dropoffLat: number;
+  dropoffLng: number;
+} | null {
+  if (!geo) return null;
+  const { pickup_lat: a, pickup_lng: b, dropoff_lat: c, dropoff_lng: d } = geo;
+  if (a == null || b == null || c == null || d == null) return null;
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || !Number.isFinite(d)) return null;
+  return { pickupLat: a, pickupLng: b, dropoffLat: c, dropoffLng: d };
+}
 
 const DEFAULT_SERVICE_TYPE = "fixed";
 
@@ -97,8 +126,33 @@ function geocodeProviderNote(geo: EstimateGeoMeta | null): string | null {
   const google = geo.pickup_resolution === "google" || geo.dropoff_resolution === "google";
   const nom = geo.pickup_resolution === "nominatim" || geo.dropoff_resolution === "nominatim";
   if (google) return "Pins: Google Geocoding API.";
-  if (nom) return "Pins: OpenStreetMap (Nominatim).";
+  if (nom) return "Pins: OpenStreetMap (Nominatim), best match for your full street address.";
   return null;
+}
+
+function routingDistanceNote(routing: string | undefined): string {
+  if (routing === "google_directions") {
+    return "Road distance from Google Directions API (driving), matched to the same map data Google Maps uses for routing. Minor differences vs the app UI can still happen (alternate routes, live traffic, or different start/end pins). Tolls not itemized in distance.";
+  }
+  if (routing === "osrm") {
+    return "Road distance uses the public OSRM “driving” profile (car-oriented on OpenStreetMap). If you expected Google Maps–like km (~25–30 for this route), the backend is not using Google Directions — usually the API key is restricted to websites only. Set GOOGLE_MAPS_SERVER_API_KEY on the server (IP / unrestricted in dev) with Directions + Geocoding enabled. For truck-legal OSM routing, set OPENROUTESERVICE_API_KEY (HGV). Tolls and live traffic excluded.";
+  }
+  if (routing === "openrouteservice_hgv") {
+    return "Road distance uses OpenRouteService heavy-goods (HGV) routing on OpenStreetMap—avoids many truck restrictions where map data supports it. One computed path vs odometer; tolls and live traffic excluded.";
+  }
+  if (routing === "openrouteservice_car") {
+    return "Road distance uses OpenRouteService car routing on OpenStreetMap (USE_TRUCK_ROUTE_PROFILE=false on server).";
+  }
+  if (routing === "openrouteservice") {
+    return "Road distance from OpenRouteService along OpenStreetMap. Same caveat: one computed path vs actual odometer. Tolls and live traffic excluded.";
+  }
+  if (routing === "same_location") {
+    return "Pickup and dropoff map to the same point — distance is 0 km.";
+  }
+  if (routing === "haversine_road_factor") {
+    return "Approximate straight-line × factor (legacy mode only).";
+  }
+  return "";
 }
 
 function siteMenuLabel(s: CustomerSite): string {
@@ -111,6 +165,7 @@ export default function CostCalculator({
 }: {
   onEstimate?: (estimate: CostEstimate) => void;
 }) {
+  const router = useRouter();
   const [pickupId, setPickupId] = useState("");
   const [dropoffId, setDropoffId] = useState("");
   const [sites, setSites] = useState<CustomerSite[]>([]);
@@ -128,24 +183,48 @@ export default function CostCalculator({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [estimateGeo, setEstimateGeo] = useState<EstimateGeoMeta | null>(null);
   const [freightLines, setFreightLines] = useState<FreightLineDetail | null>(null);
+  /** Falls back to server `GOOGLE_MAPS_GEOCODING_API_KEY` when NEXT_PUBLIC map key is unset. */
+  const [mapsJsKeyFromBackend, setMapsJsKeyFromBackend] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
 
   const hasEnoughSites = sites.length >= MIN_BOOKING_SITES;
+  const effectiveMapsKey = MAPS_JS_KEY_PUBLIC || (mapsJsKeyFromBackend ?? "");
 
   const pickup = useMemo(() => sites.find((s) => s.id === pickupId)?.address ?? "", [sites, pickupId]);
   const dropoff = useMemo(() => sites.find((s) => s.id === dropoffId)?.address ?? "", [sites, dropoffId]);
 
   const showApproximateEstimateWarning = useMemo(() => {
     if (estimateGeo) {
-      const { pickup_resolution: pr, dropoff_resolution: dr, estimate_tier: t } = estimateGeo;
+      const { pickup_resolution: pr, dropoff_resolution: dr, estimate_tier: t, routing_method: rm } = estimateGeo;
       if (pr === "none" || dr === "none") return true;
       if (t !== "geocoded") return true;
+      if (rm === "haversine_road_factor") return true;
       return false;
     }
     return !estimateUsesGeocodedBoth(pickup, dropoff);
   }, [estimateGeo, pickup, dropoff]);
 
   const providerNote = useMemo(() => geocodeProviderNote(estimateGeo), [estimateGeo]);
+
+  useEffect(() => {
+    if (MAPS_JS_KEY_PUBLIC) {
+      setMapsJsKeyFromBackend(null);
+      return;
+    }
+    let cancelled = false;
+    void apiFetch<{ api_key: string | null }>("/customer/maps-js-key")
+      .then((r) => {
+        if (cancelled) return;
+        const k = (r.api_key ?? "").trim();
+        setMapsJsKeyFromBackend(k.length > 0 ? k : null);
+      })
+      .catch(() => {
+        if (!cancelled) setMapsJsKeyFromBackend(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +266,11 @@ export default function CostCalculator({
     setSlotsFetchError(null);
     setPickedSlot("");
 
-    void WorkflowApi.bookingPickupSlotAvailability(date)
+    void WorkflowApi.bookingPickupSlotAvailability(date, {
+      cargo_weight_tons: Number.isFinite(parseFloat(weight)) ? parseFloat(weight) : 1,
+      pickup_location: pickup,
+      dropoff_location: dropoff,
+    })
       .then((res) => {
         if (cancelled) return;
         const next: Record<string, boolean> = {};
@@ -212,7 +295,7 @@ export default function CostCalculator({
     return () => {
       cancelled = true;
     };
-  }, [date, hasEnoughSites]);
+  }, [date, hasEnoughSites, pickup, dropoff, weight]);
 
   useEffect(() => {
     if (!hasEnoughSites) {
@@ -235,7 +318,7 @@ export default function CostCalculator({
       return;
     }
 
-    const effW = Number.isFinite(w) && w > 0 ? Math.min(50, w) : 1;
+    const effW = Number.isFinite(w) && w > 0 ? Math.min(168, w) : 1;
 
     let cancelled = false;
     const ac = new AbortController();
@@ -254,6 +337,8 @@ export default function CostCalculator({
             signal: ac.signal,
           });
           if (cancelled) return;
+          setMessage("");
+          setMessageType("");
           const live: LiveCostEstimate = {
             distance_km: data.distance_km,
             estimated_fuel: data.fuel_route_charge,
@@ -266,6 +351,11 @@ export default function CostCalculator({
             pickup_resolution: data.pickup_resolution,
             dropoff_resolution: data.dropoff_resolution,
             estimate_tier: data.estimate_tier,
+            routing_method: data.routing_method,
+            pickup_lat: data.pickup_lat,
+            pickup_lng: data.pickup_lng,
+            dropoff_lat: data.dropoff_lat,
+            dropoff_lng: data.dropoff_lng,
           });
           setFreightLines(freightLinesFromPayload(data));
           onEstimate?.({
@@ -277,29 +367,16 @@ export default function CostCalculator({
         } catch (e: unknown) {
           if (cancelled) return;
           if (e instanceof DOMException && e.name === "AbortError") return;
-          const breakdown = estimateBookingCost(pickup, dropoff, effW);
-          if (breakdown) {
-            const live: LiveCostEstimate = {
-              distance_km: breakdown.distanceKm,
-              estimated_fuel: breakdown.fuelRouteCharge,
-              estimated_toll: 0,
-              estimated_labor: breakdown.driverFee,
-              estimated_total: breakdown.total,
-            };
-            setCost(live);
-            setEstimateGeo(null);
-            setFreightLines(freightLinesFromBreakdown(breakdown));
-            onEstimate?.({
-              estimated_fuel: live.estimated_fuel,
-              estimated_toll: live.estimated_toll,
-              estimated_labor: live.estimated_labor,
-              estimated_total: live.estimated_total,
-            });
-          } else {
-            setCost(null);
-            setEstimateGeo(null);
-            setFreightLines(null);
+          setCost(null);
+          setEstimateGeo(null);
+          setFreightLines(null);
+          if (e instanceof ApiError) {
+            setMessage(e.message);
+            setMessageType("error");
+            return;
           }
+          setMessage("Could not compute road distance. Check your connection and that the API is running.");
+          setMessageType("error");
         } finally {
           if (!cancelled) setLoading(false);
         }
@@ -345,8 +422,9 @@ export default function CostCalculator({
     ) {
       newErrors.dropoff_location = "Pickup and dropoff must be different.";
     }
-    if (parseFloat(weight) <= 0 || parseFloat(weight) > 50) {
-      newErrors.cargo_weight_tons = "Weight must be 0.1–50 tons";
+    const wTons = parseFloat(weight);
+    if (!Number.isFinite(wTons) || wTons < 0.1 || wTons > 168) {
+      newErrors.cargo_weight_tons = "Weight must be 0.1–168 metric tons (fleet: four trucks × 42 t).";
     }
     if (!date) {
       newErrors.scheduled_date = "Schedule date required";
@@ -359,7 +437,7 @@ export default function CostCalculator({
         BOOKING_TIME_SLOTS.length > 0 &&
         BOOKING_TIME_SLOTS.every((s) => slotAvailability[s] === false)
       ) {
-        newErrors.scheduled_date = "This date has no open pickup windows — all four slots are already booked.";
+        newErrors.scheduled_date = "This date has no open pickup windows for this load — all trucks are in use for the overlapping route times.";
       }
     }
     if (date && !slotsLoading) {
@@ -397,16 +475,7 @@ export default function CostCalculator({
         body: JSON.stringify(payload),
       });
 
-      setMessage(`✓ Booking #${data.id} created! Cost: ${formatPhp(data.estimated_cost)}`);
-      setMessageType("success");
-      setPickupId("");
-      setDropoffId("");
-      setWeight("1");
-      setDate("");
-      setPickedSlot("");
-      setCost(null);
-      setEstimateGeo(null);
-      setFreightLines(null);
+      router.push(`/booking/payment?bookingId=${data.id}`);
     } catch (error) {
       const err = error as Error;
       setMessage(` Error: ${err.message}`);
@@ -544,7 +613,7 @@ export default function CostCalculator({
 
         {loading && hasEnoughSites && (
           <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Calculating estimate…
+            Calculating road distance & price…
           </div>
         )}
 
@@ -560,19 +629,64 @@ export default function CostCalculator({
             }}
           >
             <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
-              Estimated road distance: <strong style={{ color: "var(--text-primary)" }}>{cost.distance_km} km</strong>{" "}
-              (geocoded straight-line × road factor; fuel uses DOE-style diesel ₱/L from server config)
+              <strong style={{ color: "var(--text-primary)" }}>Road distance: {cost.distance_km} km</strong>
+              {estimateGeo?.routing_method === "google_directions" ||
+              estimateGeo?.routing_method === "osrm" ||
+              estimateGeo?.routing_method === "openrouteservice" ||
+              estimateGeo?.routing_method === "openrouteservice_hgv" ||
+              estimateGeo?.routing_method === "openrouteservice_car"
+                ? estimateGeo?.routing_method === "google_directions"
+                  ? " — same engine family as Google Maps driving distance."
+                  : " — computed along the mapped driving route (OSM)."
+                : estimateGeo?.routing_method === "same_location"
+                  ? " — same map location."
+                  : estimateGeo?.routing_method === "haversine_road_factor"
+                    ? " — legacy approximate mode."
+                    : "."}
             </p>
+            {estimateGeo?.routing_method ? (
+              <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
+                {routingDistanceNote(estimateGeo.routing_method)}
+              </p>
+            ) : null}
             {providerNote ? (
               <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
-                {providerNote}{" "}
-                <span title="Driving distance/tolls may differ.">Not door-to-door driving km.</span>
+                {providerNote}
               </p>
             ) : !estimateGeo ? (
               <p style={{ margin: 0, fontSize: "0.78rem", color: "#b45309" }}>
-                Browser-only estimate — start the FleetOpt API to use Google/OSM geocoding on the server.
+                Sign in with the API running to get routed road kilometers and pricing (no browser-only shortcut).
               </p>
             ) : null}
+            {(() => {
+              const rc = routePreviewCoords(estimateGeo);
+              if (!rc) return null;
+              if (effectiveMapsKey) {
+                return (
+                  <>
+                    <GoogleRoutePreviewMap
+                      apiKey={effectiveMapsKey}
+                      pickupLat={rc.pickupLat}
+                      pickupLng={rc.pickupLng}
+                      dropoffLat={rc.dropoffLat}
+                      dropoffLng={rc.dropoffLng}
+                    />
+                    <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--text-secondary)", opacity: 0.9 }}>
+                      Markers show pickup and dropoff at the coordinates the server used for this estimate.
+                    </p>
+                  </>
+                );
+              }
+              return (
+                <p style={{ margin: 0, fontSize: "0.72rem", color: "#57534e" }}>
+                  Set <code style={{ fontSize: "0.7rem" }}>GOOGLE_MAPS_GEOCODING_API_KEY</code> on the server (with{" "}
+                  <strong>Maps JavaScript API</strong> enabled on that key) or add optional{" "}
+                  <code style={{ fontSize: "0.7rem" }}>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in{" "}
+                  <code style={{ fontSize: "0.7rem" }}>.env.local</code> to preview pins. Sign in as a customer to load the key
+                  from the API.
+                </p>
+              );
+            })()}
             {freightLines ? (
               <>
                 <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
@@ -641,7 +755,7 @@ export default function CostCalculator({
                 </p>
               </div>
               <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total estimate</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Quoted total</p>
                 <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
                   freight base + driver commission
                 </p>
@@ -673,8 +787,8 @@ export default function CostCalculator({
                 marginBottom: "0.5rem",
               }}
             >
-              <span>Weight (tons)</span>
-              <span className="field-help" title="Estimated cargo weight. Used for pricing and truck allocation.">
+              <span>Weight (metric tons)</span>
+              <span className="field-help" title="Cargo weight in metric tons (1 t = 1,000 kg). Used for pricing and how many 42 t trucks you need.">
                 ?
               </span>
               {parseFloat(weight) > 0 && !errors.cargo_weight_tons && <span className="field-valid">✓</span>}
@@ -682,9 +796,9 @@ export default function CostCalculator({
             <input
               className="input"
               type="number"
-              min="0.1"
-              step="0.1"
-              max="50"
+              min={0.1}
+              max={168}
+              step={0.01}
               placeholder="1"
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
@@ -757,7 +871,7 @@ export default function CostCalculator({
             }}
           >
             <span>Pickup time window</span>
-            <span className="field-help" title="Four shared slots per day. Another customer’s active booking blocks a slot.">
+            <span className="field-help" title="Four daily windows. Availability depends on how many of our four trucks are still free when your haul would overlap earlier runs.">
               ?
             </span>
             {pickedSlot && !errors.scheduled_time_slot && <span className="field-valid">✓</span>}
@@ -787,7 +901,7 @@ export default function CostCalculator({
                     className={`booking-slot-pill booking-slot-selectable${selected ? " booking-slot-pill--selected" : ""}${taken ? " booking-slot-pill--taken" : ""}`}
                   >
                     {slot}
-                    {taken ? " (full)" : ""}
+                    {taken ? " (fleet full)" : ""}
                   </button>
                 );
               })}

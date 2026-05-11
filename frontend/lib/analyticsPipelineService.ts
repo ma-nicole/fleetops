@@ -165,7 +165,7 @@ export class AnalyticsPipelineService {
       const fuelLiters = tripFuelLogs.reduce((sum, row) => sum + Math.max(0, toNumber(row.liters_used)), 0);
       const tollCost = tripTolls.reduce((sum, row) => sum + Math.max(0, toNumber(row.toll_amount)), 0);
       const maintenanceCost = tripMaintenance.reduce((sum, row) => sum + Math.max(0, toNumber(row.cost)), 0);
-      const laborCost = distanceKm * 1.2; // Placeholder labor model for simulation.
+      const laborCost = distanceKm * 1.2;
 
       return {
         tripId: trip.id,
@@ -221,35 +221,16 @@ export class AnalyticsPipelineService {
       };
     });
 
-    const fallbackFeatures: TripFeature[] = features.length
-      ? features
-      : [
-          {
-            tripId: "SIM-TRP-001",
-            driverName: "Sample Driver",
-            truckId: "TRK-001",
-            distanceKm: 120,
-            deliveryHours: 3.5,
-            fuelCost: 95,
-            fuelEfficiencyKmPerLiter: 6.5,
-            tollCost: 22,
-            laborCost: 144,
-            maintenanceCost: 40,
-            maintenanceFrequency: 1,
-            totalCost: 301,
-            status: "completed",
-            monthKey: monthKeyFromDate(new Date().toISOString()),
-          },
-        ];
+    const featureRecords: TripFeature[] = features.length ? features : [];
 
-    const tripCostMart = fallbackFeatures.map((row) => ({
+    const tripCostMart = featureRecords.map((row) => ({
       tripId: row.tripId,
       totalCost: row.totalCost,
       costPerKm: row.distanceKm > 0 ? row.totalCost / row.distanceKm : row.totalCost,
     }));
 
     const maintenanceMap = new Map<string, { maintenanceEvents: number; maintenanceCost: number }>();
-    fallbackFeatures.forEach((row) => {
+    featureRecords.forEach((row) => {
       const existing = maintenanceMap.get(row.truckId) || { maintenanceEvents: 0, maintenanceCost: 0 };
       existing.maintenanceEvents += row.maintenanceFrequency;
       existing.maintenanceCost += row.maintenanceCost;
@@ -262,7 +243,7 @@ export class AnalyticsPipelineService {
     }));
 
     const monthlyMap = new Map<string, { totalCost: number; tripCount: number }>();
-    fallbackFeatures.forEach((row) => {
+    featureRecords.forEach((row) => {
       const existing = monthlyMap.get(row.monthKey) || { totalCost: 0, tripCount: 0 };
       existing.totalCost += row.totalCost;
       existing.tripCount += 1;
@@ -272,7 +253,7 @@ export class AnalyticsPipelineService {
       .map(([month, values]) => ({ month, totalCost: values.totalCost, tripCount: values.tripCount }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
-    const tripCostPredictions: PredictedTripCost[] = fallbackFeatures.map((row) => {
+    const tripCostPredictions: PredictedTripCost[] = featureRecords.map((row) => {
       const predictedCost = row.fuelCost + row.tollCost + row.laborCost + 75;
       return {
         tripId: row.tripId,
@@ -316,13 +297,13 @@ export class AnalyticsPipelineService {
           (store.maintenanceReports.length - maintenanceLogs.length),
       },
       features: {
-        records: fallbackFeatures,
+        records: featureRecords,
         averageDeliveryHours:
-          fallbackFeatures.reduce((sum, row) => sum + row.deliveryHours, 0) / Math.max(1, fallbackFeatures.length),
+          featureRecords.reduce((sum, row) => sum + row.deliveryHours, 0) / Math.max(1, featureRecords.length),
         averageFuelEfficiency:
-          fallbackFeatures.reduce((sum, row) => sum + row.fuelEfficiencyKmPerLiter, 0) / Math.max(1, fallbackFeatures.length),
+          featureRecords.reduce((sum, row) => sum + row.fuelEfficiencyKmPerLiter, 0) / Math.max(1, featureRecords.length),
         averageCostPerTrip:
-          fallbackFeatures.reduce((sum, row) => sum + row.totalCost, 0) / Math.max(1, fallbackFeatures.length),
+          featureRecords.reduce((sum, row) => sum + row.totalCost, 0) / Math.max(1, featureRecords.length),
       },
       marts: {
         tripCostMart,

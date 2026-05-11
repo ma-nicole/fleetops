@@ -6,9 +6,18 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import { getDashboardPath, getEffectiveRole, type UserRole } from "@/lib/auth";
 import { APP_LOCALE, APP_TIMEZONE, formatPhpWhole } from "@/lib/appLocale";
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { WorkflowApi, type Booking, type BookingStatus } from "@/lib/workflowApi";
+import { WorkflowApi, type Booking, type BookingStatus, type Payment } from "@/lib/workflowApi";
 
 const TERMINAL: BookingStatus[] = ["completed", "cancelled", "rejected"];
+
+/** When booking is still pending_approval, explain payment stage using latest payment row. */
+function paymentSubline(bookingStatus: BookingStatus, p?: Payment | null): string | null {
+  if (bookingStatus !== "pending_approval") return null;
+  if (!p) return "Awaiting payment and proof upload.";
+  if (p.status === "for_verification") return "Payment: for verification.";
+  if (p.status === "rejected") return "Payment rejected — submit a new proof from your payment flow.";
+  return null;
+}
 
 function statusLabel(status: BookingStatus): string {
   const map: Record<BookingStatus, string> = {
@@ -57,6 +66,7 @@ export default function TripRecordsPage() {
 
   const [role, setRole] = useState<UserRole | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -69,6 +79,12 @@ export default function TripRecordsPage() {
     try {
       const list = await WorkflowApi.listBookings();
       setBookings(list);
+      const r = typeof window !== "undefined" ? getEffectiveRole() : null;
+      if (r === "customer") {
+        setPayments(await WorkflowApi.listPayments());
+      } else {
+        setPayments([]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load bookings.");
     } finally {
@@ -87,7 +103,24 @@ export default function TripRecordsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [load]);
+
   const isCustomer = role === "customer";
+
+  const paymentByBooking = useMemo(() => {
+    const m = new Map<number, Payment>();
+    for (const p of payments) {
+      const cur = m.get(p.booking_id);
+      if (!cur || p.id > cur.id) m.set(p.booking_id, p);
+    }
+    return m;
+  }, [payments]);
 
   const filtered = useMemo(() => {
     let rows = bookings;
@@ -107,16 +140,20 @@ export default function TripRecordsPage() {
 
     const q = search.trim().toLowerCase();
     if (q) {
-      rows = rows.filter(
-        (b) =>
+      rows = rows.filter((b) => {
+        const pay = paymentByBooking.get(b.id);
+        const sub = paymentSubline(b.status, pay);
+        return (
           String(b.id).includes(q) ||
           b.pickup_location.toLowerCase().includes(q) ||
           b.dropoff_location.toLowerCase().includes(q) ||
-          statusLabel(b.status).toLowerCase().includes(q),
-      );
+          statusLabel(b.status).toLowerCase().includes(q) ||
+          (sub ? sub.toLowerCase().includes(q) : false)
+        );
+      });
     }
     return rows;
-  }, [bookings, filter, search, isCustomer]);
+  }, [bookings, filter, search, isCustomer, paymentByBooking]);
 
   const dashboardHref = role ? getDashboardPath(role) : "/";
 
@@ -246,7 +283,10 @@ export default function TripRecordsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => (
+              {filtered.map((b) => {
+                const pay = isCustomer ? paymentByBooking.get(b.id) : undefined;
+                const paySub = isCustomer ? paymentSubline(b.status, pay) : null;
+                return (
                 <tr key={b.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                   {showStaffCols && (
                     <td style={{ padding: "0.65rem 1rem", color: "#6B7280" }}>#{b.customer_id}</td>
@@ -263,7 +303,14 @@ export default function TripRecordsPage() {
                     <span style={{ color: "#111" }}>{b.dropoff_location}</span>
                   </td>
                   <td style={{ padding: "0.65rem 1rem" }}>
-                    <StatusBadge status={b.status} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <StatusBadge status={b.status} />
+                      {paySub ? (
+                        <span style={{ fontSize: "0.72rem", color: "#6B7280", lineHeight: 1.35, maxWidth: 220 }}>
+                          {paySub}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                   <td style={{ padding: "0.65rem 1rem", fontWeight: 600 }}>{formatPhpWhole(Number(b.estimated_cost))}</td>
                   {isCustomer && (
@@ -289,7 +336,8 @@ export default function TripRecordsPage() {
                     </td>
                   )}
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>

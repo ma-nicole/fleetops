@@ -342,7 +342,7 @@ def seed_database(*, force: bool = False) -> None:
                 customer_id=booking.customer_id,
                 method="gcash",
                 amount=booking.estimated_cost,
-                status=PaymentStatus.PAID if paid else PaymentStatus.PENDING,
+                status=PaymentStatus.VERIFIED if paid else PaymentStatus.FOR_VERIFICATION,
                 reference=f"PAY-{1000 + booking.id}",
                 paid_at=datetime.utcnow() if paid else None,
             ))

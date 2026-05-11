@@ -27,9 +27,9 @@ const roleConfigs: Record<string, {
       "Payment preference and support contact",
     ],
     kpis: [
-      { label: "Active Bookings", value: "12" },
-      { label: "On-time Deliveries", value: "94%" },
-      { label: "Avg Booking Cost", value: "₱62,000 (sample)" },
+      { label: "Active Bookings", value: "—" },
+      { label: "On-time Deliveries", value: "—" },
+      { label: "Avg Booking Cost", value: "—" },
     ],
     quickActions: [
       { label: "Create a booking", description: "Start a new shipment request with live pricing." },
@@ -37,8 +37,7 @@ const roleConfigs: Record<string, {
       { label: "Save a location", description: "Store frequent pickup and dropoff points." },
     ],
     alerts: [
-      { label: "2 bookings awaiting payment", tone: "warning" },
-      { label: "Next delivery due today", tone: "good" },
+      { label: "Open the customer portal for live booking and payment alerts", tone: "good" },
     ],
     timeline: ["Requested", "Payment pending", "Assigned", "In transit", "Delivered"],
   },
@@ -52,9 +51,9 @@ const roleConfigs: Record<string, {
       "Handle delays and exceptions",
     ],
     kpis: [
-      { label: "Pending Assignments", value: "8" },
-      { label: "Trips Ongoing", value: "21" },
-      { label: "Conflict Alerts", value: "3" },
+      { label: "Pending Assignments", value: "—" },
+      { label: "Trips Ongoing", value: "—" },
+      { label: "Conflict Alerts", value: "—" },
     ],
     quickActions: [
       { label: "Assign next trip", description: "Drag a driver card onto an open route." },
@@ -62,8 +61,7 @@ const roleConfigs: Record<string, {
       { label: "Open route map", description: "Check ETA changes and traffic hot spots." },
     ],
     alerts: [
-      { label: "3 routes at risk of delay", tone: "alert" },
-      { label: "5 drivers available now", tone: "good" },
+      { label: "Use the dispatcher console for live route and assignment alerts", tone: "good" },
     ],
     timeline: ["Pending", "Assigned", "Loaded", "In transit", "Completed"],
   },
@@ -77,9 +75,9 @@ const roleConfigs: Record<string, {
       "Attendance check-in and trip reporting",
     ],
     kpis: [
-      { label: "Trips This Week", value: "6" },
-      { label: "Attendance", value: "98%" },
-      { label: "Safety Score", value: "4.7/5" },
+      { label: "Trips This Week", value: "—" },
+      { label: "Attendance", value: "—" },
+      { label: "Safety Score", value: "—" },
     ],
     quickActions: [
       { label: "Check in for shift", description: "Mark attendance and confirm readiness." },
@@ -87,8 +85,7 @@ const roleConfigs: Record<string, {
       { label: "View earnings", description: "See today’s payout and recent settlements." },
     ],
     alerts: [
-      { label: "Next delivery in 42 minutes", tone: "warning" },
-      { label: "Attendance streak intact", tone: "good" },
+      { label: "Open the driver app modules for live trip alerts", tone: "good" },
     ],
     timeline: ["Check-in", "Pickup", "In transit", "Dropoff", "Invoice"],
   },
@@ -102,10 +99,10 @@ const roleConfigs: Record<string, {
       "Financial and pricing configuration",
     ],
     kpis: [
-      { label: "Fuel Spend", value: "₱2.54M (sample)" },
-      { label: "Toll Spend", value: "₱728,000 (sample)" },
-      { label: "Predicted Demand", value: "+9.2%" },
-      { label: "Breakdown Risk", value: "Low" },
+      { label: "Fuel Spend", value: "—" },
+      { label: "Toll Spend", value: "—" },
+      { label: "Predicted Demand", value: "—" },
+      { label: "Breakdown Risk", value: "—" },
     ],
     quickActions: [
       { label: "Review top performers", description: "See the best drivers and routes this week." },
@@ -113,8 +110,7 @@ const roleConfigs: Record<string, {
       { label: "Export report", description: "Share KPI snapshots with leadership." },
     ],
     alerts: [
-      { label: "3 maintenance issues pending", tone: "alert" },
-      { label: "High demand expected next week", tone: "warning" },
+      { label: "Use analytics and operations modules for fleet health alerts", tone: "good" },
     ],
     timeline: ["Today", "This week", "Forecast", "Budget review"],
   },
@@ -128,9 +124,9 @@ const roleConfigs: Record<string, {
       "Governance and policy enforcement",
     ],
     kpis: [
-      { label: "Users", value: "138" },
-      { label: "Active Sessions", value: "44" },
-      { label: "Policy Alerts", value: "2" },
+      { label: "Users", value: "—" },
+      { label: "Active Sessions", value: "—" },
+      { label: "Policy Alerts", value: "—" },
     ],
     quickActions: [
       { label: "Manage users", description: "Update access, roles, and onboarding status." },
@@ -138,8 +134,7 @@ const roleConfigs: Record<string, {
       { label: "Fleet records", description: "Review trucks, assignments, and inventory status." },
     ],
     alerts: [
-      { label: "2 policy exceptions found", tone: "alert" },
-      { label: "Fleet inventory up to date", tone: "good" },
+      { label: "Use admin tools for live access and audit notifications", tone: "good" },
     ],
     timeline: ["Users", "Roles", "Fleet", "Audit"],
   },

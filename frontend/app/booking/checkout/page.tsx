@@ -77,8 +77,8 @@ export default function CheckoutPage() {
     else if (shipmentDate < todayIso()) next.date = "Shipment date cannot be in the past.";
 
     const w = parseFloat(cargoWeight);
-    if (!cargoWeight.trim() || Number.isNaN(w) || w <= 0) next.weight = "Enter cargo weight greater than zero (tons).";
-    else if (w > 500) next.weight = "Weight looks too large. Enter a realistic value (tons).";
+    if (!cargoWeight.trim() || Number.isNaN(w) || w < 0.1) next.weight = "Enter cargo weight in metric tons (min 0.1 t).";
+    else if (w > 168) next.weight = "Weight must be at most 168 metric tons (four trucks × 42 t).";
 
     if (!cargoDescription.trim() || cargoDescription.trim().length < 3) {
       next.description = "Describe the cargo (at least 3 characters).";
@@ -265,7 +265,7 @@ export default function CheckoutPage() {
 
             <div>
               <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem", color: "#1A1A1A" }}>
-                Cargo Weight (tons) *
+                Cargo weight (metric tons) *
               </label>
               <input
                 type="number"
@@ -276,6 +276,8 @@ export default function CheckoutPage() {
                   if (fieldErrors.weight) setFieldErrors((f) => ({ ...f, weight: undefined }));
                 }}
                 aria-invalid={!!fieldErrors.weight}
+                min="0.1"
+                max="50000"
                 style={{
                   width: "100%",
                   padding: "0.75rem",

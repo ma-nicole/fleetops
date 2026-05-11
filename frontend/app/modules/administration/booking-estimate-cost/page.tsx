@@ -42,8 +42,8 @@ const LABELS: { key: keyof FormState; label: string; hint: string }[] = [
   },
   {
     key: "cargo_weight_multiplier_per_ton",
-    label: "Weight load factor (per ton above 1t)",
-    hint: "Scales heavier loads in fuel/wear calculations.",
+    label: "Weight load factor (per metric ton above 1 t)",
+    hint: "Each full metric ton past the first 1 t increases the load factor by this amount (pricing uses cargo weight in metric tons).",
   },
 ];
 
@@ -110,7 +110,7 @@ export default function BookingEstimateCostAdminPage() {
         <h1 style={{ margin: 0 }}>Diesel & booking estimates</h1>
         <p style={{ margin: "0.25rem 0 0", color: "var(--text-secondary)", maxWidth: "42rem" }}>
           Adjust diesel, driver commission, helper pay, and related knobs used for customer route estimates and new
-          booking totals. Values are stored in the database; you no longer need to change code or deploy for routine
+          booking totals. Customer weight is entered in metric tons. Values are stored in the database; you no longer need to change code or deploy for routine
           price updates.
         </p>
         {updatedAt && (

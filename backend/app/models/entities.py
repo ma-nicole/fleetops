@@ -43,11 +43,11 @@ class TripStatus(str, Enum):
 
 
 class PaymentStatus(str, Enum):
-    """Payment lifecycle (paper §3.2.4 Customer DFD)"""
-    PENDING = "pending"
-    PROCESSING = "processing"
-    PAID = "paid"
-    FAILED = "failed"
+    """Proof-of-payment verification lifecycle (admin approves uploads)."""
+
+    FOR_VERIFICATION = "for_verification"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
     REFUNDED = "refunded"
 
 
@@ -212,7 +212,7 @@ class Booking(Base):
     dropoff_location: Mapped[str] = mapped_column(String(255), nullable=False)
     service_type: Mapped[ServiceType] = mapped_column(SAEnum(ServiceType), nullable=False)
     scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
-    """One of the four shared daily windows (fleet capacity: one active booking per slot)."""
+    """One of four daily pickup windows; capacity = overlapping truck-hours (four × 42 t tractors)."""
     scheduled_time_slot: Mapped[str] = mapped_column(String(8), nullable=False, default="08:00")
     cargo_weight_tons: Mapped[float] = mapped_column(Float, nullable=False)
     cargo_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -222,7 +222,15 @@ class Booking(Base):
 
     estimated_cost: Mapped[float] = mapped_column(Float, default=0)
     actual_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
-    status: Mapped[BookingStatus] = mapped_column(SAEnum(BookingStatus), default=BookingStatus.PENDING_APPROVAL)
+    status: Mapped[BookingStatus] = mapped_column(
+        SAEnum(
+            BookingStatus,
+            values_callable=lambda obj: [m.value for m in obj],
+            native_enum=False,
+            length=32,
+        ),
+        default=BookingStatus.PENDING_APPROVAL,
+    )
 
     approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -310,6 +318,10 @@ class Trip(Base):
 
     proof_of_delivery: Mapped[str | None] = mapped_column(String(500), nullable=True)
     pod_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    """Helper-facing milestone (for_pick_up … complete_trip); mirrored for dispatcher/customer UI."""
+    helper_progress_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    helper_last_proof_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     current_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     current_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -477,10 +489,23 @@ class Payment(Base):
     customer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     method: Mapped[str] = mapped_column(String(50), default="card")  # card | gcash | bank | cash
     amount: Mapped[float] = mapped_column(Float, default=0)
-    status: Mapped[PaymentStatus] = mapped_column(SAEnum(PaymentStatus), default=PaymentStatus.PENDING)
+    status: Mapped[PaymentStatus] = mapped_column(
+        SAEnum(
+            PaymentStatus,
+            values_callable=lambda obj: [m.value for m in obj],
+            native_enum=False,
+            length=32,
+        ),
+        default=PaymentStatus.FOR_VERIFICATION,
+    )
     reference: Mapped[str] = mapped_column(String(100), default="")
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     refunded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    proof_original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    proof_storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    proof_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

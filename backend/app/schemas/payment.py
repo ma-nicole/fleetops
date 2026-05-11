@@ -38,6 +38,10 @@ class PaymentRead(BaseModel):
     reference: str
     paid_at: datetime | None
     refunded_at: datetime | None
+    proof_original_filename: str | None = None
+    proof_uploaded_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    reviewed_by_id: int | None = None
     created_at: datetime
 
     class Config:

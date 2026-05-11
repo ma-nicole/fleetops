@@ -1,16 +1,25 @@
-"""Distance + freight pricing aligned with FleetOpt booking estimator."""
+"""Distance + freight pricing — uses road-network km (Google Directions, OSRM, or OpenRouteService)."""
 
 from __future__ import annotations
 
 import math
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from app.core.config import Settings
 from app.services.geocoding import geocode_coordinates
+from app.services.road_routing import driving_route_distance_km, effective_google_directions_key
+
+
+class PreciseDistanceUnavailable(Exception):
+    """Strict mode: pricing requires geocoded pins + a successful road route (Google / ORS / OSRM)."""
+
+    def __init__(self, detail: str):
+        self.detail = detail
+        super().__init__(detail)
 
 
 class FreightPricingKnobsLike(Protocol):
-    """Settings or ``BookingFreightSettings`` row — same numeric fields for estimate math."""
+    """Settings or ``BookingFreightSettings`` row — same numeric fields for pricing math."""
 
     cargo_weight_multiplier_per_ton: float
     truck_fuel_efficiency_kmpl: float
@@ -19,6 +28,21 @@ class FreightPricingKnobsLike(Protocol):
     trip_depreciation_rate: float
     helper_pay_php_per_trip: float
     driver_freight_commission_rate: float
+
+
+class RoadDistanceEstimate(NamedTuple):
+    distance_km: float
+    pickup_provider: str
+    dropoff_provider: str
+    tier: str
+    """geocoded | partial_metro | heuristic | heuristic_near_dupe (legacy only)"""
+    routing_method: str
+    """google_directions | openrouteservice_hgv | openrouteservice_car | osrm | same_location — legacy: ..."""
+    pickup_lat: float | None = None
+    pickup_lng: float | None = None
+    dropoff_lat: float | None = None
+    dropoff_lng: float | None = None
+
 
 METRO_CENTER = (14.5995, 120.9842)
 ROAD_FACTOR = 1.28
@@ -46,11 +70,15 @@ def estimate_road_distance_km(
     pickup: str,
     dropoff: str,
     settings: Settings,
-) -> tuple[float, str, str, str]:
+) -> RoadDistanceEstimate:
     """
-    Returns (distance_km, pickup_provider, dropoff_provider, tier).
-    tier: geocoded | partial_metro | heuristic
+    Default (require_routed_distance=True): only returns km from a real road route:
+    Google Directions (if configured), else OpenRouteService, else OSRM.
+    No straight-line “×1.28” fallback — that path raises PreciseDistanceUnavailable.
+
+    Set REQUIRE_ROUTED_DISTANCE=false only for offline/dev approximate behavior.
     """
+    strict = bool(getattr(settings, "require_routed_distance", True))
     p_pick = pickup.strip().lower()
     p_drop = dropoff.strip().lower()
     plat, plon, pprov = geocode_coordinates(pickup, settings)
@@ -59,46 +87,154 @@ def estimate_road_distance_km(
     cp = (plat, plon) if plat is not None and plon is not None else None
     cd = (dlat, dlon) if dlat is not None and dlon is not None else None
 
-    tier = "heuristic"
+    if strict:
+        if not cp or not cd:
+            raise PreciseDistanceUnavailable(
+                "Could not place pickup and dropoff on the map. Use full Philippine addresses "
+                "(house/street, barangay, city or municipality, province). "
+                "Vague labels like a province name alone are not enough for road distance."
+            )
+        crow = haversine_km(cp, cd)
+        if crow < 0.001:
+            if p_pick == p_drop:
+                return RoadDistanceEstimate(
+                    0.0,
+                    pprov,
+                    dprov,
+                    "geocoded",
+                    "same_location",
+                    cp[0],
+                    cp[1],
+                    cd[0],
+                    cd[1],
+                )
+            raise PreciseDistanceUnavailable(
+                "Pickup and dropoff resolved to the same coordinates but the address text differs. "
+                "Refine one or both addresses (add street, barangay, or landmark) so each stop maps cleanly."
+            )
+        g_ok = bool(getattr(settings, "use_google_directions_for_routing", True)) and bool(
+            effective_google_directions_key(settings)
+        )
+        ors_ok = bool((getattr(settings, "openrouteservice_api_key", None) or "").strip())
+        osrm_ok = bool(getattr(settings, "use_osrm_driving_distance", True))
+        if not (g_ok or ors_ok or osrm_ok):
+            raise PreciseDistanceUnavailable(
+                "Road routing is disabled: enable Google Directions (GOOGLE_MAPS_SERVER_API_KEY or server-usable key + "
+                "Directions API), or OPENROUTESERVICE_API_KEY, or OSRM (USE_OSRM_DRIVING_DISTANCE=true)."
+            )
+        drive_km, r_src = driving_route_distance_km(cp[0], cp[1], cd[0], cd[1], settings)
+        _valid_routing = (
+            "google_directions",
+            "openrouteservice_hgv",
+            "openrouteservice_car",
+            "openrouteservice",
+            "osrm",
+        )
+        if drive_km is None or r_src not in _valid_routing:
+            raise PreciseDistanceUnavailable(
+                "The routing engine could not compute a driving path between the two resolved points "
+                "(service down, no road connection in the map data, or timeout). "
+                "Verify both addresses, try again, or set GOOGLE_MAPS_SERVER_API_KEY with Geocoding + Directions enabled "
+                "(not HTTP-referrer-only), OPENROUTESERVICE_API_KEY, or OSRM_ROUTE_BASE_URL."
+            )
+        return RoadDistanceEstimate(
+            float(drive_km),
+            pprov,
+            dprov,
+            "geocoded",
+            r_src,
+            cp[0],
+            cp[1],
+            cd[0],
+            cd[1],
+        )
 
+    # ---- Legacy approximate mode (REQUIRE_ROUTED_DISTANCE=false) ----
     if cp and cd:
-        tier = "geocoded"
         crow = haversine_km(cp, cd)
         if crow < 0.001 and p_pick != p_drop:
-            return _heuristic_km(pickup, dropoff), pprov, dprov, "heuristic_near_dupe"
-        km = round(crow * ROAD_FACTOR, 1)
-        return km, pprov, dprov, tier
-
+            km = _heuristic_km(pickup, dropoff)
+            return RoadDistanceEstimate(
+                km,
+                pprov,
+                dprov,
+                "heuristic_near_dupe",
+                "heuristic",
+                plat,
+                plon,
+                dlat,
+                dlon,
+            )
+        drive_km, r_src = driving_route_distance_km(cp[0], cp[1], cd[0], cd[1], settings)
+        if drive_km is not None and r_src in (
+            "google_directions",
+            "openrouteservice_hgv",
+            "openrouteservice_car",
+            "openrouteservice",
+            "osrm",
+        ):
+            return RoadDistanceEstimate(
+                drive_km,
+                pprov,
+                dprov,
+                "geocoded",
+                r_src,
+                cp[0],
+                cp[1],
+                cd[0],
+                cd[1],
+            )
+        km = round(crow * ROAD_FACTOR, 2)
+        return RoadDistanceEstimate(
+            km,
+            pprov,
+            dprov,
+            "geocoded",
+            "haversine_road_factor",
+            cp[0],
+            cp[1],
+            cd[0],
+            cd[1],
+        )
     if cp and not cd:
-        tier = "partial_metro"
         crow = haversine_km(cp, METRO_CENTER)
-        return round(crow * ROAD_FACTOR, 1), pprov, dprov, tier
-
+        km = round(crow * ROAD_FACTOR, 1)
+        return RoadDistanceEstimate(
+            km,
+            pprov,
+            dprov,
+            "partial_metro",
+            "partial_metro_haversine",
+            cp[0],
+            cp[1],
+            None,
+            None,
+        )
     if not cp and cd:
-        tier = "partial_metro"
         crow = haversine_km(METRO_CENTER, cd)
-        return round(crow * ROAD_FACTOR, 1), pprov, dprov, tier
-
-    return _heuristic_km(pickup, dropoff), pprov, dprov, "heuristic"
+        km = round(crow * ROAD_FACTOR, 1)
+        return RoadDistanceEstimate(
+            km,
+            pprov,
+            dprov,
+            "partial_metro",
+            "partial_metro_haversine",
+            None,
+            None,
+            cd[0],
+            cd[1],
+        )
+    km = _heuristic_km(pickup, dropoff)
+    return RoadDistanceEstimate(km, pprov, dprov, "heuristic", "heuristic")
 
 
 def _weight_factor(weight_tons: float, coef: float) -> float:
     w = weight_tons if math.isfinite(weight_tons) and weight_tons > 0 else 1.0
-    w = min(50.0, max(0.1, w))
+    w = min(168.0, max(0.1, w))
     return 1.0 + max(0.0, w - 1.0) * coef
 
 
 def customer_freight_pricing(km: float, weight_tons: float, knobs: FreightPricingKnobsLike) -> dict[str, float]:
-    """
-    Freight base = diesel (₱/L × liters) + per-km wear × load factor
-    plus depreciation on that diesel+wear core, helper allowance per trip.
-
-    Gross freight (freight base) is invoiced separately from driver's 15%.
-    Driver / commission = FREIGHT_COMMISSION_RATE × freight base — added to invoice total.
-
-    Mirrors frontend `bookingRouteEstimate.ts` fallback when env knobs match `Settings` defaults
-    until an admin persists overrides in ``booking_freight_settings``.
-    """
     wf = _weight_factor(weight_tons, float(knobs.cargo_weight_multiplier_per_ton))
     km_eff = float(km)
     kmpl = max(1.5, float(knobs.truck_fuel_efficiency_kmpl))
@@ -124,10 +260,10 @@ def customer_freight_pricing(km: float, weight_tons: float, knobs: FreightPricin
     total_customer = round(freight_base + driver_fee, 2)
 
     w_norm = weight_tons if math.isfinite(weight_tons) and weight_tons > 0 else 1.0
-    w_norm = min(50.0, max(0.1, w_norm))
+    w_norm = min(168.0, max(0.1, w_norm))
 
     return {
-        "distance_km": round(km_eff, 1),
+        "distance_km": round(km_eff, 2),
         "diesel_liters": round(liters, 2),
         "diesel_cost_php": round(diesel_cost, 2),
         "wear_misc_php": round(wear_misc, 2),
