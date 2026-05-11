@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
+import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
 import KpiCard from "@/components/KpiCard";
 import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/appLocale";
 import {
@@ -14,34 +15,8 @@ import {
   subscribeSitesChanged,
   type CustomerSite,
 } from "@/lib/customerSites";
-import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
+import { WorkflowApi, type CustomerBookingRow, type Payment } from "@/lib/workflowApi";
 
-function bookingLabel(status: Booking["status"]): string {
-  switch (status) {
-    case "pending_approval":
-      return "Pending approval";
-    case "approved":
-      return "Approved";
-    case "assigned":
-      return "Assigned";
-    case "accepted":
-      return "Accepted";
-    case "enroute":
-      return "En route";
-    case "loading":
-      return "Loading";
-    case "out_for_delivery":
-      return "Out for delivery";
-    case "completed":
-      return "Delivered";
-    case "cancelled":
-      return "Cancelled";
-    case "rejected":
-      return "Rejected";
-    default:
-      return status;
-  }
-}
 
 function formatShortDate(iso: string): string {
   try {
@@ -57,7 +32,9 @@ function formatShortDate(iso: string): string {
 }
 
 export default function CustomerPortalDashboard() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [activeShipments, setActiveShipments] = useState<CustomerBookingRow[]>([]);
+  const [historyCount, setHistoryCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,14 +46,19 @@ export default function CustomerPortalDashboard() {
   const [newSiteProvince, setNewSiteProvince] = useState("");
   const [newSitePostal, setNewSitePostal] = useState("");
   const [siteFormError, setSiteFormError] = useState<string | null>(null);
-
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [b, p] = await Promise.all([WorkflowApi.listBookings(), WorkflowApi.listPayments()]);
+        const [shipRes, hist, p] = await Promise.all([
+          WorkflowApi.customerShipmentTracking(),
+          WorkflowApi.customerBookingHistory(),
+          WorkflowApi.listPayments(),
+        ]);
         if (!cancelled) {
-          setBookings(b);
+          setActiveShipments(shipRes.shipments);
+          setHistoryCount(hist.length);
+          setCompletedCount(hist.filter((x) => x.display_status === "completed").length);
           setPayments(p);
         }
       } catch (e) {
@@ -105,43 +87,54 @@ export default function CustomerPortalDashboard() {
     return subscribeSitesChanged(refresh);
   }, []);
 
-  const activeBookings = useMemo(
-    () => bookings.filter((b) => !["completed", "cancelled", "rejected"].includes(b.status)),
-    [bookings],
-  );
-
   const kpis = useMemo(() => {
-    const totalOrders = bookings.length;
+    const totalOrders = activeShipments.length + historyCount;
     const paid = payments.filter((p) => p.status === "verified");
     const spent = paid.reduce((s, p) => s + p.amount, 0);
-    const done = bookings.filter((b) => b.status === "completed").length;
+    const done = completedCount;
     const rate = totalOrders ? Math.round((done / totalOrders) * 1000) / 10 : 0;
+    const inTransit = activeShipments.filter((b) =>
+      ["en_route", "out_for_delivery", "picked_up", "dropped_off", "for_pickup"].includes(b.display_status),
+    ).length;
+    const pendingPickup = activeShipments.filter((b) =>
+      ["assigned", "approved", "payment_verified", "ready_for_assignment", "for_pickup"].includes(b.display_status),
+    ).length;
     return {
-      activeCount: activeBookings.length,
-      inTransit: bookings.filter((b) => ["enroute", "loading", "out_for_delivery"].includes(b.status)).length,
-      pendingPickup: bookings.filter((b) => b.status === "approved" || b.status === "assigned").length,
+      activeCount: activeShipments.length,
+      inTransit,
+      pendingPickup,
       totalOrders,
       spent,
       spentLabel: spent >= 1000 ? `₱${formatNumber(spent / 1000, { maximumFractionDigits: 1 })}K` : formatPhpWhole(Math.round(spent)),
       rate,
-      thisMonth: bookings.filter((b) => {
+      thisMonth: activeShipments.filter((b) => {
         const t = new Date(b.created_at).getTime();
         const now = new Date();
         return t > now.getTime() - 31 * 86400000;
       }).length,
     };
-  }, [bookings, payments, activeBookings.length]);
+  }, [activeShipments.length, historyCount, completedCount, payments]);
 
   const activeShow = useMemo(() => {
-    const prioritized = [...activeBookings].sort((a, b) => {
-      const rank = (s: Booking["status"]) =>
-        ["out_for_delivery", "enroute", "loading", "assigned", "accepted", "approved", "pending_approval"].indexOf(
-          s,
-        );
-      return rank(a.status) - rank(b.status);
+    const prioritized = [...activeShipments].sort((a, b) => {
+      const rank = (s: string) =>
+        [
+          "dropped_off",
+          "en_route",
+          "out_for_delivery",
+          "picked_up",
+          "for_pickup",
+          "assigned",
+          "approved",
+          "payment_verified",
+          "ready_for_assignment",
+          "payment_verification",
+          "pending_payment",
+        ].indexOf(s);
+      return rank(a.display_status) - rank(b.display_status);
     });
     return prioritized.slice(0, 4);
-  }, [activeBookings]);
+  }, [activeShipments]);
 
   const txRows = useMemo(
     () =>
@@ -215,7 +208,6 @@ export default function CustomerPortalDashboard() {
                 ) : (
                   <div style={{ display: "grid", gap: "1rem" }}>
                     {activeShow.map((order) => {
-                      const lbl = bookingLabel(order.status);
                       return (
                         <div
                           key={order.id}
@@ -233,15 +225,18 @@ export default function CustomerPortalDashboard() {
                               <div style={{ fontWeight: "700", marginBottom: "0.25rem" }}>Booking #{order.id}</div>
                               <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Pickup {formatShortDate(`${order.scheduled_date}`)}</div>
                             </div>
-                            <ShipmentBadge status={lbl} />
+                            <ShipmentBadge status="On going" />
                           </div>
                           <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
                             <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
                             <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
+                            <div style={{ marginTop: "0.25rem" }}>
+                              <CustomerBookingAssignmentsList assignments={order.assignments} dropoffAddress={order.dropoff_location} />
+                            </div>
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem", flexWrap: "wrap", gap: "0.35rem" }}>
                             <span style={{ color: "var(--text-secondary)" }}>
-                              Estimate <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
+                              Payment total <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
                             </span>
                             <Link href="/modules/customer/booking-history" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
                               Details
@@ -259,7 +254,7 @@ export default function CustomerPortalDashboard() {
                   <h2 style={{ margin: 0 }}>Sites</h2>
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                     Use separate fields: street, district or village, city or municipality, province, and zip code —
-                    the full line is built automatically for bookings and estimates. You need at least {MIN_BOOKING_SITES} sites
+                    the full line is built automatically for bookings and pricing. You need at least {MIN_BOOKING_SITES} sites
                     before you can book.
                   </p>
                   <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>
@@ -537,6 +532,8 @@ const badgeBase: CSSProperties = {
 
 function ShipmentBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
+  if (s === "on going" || s === "ongoing")
+    return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "#1d4ed8" }}>{status}</span>;
   if (s.includes("transit") || s.includes("route") || s.includes("delivery") || s.includes("en route")) return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "#1d4ed8" }}>{status}</span>;
   if (s.includes("deliver") || s.includes("complet")) return <span style={{ ...badgeBase, background: "rgba(5,150,105,0.12)", color: "#047857" }}>{status}</span>;
   if (s.includes("pending") || s.includes("approv")) return <span style={{ ...badgeBase, background: "rgba(251,191,36,0.35)", color: "#92400e" }}>{status}</span>;

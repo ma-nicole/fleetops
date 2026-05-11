@@ -1,4 +1,4 @@
-/** Browser fallback pricing — keep in sync with backend `Settings` / `customer_freight_pricing`. */
+/** Browser fallback: admin only edits diesel + toll in DB; these env vars mimic that when offline. */
 
 function num(raw: string | undefined, fallback: number): number {
   if (raw === undefined || String(raw).trim() === "") return fallback;
@@ -8,23 +8,13 @@ function num(raw: string | undefined, fallback: number): number {
 
 export type BookingPricingKnobs = {
   dieselPricePhpPerLiter: number;
-  truckKmPerLiter: number;
-  tripWearPhpPerKm: number;
-  tripDepreciationRate: number;
-  helperPhpPerTrip: number;
-  driverCommissionRate: number;
-  cargoWeightMultiplierPerTon: number;
+  tollFeesPhpPerTrip: number;
 };
 
-/** Defaults match `backend/app/core/config.py`. */
+/** Defaults align with backend `Settings` seed for `booking_freight_settings`. */
 export function bookingPricingKnobs(): BookingPricingKnobs {
   return {
     dieselPricePhpPerLiter: num(process.env.NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER, 74.75),
-    truckKmPerLiter: num(process.env.NEXT_PUBLIC_TRUCK_FUEL_KMPL, 4.5),
-    tripWearPhpPerKm: num(process.env.NEXT_PUBLIC_TRIP_WEAR_PHP_PER_KM, 3.75),
-    tripDepreciationRate: num(process.env.NEXT_PUBLIC_TRIP_DEPRECIATION_RATE, 0.1),
-    helperPhpPerTrip: num(process.env.NEXT_PUBLIC_HELPER_PAY_PHP_PER_TRIP, 220),
-    driverCommissionRate: num(process.env.NEXT_PUBLIC_DRIVER_FREIGHT_COMMISSION_RATE, 0.15),
-    cargoWeightMultiplierPerTon: num(process.env.NEXT_PUBLIC_CARGO_WEIGHT_MULT_PER_TON, 0.07),
+    tollFeesPhpPerTrip: num(process.env.NEXT_PUBLIC_TOLL_FEES_PHP_PER_TRIP, 0),
   };
 }

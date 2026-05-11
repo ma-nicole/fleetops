@@ -145,7 +145,7 @@ export default function RouteDetailsPage() {
               fontWeight: 600,
             }}
           >
-             Open GPS Navigation
+             Open map directions
           </button>
         </div>
 

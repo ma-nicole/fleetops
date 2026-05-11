@@ -1,37 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { TripBoardDetailModal } from "@/components/TripBoardDetailModal";
+import { formatPhp } from "@/lib/appLocale";
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { AdminFlowService, type AdminTrip } from "@/lib/adminFlowService";
+import { WorkflowApi } from "@/lib/workflowApi";
 
-function timeToMinutes(t: string): number {
-  const [h, m] = t.split(":").map((x) => parseInt(x, 10));
-  return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
-}
+type BoardRow = Awaited<ReturnType<typeof WorkflowApi.dispatchAssignmentsBoard>>["assignments"][number];
 
-function tripIdSortKey(id: string): number {
-  const m = id.match(/(\d+)/);
-  return m ? parseInt(m[1], 10) : 0;
-}
-
-const STATUS_SORT_ORDER: Record<AdminTrip["status"], number> = {
-  enroute: 0,
-  delayed: 1,
-  completed: 2,
-};
-
-type SortKey = "trip" | "eta" | "status";
+type SortKey = "trip" | "booking" | "status" | "customer";
 
 export default function AdminTripMonitoringPage() {
   useRoleGuard(["admin", "manager"]);
-  const [trips, setTrips] = useState<AdminTrip[]>([]);
+  const [rows, setRows] = useState<BoardRow[]>([]);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [detailRow, setDetailRow] = useState<BoardRow | null>(null);
+
+  const load = useCallback(async () => {
+    const board = await WorkflowApi.dispatchAssignmentsBoard();
+    setRows(board.assignments);
+  }, []);
 
   useEffect(() => {
-    setTrips(AdminFlowService.getTrips());
-  }, []);
+    void load().catch(() => setRows([]));
+  }, [load]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -43,26 +37,15 @@ export default function AdminTripMonitoringPage() {
   };
 
   const sortedTrips = useMemo(() => {
-    if (!sortKey) return trips;
+    if (!sortKey) return rows;
     const dir = sortDir === "asc" ? 1 : -1;
-    return [...trips].sort((a, b) => {
-      if (sortKey === "trip") {
-        const na = tripIdSortKey(a.id);
-        const nb = tripIdSortKey(b.id);
-        if (na !== nb) return (na - nb) * dir;
-        return a.id.localeCompare(b.id) * dir;
-      }
-      if (sortKey === "eta") {
-        const ea = timeToMinutes(a.eta);
-        const eb = timeToMinutes(b.eta);
-        return (ea - eb) * dir;
-      }
-      const oa = STATUS_SORT_ORDER[a.status];
-      const ob = STATUS_SORT_ORDER[b.status];
-      if (oa !== ob) return (oa - ob) * dir;
-      return a.id.localeCompare(b.id) * dir;
+    return [...rows].sort((a, b) => {
+      if (sortKey === "trip") return (a.trip_id - b.trip_id) * dir;
+      if (sortKey === "booking") return (a.booking_id - b.booking_id) * dir;
+      if (sortKey === "customer") return ((a.customer_name || "").localeCompare(b.customer_name || "")) * dir;
+      return (a.trip_status + (a.helper_progress_status || "")).localeCompare(b.trip_status + (b.helper_progress_status || "")) * dir;
     });
-  }, [trips, sortKey, sortDir]);
+  }, [rows, sortKey, sortDir]);
 
   const thBtn: React.CSSProperties = {
     border: "none",
@@ -79,20 +62,22 @@ export default function AdminTripMonitoringPage() {
 
   return (
     <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
-      <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.2rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <Link href="/admin/payment-approval" style={{ color: "#0EA5E9", textDecoration: "none" }}>← Payment approval</Link>
-            <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Trip Execution & Monitoring</h1>
-          </div>
-          <Link href="/admin/orders" style={{ textDecoration: "none", background: "#3B82F6", color: "white", padding: "0.6rem 1rem", borderRadius: "6px", fontWeight: 600 }}>Next: Orders</Link>
+      <div className="container" style={{ maxWidth: "1280px", margin: "0 auto", display: "grid", gap: "1.2rem" }}>
+        <div>
+          <Link href="/admin/payment-approval" style={{ color: "#0EA5E9", textDecoration: "none" }}>
+            ← Payment approval
+          </Link>
+          <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Trip Execution & Monitoring</h1>
+          <p style={{ margin: 0, color: "#64748B", fontSize: "0.95rem" }}>
+            Assigned trips with customer, route, payment, and live location. Use View details per row.
+          </p>
         </div>
 
-        <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <section style={{ background: "white", border: "1px solid #E8E8E8", borderRadius: "10px", overflow: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
             <thead>
               <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E8E8E8" }}>
-                <th style={{ padding: "0.75rem", textAlign: "left" }} aria-sort={sortKey === "trip" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>
                   <button type="button" style={thBtn} onClick={() => toggleSort("trip")}>
                     Trip
                     <span style={{ fontSize: "0.85rem", opacity: sortKey === "trip" ? 1 : 0.35 }} aria-hidden>
@@ -100,18 +85,30 @@ export default function AdminTripMonitoringPage() {
                     </span>
                   </button>
                 </th>
-                <th style={{ padding: "0.75rem", textAlign: "left" }}>Driver</th>
-                <th style={{ padding: "0.75rem", textAlign: "left" }}>Vehicle</th>
-                <th style={{ padding: "0.75rem", textAlign: "left" }}>Location</th>
-                <th style={{ padding: "0.75rem", textAlign: "left" }} aria-sort={sortKey === "eta" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
-                  <button type="button" style={thBtn} onClick={() => toggleSort("eta")}>
-                    ETA
-                    <span style={{ fontSize: "0.85rem", opacity: sortKey === "eta" ? 1 : 0.35 }} aria-hidden>
-                      {sortKey === "eta" ? (sortDir === "asc" ? "↑" : "↓") : "⇅"}
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>
+                  <button type="button" style={thBtn} onClick={() => toggleSort("customer")}>
+                    Customer
+                    <span style={{ fontSize: "0.85rem", opacity: sortKey === "customer" ? 1 : 0.35 }} aria-hidden>
+                      {sortKey === "customer" ? (sortDir === "asc" ? "↑" : "↓") : "⇅"}
                     </span>
                   </button>
                 </th>
-                <th style={{ padding: "0.75rem", textAlign: "left" }} aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Company</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Pickup / Dropoff</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Paid</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Driver</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Helper</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Vehicle</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>Location</th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>
+                  <button type="button" style={thBtn} onClick={() => toggleSort("booking")}>
+                    Booking
+                    <span style={{ fontSize: "0.85rem", opacity: sortKey === "booking" ? 1 : 0.35 }} aria-hidden>
+                      {sortKey === "booking" ? (sortDir === "asc" ? "↑" : "↓") : "⇅"}
+                    </span>
+                  </button>
+                </th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}>
                   <button type="button" style={thBtn} onClick={() => toggleSort("status")}>
                     Status
                     <span style={{ fontSize: "0.85rem", opacity: sortKey === "status" ? 1 : 0.35 }} aria-hidden>
@@ -119,23 +116,76 @@ export default function AdminTripMonitoringPage() {
                     </span>
                   </button>
                 </th>
+                <th style={{ padding: "0.75rem", textAlign: "left" }}> </th>
               </tr>
             </thead>
             <tbody>
               {sortedTrips.map((trip) => (
-                <tr key={trip.id} style={{ borderBottom: "1px solid #E8E8E8" }}>
-                  <td style={{ padding: "0.75rem", fontWeight: 700 }}>{trip.id}</td>
-                  <td style={{ padding: "0.75rem" }}>{trip.driver}</td>
-                  <td style={{ padding: "0.75rem" }}>{trip.vehicle}</td>
-                  <td style={{ padding: "0.75rem" }}>{trip.location}</td>
-                  <td style={{ padding: "0.75rem" }}>{trip.eta}</td>
-                  <td style={{ padding: "0.75rem", textTransform: "capitalize" }}>{trip.status}</td>
+                <tr key={trip.trip_id} style={{ borderBottom: "1px solid #E8E8E8" }}>
+                  <td style={{ padding: "0.75rem", fontWeight: 700 }}>#{trip.trip_id}</td>
+                  <td style={{ padding: "0.75rem" }}>{trip.customer_name ?? "—"}</td>
+                  <td style={{ padding: "0.75rem", color: "#475569", fontSize: "0.88rem" }}>
+                    {trip.customer_company_name ?? "—"}
+                  </td>
+                  <td style={{ padding: "0.75rem", maxWidth: 220, fontSize: "0.82rem", color: "#334155" }}>
+                    <div title={trip.pickup_location}>
+                      {trip.pickup_location.slice(0, 42)}
+                      {trip.pickup_location.length > 42 ? "…" : ""}
+                    </div>
+                    <div style={{ color: "#94A3B8" }}>→</div>
+                    <div title={trip.dropoff_location}>
+                      {trip.dropoff_location.slice(0, 42)}
+                      {trip.dropoff_location.length > 42 ? "…" : ""}
+                    </div>
+                  </td>
+                  <td style={{ padding: "0.75rem", whiteSpace: "nowrap", fontWeight: 600 }}>
+                    {trip.paid_amount_verified != null ? formatPhp(trip.paid_amount_verified) : "—"}
+                  </td>
+                  <td style={{ padding: "0.75rem" }}>{trip.driver_name ?? "—"}</td>
+                  <td style={{ padding: "0.75rem" }}>{trip.helper_name ?? "—"}</td>
+                  <td style={{ padding: "0.75rem" }}>{trip.truck_code}</td>
+                  <td style={{ padding: "0.75rem", maxWidth: 140, fontSize: "0.85rem" }}>
+                    {trip.latest_location ?? "No update yet"}
+                  </td>
+                  <td style={{ padding: "0.75rem" }}>#{trip.booking_id}</td>
+                  <td style={{ padding: "0.75rem", textTransform: "capitalize" }}>
+                    {(trip.helper_progress_status || trip.trip_status).replace(/_/g, " ")}
+                  </td>
+                  <td style={{ padding: "0.75rem" }}>
+                    <button
+                      type="button"
+                      title="View full details"
+                      aria-label="View details"
+                      onClick={() => setDetailRow(trip)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "0.4rem 0.65rem",
+                        borderRadius: 8,
+                        border: "1px solid #CBD5E1",
+                        background: "#F8FAFC",
+                        cursor: "pointer",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        color: "#0F172A",
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                      View details
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </section>
       </div>
+
+      <TripBoardDetailModal row={detailRow} onClose={() => setDetailRow(null)} />
     </main>
   );
 }

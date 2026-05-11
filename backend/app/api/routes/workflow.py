@@ -123,7 +123,7 @@ def create_booking_request(
     # Send confirmation email
     subject, html_body = EmailTemplate.booking_confirmation(
         booking_id=booking.id,
-        estimated_cost=booking.estimated_cost,
+        quoted_amount_php=float(booking.estimated_cost or 0),
         scheduled_date=str(booking.scheduled_date),
     )
     send_email_notification(to_email=user.email, subject=subject, html_body=html_body)
@@ -175,7 +175,16 @@ def get_assignable_bookings_for_dispatch(
     rows = (
         db.query(Booking)
         .filter(verified)
-        .filter(Booking.status.in_([BookingStatus.APPROVED, BookingStatus.ASSIGNED]))
+        .filter(
+            Booking.status.in_(
+                [
+                    BookingStatus.PAYMENT_VERIFIED,
+                    BookingStatus.READY_FOR_ASSIGNMENT,
+                    BookingStatus.APPROVED,
+                    BookingStatus.ASSIGNED,
+                ]
+            )
+        )
         .order_by(Booking.created_at.desc())
         .all()
     )
@@ -368,10 +377,17 @@ def depart_to_pickup(
 
     trip.status = TripStatus.DEPARTED
     trip.departure_time = datetime.utcnow()
-    trip.current_latitude = update.latitude
-    trip.current_longitude = update.longitude
-
     booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+    loc = (
+        (update.location_name or "").strip()
+        or (update.notes or "").strip()
+        or (booking.pickup_location if booking else "")
+        or "Departed to pickup"
+    )
+    trip.latest_location = loc
+    if booking:
+        booking.latest_location = loc
+
     booking.status = BookingStatus.ENROUTE
 
     db.commit()
@@ -543,10 +559,14 @@ def update_trip_status(
     if user.role == UserRole.DRIVER and trip.driver_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    trip.current_latitude = update.latitude
-    trip.current_longitude = update.longitude
     trip.status = update.status
     trip.updated_at = datetime.utcnow()
+    loc = ((update.location_name or "").strip() or (update.notes or "").strip())
+    if loc:
+        trip.latest_location = loc
+        bk = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+        if bk:
+            bk.latest_location = loc
 
     db.commit()
     db.refresh(trip)

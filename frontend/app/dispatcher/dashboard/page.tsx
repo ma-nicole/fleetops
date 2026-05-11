@@ -201,7 +201,7 @@ export default function DispatcherDashboard() {
         >
           <article style={{ ...card, display: "grid", gap: "0.85rem" }}>
             <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Trip schedule optimization</h3>
-            <InsightRow title="Best dispatch window" detail="06:00 – 08:00 AM · Estimated efficiency uplift +18% (baseline)" accent="rgba(14,165,233,0.15)" />
+            <InsightRow title="Best dispatch window" detail="06:00 – 08:00 AM · Projected efficiency uplift +18% (baseline)" accent="rgba(14,165,233,0.15)" />
             <InsightRow title="Workload forecast" detail="Peak 10:00 AM – 2:00 PM · Consider extra coverage on the board." accent="rgba(251,146,60,0.18)" />
             <div style={{ marginTop: 4 }}>
               <div style={{ fontSize: "0.82rem", fontWeight: 700, marginBottom: 8 }}>Volume by slot</div>

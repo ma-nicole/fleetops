@@ -44,8 +44,7 @@ export interface Trip {
   completed_at?: string;
   proof_of_delivery?: string;
   pod_notes?: string;
-  current_latitude?: number;
-  current_longitude?: number;
+  latest_location?: string | null;
   estimated_delivery_time?: string;
   created_at: string;
   updated_at: string;
@@ -83,11 +82,11 @@ export const createJobFromBooking = (bookingId: number) =>
 // Driver actions
 export const acceptJob = (tripId: number) => apiPost(`/workflow/job/${tripId}/accept`);
 
-export const departToPickup = (tripId: number, latitude?: number, longitude?: number) =>
+export const departToPickup = (tripId: number, opts?: { location_name?: string; notes?: string }) =>
   apiPost(`/workflow/job/${tripId}/depart`, {
     status: "departed",
-    latitude,
-    longitude,
+    location_name: opts?.location_name,
+    notes: opts?.notes,
   });
 
 export const arrivedAtPickup = (tripId: number) =>
@@ -103,11 +102,15 @@ export const completeDelivery = (tripId: number, proofUrl?: string, notes?: stri
     notes,
   });
 
-export const updateTripStatus = (tripId: number, status: string, latitude?: number, longitude?: number) =>
+export const updateTripStatus = (
+  tripId: number,
+  status: string,
+  opts?: { location_name?: string; notes?: string }
+) =>
   apiPost(`/workflow/job/${tripId}/update-status`, {
     status,
-    latitude,
-    longitude,
+    location_name: opts?.location_name,
+    notes: opts?.notes,
   });
 
 export const getTripDetails = (tripId: number) => apiGet(`/workflow/job/${tripId}`);

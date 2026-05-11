@@ -202,6 +202,27 @@ export async function apiChangePassword(currentPassword: string, newPassword: st
   });
 }
 
+export type MeUser = {
+  id: number;
+  email: string;
+  full_name: string;
+  company_name: string | null;
+  phone: string | null;
+  role: string;
+};
+
+export async function apiGetMe(): Promise<MeUser> {
+  return apiGet<MeUser>("/auth/me");
+}
+
+export async function apiUpdateCustomerProfile(payload: {
+  full_name: string;
+  company_name?: string | null;
+  phone?: string | null;
+}): Promise<MeUser> {
+  return apiPatch<MeUser>("/auth/profile", payload);
+}
+
 /** Decode JWT payload segment (base64url); pads for browsers where `atob` requires it. */
 function decodeJwtPayloadJson(segment: string): Record<string, unknown> | null {
   try {

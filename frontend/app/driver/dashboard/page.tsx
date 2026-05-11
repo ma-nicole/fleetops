@@ -39,7 +39,6 @@ export default function DriverDashboardPage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [salary, setSalary] = useState<SalaryPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<number | null>(null);
   const [checkInBusy, setCheckInBusy] = useState(false);
   const [checkInOk, setCheckInOk] = useState<string | null>(null);
 
@@ -59,18 +58,6 @@ export default function DriverDashboardPage() {
   useEffect(() => {
     refresh();
   }, []);
-
-  const accept = async (id: number) => {
-    setBusy(id);
-    try {
-      await WorkflowApi.acceptJob(id);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Accept failed");
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const checkIn = async () => {
     setError(null);
@@ -267,16 +254,8 @@ export default function DriverDashboardPage() {
                   <strong>Optional route tweak:</strong> If traffic builds, planners may suggest alternate arterials via Route Info — coordination with dispatcher first.
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                  {primary.status === "assigned" && (
-                    <button type="button" className="button" disabled={busy === primary.id} onClick={() => accept(primary.id)}>
-                      {busy === primary.id ? "Working…" : "Accept assignment"}
-                    </button>
-                  )}
                   <Link href={`/trips/${primary.id}/track`} className="button" style={{ background: "#fff", color: "var(--text)", border: "1px solid var(--border)", textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                     Track trip
-                  </Link>
-                  <Link href={`/driver/job-execution?trip=${primary.id}`} className="button" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                    Update status / POD
                   </Link>
                 </div>
               </>
@@ -310,20 +289,9 @@ export default function DriverDashboardPage() {
             </article>
 
             <article style={{ ...card }}>
-              <h3 style={{ margin: "0 0 0.75rem", fontSize: "1rem", fontWeight: 700 }}>Quick actions</h3>
-              <div style={{ display: "grid", gap: "0.5rem" }}>
-                <ActionBtn href={`/driver/job-execution${primary ? `?trip=${primary.id}` : ""}`} bg="#059669">
-                  Complete segment / POD
-                </ActionBtn>
-                <ActionBtn href={`/driver/update-status${primary ? `?trip=${primary.id}` : ""}`} bg="#2563eb">
-                  Update status
-                </ActionBtn>
-                <ActionBtn href="/driver/route-info" bg="#ea580c">
-                  Report issue / route help
-                </ActionBtn>
-              </div>
-              <p style={{ margin: "0.75rem 0 0", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                Next-slot delay likelihood depends on corridor — dispatcher sees the same ETA stream.
+              <h3 style={{ margin: "0 0 0.75rem", fontSize: "1rem", fontWeight: 700 }}>Trip visibility</h3>
+              <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
+                Driver dashboard is view-only. Trip progress and live locations are submitted by the assigned helper.
               </p>
             </article>
           </div>
@@ -340,11 +308,6 @@ export default function DriverDashboardPage() {
                   <strong>TRP-{t.id}</strong>
                   <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{formatRoute(t)} · status: {t.status}</span>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                    {t.status === "assigned" && (
-                      <button type="button" className="button" disabled={busy === t.id} onClick={() => accept(t.id)}>
-                        Accept
-                      </button>
-                    )}
                     <Link href={`/trips/${t.id}/track`} className="button" style={{ ...ghostBtn }}>
                       Track
                     </Link>
@@ -428,36 +391,6 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
     >
       {label}
     </span>
-  );
-}
-
-function ActionBtn({
-  href,
-  bg,
-  children,
-}: {
-  href: string;
-  bg: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: 44,
-        borderRadius: 8,
-        background: bg,
-        color: "#fff",
-        fontWeight: 700,
-        fontSize: "0.92rem",
-        textDecoration: "none",
-      }}
-    >
-      {children}
-    </Link>
   );
 }
 

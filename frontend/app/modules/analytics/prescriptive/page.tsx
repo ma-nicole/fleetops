@@ -46,7 +46,7 @@ export default function PrescriptiveAnalyticsPage() {
         <div className="card">
           <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Key Features</h3>
           <ul style={{ color: "#666666", paddingLeft: "1.5rem" }}>
-            <li>Actionable recommendations with impact estimates</li>
+            <li>Actionable recommendations with impact projections</li>
             <li>Priority ranking of recommendations</li>
             <li>Implementation guidance and steps</li>
             <li>ROI and benefit calculations</li>

@@ -44,6 +44,8 @@ class BookingScheduleAvailabilityRead(BaseModel):
 
     scheduled_date: date
     slots: dict[str, bool]
+    required_trucks: int = 1
+    available_trucks_by_slot: dict[str, int] = {}
 
 
 class BookingRead(BaseModel):
@@ -55,6 +57,7 @@ class BookingRead(BaseModel):
     scheduled_date: date
     scheduled_time_slot: str
     cargo_weight_tons: float
+    required_truck_count: int
     cargo_description: str | None
     estimated_cost: float
     actual_cost: float | None
@@ -64,6 +67,7 @@ class BookingRead(BaseModel):
     rejection_reason: str | None
     created_at: datetime
     updated_at: datetime
+    latest_location: str | None = None
 
     class Config:
         from_attributes = True

@@ -26,8 +26,6 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Dashboard", href: "/driver/dashboard", roles: ["driver"] },
       { label: "Scheduled Bookings", href: "/driver/scheduled-trips", roles: ["driver"] },
-      { label: "Order Details", href: "/driver/order-details", roles: ["driver"] },
-      { label: "Update Trip Status", href: "/driver/update-status", roles: ["driver"] },
     ],
   },
   {
@@ -60,8 +58,6 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Dashboard", href: "/driver/dashboard", roles: ["helper"] },
       { label: "Bookings", href: "/helper/bookings", roles: ["helper"] },
-      { label: "Order Details", href: "/driver/order-details", roles: ["helper"] },
-      { label: "Update Trip Status", href: "/driver/update-status", roles: ["helper"] },
     ],
   },
   {
@@ -184,10 +180,9 @@ const menuModules: MenuModule[] = [
     roles: ["admin"],
     items: [
       { label: "Dashboard", href: "/admin/dashboard", roles: ["admin"] },
-      { label: "Calculations", href: "/modules/administration/booking-estimate-cost", roles: ["admin"] },
+      { label: "Calculations", href: "/modules/administration/booking-pricing", roles: ["admin"] },
       { label: "Payment Approval", href: "/admin/payment-approval", roles: ["admin"] },
       { label: "Trip Monitoring", href: "/admin/trip-monitoring", roles: ["admin"] },
-      { label: "Orders", href: "/admin/orders", roles: ["admin"] },
     ],
   },
   {
@@ -195,6 +190,7 @@ const menuModules: MenuModule[] = [
     roles: ["admin"],
     items: [
       { label: "User Management", href: "/modules/administration/accounts", roles: ["admin"] },
+      { label: "Vehicle Management", href: "/modules/administration/vehicles", roles: ["admin"] },
       { label: "Live data marts", href: "/modules/analytics/operations-snapshot", roles: ["admin"] },
     ],
   },

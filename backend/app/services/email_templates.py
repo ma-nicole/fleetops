@@ -7,7 +7,7 @@ class EmailTemplate(BaseModel):
     """Email notification templates"""
 
     @staticmethod
-    def booking_confirmation(booking_id: int, estimated_cost: float, scheduled_date: str) -> tuple[str, str]:
+    def booking_confirmation(booking_id: int, quoted_amount_php: float, scheduled_date: str) -> tuple[str, str]:
         """Generate booking confirmation email"""
         subject = f"Booking Confirmation - #{booking_id}"
         html = f"""
@@ -21,7 +21,7 @@ class EmailTemplate(BaseModel):
                     <div style="background: #f0fdf4; padding: 15px; border-radius: 8px; margin: 20px 0;">
                         <p><strong>Booking ID:</strong> #{booking_id}</p>
                         <p><strong>Scheduled Date:</strong> {scheduled_date}</p>
-                        <p><strong>Estimated Cost:</strong> ${estimated_cost:.2f}</p>
+                        <p><strong>Quoted amount (PHP):</strong> ₱{quoted_amount_php:,.2f}</p>
                     </div>
                     
                     <p>A dispatcher will review your booking and assign a truck and driver shortly.</p>

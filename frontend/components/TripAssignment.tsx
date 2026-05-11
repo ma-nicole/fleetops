@@ -147,7 +147,7 @@ export default function TripAssignment({
                   )}
                   {trip.estimated_cost && (
                     <p style={{ margin: "0.25rem 0", color: "#FF9800", fontWeight: 600 }}>
-                      Est. Cost: ${trip.estimated_cost}
+                      Quoted total: ${trip.estimated_cost}
                     </p>
                   )}
                 </div>

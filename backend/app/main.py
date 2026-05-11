@@ -11,6 +11,7 @@ from app.api.routes import (
     bookings,
     clerk_auth,
     completion,
+    customer,
     customer_route_estimate,
     customer_sites,
     dispatch,
@@ -72,6 +73,7 @@ _api_deps = [Depends(require_db)]
 # Core
 app.include_router(auth.router, prefix="/api", dependencies=_api_deps)
 app.include_router(bookings.router, prefix="/api", dependencies=_api_deps)
+app.include_router(customer.router, prefix="/api", dependencies=_api_deps)
 app.include_router(dispatch.router, prefix="/api", dependencies=_api_deps)
 app.include_router(driver.router, prefix="/api", dependencies=_api_deps)
 app.include_router(helper_ops.router, prefix="/api", dependencies=_api_deps)

@@ -111,7 +111,7 @@ export default function RouteApprovalPage() {
            Approve Route Plans
         </h1>
         <p style={{ color: "#666666", marginBottom: "1.5rem" }}>
-          Review and approve route proposals from drivers. Verify distance, duration, and estimated costs.
+          Review and approve route proposals from drivers. Verify distance, duration, and quoted costs.
         </p>
 
         {/* Filter */}
@@ -251,7 +251,7 @@ export default function RouteApprovalPage() {
                     </div>
                     <div>
                       <p style={{ color: "#666666", fontSize: "0.85rem" }}>
-                        Fuel Estimate
+                        Fuel allowance (quote)
                       </p>
                       <p style={{ color: "#FF9800", fontWeight: 700 }}>
                         {route.route_details.fuel_estimate}

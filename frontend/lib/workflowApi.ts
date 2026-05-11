@@ -1,9 +1,13 @@
 /**
  * Typed wrapper around the booking → trip → payment lifecycle.
  */
-import { apiGet, apiPost, apiPostMultipart } from "./api";
+import { apiGet, apiPatch, apiPost, apiPostMultipart } from "./api";
 
 export type BookingStatus =
+  | "pending_payment"
+  | "payment_verification"
+  | "payment_verified"
+  | "ready_for_assignment"
   | "pending_approval"
   | "approved"
   | "assigned"
@@ -13,7 +17,50 @@ export type BookingStatus =
   | "out_for_delivery"
   | "completed"
   | "cancelled"
-  | "rejected";
+  | "rejected"
+  | "payment_rejected"
+  | "expired";
+
+export type CustomerBookingAssignment = {
+  trip_id: number;
+  trip_status: string;
+  helper_progress_status: string | null;
+  truck: {
+    id: number;
+    code: string;
+    plate_number?: string;
+    model_name: string | null;
+    capacity_tons: number;
+  } | null;
+  driver: { id: number; name: string } | null;
+  helper: { id: number; name: string } | null;
+  latest_location_name: string | null;
+  location_updates: Array<{
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+  }>;
+  status_timeline: Array<{
+    status: string;
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+  }>;
+};
+
+export type CustomerBookingRow = Booking & {
+  display_status: string;
+  display_status_label: string;
+  can_cancel: boolean;
+  assignments: CustomerBookingAssignment[];
+};
+
+export type CustomerBookingHistoryRow = CustomerBookingRow & {
+  primary_trip_id: number | null;
+  closed_at: string | null;
+};
 
 export type Booking = {
   id: number;
@@ -24,6 +71,7 @@ export type Booking = {
   scheduled_date: string;
   scheduled_time_slot: string;
   cargo_weight_tons: number;
+  required_truck_count: number;
   cargo_description: string | null;
   estimated_cost: number;
   actual_cost: number | null;
@@ -33,11 +81,15 @@ export type Booking = {
   rejection_reason: string | null;
   created_at: string;
   updated_at: string;
+  latest_location?: string | null;
 };
 
 export type TripBookingSummary = {
   id: number;
   customer_id?: number;
+  customer_name?: string | null;
+  customer_company_name?: string | null;
+  paid_amount_verified?: number | null;
   pickup_location: string;
   dropoff_location: string;
   scheduled_date: string;
@@ -78,12 +130,25 @@ export type Trip = {
   completed_at: string | null;
   proof_of_delivery: string | null;
   pod_notes: string | null;
-  current_latitude: number | null;
-  current_longitude: number | null;
+  latest_location: string | null;
   estimated_delivery_time: string | null;
   helper_id?: number | null;
+  helper_name?: string | null;
   helper_progress_status?: string | null;
   helper_last_proof_path?: string | null;
+  location_updates?: Array<{
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+  }>;
+  status_timeline?: Array<{
+    status: string;
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+  }>;
   booking?: TripBookingSummary | null;
   truck?: TripTruckSummary | null;
 };
@@ -121,7 +186,12 @@ export const WorkflowApi = {
     if (opts?.dropoff_location && opts.dropoff_location.trim().length >= 3) {
       q.set("dropoff_location", opts.dropoff_location.trim());
     }
-    return apiGet<{ scheduled_date: string; slots: Record<string, boolean> }>(
+    return apiGet<{
+      scheduled_date: string;
+      slots: Record<string, boolean>;
+      required_trucks: number;
+      available_trucks_by_slot: Record<string, number>;
+    }>(
       `/bookings/schedule-availability?${q.toString()}`,
     );
   },
@@ -135,7 +205,49 @@ export const WorkflowApi = {
     cargo_description?: string | null;
   }) => apiPost<Booking>("/bookings", payload),
   getBooking: (id: number) => apiGet<Booking>(`/bookings/${id}`),
+  bookingTrackingDetails: (id: number) =>
+    apiGet<{
+      booking: {
+        id: number;
+        status: string;
+        pickup_location: string;
+        dropoff_location: string;
+        cargo_weight_tons: number;
+        scheduled_date: string;
+        scheduled_time_slot: string;
+        required_truck_count: number;
+        /** Routed pickup→dropoff km (same engine as booking pricing); null if unavailable. */
+        road_distance_km?: number | null;
+      };
+      assignments: Array<{
+        trip_id: number;
+        trip_status: string;
+        helper_progress_status: string | null;
+        truck: { id: number; code: string; model_name: string | null; capacity_tons: number } | null;
+        driver: { id: number; name: string } | null;
+        helper: { id: number; name: string } | null;
+        latest_location_name: string | null;
+        location_updates: Array<{
+          location_name: string;
+          remarks: string | null;
+          photo_url: string | null;
+          created_at: string;
+        }>;
+        status_timeline: Array<{
+          status: string;
+          location_name: string;
+          remarks: string | null;
+          photo_url: string | null;
+          created_at: string;
+        }>;
+      }>;
+    }>(`/bookings/${id}/tracking-details`),
   cancelBooking: (id: number) => apiPost<{ status: string }>(`/bookings/${id}/cancel`),
+
+  customerCurrentBookings: () => apiGet<CustomerBookingRow[]>("/customer/current-bookings"),
+  customerBookingHistory: () => apiGet<CustomerBookingHistoryRow[]>("/customer/booking-history"),
+  customerShipmentTracking: () => apiGet<{ shipments: CustomerBookingRow[] }>("/customer/shipment-tracking"),
+  customerCancelBooking: (id: number) => apiPatch<{ status: string }>(`/customer/bookings/${id}/cancel`, {}),
 
   // Workflow API
   workflowCreateBooking: (payload: Record<string, unknown>) =>
@@ -156,11 +268,11 @@ export const WorkflowApi = {
   driverCheckIn: () =>
     apiPost<{ checked_in: boolean; timestamp: string }>("/driver/attendance/check-in", {}),
   acceptJob: (trip_id: number) => apiPost<Trip>(`/workflow/job/${trip_id}/accept`),
-  depart: (trip_id: number, lat?: number, lng?: number) =>
+  depart: (trip_id: number, opts?: { location_name?: string; notes?: string }) =>
     apiPost<Trip>(`/workflow/job/${trip_id}/depart`, {
       status: "departed",
-      latitude: lat,
-      longitude: lng,
+      location_name: opts?.location_name,
+      notes: opts?.notes,
     }),
   arrivedPickup: (trip_id: number) =>
     apiPost<Trip>(`/workflow/job/${trip_id}/arrived-pickup`, { status: "loading" }),
@@ -224,6 +336,23 @@ export const WorkflowApi = {
     apiGet(`/schedule/availability?scheduled_date=${encodeURIComponent(scheduled_date)}`),
 
   // Dispatch
+  dispatchBookingAvailability: (booking_id: number) =>
+    apiGet<{
+      booking_id: number;
+      required_truck_count: number;
+      cargo_weight_tons: number;
+      weight_splits: number[];
+      trucks: { id: number; code: string; capacity_tons: number }[];
+      drivers: { id: number; name: string }[];
+      helpers: { id: number; name: string }[];
+    }>(`/dispatch/booking/${booking_id}/availability`),
+  dispatchAssignBatch: (
+    booking_id: number,
+    assignments: Array<{ truck_id: number; driver_id: number; helper_id: number; assigned_weight: number }>,
+  ) =>
+    apiPost<{ booking_id: number; trip_ids: number[]; assigned_count: number }>(`/dispatch/${booking_id}/assign-batch`, {
+      assignments,
+    }),
   manualAssign: (
     booking_id: number,
     payload: {
@@ -254,13 +383,17 @@ export const WorkflowApi = {
         trip_status: string;
         booking_id: number;
         customer_id: number;
+        customer_name: string | null;
+        customer_company_name: string | null;
         pickup_location: string;
         dropoff_location: string;
         scheduled_date: string;
         scheduled_time_slot: string;
         cargo_weight_tons: number;
+        estimated_cost: number;
         booking_status: string;
-        truck_id: number;
+        paid_amount_verified?: number | null;
+        truck_id: number | null;
         truck_code: string;
         driver_id: number | null;
         driver_name: string | null;
@@ -268,10 +401,35 @@ export const WorkflowApi = {
         helper_name: string | null;
         helper_progress_status: string | null;
         distance_km: number;
-        current_latitude: number | null;
-        current_longitude: number | null;
+        latest_location: string | null;
+        last_updated: string | null;
       }>;
     }>("/dispatch/assignments-board"),
+
+  dispatchFleetAssets: () =>
+    apiGet<{
+      drivers: Array<{
+        id: number;
+        name: string;
+        phone: string;
+        rating: number;
+        completed_trips: number;
+        status: "on_trip" | "available";
+        assigned_truck_code?: string;
+      }>;
+      trucks: Array<{
+        id: number;
+        plate: string;
+        model_name: string;
+        capacity_tons: number;
+        status: string;
+        db_status: string;
+        odometer_km: number;
+        age_years: number;
+        assigned_driver_name: string | null;
+        assigned_driver_id: number | null;
+      }>;
+    }>("/dispatch/fleet-assets"),
 
   helperListBookings: () =>
     apiGet<{
@@ -279,9 +437,18 @@ export const WorkflowApi = {
         trip_id: number;
         trip_status: string;
         helper_progress_status: string | null;
+        location_updates_submitted: number;
+        required_location_updates: number;
+        latest_location_name: string | null;
+        driver_name: string | null;
+        recent_locations: Array<{
+          location_name: string;
+          remarks: string | null;
+          photo_url: string | null;
+          created_at: string;
+        }>;
         distance_km: number;
-        current_latitude: number | null;
-        current_longitude: number | null;
+        latest_location: string | null;
         booking: TripBookingSummary | null;
         truck: TripTruckSummary | null;
       }>;
@@ -290,10 +457,16 @@ export const WorkflowApi = {
   helperSubmitProgress: (trip_id: number, fd: FormData) =>
     apiPostMultipart<{
       trip_id: number;
-      helper_progress_status: string;
+      status: string;
       trip_status: string;
-      proof_path: string;
-      latitude: number | null;
-      longitude: number | null;
-    }>(`/helper/trips/${trip_id}/progress`, fd),
+      photo_path: string | null;
+      location_updates_submitted: number;
+      required_location_updates: number;
+    }>(`/helper/trips/${trip_id}/status`, fd),
+  helperSubmitLocation: (trip_id: number, fd: FormData) =>
+    apiPostMultipart<{
+      trip_id: number;
+      location_updates_submitted: number;
+      required_location_updates: number;
+    }>(`/helper/trips/${trip_id}/location`, fd),
 };

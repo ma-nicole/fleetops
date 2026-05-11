@@ -250,7 +250,7 @@ export default function RoutesPage() {
                     </div>
                     <div>
                       <p style={{ color: "#666666", fontSize: "0.85rem" }}>
-                        Estimated Duration
+                        Planned duration
                       </p>
                       <p style={{ color: "#1A1A1A", fontWeight: 700 }}>
                         {route.estimated_duration} hours

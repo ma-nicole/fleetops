@@ -215,7 +215,7 @@ export default function CheckoutPage() {
 
             <div>
               <label style={{ display: "block", fontWeight: 600, marginBottom: "0.5rem", color: "#1A1A1A" }}>
-                Estimated Distance (km)
+                Route distance (km)
               </label>
               <input
                 type="number"

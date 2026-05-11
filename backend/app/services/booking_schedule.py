@@ -1,4 +1,4 @@
-"""Pickup-window capacity: four trucks × 42 t, with overlap by estimated trip duration."""
+"""Pickup-window capacity: four trucks × 42 t, with overlap by planned trip duration on the route."""
 
 from __future__ import annotations
 

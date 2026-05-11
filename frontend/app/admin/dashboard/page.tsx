@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { AdminFlowService, type AdminOrder, type AdminSchedule, type AdminTrip } from "@/lib/adminFlowService";
+import { AdminFlowService, type AdminSchedule, type AdminTrip } from "@/lib/adminFlowService";
 import { formatPhp } from "@/lib/appLocale";
 
 export default function AdminDashboardPage() {
@@ -11,14 +11,11 @@ export default function AdminDashboardPage() {
   const [kpis, setKpis] = useState(AdminFlowService.getKpis());
   const [schedules, setSchedules] = useState<AdminSchedule[]>([]);
   const [trips, setTrips] = useState<AdminTrip[]>([]);
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
-
   useEffect(() => {
     AdminFlowService.init();
     setKpis(AdminFlowService.getKpis());
     setSchedules(AdminFlowService.getSchedules());
     setTrips(AdminFlowService.getTrips());
-    setOrders(AdminFlowService.getOrders());
   }, []);
 
   const statusPill = (label: string, tone: "blue" | "amber" | "green") => {
@@ -52,7 +49,7 @@ export default function AdminDashboardPage() {
         <div>
           <h1 style={{ margin: "0 0 0.4rem", fontSize: "2rem", fontWeight: 900, color: "#1A1A1A" }}>Admin Dashboard</h1>
           <p style={{ margin: 0, color: "#666" }}>
-            Complete operations view across payment verification, trip monitoring, and orders.
+            Complete operations view across payment verification and trip monitoring.
           </p>
         </div>
 
@@ -78,7 +75,6 @@ export default function AdminDashboardPage() {
             {[
               { label: "Payment Approval", href: "/admin/payment-approval" },
               { label: "Trip Monitoring", href: "/admin/trip-monitoring" },
-              { label: "Orders", href: "/admin/orders" },
             ].map((item) => (
               <Link
                 key={item.href}
@@ -143,29 +139,9 @@ export default function AdminDashboardPage() {
                 </div>
               ))}
             </div>
-          </section>
-
-          <section style={{ background: "#fff", border: "1px solid #E8E8E8", borderRadius: "10px", padding: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
-              <h3 style={{ margin: 0 }}>Recent orders</h3>
-              <Link href="/admin/orders" style={{ color: "#2563EB", textDecoration: "none", fontWeight: 600 }}>
-                Open page
-              </Link>
-            </div>
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              {orders.slice(0, 4).map((o) => (
-                <div key={o.id} style={{ padding: "0.6rem", border: "1px solid #F0F0F0", borderRadius: "8px" }}>
-                  <p style={{ margin: 0, fontWeight: 700 }}>{o.id} • {o.customer}</p>
-                  <p style={{ margin: "0.25rem 0", color: "#666", fontSize: "0.9rem" }}>{o.route}</p>
-                  <p style={{ margin: 0, color: "#111827", fontSize: "0.9rem" }}>
-                    Amount: <strong>{formatPhp(o.amount)}</strong> • Fuel: {formatPhp(o.fuelCost)} • Toll: {formatPhp(o.tollFee)}
-                  </p>
-                  <div style={{ marginTop: "0.35rem" }}>
-                    {statusPill(o.paymentStatus, o.paymentStatus === "paid" ? "green" : "amber")}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p style={{ margin: "0.75rem 0 0", color: "#64748B", fontSize: "0.88rem" }}>
+              Full board includes customer, company, paid amount, locations, and per-row <strong>View details</strong>.
+            </p>
           </section>
         </div>
       </div>

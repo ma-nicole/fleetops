@@ -18,6 +18,10 @@ class UserRole(str, Enum):
 
 class BookingStatus(str, Enum):
     """Booking workflow statuses (paper §3.2.3 + Fig 19)"""
+    PENDING_PAYMENT = "pending_payment"
+    PAYMENT_VERIFICATION = "payment_verification"
+    PAYMENT_VERIFIED = "payment_verified"
+    READY_FOR_ASSIGNMENT = "ready_for_assignment"
     PENDING_APPROVAL = "pending_approval"
     APPROVED = "approved"
     ASSIGNED = "assigned"
@@ -28,6 +32,8 @@ class BookingStatus(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     REJECTED = "rejected"
+    PAYMENT_REJECTED = "payment_rejected"
+    EXPIRED = "expired"
 
 
 class TripStatus(str, Enum):
@@ -88,6 +94,26 @@ class TruckOperationalStatus(str, Enum):
     MAINTENANCE = "maintenance"
 
 
+class TruckSlotHoldStatus(str, Enum):
+    ON_HOLD = "on_hold"
+    READY_FOR_ASSIGNMENT = "ready_for_assignment"
+    ASSIGNED = "assigned"
+    RELEASED = "released"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class TruckAssignmentStatus(str, Enum):
+    ASSIGNED = "assigned"
+    FOR_PICKUP = "for_pickup"
+    PICKED_UP = "picked_up"
+    EN_ROUTE = "en_route"
+    DROPPED_OFF = "dropped_off"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
 # ------------------------------------------------------------------
 # Identity & access
 # ------------------------------------------------------------------
@@ -102,6 +128,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), nullable=False)
+    availability_status: Mapped[str] = mapped_column(String(32), default="available")
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     password_reset_token_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -148,8 +175,10 @@ class Truck(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     capacity_tons: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="available")
+    availability_status: Mapped[str] = mapped_column(String(32), default="available")
     fuel_efficiency_kmpl: Mapped[float] = mapped_column(Float, default=4.0)
     odometer_km: Mapped[float] = mapped_column(Float, default=0)
     age_years: Mapped[float] = mapped_column(Float, default=1.0)
@@ -215,6 +244,7 @@ class Booking(Base):
     """One of four daily pickup windows; capacity = overlapping truck-hours (four × 42 t tractors)."""
     scheduled_time_slot: Mapped[str] = mapped_column(String(8), nullable=False, default="08:00")
     cargo_weight_tons: Mapped[float] = mapped_column(Float, nullable=False)
+    required_truck_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     cargo_description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Optional foreign keys (filled as workflow advances)
@@ -239,6 +269,9 @@ class Booking(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    """Latest manual location name from helper (not GPS)."""
+    latest_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     customer: Mapped[User] = relationship(foreign_keys=[customer_id])
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
     route: Mapped[Route | None] = relationship(foreign_keys=[route_id])
@@ -256,6 +289,79 @@ class JobOrder(Base):
     issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+
+class TruckSlotHold(Base):
+    __tablename__ = "truck_slot_holds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    schedule_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    time_slot: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    required_truck_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    hold_status: Mapped[TruckSlotHoldStatus] = mapped_column(
+        SAEnum(
+            TruckSlotHoldStatus,
+            values_callable=lambda obj: [m.value for m in obj],
+            native_enum=False,
+            length=32,
+        ),
+        default=TruckSlotHoldStatus.ON_HOLD,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TruckAssignment(Base):
+    __tablename__ = "truck_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    truck_id: Mapped[int] = mapped_column(ForeignKey("trucks.id"), nullable=False)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    helper_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assigned_weight: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    assignment_status: Mapped[TruckAssignmentStatus] = mapped_column(
+        SAEnum(
+            TruckAssignmentStatus,
+            values_callable=lambda obj: [m.value for m in obj],
+            native_enum=False,
+            length=32,
+        ),
+        default=TruckAssignmentStatus.ASSIGNED,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TripStatusUpdate(Base):
+    __tablename__ = "trip_status_updates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    helper_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    location_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TripLocationUpdate(Base):
+    __tablename__ = "trip_location_updates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    helper_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    location_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    remarks: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class RouteOption(Base):
     """A* candidate routes per booking (paper §3.2.9 + Test F-07 IsSelected flag)"""
@@ -323,6 +429,9 @@ class Trip(Base):
     helper_progress_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     helper_last_proof_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    """Latest manual location name from helper (not GPS)."""
+    latest_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     current_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     current_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     estimated_delivery_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -387,18 +496,13 @@ class MaintenanceRecord(Base):
 
 
 class BookingFreightSettings(Base):
-    """Singleton row (id=1): customer booking estimate knobs — editable by admin (diesel, driver %, etc.)."""
+    """Singleton row (id=1): admin-editable diesel ₱/L and toll only; other formula terms are code constants."""
 
     __tablename__ = "booking_freight_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     diesel_price_php_per_liter: Mapped[float] = mapped_column(Float, nullable=False)
-    truck_fuel_efficiency_kmpl: Mapped[float] = mapped_column(Float, nullable=False)
-    trip_wear_misc_php_per_km: Mapped[float] = mapped_column(Float, nullable=False)
-    trip_depreciation_rate: Mapped[float] = mapped_column(Float, nullable=False)
-    helper_pay_php_per_trip: Mapped[float] = mapped_column(Float, nullable=False)
-    driver_freight_commission_rate: Mapped[float] = mapped_column(Float, nullable=False)
-    cargo_weight_multiplier_per_ton: Mapped[float] = mapped_column(Float, nullable=False)
+    toll_fees_php_per_trip: Mapped[float] = mapped_column(Float, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

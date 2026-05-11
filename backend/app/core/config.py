@@ -56,15 +56,8 @@ class Settings(BaseSettings):
     google_maps_geocoding_api_key: str | None = Field(
         default=None,
         description=(
-            "Google Geocoding API key (optional). Often browser/referrer-restricted for Maps JS. "
-            "Backend geocoding from FastAPI needs GOOGLE_MAPS_SERVER_API_KEY if this key is websites-only."
-        ),
-    )
-    google_maps_server_api_key: str | None = Field(
-        default=None,
-        description=(
-            "Server-side Google key for Geocoding + Directions from this API (IP restriction or none in dev). "
-            "Use when GOOGLE_MAPS_GEOCODING_API_KEY is HTTP-referrer-only — otherwise those calls fail and you get Nominatim/OSRM."
+            "Google Geocoding API key for backend pin resolution. Enable Geocoding API; for uvicorn calls avoid HTTP-referrer-only "
+            "restriction (use IP / none in dev) or backend requests will fail and Nominatim is used."
         ),
     )
     geocoding_user_agent: str = Field(
@@ -76,13 +69,13 @@ class Settings(BaseSettings):
     google_maps_directions_api_key: str | None = Field(
         default=None,
         description=(
-            "Google Directions API key for server routes. Enable Directions API. "
-            "If empty, falls back to GOOGLE_MAPS_SERVER_API_KEY then geocoding key when GOOGLE_DIRECTIONS_FALLBACK…=true."
+            "Optional dedicated Google Directions API key. If empty and GOOGLE_DIRECTIONS_FALLBACK_TO_GEOCODING_KEY=true, "
+            "reuses GOOGLE_MAPS_GEOCODING_API_KEY (enable Directions API on that key)."
         ),
     )
     google_directions_fallback_to_geocoding_key: bool = Field(
         default=True,
-        description="If no dedicated directions key, use server key then GOOGLE_MAPS_GEOCODING_API_KEY for Directions.",
+        description="If no dedicated directions key, use GOOGLE_MAPS_GEOCODING_API_KEY for Directions API calls.",
     )
     use_google_directions_for_routing: bool = Field(
         default=True,
@@ -121,47 +114,18 @@ class Settings(BaseSettings):
         description="If true, refuse heuristics / straight-line km — only Google Directions / OSRM / ORS road km (or same-location zero).",
     )
 
-    # Booking route estimate — align with frontend NEXT_PUBLIC_* for browser fallback.
+    # Booking freight knobs persisted in DB — admin UI only edits these two (.env seeds first row).
     diesel_price_php_per_liter: float = Field(
         default=74.75,
-        ge=40.0,
-        le=200.0,
-        description="Retail diesel ₱/L (update weekly after DOE oil price bulletin — usually Tuesdays).",
+        ge=1.0,
+        le=500.0,
+        description="Retail diesel ₱/L for the fuel deduction (road km / 4 × ₱/L in the business formula).",
     )
-    truck_fuel_efficiency_kmpl: float = Field(
-        default=4.5,
-        ge=2.5,
-        le=12.0,
-        description="Blended laden truck km/L.",
-    )
-    trip_wear_misc_php_per_km: float = Field(
-        default=3.75,
+    toll_fees_php_per_trip: float = Field(
+        default=0.0,
         ge=0.0,
-        le=50.0,
-        description="Extras per km (tires, lubes, sundry)—excluding diesel liters.",
-    )
-    trip_depreciation_rate: float = Field(
-        default=0.10,
-        ge=0.0,
-        le=0.5,
-        description="Ten percent–style depreciation: fraction multiplied by diesel+wear subtotal (default 0.10).",
-    )
-    helper_pay_php_per_trip: float = Field(
-        default=220.0,
-        ge=0.0,
-        description="Helper allowance PHP per booked leg.",
-    )
-    driver_freight_commission_rate: float = Field(
-        default=0.15,
-        ge=0.0,
-        le=0.45,
-        description="Driver pay as a fraction of freight base before driver fee is invoiced.",
-    )
-    cargo_weight_multiplier_per_ton: float = Field(
-        default=0.07,
-        ge=0.0,
-        le=0.5,
-        description="Loads above 1t increase liters & wear proportionally.",
+        le=500_000.0,
+        description="Toll deduction ₱ per booking leg (admin Calculations tab).",
     )
 
     model_config = SettingsConfigDict(

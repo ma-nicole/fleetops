@@ -1,4 +1,4 @@
-"""Resolve diesel / driver / helper knobs for booking estimates (DB row or app Settings)."""
+"""Resolve diesel / driver / helper knobs for customer freight quotes (DB row or app Settings)."""
 
 from __future__ import annotations
 
@@ -17,12 +17,7 @@ def ensure_booking_freight_row(db: Session, app: Settings | None = None) -> Book
     row = BookingFreightSettings(
         id=1,
         diesel_price_php_per_liter=float(cfg.diesel_price_php_per_liter),
-        truck_fuel_efficiency_kmpl=float(cfg.truck_fuel_efficiency_kmpl),
-        trip_wear_misc_php_per_km=float(cfg.trip_wear_misc_php_per_km),
-        trip_depreciation_rate=float(cfg.trip_depreciation_rate),
-        helper_pay_php_per_trip=float(cfg.helper_pay_php_per_trip),
-        driver_freight_commission_rate=float(cfg.driver_freight_commission_rate),
-        cargo_weight_multiplier_per_ton=float(cfg.cargo_weight_multiplier_per_ton),
+        toll_fees_php_per_trip=float(cfg.toll_fees_php_per_trip),
     )
     db.add(row)
     db.commit()
@@ -38,11 +33,6 @@ def booking_freight_knobs_to_dict(row: BookingFreightSettings) -> dict:
     return {
         "id": row.id,
         "diesel_price_php_per_liter": float(row.diesel_price_php_per_liter),
-        "truck_fuel_efficiency_kmpl": float(row.truck_fuel_efficiency_kmpl),
-        "trip_wear_misc_php_per_km": float(row.trip_wear_misc_php_per_km),
-        "trip_depreciation_rate": float(row.trip_depreciation_rate),
-        "helper_pay_php_per_trip": float(row.helper_pay_php_per_trip),
-        "driver_freight_commission_rate": float(row.driver_freight_commission_rate),
-        "cargo_weight_multiplier_per_ton": float(row.cargo_weight_multiplier_per_ton),
+        "toll_fees_php_per_trip": float(row.toll_fees_php_per_trip),
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }

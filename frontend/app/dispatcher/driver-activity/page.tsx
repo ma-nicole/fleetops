@@ -16,8 +16,7 @@ type BoardAssignment = {
   pickup_location: string;
   dropoff_location: string;
   distance_km: number;
-  current_latitude: number | null;
-  current_longitude: number | null;
+  latest_location: string | null;
 };
 
 type DriverActivity = {
@@ -69,10 +68,6 @@ export default function DriverActivityPage() {
         const drivers = roster.drivers ?? [];
         const built: DriverActivity[] = drivers.map((d) => {
           const row = assignments.find((a) => a.driver_id === d.id && tripActive(a.trip_status));
-          const gps =
-            row && row.current_latitude != null && row.current_longitude != null
-              ? `${row.current_latitude.toFixed(4)}, ${row.current_longitude.toFixed(4)}`
-              : null;
           const routeHint =
             row != null
               ? `${row.pickup_location.slice(0, 48)}${row.pickup_location.length > 48 ? "…" : ""} → ${row.dropoff_location.slice(0, 48)}${row.dropoff_location.length > 48 ? "…" : ""}`
@@ -83,7 +78,7 @@ export default function DriverActivityPage() {
             contactPhone: "Not on file",
             contactPhoneE164: "",
             status: row ? "on_trip" : "available",
-            currentLocation: gps || routeHint || "—",
+            currentLocation: row?.latest_location || routeHint || "—",
             distanceTraveledToday: row ? `${row.distance_km} km (est.)` : "—",
             tripCount: row ? 1 : 0,
             lastActivity: row ? `Trip #${row.trip_id} · ${row.trip_status}` : "No active trip",

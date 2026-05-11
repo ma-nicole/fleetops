@@ -6,22 +6,45 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { formatPhp } from "@/lib/appLocale";
 import { BOOKING_TIME_SLOTS } from "@/lib/bookingSlots";
-import { estimateUsesGeocodedBoth, type BookingEstimateBreakdown } from "@/lib/bookingRouteEstimate";
+import { routeUsesGeocodedPinsBoth, type BookingPricingBreakdown } from "@/lib/bookingRouteEstimate";
 import { validateCustomerSiteAddress } from "@/lib/formValidation";
 import { MIN_BOOKING_SITES, loadCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
 import { WorkflowApi } from "@/lib/workflowApi";
-import GoogleRoutePreviewMap from "@/components/GoogleRoutePreviewMap";
 
-const MAPS_JS_KEY_PUBLIC = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() ?? "";
-
-type CostEstimate = {
-  estimated_fuel: number;
-  estimated_toll: number;
-  estimated_labor: number;
-  estimated_total: number;
+type QuotedCostBreakdown = {
+  cargo_gross_php: number;
+  toll_fees_php: number;
+  labor_freight_php: number;
+  quoted_total_php: number;
 };
 
-type LiveCostEstimate = CostEstimate & { distance_km: number };
+type TruckLoadApiLine = {
+  truck_index: number;
+  weight_tons: number;
+  distance_km: number;
+  cargo_gross_php: number;
+  diesel_liters: number;
+  diesel_cost_php: number;
+  driver_share_php: number;
+  helper_share_php: number;
+  toll_fees_php: number;
+  additives_total_php: number;
+  net_profit_php: number;
+};
+
+type LiveCostQuote = {
+  distance_km: number;
+  total_trucks: number;
+  cargo_gross_php: number;
+  diesel_cost_php: number;
+  driver_share_php: number;
+  helper_share_php: number;
+  toll_fees_php: number;
+  additives_total_php: number;
+  net_profit_total_php: number;
+  quoted_total: number;
+  truck_loads: TruckLoadApiLine[];
+};
 
 type BookingResponse = {
   id: number;
@@ -33,95 +56,103 @@ type FormErrors = {
   [key: string]: string;
 };
 
-type RouteEstimateApiResponse = {
+type RouteQuoteApiResponse = {
   distance_km: number;
+  weight_tons: number;
+  total_trucks: number;
+  cargo_rate_php_per_ton: number;
+  cargo_gross_php: number;
   diesel_liters: number;
   diesel_cost_php: number;
-  wear_misc_php: number;
-  depreciation_php: number;
-  helper_pay_php: number;
-  freight_base_php: number;
-  fuel_route_charge: number;
-  driver_fee: number;
-  estimated_total: number;
+  driver_share_php: number;
+  helper_share_php: number;
+  toll_fees_php: number;
+  additives_total_php: number;
+  net_profit_total_php: number;
+  quoted_total: number;
   diesel_price_per_liter: number;
-  driver_commission_pct: number;
+  driver_freight_share_pct: number;
+  helper_freight_share_pct: number;
+  truck_loads: TruckLoadApiLine[];
   pickup_resolution: string;
   dropoff_resolution: string;
-  estimate_tier: string;
+  pricing_tier: string;
   routing_method: string;
-  pickup_lat?: number | null;
-  pickup_lng?: number | null;
-  dropoff_lat?: number | null;
-  dropoff_lng?: number | null;
 };
 
 /** Line items mirrored from backend / browser fallback breakdown. */
 type FreightLineDetail = {
+  booking_weight_tons: number;
+  total_trucks: number;
+  cargo_rate_php_per_ton: number;
   diesel_liters: number;
   diesel_cost_php: number;
-  wear_misc_php: number;
-  depreciation_php: number;
-  helper_pay_php: number;
-  freight_base_php: number;
+  driver_share_php: number;
+  helper_share_php: number;
+  toll_fees_php: number;
+  additives_total_php: number;
   diesel_price_per_liter: number;
-  driver_commission_pct: number;
+  driver_freight_share_pct: number;
+  helper_freight_share_pct: number;
+  truck_loads: TruckLoadApiLine[];
 };
 
-function freightLinesFromPayload(data: RouteEstimateApiResponse): FreightLineDetail {
+function freightLinesFromPayload(data: RouteQuoteApiResponse): FreightLineDetail {
   return {
+    booking_weight_tons: data.weight_tons,
+    total_trucks: data.total_trucks,
+    cargo_rate_php_per_ton: data.cargo_rate_php_per_ton,
     diesel_liters: data.diesel_liters,
     diesel_cost_php: data.diesel_cost_php,
-    wear_misc_php: data.wear_misc_php,
-    depreciation_php: data.depreciation_php,
-    helper_pay_php: data.helper_pay_php,
-    freight_base_php: data.freight_base_php,
+    driver_share_php: data.driver_share_php,
+    helper_share_php: data.helper_share_php,
+    toll_fees_php: data.toll_fees_php,
+    additives_total_php: data.additives_total_php,
     diesel_price_per_liter: data.diesel_price_per_liter,
-    driver_commission_pct: data.driver_commission_pct,
+    driver_freight_share_pct: data.driver_freight_share_pct,
+    helper_freight_share_pct: data.helper_freight_share_pct,
+    truck_loads: data.truck_loads,
   };
 }
 
-function freightLinesFromBreakdown(b: BookingEstimateBreakdown): FreightLineDetail {
+function freightLinesFromBreakdown(b: BookingPricingBreakdown): FreightLineDetail {
   return {
+    booking_weight_tons: b.weightTons,
+    total_trucks: b.totalTrucks,
+    cargo_rate_php_per_ton: b.cargoRatePhpPerTon,
     diesel_liters: b.dieselLiters,
     diesel_cost_php: b.dieselCostPhp,
-    wear_misc_php: b.wearMiscPhp,
-    depreciation_php: b.depreciationPhp,
-    helper_pay_php: b.helperPayPhp,
-    freight_base_php: b.freightBasePhp,
+    driver_share_php: b.driverSharePhp,
+    helper_share_php: b.helperSharePhp,
+    toll_fees_php: b.tollFeesPhp,
+    additives_total_php: b.additivesTotalPhp,
     diesel_price_per_liter: b.dieselPricePerLiter,
-    driver_commission_pct: b.driverCommissionPct,
+    driver_freight_share_pct: b.driverFreightSharePct,
+    helper_freight_share_pct: b.helperFreightSharePct,
+    truck_loads: b.truckLoads.map((r) => ({
+      truck_index: r.truckIndex,
+      weight_tons: r.weightTons,
+      distance_km: r.distanceKm,
+      cargo_gross_php: r.cargoGrossPhp,
+      diesel_liters: r.dieselLiters,
+      diesel_cost_php: r.dieselCostPhp,
+      driver_share_php: r.driverSharePhp,
+      helper_share_php: r.helperSharePhp,
+      toll_fees_php: r.tollFeesPhp,
+      additives_total_php: r.additivesTotalPhp,
+      net_profit_php: r.netProfitPhp,
+    })),
   };
 }
 
-type EstimateGeoMeta = Pick<
-  RouteEstimateApiResponse,
-  | "pickup_resolution"
-  | "dropoff_resolution"
-  | "estimate_tier"
-  | "routing_method"
-  | "pickup_lat"
-  | "pickup_lng"
-  | "dropoff_lat"
-  | "dropoff_lng"
+type QuoteGeoMeta = Pick<
+  RouteQuoteApiResponse,
+  "pickup_resolution" | "dropoff_resolution" | "pricing_tier" | "routing_method"
 >;
-
-function routePreviewCoords(geo: EstimateGeoMeta | null): {
-  pickupLat: number;
-  pickupLng: number;
-  dropoffLat: number;
-  dropoffLng: number;
-} | null {
-  if (!geo) return null;
-  const { pickup_lat: a, pickup_lng: b, dropoff_lat: c, dropoff_lng: d } = geo;
-  if (a == null || b == null || c == null || d == null) return null;
-  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || !Number.isFinite(d)) return null;
-  return { pickupLat: a, pickupLng: b, dropoffLat: c, dropoffLng: d };
-}
 
 const DEFAULT_SERVICE_TYPE = "fixed";
 
-function geocodeProviderNote(geo: EstimateGeoMeta | null): string | null {
+function geocodeProviderNote(geo: QuoteGeoMeta | null): string | null {
   if (!geo) return null;
   const google = geo.pickup_resolution === "google" || geo.dropoff_resolution === "google";
   const nom = geo.pickup_resolution === "nominatim" || geo.dropoff_resolution === "nominatim";
@@ -135,7 +166,7 @@ function routingDistanceNote(routing: string | undefined): string {
     return "Road distance from Google Directions API (driving), matched to the same map data Google Maps uses for routing. Minor differences vs the app UI can still happen (alternate routes, live traffic, or different start/end pins). Tolls not itemized in distance.";
   }
   if (routing === "osrm") {
-    return "Road distance uses the public OSRM “driving” profile (car-oriented on OpenStreetMap). If you expected Google Maps–like km (~25–30 for this route), the backend is not using Google Directions — usually the API key is restricted to websites only. Set GOOGLE_MAPS_SERVER_API_KEY on the server (IP / unrestricted in dev) with Directions + Geocoding enabled. For truck-legal OSM routing, set OPENROUTESERVICE_API_KEY (HGV). Tolls and live traffic excluded.";
+    return "Road distance uses the public OSRM “driving” profile (car-oriented on OpenStreetMap). If you expected Google Maps–like km, the backend is not using Google Directions — set GOOGLE_MAPS_GEOCODING_API_KEY with Geocoding + Directions APIs enabled and restrictions that allow your FastAPI server (not HTTP-referrer-only). For truck-legal OSM routing, set OPENROUTESERVICE_API_KEY (HGV). Tolls and live traffic excluded.";
   }
   if (routing === "openrouteservice_hgv") {
     return "Road distance uses OpenRouteService heavy-goods (HGV) routing on OpenStreetMap—avoids many truck restrictions where map data supports it. One computed path vs odometer; tolls and live traffic excluded.";
@@ -161,16 +192,16 @@ function siteMenuLabel(s: CustomerSite): string {
 }
 
 export default function CostCalculator({
-  onEstimate,
+  onQuotedBreakdown,
 }: {
-  onEstimate?: (estimate: CostEstimate) => void;
+  onQuotedBreakdown?: (breakdown: QuotedCostBreakdown) => void;
 }) {
   const router = useRouter();
   const [pickupId, setPickupId] = useState("");
   const [dropoffId, setDropoffId] = useState("");
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [weight, setWeight] = useState("1");
-  const [cost, setCost] = useState<LiveCostEstimate | null>(null);
+  const [cost, setCost] = useState<LiveCostQuote | null>(null);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [message, setMessage] = useState("");
@@ -178,53 +209,32 @@ export default function CostCalculator({
   const [date, setDate] = useState("");
   const [pickedSlot, setPickedSlot] = useState<string>("");
   const [slotAvailability, setSlotAvailability] = useState<Record<string, boolean>>({});
+  const [slotAvailableTrucks, setSlotAvailableTrucks] = useState<Record<string, number>>({});
+  const [requiredTrucksFromApi, setRequiredTrucksFromApi] = useState<number>(1);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsFetchError, setSlotsFetchError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [estimateGeo, setEstimateGeo] = useState<EstimateGeoMeta | null>(null);
+  const [routeQuoteMeta, setRouteQuoteMeta] = useState<QuoteGeoMeta | null>(null);
   const [freightLines, setFreightLines] = useState<FreightLineDetail | null>(null);
-  /** Falls back to server `GOOGLE_MAPS_GEOCODING_API_KEY` when NEXT_PUBLIC map key is unset. */
-  const [mapsJsKeyFromBackend, setMapsJsKeyFromBackend] = useState<string | null>(null);
   const today = new Date().toISOString().split("T")[0];
 
   const hasEnoughSites = sites.length >= MIN_BOOKING_SITES;
-  const effectiveMapsKey = MAPS_JS_KEY_PUBLIC || (mapsJsKeyFromBackend ?? "");
 
   const pickup = useMemo(() => sites.find((s) => s.id === pickupId)?.address ?? "", [sites, pickupId]);
   const dropoff = useMemo(() => sites.find((s) => s.id === dropoffId)?.address ?? "", [sites, dropoffId]);
 
-  const showApproximateEstimateWarning = useMemo(() => {
-    if (estimateGeo) {
-      const { pickup_resolution: pr, dropoff_resolution: dr, estimate_tier: t, routing_method: rm } = estimateGeo;
+  const showApproximateRoutingWarning = useMemo(() => {
+    if (routeQuoteMeta) {
+      const { pickup_resolution: pr, dropoff_resolution: dr, pricing_tier: t, routing_method: rm } = routeQuoteMeta;
       if (pr === "none" || dr === "none") return true;
       if (t !== "geocoded") return true;
       if (rm === "haversine_road_factor") return true;
       return false;
     }
-    return !estimateUsesGeocodedBoth(pickup, dropoff);
-  }, [estimateGeo, pickup, dropoff]);
+    return !routeUsesGeocodedPinsBoth(pickup, dropoff);
+  }, [routeQuoteMeta, pickup, dropoff]);
 
-  const providerNote = useMemo(() => geocodeProviderNote(estimateGeo), [estimateGeo]);
-
-  useEffect(() => {
-    if (MAPS_JS_KEY_PUBLIC) {
-      setMapsJsKeyFromBackend(null);
-      return;
-    }
-    let cancelled = false;
-    void apiFetch<{ api_key: string | null }>("/customer/maps-js-key")
-      .then((r) => {
-        if (cancelled) return;
-        const k = (r.api_key ?? "").trim();
-        setMapsJsKeyFromBackend(k.length > 0 ? k : null);
-      })
-      .catch(() => {
-        if (!cancelled) setMapsJsKeyFromBackend(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const providerNote = useMemo(() => geocodeProviderNote(routeQuoteMeta), [routeQuoteMeta]);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,6 +258,8 @@ export default function CostCalculator({
   useEffect(() => {
     if (!hasEnoughSites) {
       setSlotAvailability({});
+      setSlotAvailableTrucks({});
+      setRequiredTrucksFromApi(1);
       setPickedSlot("");
       setSlotsFetchError(null);
       setSlotsLoading(false);
@@ -255,6 +267,8 @@ export default function CostCalculator({
     }
     if (!date) {
       setSlotAvailability({});
+      setSlotAvailableTrucks({});
+      setRequiredTrucksFromApi(1);
       setPickedSlot("");
       setSlotsFetchError(null);
       setSlotsLoading(false);
@@ -279,12 +293,20 @@ export default function CostCalculator({
           next[s] = res.slots?.[s] !== false;
         }
         setSlotAvailability(next);
+        setSlotAvailableTrucks(res.available_trucks_by_slot ?? {});
+        setRequiredTrucksFromApi(
+          typeof res.required_trucks === "number" && Number.isFinite(res.required_trucks)
+            ? Math.max(1, Math.floor(res.required_trucks))
+            : 1,
+        );
       })
       .catch((e) => {
         if (!cancelled) {
           const next: Record<string, boolean> = {};
           for (const s of BOOKING_TIME_SLOTS) next[s] = true;
           setSlotAvailability(next);
+          setSlotAvailableTrucks({});
+          setRequiredTrucksFromApi(Math.max(1, Math.ceil((Number.parseFloat(weight) || 1) / 42)));
           setSlotsFetchError(e instanceof Error ? e.message : "Could not load pickup windows.");
         }
       })
@@ -300,7 +322,7 @@ export default function CostCalculator({
   useEffect(() => {
     if (!hasEnoughSites) {
       setCost(null);
-      setEstimateGeo(null);
+      setRouteQuoteMeta(null);
       setFreightLines(null);
       setLoading(false);
       return;
@@ -312,7 +334,7 @@ export default function CostCalculator({
 
     if (!pickupId || !dropoffId || pickupId === dropoffId || p.length < 3 || d.length < 3 || p.toLowerCase() === d.toLowerCase()) {
       setCost(null);
-      setEstimateGeo(null);
+      setRouteQuoteMeta(null);
       setFreightLines(null);
       setLoading(false);
       return;
@@ -327,7 +349,7 @@ export default function CostCalculator({
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const data = await apiFetch<RouteEstimateApiResponse>("/customer/route-estimate", {
+          const data = await apiFetch<RouteQuoteApiResponse>("/customer/route-quote", {
             method: "POST",
             body: JSON.stringify({
               pickup_location: pickup,
@@ -339,36 +361,38 @@ export default function CostCalculator({
           if (cancelled) return;
           setMessage("");
           setMessageType("");
-          const live: LiveCostEstimate = {
+          const live: LiveCostQuote = {
             distance_km: data.distance_km,
-            estimated_fuel: data.fuel_route_charge,
-            estimated_toll: 0,
-            estimated_labor: data.driver_fee,
-            estimated_total: data.estimated_total,
+            total_trucks: data.total_trucks,
+            cargo_gross_php: data.cargo_gross_php,
+            diesel_cost_php: data.diesel_cost_php,
+            driver_share_php: data.driver_share_php,
+            helper_share_php: data.helper_share_php,
+            toll_fees_php: data.toll_fees_php,
+            additives_total_php: data.additives_total_php,
+            net_profit_total_php: data.net_profit_total_php,
+            quoted_total: data.quoted_total,
+            truck_loads: data.truck_loads,
           };
           setCost(live);
-          setEstimateGeo({
+          setRouteQuoteMeta({
             pickup_resolution: data.pickup_resolution,
             dropoff_resolution: data.dropoff_resolution,
-            estimate_tier: data.estimate_tier,
+            pricing_tier: data.pricing_tier,
             routing_method: data.routing_method,
-            pickup_lat: data.pickup_lat,
-            pickup_lng: data.pickup_lng,
-            dropoff_lat: data.dropoff_lat,
-            dropoff_lng: data.dropoff_lng,
           });
           setFreightLines(freightLinesFromPayload(data));
-          onEstimate?.({
-            estimated_fuel: live.estimated_fuel,
-            estimated_toll: live.estimated_toll,
-            estimated_labor: live.estimated_labor,
-            estimated_total: live.estimated_total,
+          onQuotedBreakdown?.({
+            cargo_gross_php: live.cargo_gross_php,
+            toll_fees_php: live.toll_fees_php,
+            labor_freight_php: live.driver_share_php + live.helper_share_php,
+            quoted_total_php: live.quoted_total,
           });
         } catch (e: unknown) {
           if (cancelled) return;
           if (e instanceof DOMException && e.name === "AbortError") return;
           setCost(null);
-          setEstimateGeo(null);
+          setRouteQuoteMeta(null);
           setFreightLines(null);
           if (e instanceof ApiError) {
             setMessage(e.message);
@@ -388,7 +412,7 @@ export default function CostCalculator({
       ac.abort();
       window.clearTimeout(timer);
     };
-  }, [pickup, dropoff, weight, onEstimate, hasEnoughSites, pickupId, dropoffId]);
+  }, [pickup, dropoff, weight, onQuotedBreakdown, hasEnoughSites, pickupId, dropoffId]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -445,6 +469,8 @@ export default function CostCalculator({
         newErrors.scheduled_time_slot = "Choose a pickup time window.";
       } else if (slotAvailability[pickedSlot] === false) {
         newErrors.scheduled_time_slot = "That time is no longer available — choose another slot.";
+      } else if ((slotAvailableTrucks[pickedSlot] ?? 0) < requiredTrucksFromApi) {
+        newErrors.scheduled_time_slot = "Not enough trucks available for this schedule. Please choose another date/time.";
       }
     }
     setErrors(newErrors);
@@ -485,7 +511,7 @@ export default function CostCalculator({
     }
   };
 
-  const estimateHint = !hasEnoughSites
+  const bookingPricingHint = !hasEnoughSites
     ? `Save at least ${MIN_BOOKING_SITES} sites on your dashboard — booking is disabled until then.`
     : "Select pickup and dropoff — server geocoding runs when you save (needs backend online).";
 
@@ -495,7 +521,10 @@ export default function CostCalculator({
     !isSubmitting &&
     !!pickedSlot &&
     slotAvailability[pickedSlot] !== false &&
+    (slotAvailableTrucks[pickedSlot] ?? 0) >= requiredTrucksFromApi &&
     !slotsLoading;
+  const requiredTrucks = Math.max(1, requiredTrucksFromApi || Math.ceil((parseFloat(weight) || 1) / 42));
+  const selectedAvailableTrucks = pickedSlot ? (slotAvailableTrucks[pickedSlot] ?? 0) : 0;
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
@@ -630,70 +659,44 @@ export default function CostCalculator({
           >
             <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
               <strong style={{ color: "var(--text-primary)" }}>Road distance: {cost.distance_km} km</strong>
-              {estimateGeo?.routing_method === "google_directions" ||
-              estimateGeo?.routing_method === "osrm" ||
-              estimateGeo?.routing_method === "openrouteservice" ||
-              estimateGeo?.routing_method === "openrouteservice_hgv" ||
-              estimateGeo?.routing_method === "openrouteservice_car"
-                ? estimateGeo?.routing_method === "google_directions"
+              {" — "}
+              <strong style={{ color: "var(--text-primary)" }}>{cost.total_trucks} truck(s)</strong>
+              {cost.total_trucks > 1 ? " (42 t max per truck)" : ""}
+              {routeQuoteMeta?.routing_method === "google_directions" ||
+              routeQuoteMeta?.routing_method === "osrm" ||
+              routeQuoteMeta?.routing_method === "openrouteservice" ||
+              routeQuoteMeta?.routing_method === "openrouteservice_hgv" ||
+              routeQuoteMeta?.routing_method === "openrouteservice_car"
+                ? routeQuoteMeta?.routing_method === "google_directions"
                   ? " — same engine family as Google Maps driving distance."
                   : " — computed along the mapped driving route (OSM)."
-                : estimateGeo?.routing_method === "same_location"
+                : routeQuoteMeta?.routing_method === "same_location"
                   ? " — same map location."
-                  : estimateGeo?.routing_method === "haversine_road_factor"
+                  : routeQuoteMeta?.routing_method === "haversine_road_factor"
                     ? " — legacy approximate mode."
                     : "."}
             </p>
-            {estimateGeo?.routing_method ? (
+            {routeQuoteMeta?.routing_method ? (
               <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
-                {routingDistanceNote(estimateGeo.routing_method)}
+                {routingDistanceNote(routeQuoteMeta.routing_method)}
               </p>
             ) : null}
             {providerNote ? (
               <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
                 {providerNote}
               </p>
-            ) : !estimateGeo ? (
+            ) : !routeQuoteMeta ? (
               <p style={{ margin: 0, fontSize: "0.78rem", color: "#b45309" }}>
                 Sign in with the API running to get routed road kilometers and pricing (no browser-only shortcut).
               </p>
             ) : null}
-            {(() => {
-              const rc = routePreviewCoords(estimateGeo);
-              if (!rc) return null;
-              if (effectiveMapsKey) {
-                return (
-                  <>
-                    <GoogleRoutePreviewMap
-                      apiKey={effectiveMapsKey}
-                      pickupLat={rc.pickupLat}
-                      pickupLng={rc.pickupLng}
-                      dropoffLat={rc.dropoffLat}
-                      dropoffLng={rc.dropoffLng}
-                    />
-                    <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--text-secondary)", opacity: 0.9 }}>
-                      Markers show pickup and dropoff at the coordinates the server used for this estimate.
-                    </p>
-                  </>
-                );
-              }
-              return (
-                <p style={{ margin: 0, fontSize: "0.72rem", color: "#57534e" }}>
-                  Set <code style={{ fontSize: "0.7rem" }}>GOOGLE_MAPS_GEOCODING_API_KEY</code> on the server (with{" "}
-                  <strong>Maps JavaScript API</strong> enabled on that key) or add optional{" "}
-                  <code style={{ fontSize: "0.7rem" }}>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in{" "}
-                  <code style={{ fontSize: "0.7rem" }}>.env.local</code> to preview pins. Sign in as a customer to load the key
-                  from the API.
-                </p>
-              );
-            })()}
             {freightLines ? (
               <>
                 <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
-                  Update retail diesel <strong>₱{freightLines.diesel_price_per_liter.toFixed(2)}/L</strong> weekly (after DOE bulletin,
-                  usually Tuesdays) in <code style={{ fontSize: "0.74rem" }}>backend/.env</code> —
-                  <span style={{ marginLeft: "0.25rem" }}>optional public fallbacks: </span>
-                  <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER</code>.
+                  Admin sets only <strong>diesel ₱/L</strong> and <strong>toll per trip</strong> under Calculations. Cargo
+                  rate (₱650/t), 4 km/L, and crew percentages are fixed in the app to match your formula.
+                  Offline fallbacks: <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER</code>,{" "}
+                  <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_TOLL_FEES_PHP_PER_TRIP</code>.
                 </p>
                 <ul
                   style={{
@@ -704,14 +707,73 @@ export default function CostCalculator({
                     lineHeight: 1.55,
                   }}
                 >
-                  <li>Diesel {freightLines.diesel_liters.toFixed(2)} L → {formatPhp(freightLines.diesel_cost_php)}</li>
-                  <li>Wear / misc (per km) → {formatPhp(freightLines.wear_misc_php)}</li>
-                  <li>Depreciation surcharge (10% of diesel + wear stack) → {formatPhp(freightLines.depreciation_php)}</li>
-                  <li>Helper allowance → {formatPhp(freightLines.helper_pay_php)}</li>
+                  <li>
+                    Booking weight {freightLines.booking_weight_tons.toFixed(2)} t → {freightLines.total_trucks} truck load(s)
+                    (≤42 t each) — total cargo gross {formatPhp(cost.cargo_gross_php)}
+                  </li>
+                  <li>
+                    Fuel (all trucks, route km ÷ 4 km/L) → {freightLines.diesel_liters.toFixed(2)} L @ ₱
+                    {freightLines.diesel_price_per_liter.toFixed(2)}/L → {formatPhp(freightLines.diesel_cost_php)}
+                  </li>
+                  <li>
+                    Driver share ({freightLines.driver_freight_share_pct.toFixed(2)}% of each truck&apos;s gross) →{" "}
+                    {formatPhp(freightLines.driver_share_php)}
+                  </li>
+                  <li>
+                    Helper share ({freightLines.helper_freight_share_pct.toFixed(2)}% of each truck&apos;s gross) →{" "}
+                    {formatPhp(freightLines.helper_share_php)}
+                  </li>
+                  <li>Toll (per truck per trip) → {formatPhp(freightLines.toll_fees_php)}</li>
+                  <li>
+                    <strong>Model:</strong> net/truck = cargo gross + fuel + driver + helper + toll (additive).
+                  </li>
                 </ul>
+                {freightLines.truck_loads.length > 0 ? (
+                  <div style={{ marginTop: "0.75rem" }}>
+                    <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.9rem" }}>Truck allocation breakdown</p>
+                    <div style={{ display: "grid", gap: "0.65rem" }}>
+                      {freightLines.truck_loads.map((t) => (
+                        <div
+                          key={t.truck_index}
+                          style={{
+                            border: "1px solid rgba(76, 175, 80, 0.25)",
+                            borderRadius: "8px",
+                            padding: "0.65rem 0.75rem",
+                            background: "rgba(255,255,255,0.5)",
+                          }}
+                        >
+                          <p style={{ margin: "0 0 0.35rem", fontWeight: 600, fontSize: "0.85rem" }}>Truck {t.truck_index}</p>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: "1.1rem",
+                              fontSize: "0.78rem",
+                              color: "var(--text-secondary)",
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            <li>Weight: {t.weight_tons.toFixed(2)} t</li>
+                            <li>Distance: {t.distance_km.toFixed(2)} km</li>
+                            <li>Fuel cost: {formatPhp(t.diesel_cost_php)}</li>
+                            <li>Driver share: {formatPhp(t.driver_share_php)}</li>
+                            <li>Helper share: {formatPhp(t.helper_share_php)}</li>
+                            <li>Toll: {formatPhp(t.toll_fees_php)}</li>
+                            <li style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                              Net profit: {formatPhp(t.net_profit_php)}
+                            </li>
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                    <p style={{ margin: "0.65rem 0 0", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                      <strong>Final totals:</strong> {freightLines.total_trucks} truck(s) — total cargo gross{" "}
+                      {formatPhp(cost.cargo_gross_php)} — combined net profit {formatPhp(cost.net_profit_total_php)}
+                    </p>
+                  </div>
+                ) : null}
               </>
             ) : null}
-            {showApproximateEstimateWarning && (
+            {showApproximateRoutingWarning && (
               <p
                 style={{
                   margin: 0,
@@ -723,8 +785,8 @@ export default function CostCalculator({
                   padding: "0.5rem 0.65rem",
                 }}
               >
-                Rough distance / pins — improve site addresses for tighter geocoding (this does not replace DOE diesel
-                postings; update fuel price in .env when advisories move).
+                Rough distance / pins — use clear saved site addresses so the server can geocode and route accurately.
+                Admin sets diesel and toll under Calculations.
               </p>
             )}
             <div
@@ -735,38 +797,36 @@ export default function CostCalculator({
               }}
             >
               <div>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Freight base</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Cargo gross</p>
                 <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-                  diesel + wear + depreciation + helper
+                  ₱650/t × tons across all loads (≤42 t per truck)
                 </p>
                 <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                  {formatPhp(cost.estimated_fuel)}
+                  {formatPhp(cost.cargo_gross_php)}
                 </p>
               </div>
               <div>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                  Driver ({freightLines ? `${freightLines.driver_commission_pct}%` : "15%"} of freight base)
-                </p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total additives</p>
                 <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-                  commission on gross freight row
+                  fuel + driver + helper + toll (all trucks)
                 </p>
                 <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                  {formatPhp(cost.estimated_labor)}
+                  {formatPhp(cost.additives_total_php)}
                 </p>
               </div>
               <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Quoted total</p>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Combined net profit</p>
                 <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-                  freight base + driver commission
+                  cargo gross + additives (per truck), summed
                 </p>
                 <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
-                  {formatPhp(cost.estimated_total)}
+                  {formatPhp(cost.quoted_total)}
                 </p>
               </div>
             </div>
           </div>
         ) : (
-          !loading && <div className="booking-placeholder">{estimateHint}</div>
+          !loading && <div className="booking-placeholder">{bookingPricingHint}</div>
         )}
 
         <div
@@ -910,7 +970,50 @@ export default function CostCalculator({
           {errors.scheduled_time_slot && (
             <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.35rem 0 0 0" }}>{errors.scheduled_time_slot}</p>
           )}
+          {date && !slotsLoading && (
+            <div
+              style={{
+                marginTop: "0.55rem",
+                padding: "0.65rem 0.75rem",
+                borderRadius: "8px",
+                border: "1px solid rgba(0,0,0,0.08)",
+                background: "rgba(0,0,0,0.02)",
+                fontSize: "0.82rem",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <div>Required trucks: {requiredTrucks}</div>
+              <div>Available trucks{pickedSlot ? ` (${pickedSlot})` : ""}: {selectedAvailableTrucks}</div>
+              {pickedSlot && selectedAvailableTrucks < requiredTrucks ? (
+                <div style={{ color: "#b91c1c", marginTop: "0.3rem", fontWeight: 600 }}>
+                  Not enough trucks available for this time slot.
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
+
+        {cost && (
+          <div
+            style={{
+              padding: "1rem 1.25rem",
+              borderRadius: "10px",
+              background: "rgba(76, 175, 80, 0.08)",
+              border: "1px solid rgba(76, 175, 80, 0.35)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.2rem",
+            }}
+          >
+            <span style={{ fontSize: "0.9rem", color: "var(--text-secondary)", fontWeight: 600 }}>
+              Amount to be paid
+            </span>
+            <span style={{ fontSize: "1.35rem", fontWeight: 700, color: "#2e7d32" }}>{formatPhp(cost.quoted_total)}</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", margin: 0 }}>
+              Total quoted for this booking (before payment verification).
+            </span>
+          </div>
+        )}
 
         <button
           className="button"
@@ -925,6 +1028,11 @@ export default function CostCalculator({
         >
           {isSubmitting ? " Processing..." : "✓ Confirm & Book"}
         </button>
+        {pickedSlot && selectedAvailableTrucks < requiredTrucks && (
+          <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: "0.9rem" }}>
+            Not enough trucks available for this schedule. Please choose another date/time.
+          </p>
+        )}
 
         {message && (
           <div

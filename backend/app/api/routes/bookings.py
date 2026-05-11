@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.db import get_db
-from app.models.entities import Booking, BookingStatus, User, UserRole
+from app.models.entities import (
+    Booking,
+    BookingStatus,
+    User,
+    UserRole,
+)
 from app.schemas.booking import BookingCreate, BookingRead, BookingScheduleAvailabilityRead
 from app.services.email_templates import EmailTemplate
 from app.services.notifications import send_email_notification
@@ -14,8 +19,13 @@ from app.core.config import settings
 from app.constants.booking_time_slots import BOOKING_TIME_SLOTS
 from app.constants.fleet_capacity import cargo_exceeds_fleet
 from app.services.booking_freight_knobs import resolve_booking_freight_knobs
-from app.services.booking_schedule import availability_for_date, slot_available
+from app.services.booking_capacity import get_available_truck_count
 from app.services.route_estimate import estimate_road_distance_km, customer_freight_pricing
+from app.constants.fleet_capacity import trucks_required_for_cargo
+from app.models.entities import TruckSlotHold, TruckSlotHoldStatus
+from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
+from app.services.booking_tracking_payload import build_assignments_for_booking
+from app.services.booking_status_aggregate import aggregate_customer_display_from_assignment_rows
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -44,10 +54,10 @@ def _sync_bookings_approved_from_verified_payments(db: Session, customer_id: int
         ) v ON v.booking_id = b.id
         INNER JOIN payments p ON p.id = v.mid
         SET
-            b.status = 'approved',
+            b.status = 'payment_verified',
             b.approved_at = COALESCE(b.approved_at, p.reviewed_at, p.paid_at),
             b.approved_by_id = COALESCE(b.approved_by_id, p.reviewed_by_id)
-        WHERE b.status IN ('pending_approval', 'PENDING_APPROVAL')
+        WHERE b.status IN ('pending_approval', 'PENDING_APPROVAL', 'payment_verification')
         """
         + extra
     )
@@ -63,7 +73,7 @@ def create_booking(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
-    """Create a new booking with routed road distance + freight model (diesel DOE price, dep., helper, driver %)."""
+    """Create a new booking with routed road distance and cargo-based customer quote."""
     est = estimate_road_distance_km(
         payload.pickup_location,
         payload.dropoff_location,
@@ -79,40 +89,72 @@ def create_booking(
             detail="Cargo exceeds simultaneous fleet capacity (four trucks × 42 t). Split into multiple bookings.",
         )
 
-    if not slot_available(
+    required_trucks = trucks_required_for_cargo(payload.cargo_weight_tons)
+    availability = get_available_truck_count(
         db,
         payload.scheduled_date,
         payload.scheduled_time_slot,
-        payload.cargo_weight_tons,
-        payload.pickup_location,
-        payload.dropoff_location,
-    ):
+        required_trucks=required_trucks,
+        lock_rows=False,
+    )
+    if not availability.can_book:
         raise HTTPException(
             status_code=409,
-            detail="Not enough free trucks for this pickup window and route duration. Pick another slot or date.",
+            detail="Not enough trucks available for this schedule. Please choose another date/time.",
         )
 
-    booking = Booking(
-        customer_id=user.id,
-        pickup_location=payload.pickup_location,
-        dropoff_location=payload.dropoff_location,
-        service_type=payload.service_type,
-        scheduled_date=payload.scheduled_date,
-        scheduled_time_slot=payload.scheduled_time_slot,
-        cargo_weight_tons=payload.cargo_weight_tons,
-        cargo_description=payload.cargo_description,
-        estimated_cost=pricing["estimated_total"],
-        status=BookingStatus.PENDING_APPROVAL,
-    )
+    try:
+        recheck = get_available_truck_count(
+            db,
+            payload.scheduled_date,
+            payload.scheduled_time_slot,
+            required_trucks=required_trucks,
+            lock_rows=True,
+        )
+        if not recheck.can_book:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Not enough trucks available for this schedule. Please choose another date/time.",
+            )
 
-    db.add(booking)
-    db.commit()
+        booking = Booking(
+            customer_id=user.id,
+            pickup_location=payload.pickup_location,
+            dropoff_location=payload.dropoff_location,
+            service_type=payload.service_type,
+            scheduled_date=payload.scheduled_date,
+            scheduled_time_slot=payload.scheduled_time_slot,
+            cargo_weight_tons=payload.cargo_weight_tons,
+            required_truck_count=required_trucks,
+            cargo_description=payload.cargo_description,
+            estimated_cost=pricing["quoted_total"],
+            status=BookingStatus.PAYMENT_VERIFICATION,
+        )
+        db.add(booking)
+        db.flush()
+
+        hold = TruckSlotHold(
+            booking_id=booking.id,
+            schedule_date=payload.scheduled_date,
+            time_slot=payload.scheduled_time_slot,
+            required_truck_count=required_trucks,
+            hold_status=TruckSlotHoldStatus.ON_HOLD,
+        )
+        db.add(hold)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(booking)
 
     # Send confirmation email with template
     subject, html_body = EmailTemplate.booking_confirmation(
         booking_id=booking.id,
-        estimated_cost=booking.estimated_cost,
+        quoted_amount_php=float(booking.estimated_cost or 0),
         scheduled_date=str(booking.scheduled_date),
     )
     send_email_notification(to_email=user.email, subject=subject, html_body=html_body)
@@ -129,18 +171,46 @@ def booking_schedule_availability(
     pickup_location: str = Query(default=""),
     dropoff_location: str = Query(default=""),
 ):
-    """Open slots account for weight (trucks needed) and overlap with earlier runs still on the road."""
+    """Open slots account for weight and reserved truck-count for that exact date/time slot."""
+    required_trucks = trucks_required_for_cargo(cargo_weight_tons)
     if len(pickup_location.strip()) < 3 or len(dropoff_location.strip()) < 3:
-        slots = {s: True for s in BOOKING_TIME_SLOTS}
-        return BookingScheduleAvailabilityRead(scheduled_date=scheduled_date, slots=slots)
-    slots = availability_for_date(
-        db,
-        scheduled_date,
-        cargo_weight_tons,
-        pickup_location.strip(),
-        dropoff_location.strip(),
+        slots: dict[str, bool] = {}
+        available_by_slot: dict[str, int] = {}
+        for slot in BOOKING_TIME_SLOTS:
+            cap = get_available_truck_count(
+                db,
+                scheduled_date,
+                slot,
+                required_trucks=required_trucks,
+                lock_rows=False,
+            )
+            slots[slot] = cap.can_book
+            available_by_slot[slot] = cap.available_trucks
+        return BookingScheduleAvailabilityRead(
+            scheduled_date=scheduled_date,
+            slots=slots,
+            required_trucks=required_trucks,
+            available_trucks_by_slot=available_by_slot,
+        )
+
+    slots: dict[str, bool] = {}
+    available_by_slot: dict[str, int] = {}
+    for slot in BOOKING_TIME_SLOTS:
+        cap = get_available_truck_count(
+            db,
+            scheduled_date,
+            slot,
+            required_trucks=required_trucks,
+            lock_rows=False,
+        )
+        slots[slot] = cap.can_book
+        available_by_slot[slot] = cap.available_trucks
+    return BookingScheduleAvailabilityRead(
+        scheduled_date=scheduled_date,
+        slots=slots,
+        required_trucks=required_trucks,
+        available_trucks_by_slot=available_by_slot,
     )
-    return BookingScheduleAvailabilityRead(scheduled_date=scheduled_date, slots=slots)
 
 
 @router.get("", response_model=list[BookingRead])
@@ -185,6 +255,53 @@ def cancel_booking(
     if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
         raise HTTPException(status_code=403, detail="Not allowed")
 
+    if user.role == UserRole.CUSTOMER:
+        if booking.status not in (BookingStatus.PENDING_PAYMENT, BookingStatus.PAYMENT_VERIFICATION):
+            raise HTTPException(
+                status_code=400,
+                detail="Cancellation is only allowed before payment is verified.",
+            )
+
     booking.status = BookingStatus.CANCELLED
+    db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
+        {"hold_status": TruckSlotHoldStatus.CANCELLED}
+    )
     db.commit()
     return {"status": "cancelled"}
+
+
+@router.get("/{booking_id}/tracking-details")
+def booking_tracking_details(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    assignment_rows = build_assignments_for_booking(db, booking)
+    road_km = booking_pickup_dropoff_distance_km(booking)
+
+    booking_effective_status = (
+        aggregate_customer_display_from_assignment_rows(assignment_rows)
+        if assignment_rows
+        else (booking.status.value if hasattr(booking.status, "value") else str(booking.status))
+    )
+
+    return {
+        "booking": {
+            "id": booking.id,
+            "status": booking_effective_status,
+            "pickup_location": booking.pickup_location,
+            "dropoff_location": booking.dropoff_location,
+            "cargo_weight_tons": float(booking.cargo_weight_tons),
+            "scheduled_date": booking.scheduled_date.isoformat(),
+            "scheduled_time_slot": booking.scheduled_time_slot,
+            "required_truck_count": int(booking.required_truck_count or 1),
+            "road_distance_km": float(road_km) if road_km is not None else None,
+        },
+        "assignments": assignment_rows,
+    }

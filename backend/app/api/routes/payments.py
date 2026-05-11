@@ -15,6 +15,8 @@ from app.models.entities import (
     BookingStatus,
     Payment,
     PaymentStatus,
+    TruckSlotHold,
+    TruckSlotHoldStatus,
     Transaction,
     User,
     UserRole,
@@ -63,6 +65,10 @@ def create_payment(
         raise HTTPException(status_code=403, detail="Not your booking")
 
     if booking.status not in {
+        BookingStatus.PENDING_PAYMENT,
+        BookingStatus.PAYMENT_VERIFICATION,
+        BookingStatus.PAYMENT_VERIFIED,
+        BookingStatus.READY_FOR_ASSIGNMENT,
         BookingStatus.PENDING_APPROVAL,
         BookingStatus.APPROVED,
         BookingStatus.ASSIGNED,
@@ -115,7 +121,11 @@ async def submit_payment_proof(
         raise HTTPException(status_code=404, detail="Booking not found")
     if booking.customer_id != user.id:
         raise HTTPException(status_code=403, detail="Not your booking")
-    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REJECTED):
+    if booking.status in (
+        BookingStatus.CANCELLED,
+        BookingStatus.REJECTED,
+        BookingStatus.COMPLETED,
+    ):
         raise HTTPException(status_code=400, detail="Cannot submit payment for this booking.")
 
     method = (method or "gcash").lower().strip()
@@ -133,6 +143,12 @@ async def submit_payment_proof(
         .order_by(Payment.id.desc())
         .first()
     )
+    if booking.status == BookingStatus.PAYMENT_REJECTED:
+        if not (existing and existing.status == PaymentStatus.REJECTED):
+            raise HTTPException(
+                status_code=400,
+                detail="Use the payment page to submit a corrected proof for your rejected payment.",
+            )
     if existing:
         if existing.status == PaymentStatus.VERIFIED:
             raise HTTPException(status_code=400, detail="Payment already verified for this booking.")
@@ -162,6 +178,8 @@ async def submit_payment_proof(
         pay.proof_uploaded_at = datetime.utcnow()
         pay.reviewed_at = None
         pay.reviewed_by_id = None
+        if booking.status == BookingStatus.PAYMENT_REJECTED:
+            booking.status = BookingStatus.PAYMENT_VERIFICATION
         db.commit()
         db.refresh(pay)
         return pay
@@ -306,10 +324,18 @@ def verify_payment(
     payment.reviewed_by_id = reviewer.id
 
     book = db.query(Booking).filter(Booking.id == payment.booking_id).first()
-    if book and book.status == BookingStatus.PENDING_APPROVAL:
-        book.status = BookingStatus.APPROVED
+    if book and book.status in {
+        BookingStatus.PENDING_PAYMENT,
+        BookingStatus.PAYMENT_VERIFICATION,
+        BookingStatus.PENDING_APPROVAL,
+        BookingStatus.APPROVED,
+    }:
+        book.status = BookingStatus.PAYMENT_VERIFIED
         book.approved_by_id = reviewer.id
         book.approved_at = datetime.utcnow()
+        db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == book.id).update(
+            {"hold_status": TruckSlotHoldStatus.READY_FOR_ASSIGNMENT}
+        )
 
     db.commit()
     db.refresh(payment)
@@ -340,6 +366,12 @@ def reject_payment(
     payment.paid_at = None
     payment.reviewed_at = datetime.utcnow()
     payment.reviewed_by_id = reviewer.id
+    booking = db.query(Booking).filter(Booking.id == payment.booking_id).first()
+    if booking:
+        booking.status = BookingStatus.PAYMENT_REJECTED
+        db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
+            {"hold_status": TruckSlotHoldStatus.RELEASED}
+        )
     db.commit()
     db.refresh(payment)
 
@@ -348,7 +380,10 @@ def reject_payment(
         send_email_notification(
             to_email=cust.email,
             subject=f"Payment proof needs correction — booking #{payment.booking_id}",
-            html_body=f"<p>We could not verify payment {payment.reference}. Please submit a new proof from the payment page.</p>",
+            html_body=(
+                f"<p>We could not verify payment {payment.reference}.</p>"
+                "<p>Your payment was rejected. Your booking is marked payment rejected and the reserved truck slot has been released. You may submit a corrected proof from the payment flow.</p>"
+            ),
         )
     return payment
 

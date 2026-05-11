@@ -295,7 +295,7 @@ export default function BookingsPage() {
                     </div>
                     <div>
                       <p style={{ color: "#666666", fontSize: "0.85rem", margin: "0.5rem 0" }}>
-                        Estimated Cost
+                        Quoted total
                       </p>
                       <p
                         style={{

@@ -48,15 +48,10 @@ class PricingUpdatePayload(BaseModel):
 
 
 class BookingFreightSettingsUpdate(BaseModel):
-    """Single-row knobs for `/customer/route-estimate` and booking creation."""
+    """Admin-editable values for booking quotes — cargo rate, km/L, and crew shares are fixed in code."""
 
     diesel_price_php_per_liter: float = Field(..., ge=1.0, le=500.0)
-    truck_fuel_efficiency_kmpl: float = Field(..., ge=0.5, le=80.0)
-    trip_wear_misc_php_per_km: float = Field(..., ge=0.0, le=500.0)
-    trip_depreciation_rate: float = Field(..., ge=0.0, le=5.0)
-    helper_pay_php_per_trip: float = Field(..., ge=0.0, le=500_000.0)
-    driver_freight_commission_rate: float = Field(..., ge=0.0, le=1.0)
-    cargo_weight_multiplier_per_ton: float = Field(..., ge=0.0, le=10.0)
+    toll_fees_php_per_trip: float = Field(..., ge=0.0, le=500_000.0)
 
 
 def _serialize_user(user: User) -> dict:
@@ -231,7 +226,7 @@ def get_stats(
     }
 
 
-# ---------- Booking route-estimate freight knobs (diesel, driver %, etc.) ----------
+# ---------- Booking freight: diesel + toll (other terms are code constants) ----------
 
 @router.get("/booking-freight-settings")
 def get_booking_freight_settings(
@@ -250,12 +245,7 @@ def put_booking_freight_settings(
 ):
     row = ensure_booking_freight_row(db, app_settings)
     row.diesel_price_php_per_liter = payload.diesel_price_php_per_liter
-    row.truck_fuel_efficiency_kmpl = payload.truck_fuel_efficiency_kmpl
-    row.trip_wear_misc_php_per_km = payload.trip_wear_misc_php_per_km
-    row.trip_depreciation_rate = payload.trip_depreciation_rate
-    row.helper_pay_php_per_trip = payload.helper_pay_php_per_trip
-    row.driver_freight_commission_rate = payload.driver_freight_commission_rate
-    row.cargo_weight_multiplier_per_ton = payload.cargo_weight_multiplier_per_ton
+    row.toll_fees_php_per_trip = payload.toll_fees_php_per_trip
     db.commit()
     db.refresh(row)
     return booking_freight_knobs_to_dict(row)
@@ -320,20 +310,69 @@ def update_pricing(
     }
 
 
-# ---------- Trucks (existing) ----------
+class TruckCreatePayload(BaseModel):
+    model_name: str = Field(..., min_length=1, max_length=255)
+    plate_number: str = Field(..., min_length=1, max_length=50)
+    capacity_tons: float = Field(..., gt=0, le=100)
+    status: str = Field(default="available", max_length=50)
+    age_years: float = Field(default=1.0, ge=0, le=80)
 
-@router.post("/trucks")
-def add_truck(
-    code: str,
-    capacity_tons: float,
+
+# ---------- Trucks (admin / manager) ----------
+
+@router.get("/trucks")
+def list_trucks(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
 ):
-    truck = Truck(code=code, capacity_tons=capacity_tons)
+    rows = db.query(Truck).order_by(Truck.id.asc()).all()
+    return [
+        {
+            "id": t.id,
+            "code": t.code,
+            "model_name": t.model_name,
+            "capacity_tons": float(t.capacity_tons),
+            "status": t.status,
+            "fuel_efficiency_kmpl": float(t.fuel_efficiency_kmpl),
+            "odometer_km": float(t.odometer_km or 0),
+            "age_years": float(t.age_years or 0),
+            "last_maintenance_date": t.last_maintenance_date.isoformat() if t.last_maintenance_date else None,
+        }
+        for t in rows
+    ]
+
+
+@router.post("/trucks", status_code=201)
+def add_truck(
+    payload: TruckCreatePayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    plate = payload.plate_number.strip().upper()
+    if db.query(Truck).filter(Truck.code == plate).first():
+        raise HTTPException(status_code=409, detail="A vehicle with this plate number already exists.")
+
+    truck = Truck(
+        code=plate,
+        model_name=payload.model_name.strip(),
+        capacity_tons=float(payload.capacity_tons),
+        status=payload.status.strip().lower() or "available",
+        age_years=float(payload.age_years),
+    )
     db.add(truck)
     db.commit()
     db.refresh(truck)
-    return truck
+    return {
+        "id": truck.id,
+        "code": truck.code,
+        "model_name": truck.model_name,
+        "capacity_tons": float(truck.capacity_tons),
+        "status": truck.status,
+        "fuel_efficiency_kmpl": float(truck.fuel_efficiency_kmpl),
+        "odometer_km": float(truck.odometer_km or 0),
+        "age_years": float(truck.age_years or 0),
+        "last_maintenance_date": truck.last_maintenance_date.isoformat() if truck.last_maintenance_date else None,
+    }
 
 
 @router.delete("/trucks/{truck_id}")

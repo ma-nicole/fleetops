@@ -86,13 +86,11 @@ export default function TripTrackPage() {
         </div>
 
         <div style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 20 }}>
-          <h3 style={{ marginTop: 0 }}>Live position</h3>
-          {trip.current_latitude && trip.current_longitude ? (
-            <p>
-               {trip.current_latitude.toFixed(4)}, {trip.current_longitude.toFixed(4)}
-            </p>
+          <h3 style={{ marginTop: 0 }}>Latest location</h3>
+          {trip.latest_location?.trim() ? (
+            <p>{trip.latest_location}</p>
           ) : (
-            <p style={{ color: "#6B7280" }}>Waiting for first GPS ping from driver…</p>
+            <p style={{ color: "#6B7280" }}>No location updates yet.</p>
           )}
           {trip.estimated_delivery_time && (
             <p>ETA: {formatDateTime(trip.estimated_delivery_time)}</p>

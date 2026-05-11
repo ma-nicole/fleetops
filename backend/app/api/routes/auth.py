@@ -25,6 +25,7 @@ from app.schemas.auth import (
     ResetPasswordResponse,
     Token,
     UserCreate,
+    UserProfileUpdate,
     UserRead,
 )
 from app.services.email_templates import EmailTemplate
@@ -200,4 +201,24 @@ def logout(user: User = Depends(get_current_user)):
 
 @router.get("/me", response_model=UserRead)
 def me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/profile", response_model=UserRead)
+def update_profile(
+    payload: UserProfileUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role != UserRole.CUSTOMER:
+        raise HTTPException(
+            status_code=403,
+            detail="This profile editor is only for customer accounts.",
+        )
+    user.full_name = payload.full_name
+    user.company_name = payload.company_name
+    user.phone = payload.phone
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user

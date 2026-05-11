@@ -1,8 +1,7 @@
 """
-Forward geocoding for booking route estimates.
+Forward geocoding for booking route distance and customer quotes.
 
-- If GOOGLE_MAPS_SERVER_API_KEY or GOOGLE_MAPS_GEOCODING_API_KEY is set and the key allows server
-  requests, uses Google Geocoding API.
+- If GOOGLE_MAPS_GEOCODING_API_KEY is set and allows server HTTP requests, uses Google Geocoding API.
 - Else uses OpenStreetMap Nominatim (free; polite 1 req/s throttle + cache).
 
 Keys restricted to “HTTP referrers” only work in the browser — not from FastAPI. Use a server key.
@@ -36,18 +35,14 @@ _nom_lock = threading.Lock()
 _last_nom_at = 0.0
 
 
-def _server_google_maps_key(settings: Settings) -> str:
-    """Key for server-side Geocoding HTTP calls (IP / unrestricted — not websites-only)."""
-    s = (getattr(settings, "google_maps_server_api_key", None) or "").strip()
-    if s:
-        return s
+def _google_geocoding_api_key(settings: Settings) -> str:
     return (settings.google_maps_geocoding_api_key or "").strip()
 
 
 def _geocode_cache_key(normalized_addr: str, settings: Settings) -> str:
-    """Invalidate cached Nominatim pins when Google keys are added or changed."""
+    """Invalidate cached Nominatim pins when the Geocoding API key is added or changed."""
     base = "".join(normalized_addr.lower().split())
-    gk = _server_google_maps_key(settings)
+    gk = _google_geocoding_api_key(settings)
     if gk:
         fp = hashlib.sha256(gk.encode()).hexdigest()[:12]
         return f"{base}|g:{fp}"
@@ -128,7 +123,7 @@ def _respect_nom_throttle() -> None:
 
 
 def _query_google(address: str, settings: Settings) -> tuple[float, float] | None:
-    key = _server_google_maps_key(settings)
+    key = _google_geocoding_api_key(settings)
     if not key:
         return None
     try:
@@ -142,8 +137,8 @@ def _query_google(address: str, settings: Settings) -> tuple[float, float] | Non
             st = data.get("status")
             if st not in ("OK", "ZERO_RESULTS"):
                 logger.warning(
-                    "Google geocode status=%s error_message=%s — if REQUEST_DENIED, use GOOGLE_MAPS_SERVER_API_KEY "
-                    "(IP / no referrer restriction) for backend calls",
+                    "Google geocode status=%s error_message=%s — if REQUEST_DENIED, Geocoding API must accept server "
+                    "requests (not HTTP-referrer-only) or enable billing/APIs on GOOGLE_MAPS_GEOCODING_API_KEY",
                     st,
                     data.get("error_message") or "",
                 )

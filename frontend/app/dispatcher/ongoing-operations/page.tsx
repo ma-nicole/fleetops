@@ -1,125 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-
-import { announce } from "@/lib/useAnnouncer";
-
-type OngoingOperation = {
-  tripId: string;
-  driverId: string;
-  driverName: string;
-  driverPhone: string;
-  vehiclePlate: string;
-  status: "pending" | "started" | "in_transit" | "arrived" | "loading" | "unloading";
-  currentLocation: string;
-  pickupAddress: string;
-  deliveryAddress: string;
-  startTime: string;
-  estimatedCompletion: string;
-  progress: number;
-};
+import { useEffect, useState } from "react";
+import { TripBoardDetailModal, type TripBoardRow } from "@/components/TripBoardDetailModal";
+import { formatPhp } from "@/lib/appLocale";
+import { WorkflowApi } from "@/lib/workflowApi";
 
 export default function OngoingOperationsPage() {
-  const router = useRouter();
+  const [operations, setOperations] = useState<TripBoardRow[]>([]);
+  const [detailRow, setDetailRow] = useState<TripBoardRow | null>(null);
 
-  const [operations] = useState<OngoingOperation[]>([
-    {
-      tripId: "TRIP-001",
-      driverId: "DRV-001",
-      driverName: "Carlos Rodriguez",
-      driverPhone: "+639171234567",
-      vehiclePlate: "AUV-2024-1440",
-      status: "in_transit",
-      currentLocation: "EDSA, Makati",
-      pickupAddress: "Manila Warehouse",
-      deliveryAddress: "Makati Branch",
-      startTime: "09:30 AM",
-      estimatedCompletion: "11:45 AM",
-      progress: 65,
-    },
-    {
-      tripId: "TRIP-002",
-      driverId: "DRV-002",
-      driverName: "Maria Santos",
-      driverPhone: "+639172345678",
-      vehiclePlate: "AUV-2024-1441",
-      status: "loading",
-      currentLocation: "Quezon City Depot",
-      pickupAddress: "Quezon City Depot",
-      deliveryAddress: "Pasig Market",
-      startTime: "10:00 AM",
-      estimatedCompletion: "01:00 PM",
-      progress: 25,
-    },
-    {
-      tripId: "TRIP-003",
-      driverId: "DRV-003",
-      driverName: "Juan Dela Cruz",
-      driverPhone: "+639173456789",
-      vehiclePlate: "AUV-2024-1442",
-      status: "started",
-      currentLocation: "Caloocan Pickup Point",
-      pickupAddress: "Caloocan Warehouse",
-      deliveryAddress: "San Juan Delivery",
-      startTime: "08:45 AM",
-      estimatedCompletion: "10:30 AM",
-      progress: 35,
-    },
-    {
-      tripId: "TRIP-004",
-      driverId: "DRV-005",
-      driverName: "Miguel Reyes",
-      driverPhone: "+639175678901",
-      vehiclePlate: "AUV-2024-1444",
-      status: "arrived",
-      currentLocation: "Santa Rosa Destination",
-      pickupAddress: "Las Piñas Warehouse",
-      deliveryAddress: "Santa Rosa Distribution",
-      startTime: "06:00 AM",
-      estimatedCompletion: "08:30 AM",
-      progress: 90,
-    },
-  ]);
+  useEffect(() => {
+    void (async () => {
+      const board = await WorkflowApi.dispatchAssignmentsBoard();
+      setOperations(board.assignments);
+    })();
+  }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "#2196F3";
-      case "started":
-        return "#9C27B0";
-      case "in_transit":
-        return "#FF6B6B";
-      case "arrived":
-        return "#FF9800";
-      case "loading":
-        return "#FFC107";
-      case "unloading":
-        return "#FF9800";
-      default:
-        return "#999";
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "⏳ Pending";
-      case "started":
-        return "▶ Started";
-      case "in_transit":
-        return " In Transit";
-      case "arrived":
-        return " Arrived";
-      case "loading":
-        return " Loading";
-      case "unloading":
-        return " Unloading";
-      default:
-        return "Unknown";
-    }
-  };
+  const displayStatus = (a: TripBoardRow) => (a.helper_progress_status || a.trip_status).replace(/_/g, " ");
 
   return (
     <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem" }}>
@@ -128,10 +26,9 @@ export default function OngoingOperationsPage() {
           ← Back to Dashboard
         </Link>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Ongoing Operations</h1>
-        <p style={{ color: "#666666", margin: "0" }}>Real-time monitoring of all active trips</p>
+        <p style={{ color: "#666666", margin: "0" }}>Live board: customer, payment, routes, and trip status</p>
       </div>
 
-      {/* Summary Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
         <div
           style={{
@@ -158,7 +55,7 @@ export default function OngoingOperationsPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>IN TRANSIT</p>
           <p style={{ color: "#FF9800", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {operations.filter((op) => op.status === "in_transit").length}
+            {operations.filter((op) => (op.helper_progress_status || op.trip_status) === "en_route").length}
           </p>
         </div>
         <div
@@ -172,7 +69,7 @@ export default function OngoingOperationsPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LOADING/UNLOADING</p>
           <p style={{ color: "#FFC107", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {operations.filter((op) => op.status === "loading" || op.status === "unloading").length}
+            {operations.filter((op) => ["for_pickup", "picked_up"].includes(op.helper_progress_status || "")).length}
           </p>
         </div>
         <div
@@ -186,51 +83,65 @@ export default function OngoingOperationsPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>COMPLETED</p>
           <p style={{ color: "#4CAF50", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            0
+            {operations.filter((op) => (op.helper_progress_status || op.trip_status) === "completed").length}
           </p>
         </div>
       </div>
 
-      {/* Operations List */}
       <div style={{ display: "grid", gap: "1.5rem" }}>
         {operations.map((op) => (
           <div
-            key={op.tripId}
+            key={op.trip_id}
             style={{
               padding: "1.5rem",
-              border: `2px solid ${getStatusColor(op.status)}`,
+              border: "2px solid #FFB74D",
               borderRadius: "8px",
               background: "#F9F9F9",
             }}
           >
-            {/* Header Row */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "1.5rem", marginBottom: "1rem" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr auto auto",
+                gap: "1rem",
+                marginBottom: "1rem",
+                alignItems: "start",
+              }}
+            >
               <div>
-                <h3 style={{ color: "#1A1A1A", margin: "0" }}>{op.tripId}</h3>
+                <h3 style={{ color: "#1A1A1A", margin: "0" }}>Trip #{op.trip_id}</h3>
                 <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                  {op.driverName} • {op.vehiclePlate}
+                  Booking #{op.booking_id} · {op.driver_name ?? "No driver"} · {op.truck_code} · Helper: {op.helper_name ?? "—"}
+                </p>
+                <p style={{ color: "#444", fontSize: "0.88rem", margin: "0.5rem 0 0" }}>
+                  <strong>Customer:</strong> {op.customer_name ?? "—"}
+                  {op.customer_company_name ? ` · ${op.customer_company_name}` : ""}
+                </p>
+                <p style={{ color: "#444", fontSize: "0.88rem", margin: "0.25rem 0 0" }}>
+                  <strong>Paid:</strong> {op.paid_amount_verified != null ? formatPhp(op.paid_amount_verified) : "—"} ·{" "}
+                  <strong>Quoted total:</strong> {formatPhp(op.estimated_cost)}
                 </p>
               </div>
 
               <div>
                 <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CURRENT LOCATION</p>
                 <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                   {op.currentLocation}
+                  {op.latest_location ?? "No live update yet"}
                 </p>
               </div>
 
               <div>
                 <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TIMELINE</p>
                 <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {op.startTime} → {op.estimatedCompletion}
+                  {op.scheduled_date} {op.scheduled_time_slot}
                 </p>
               </div>
 
               <span
                 style={{
                   padding: "0.5rem 0.75rem",
-                  background: getStatusColor(op.status) + "20",
-                  color: getStatusColor(op.status),
+                  background: "rgba(37,99,235,0.12)",
+                  color: "#1d4ed8",
                   borderRadius: "4px",
                   fontWeight: "600",
                   fontSize: "0.75rem",
@@ -238,136 +149,54 @@ export default function OngoingOperationsPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {getStatusLabel(op.status)}
+                {displayStatus(op)}
               </span>
+
+              <button
+                type="button"
+                onClick={() => setDetailRow(op)}
+                style={{
+                  padding: "0.5rem 0.75rem",
+                  borderRadius: 8,
+                  border: "1px solid #FF9800",
+                  background: "white",
+                  color: "#E65100",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  height: "fit-content",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                View details
+              </button>
             </div>
 
-            {/* Route Info */}
             <div
               style={{
                 padding: "1rem",
                 background: "white",
                 borderRadius: "6px",
                 border: "1px solid #E8E8E8",
-                marginBottom: "1rem",
+                marginBottom: "0",
               }}
             >
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "1rem", alignItems: "center" }}>
                 <div>
                   <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PICKUP</p>
-                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                    {op.pickupAddress}
-                  </p>
+                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>{op.pickup_location}</p>
                 </div>
                 <p style={{ color: "#999", margin: "0" }}>→</p>
                 <div>
                   <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DELIVERY</p>
-                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                    {op.deliveryAddress}
-                  </p>
+                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>{op.dropoff_location}</p>
                 </div>
               </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div style={{ marginBottom: "1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>COMPLETION</p>
-                <p style={{ color: "#1A1A1A", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>
-                  {op.progress}%
-                </p>
-              </div>
-              <div
-                style={{
-                  height: "8px",
-                  background: "#E8E8E8",
-                  borderRadius: "4px",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    background: getStatusColor(op.status),
-                    width: op.progress + "%",
-                    transition: "width 0.3s ease",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button
-                type="button"
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "#2196F3",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  fontSize: "0.85rem",
-                }}
-                onClick={() => {
-                  const q = encodeURIComponent(`${op.currentLocation}, Philippines`);
-                  window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, "_blank", "noopener,noreferrer");
-                  announce(`Opened map for ${op.tripId}`);
-                }}
-              >
-                View Route
-              </button>
-              <button
-                type="button"
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "#FF9800",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  fontSize: "0.85rem",
-                }}
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      await navigator.clipboard.writeText(op.driverPhone);
-                      announce(`Copied ${op.driverName}'s number`);
-                    } catch {
-                      announce(`Call ${op.driverName} at ${op.driverPhone}`, "assertive");
-                    }
-                  })();
-                }}
-              >
-                Contact Driver
-              </button>
-              {op.status === "arrived" && (
-                <button
-                  type="button"
-                  style={{
-                    padding: "0.5rem 1rem",
-                    background: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    fontSize: "0.85rem",
-                  }}
-                  onClick={() => {
-                    announce(`Opening confirmation for ${op.tripId}`);
-                    router.push(`/dispatcher/confirm-completion?trip=${encodeURIComponent(op.tripId)}`);
-                  }}
-                >
-                  Confirm Delivery
-                </button>
-              )}
             </div>
           </div>
         ))}
       </div>
+
+      <TripBoardDetailModal row={detailRow} onClose={() => setDetailRow(null)} />
     </div>
   );
 }

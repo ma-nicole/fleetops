@@ -59,6 +59,8 @@ def apply_runtime_schema_fixes() -> None:
             alters.append("ALTER TABLE users ADD COLUMN company_name VARCHAR(255) NULL")
         else:
             alters.append("ALTER TABLE users ADD COLUMN company_name VARCHAR(255)")
+    if "availability_status" not in cols:
+        alters.append("ALTER TABLE users ADD COLUMN availability_status VARCHAR(32) NOT NULL DEFAULT 'available'")
 
     if insp.has_table("feedback"):
         fb_cols = {c["name"]: c for c in insp.get_columns("feedback")}
@@ -103,6 +105,11 @@ def apply_runtime_schema_fixes() -> None:
             alters.append(
                 "ALTER TABLE bookings MODIFY COLUMN status VARCHAR(32) NOT NULL DEFAULT 'pending_approval'"
             )
+        if "required_truck_count" not in bk_cols:
+            alters.append("ALTER TABLE bookings ADD COLUMN required_truck_count INT NOT NULL DEFAULT 1")
+            alters.append("UPDATE bookings SET required_truck_count = 1 WHERE required_truck_count IS NULL")
+        if "latest_location" not in bk_cols:
+            alters.append("ALTER TABLE bookings ADD COLUMN latest_location VARCHAR(512) NULL")
 
     if insp.has_table("payments"):
         pay_cols = {c["name"] for c in insp.get_columns("payments")}
@@ -138,6 +145,49 @@ def apply_runtime_schema_fixes() -> None:
                 alters.append("ALTER TABLE trips ADD COLUMN helper_last_proof_path VARCHAR(512) NULL")
             else:
                 alters.append("ALTER TABLE trips ADD COLUMN helper_last_proof_path VARCHAR(512) NULL")
+        if "latest_location" not in tr_cols:
+            alters.append("ALTER TABLE trips ADD COLUMN latest_location VARCHAR(512) NULL")
+
+    if insp.has_table("booking_freight_settings"):
+        bf_cols = {c["name"] for c in insp.get_columns("booking_freight_settings")}
+        if "toll_fees_php_per_trip" not in bf_cols:
+            alters.append(
+                "ALTER TABLE booking_freight_settings ADD COLUMN toll_fees_php_per_trip FLOAT NOT NULL DEFAULT 0"
+            )
+        for col in (
+            "truck_fuel_efficiency_kmpl",
+            "cargo_rate_php_per_ton",
+            "driver_freight_share_rate",
+            "helper_freight_share_rate",
+        ):
+            if col in bf_cols:
+                alters.append(f"ALTER TABLE booking_freight_settings DROP COLUMN {col}")
+        legacy_cols = [
+            "trip_wear_misc_php_per_km",
+            "trip_depreciation_rate",
+            "helper_pay_php_per_trip",
+            "driver_freight_commission_rate",
+            "cargo_weight_multiplier_per_ton",
+        ]
+        for col in legacy_cols:
+            if col in bf_cols:
+                alters.append(f"ALTER TABLE booking_freight_settings DROP COLUMN {col}")
+
+    if insp.has_table("trucks"):
+        tk_cols = {c["name"] for c in insp.get_columns("trucks")}
+        if "model_name" not in tk_cols:
+            v255 = "VARCHAR(255) NULL"
+            alters.append(f"ALTER TABLE trucks ADD COLUMN model_name {v255}")
+        if dialect == "mysql":
+            alters.append("UPDATE trucks SET status = LOWER(COALESCE(status,'available'))")
+        if "availability_status" not in tk_cols:
+            alters.append("ALTER TABLE trucks ADD COLUMN availability_status VARCHAR(32) NOT NULL DEFAULT 'available'")
+
+    if insp.has_table("truck_slot_holds"):
+        if dialect == "mysql":
+            alters.append(
+                "ALTER TABLE truck_slot_holds MODIFY COLUMN hold_status VARCHAR(32) NOT NULL DEFAULT 'on_hold'"
+            )
 
     if alters or insp.has_table("payments"):
         with engine.begin() as conn:
@@ -153,6 +203,16 @@ def apply_runtime_schema_fixes() -> None:
                 )
                 conn.execute(text("UPDATE payments SET status = 'verified' WHERE status = 'paid'"))
                 conn.execute(text("UPDATE payments SET status = 'rejected' WHERE status = 'failed'"))
+            if insp.has_table("truck_slot_holds") and insp.has_table("bookings"):
+                conn.execute(
+                    text(
+                        "UPDATE truck_slot_holds h "
+                        "INNER JOIN bookings b ON b.id = h.booking_id "
+                        "SET h.hold_status = 'released' "
+                        "WHERE b.status IN ('cancelled','rejected') "
+                        "AND h.hold_status IN ('on_hold','payment_verification','ready_for_assignment','assigned')"
+                    )
+                )
 
     # Legacy MySQL ENUM on bookings.status often stored Python enum *names* (PENDING_APPROVAL) not values
     # (pending_approval) — that breaks SQLAlchemy's Enum. Normalize on every startup (idempotent).
@@ -165,6 +225,12 @@ def apply_runtime_schema_fixes() -> None:
                     text("UPDATE bookings SET status = :v WHERE status = :bad"),
                     {"v": m.value, "bad": m.name},
                 )
+            conn.execute(
+                text(
+                    "UPDATE bookings SET status = 'payment_verification' "
+                    "WHERE status IN ('pending_approval')"
+                )
+            )
 
 
 def get_db() -> Generator[Session, None, None]:

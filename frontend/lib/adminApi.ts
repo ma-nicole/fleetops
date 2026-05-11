@@ -22,13 +22,20 @@ export type AdminStats = {
 export type AdminBookingFreightSettings = {
   id: number;
   diesel_price_php_per_liter: number;
-  truck_fuel_efficiency_kmpl: number;
-  trip_wear_misc_php_per_km: number;
-  trip_depreciation_rate: number;
-  helper_pay_php_per_trip: number;
-  driver_freight_commission_rate: number;
-  cargo_weight_multiplier_per_ton: number;
+  toll_fees_php_per_trip: number;
   updated_at: string | null;
+};
+
+export type AdminTruck = {
+  id: number;
+  code: string;
+  model_name: string | null;
+  capacity_tons: number;
+  status: string;
+  fuel_efficiency_kmpl: number;
+  odometer_km: number;
+  age_years: number;
+  last_maintenance_date: string | null;
 };
 
 export const adminApi = {
@@ -54,4 +61,14 @@ export const adminApi = {
   saveBookingFreightSettings: (
     body: Omit<AdminBookingFreightSettings, "id" | "updated_at">,
   ) => apiPut<AdminBookingFreightSettings>("/admin/booking-freight-settings", body),
+
+  listTrucks: () => apiGet<AdminTruck[]>("/admin/trucks"),
+
+  createTruck: (body: {
+    model_name: string;
+    plate_number: string;
+    capacity_tons: number;
+    status: string;
+    age_years: number;
+  }) => apiPost<AdminTruck>("/admin/trucks", body),
 };

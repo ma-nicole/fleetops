@@ -2,134 +2,41 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { announce } from "@/lib/useAnnouncer";
-
-type Driver = {
-  id: string;
-  name: string;
-  license: string;
-  status: "available" | "on_trip" | "on_break" | "off_duty";
-  assignedVehicle: string;
-  phone: string;
-  rating: number;
-  trips: number;
-};
-
-type Vehicle = {
-  id: string;
-  plate: string;
-  type: string;
-  status: "available" | "in_use" | "maintenance" | "inspection";
-  driver?: string;
-  fuelLevel: number;
-  mileage: number;
-};
+import { WorkflowApi } from "@/lib/workflowApi";
 
 export default function AssetsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"drivers" | "vehicles">("drivers");
-  const [expandedVehicleId, setExpandedVehicleId] = useState<string | null>(null);
+  const [expandedVehicleId, setExpandedVehicleId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [drivers, setDrivers] = useState<
+    Awaited<ReturnType<typeof WorkflowApi.dispatchFleetAssets>>["drivers"]
+  >([]);
+  const [trucks, setTrucks] = useState<Awaited<ReturnType<typeof WorkflowApi.dispatchFleetAssets>>["trucks"]>(
+    [],
+  );
 
-  const [drivers] = useState<Driver[]>([
-    {
-      id: "DRV-001",
-      name: "Carlos Rodriguez",
-      license: "DL-2024-1001",
-      status: "on_trip",
-      assignedVehicle: "AUV-2024-1440",
-      phone: "+63-917-123-4567",
-      rating: 4.8,
-      trips: 47,
-    },
-    {
-      id: "DRV-002",
-      name: "Maria Santos",
-      license: "DL-2024-1002",
-      status: "on_trip",
-      assignedVehicle: "AUV-2024-1441",
-      phone: "+63-917-234-5678",
-      rating: 4.6,
-      trips: 35,
-    },
-    {
-      id: "DRV-003",
-      name: "Juan Dela Cruz",
-      license: "DL-2024-1003",
-      status: "available",
-      assignedVehicle: "AUV-2024-1442",
-      phone: "+63-917-345-6789",
-      rating: 4.7,
-      trips: 52,
-    },
-    {
-      id: "DRV-004",
-      name: "Rita Gonzales",
-      license: "DL-2024-1004",
-      status: "on_break",
-      assignedVehicle: "AUV-2024-1443",
-      phone: "+63-917-456-7890",
-      rating: 4.5,
-      trips: 28,
-    },
-    {
-      id: "DRV-005",
-      name: "Miguel Reyes",
-      license: "DL-2024-1005",
-      status: "available",
-      assignedVehicle: "AUV-2024-1444",
-      phone: "+63-917-567-8901",
-      rating: 4.9,
-      trips: 61,
-    },
-  ]);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await WorkflowApi.dispatchFleetAssets();
+      setDrivers(data.drivers);
+      setTrucks(data.trucks);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Could not load fleet assets.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>([
-    {
-      id: "VEH-001",
-      plate: "AUV-2024-1440",
-      type: "Hino 500 Truck",
-      status: "in_use",
-      driver: "Carlos Rodriguez",
-      fuelLevel: 75,
-      mileage: 158400,
-    },
-    {
-      id: "VEH-002",
-      plate: "AUV-2024-1441",
-      type: "Hino 300 Truck",
-      status: "in_use",
-      driver: "Maria Santos",
-      fuelLevel: 60,
-      mileage: 142200,
-    },
-    {
-      id: "VEH-003",
-      plate: "AUV-2024-1442",
-      type: "Hino 500 Truck",
-      status: "available",
-      fuelLevel: 85,
-      mileage: 165800,
-    },
-    {
-      id: "VEH-004",
-      plate: "AUV-2024-1443",
-      type: "Hino 300 Truck",
-      status: "maintenance",
-      fuelLevel: 0,
-      mileage: 156300,
-    },
-    {
-      id: "VEH-005",
-      plate: "AUV-2024-1444",
-      type: "Hino 500 Truck",
-      status: "available",
-      driver: "Miguel Reyes",
-      fuelLevel: 70,
-      mileage: 172100,
-    },
-  ]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -157,19 +64,19 @@ export default function AssetsPage() {
       case "available":
         return "✓ Available";
       case "on_trip":
-        return " On Trip";
+        return "On Trip";
       case "on_break":
-        return " On Break";
+        return "On Break";
       case "off_duty":
-        return " Off Duty";
+        return "Off Duty";
       case "in_use":
-        return " In Use";
+        return "In Use";
       case "maintenance":
-        return " Maintenance";
+        return "Under maintenance";
       case "inspection":
-        return " Inspection";
+        return "Inspection";
       default:
-        return "Unknown";
+        return status.replace(/_/g, " ");
     }
   };
 
@@ -183,9 +90,39 @@ export default function AssetsPage() {
         <p style={{ color: "#666666", margin: "0" }}>Manage drivers and vehicles</p>
       </div>
 
-      {/* Tabs */}
+      {loadError && (
+        <div
+          role="alert"
+          style={{
+            padding: "1rem",
+            borderRadius: "8px",
+            background: "rgba(244, 67, 54, 0.08)",
+            border: "1px solid rgba(244, 67, 54, 0.4)",
+            color: "#c62828",
+          }}
+        >
+          {loadError}{" "}
+          <button
+            type="button"
+            onClick={() => refresh()}
+            style={{
+              marginLeft: "0.5rem",
+              padding: "0.25rem 0.6rem",
+              borderRadius: "4px",
+              border: "1px solid #c62828",
+              background: "white",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: "0.5rem", borderBottom: "2px solid #E8E8E8" }}>
         <button
+          type="button"
           onClick={() => setActiveTab("drivers")}
           style={{
             padding: "0.75rem 1.5rem",
@@ -197,9 +134,10 @@ export default function AssetsPage() {
             borderRadius: "6px 6px 0 0",
           }}
         >
-           Drivers ({drivers.length})
+          Drivers ({loading ? "…" : drivers.length})
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab("vehicles")}
           style={{
             padding: "0.75rem 1.5rem",
@@ -211,196 +149,167 @@ export default function AssetsPage() {
             borderRadius: "6px 6px 0 0",
           }}
         >
-           Vehicles ({vehicles.length})
+          Vehicles ({loading ? "…" : trucks.length})
         </button>
       </div>
 
-      {/* Drivers List */}
       {activeTab === "drivers" && (
         <div style={{ display: "grid", gap: "1rem" }}>
-          {drivers.map((driver) => (
-            <div
-              key={driver.id}
-              style={{
-                padding: "1.5rem",
-                border: `2px solid ${getStatusColor(driver.status)}`,
-                borderRadius: "8px",
-                background: "#F9F9F9",
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr auto",
-                gap: "1.5rem",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <h3 style={{ color: "#1A1A1A", margin: "0" }}>{driver.name}</h3>
-                <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                  {driver.id} • {driver.license}
-                </p>
-              </div>
-
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ASSIGNED VEHICLE</p>
-                <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {driver.assignedVehicle}
-                </p>
-                <p style={{ color: "#2196F3", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                   {driver.phone}
-                </p>
-              </div>
-
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PERFORMANCE</p>
-                <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  ★ {driver.rating} • {driver.trips} trips
-                </p>
-              </div>
-
-              <div style={{ display: "flex", gap: "0.5rem", flexDirection: "column", alignItems: "flex-end" }}>
-                <span
+          {loading && <p style={{ margin: 0, color: "#666" }}>Loading drivers…</p>}
+          {!loading && drivers.length === 0 && (
+            <p style={{ margin: 0, color: "#666" }}>No driver accounts found in the database.</p>
+          )}
+          {!loading &&
+            drivers.map((driver) => {
+              const uiStatus = driver.status === "on_trip" ? "on_trip" : "available";
+              return (
+                <div
+                  key={driver.id}
                   style={{
-                    padding: "0.4rem 0.75rem",
-                    background: getStatusColor(driver.status) + "20",
-                    color: getStatusColor(driver.status),
-                    borderRadius: "4px",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                    whiteSpace: "nowrap",
+                    padding: "1.5rem",
+                    border: `2px solid ${getStatusColor(uiStatus)}`,
+                    borderRadius: "8px",
+                    background: "#F9F9F9",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr auto",
+                    gap: "1.5rem",
+                    alignItems: "center",
                   }}
                 >
-                  {getStatusLabel(driver.status)}
-                </span>
-                <button
-                  type="button"
-                  style={{
-                    padding: "0.4rem 0.75rem",
-                    background: "#2196F3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                  }}
-                  onClick={() => {
-                    announce(`Opening assignments to schedule ${driver.name}`);
-                    router.push(`/dispatcher/job-assignments?fromDriver=${encodeURIComponent(driver.id)}&driverName=${encodeURIComponent(driver.name)}`);
-                  }}
-                >
-                  Assign
-                </button>
-              </div>
-            </div>
-          ))}
+                  <div>
+                    <h3 style={{ color: "#1A1A1A", margin: "0" }}>{driver.name}</h3>
+                    <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
+                      Driver ID {driver.id}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ASSIGNED TRUCK</p>
+                    <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
+                      {driver.assigned_truck_code ?? "—"}
+                    </p>
+                    <p style={{ color: "#2196F3", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>{driver.phone || "—"}</p>
+                  </div>
+
+                  <div>
+                    <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PERFORMANCE</p>
+                    <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
+                      ★ {driver.rating} • {driver.completed_trips} completed trip{driver.completed_trips === 1 ? "" : "s"}
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "0.5rem", flexDirection: "column", alignItems: "flex-end" }}>
+                    <span
+                      style={{
+                        padding: "0.4rem 0.75rem",
+                        background: getStatusColor(uiStatus) + "20",
+                        color: getStatusColor(uiStatus),
+                        borderRadius: "4px",
+                        fontWeight: "600",
+                        fontSize: "0.75rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {getStatusLabel(uiStatus)}
+                    </span>
+                    <button
+                      type="button"
+                      style={{
+                        padding: "0.4rem 0.75rem",
+                        background: "#2196F3",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        fontSize: "0.75rem",
+                      }}
+                      onClick={() => {
+                        announce(`Opening assignments to schedule ${driver.name}`);
+                        router.push(
+                          `/dispatcher/job-assignments?fromDriver=${encodeURIComponent(String(driver.id))}&driverName=${encodeURIComponent(driver.name)}`,
+                        );
+                      }}
+                    >
+                      Assign
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
         </div>
       )}
 
-      {/* Vehicles List */}
       {activeTab === "vehicles" && (
         <div style={{ display: "grid", gap: "1rem" }}>
-          {vehicles.map((vehicle) => (
-            <div
-              key={vehicle.id}
-              style={{
-                padding: "1.5rem",
-                border: `2px solid ${getStatusColor(vehicle.status)}`,
-                borderRadius: "8px",
-                background: "#F9F9F9",
-              }}
-            >
+          {loading && <p style={{ margin: 0, color: "#666" }}>Loading vehicles…</p>}
+          {!loading && trucks.length === 0 && (
+            <p style={{ margin: 0, color: "#666" }}>
+              No vehicles in the fleet yet. Admins can add trucks under System → Vehicle Management.
+            </p>
+          )}
+          {!loading &&
+            trucks.map((vehicle) => (
               <div
+                key={vehicle.id}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr auto",
-                  gap: "1.5rem",
-                  alignItems: "center",
-                  marginBottom: "1rem",
-                }}
-              >
-                <div>
-                  <h3 style={{ color: "#1A1A1A", margin: "0" }}>{vehicle.plate}</h3>
-                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                    {vehicle.type}
-                  </p>
-                </div>
-
-                <div>
-                  <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DRIVER</p>
-                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                    {vehicle.driver || "Not assigned"}
-                  </p>
-                </div>
-
-                <div>
-                  <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>FUEL & MILEAGE</p>
-                  <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                    {vehicle.fuelLevel}% Fuel • {vehicle.mileage} km
-                  </p>
-                </div>
-
-                <span
-                  style={{
-                    padding: "0.4rem 0.75rem",
-                    background: getStatusColor(vehicle.status) + "20",
-                    color: getStatusColor(vehicle.status),
-                    borderRadius: "4px",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {getStatusLabel(vehicle.status)}
-                </span>
-              </div>
-
-              {/* Fuel Level Bar */}
-              <div
-                style={{
-                  height: "6px",
-                  background: "#E8E8E8",
-                  borderRadius: "3px",
-                  overflow: "hidden",
-                  marginBottom: "0.75rem",
+                  padding: "1.5rem",
+                  border: `2px solid ${getStatusColor(vehicle.status)}`,
+                  borderRadius: "8px",
+                  background: "#F9F9F9",
                 }}
               >
                 <div
                   style={{
-                    height: "100%",
-                    background: vehicle.fuelLevel > 30 ? "#4CAF50" : "#F44336",
-                    width: vehicle.fuelLevel + "%",
-                  }}
-                />
-              </div>
-
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  style={{
-                    padding: "0.4rem 0.75rem",
-                    background: "#2196F3",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                  }}
-                  onClick={() => {
-                    setExpandedVehicleId((prev) => {
-                      const next = prev === vehicle.id ? null : vehicle.id;
-                      announce(next ? `Showing details for ${vehicle.plate}` : "Vehicle details hidden");
-                      return next;
-                    });
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr auto",
+                    gap: "1.5rem",
+                    alignItems: "center",
+                    marginBottom: "0.75rem",
                   }}
                 >
-                  {expandedVehicleId === vehicle.id ? "Hide details" : "View Details"}
-                </button>
-                {vehicle.status === "maintenance" && (
+                  <div>
+                    <h3 style={{ color: "#1A1A1A", margin: "0" }}>{vehicle.plate}</h3>
+                    <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
+                      {vehicle.model_name?.trim() ? vehicle.model_name : "Model not set"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DRIVER</p>
+                    <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
+                      {vehicle.assigned_driver_name || "Not assigned"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ODOMETER & CAPACITY</p>
+                    <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
+                      {Math.round(vehicle.odometer_km).toLocaleString()} km • {vehicle.capacity_tons} t max
+                    </p>
+                  </div>
+
+                  <span
+                    style={{
+                      padding: "0.4rem 0.75rem",
+                      background: getStatusColor(vehicle.status) + "20",
+                      color: getStatusColor(vehicle.status),
+                      borderRadius: "4px",
+                      fontWeight: "600",
+                      fontSize: "0.75rem",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {getStatusLabel(vehicle.status)}
+                  </span>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                   <button
                     type="button"
                     style={{
                       padding: "0.4rem 0.75rem",
-                      background: "#4CAF50",
+                      background: "#2196F3",
                       color: "white",
                       border: "none",
                       borderRadius: "4px",
@@ -409,59 +318,57 @@ export default function AssetsPage() {
                       fontSize: "0.75rem",
                     }}
                     onClick={() => {
-                      setVehicles((prev) =>
-                        prev.map((v) =>
-                          v.id === vehicle.id ? { ...v, status: "available" as const, fuelLevel: v.fuelLevel || 40 } : v,
-                        ),
-                      );
-                      announce(`${vehicle.plate} marked available`);
+                      setExpandedVehicleId((prev) => {
+                        const next = prev === vehicle.id ? null : vehicle.id;
+                        announce(next ? `Showing details for ${vehicle.plate}` : "Vehicle details hidden");
+                        return next;
+                      });
                     }}
                   >
-                    Mark Available
-                  </button>
-                )}
-              </div>
-
-              {expandedVehicleId === vehicle.id && (
-                <div
-                  style={{
-                    marginTop: "0.75rem",
-                    padding: "0.85rem",
-                    background: "#fff",
-                    border: "1px solid #E0E0E0",
-                    borderRadius: "6px",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  <p style={{ margin: "0 0 0.35rem 0", fontWeight: 700 }}>{vehicle.id}</p>
-                  <p style={{ margin: 0, color: "#555" }}>
-                    Type {vehicle.type}; odometer {vehicle.mileage.toLocaleString()} km; fuel {vehicle.fuelLevel}%; driver:{" "}
-                    {vehicle.driver ?? "Unassigned"}.
-                  </p>
-                  <button
-                    type="button"
-                    style={{
-                      marginTop: "0.65rem",
-                      padding: "0.35rem 0.65rem",
-                      background: "#FF9800",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      fontSize: "0.75rem",
-                    }}
-                    onClick={() => {
-                      announce(`Opening trip monitoring filtered view for ${vehicle.plate}`);
-                      router.push("/dispatcher/trip-monitoring");
-                    }}
-                  >
-                    Open trip monitoring
+                    {expandedVehicleId === vehicle.id ? "Hide details" : "View Details"}
                   </button>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {expandedVehicleId === vehicle.id && (
+                  <div
+                    style={{
+                      marginTop: "0.75rem",
+                      padding: "0.85rem",
+                      background: "#fff",
+                      border: "1px solid #E0E0E0",
+                      borderRadius: "6px",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    <p style={{ margin: "0 0 0.35rem 0", fontWeight: 700 }}>Truck #{vehicle.id}</p>
+                    <p style={{ margin: 0, color: "#555" }}>
+                      Recorded status: {vehicle.db_status}. Age {vehicle.age_years} yr
+                      {vehicle.age_years === 1 ? "" : "s"}. Capacity {vehicle.capacity_tons} t.
+                    </p>
+                    <button
+                      type="button"
+                      style={{
+                        marginTop: "0.65rem",
+                        padding: "0.35rem 0.65rem",
+                        background: "#FF9800",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        fontSize: "0.75rem",
+                      }}
+                      onClick={() => {
+                        announce(`Opening trip monitoring for fleet overview`);
+                        router.push("/dispatcher/trip-monitoring");
+                      }}
+                    >
+                      Open trip monitoring
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
         </div>
       )}
     </div>

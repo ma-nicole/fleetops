@@ -177,7 +177,13 @@ export default function DriverScheduleBookingsPage() {
             {detail.booking ? (
               <div style={{ display: "grid", gap: 8, fontSize: "0.95rem" }}>
                 <p>
-                  <strong>Status:</strong> {detail.booking.status} (booking) / {detail.status} (trip)
+                  <strong>Status:</strong> {(detail.helper_progress_status || detail.status).replace(/_/g, " ")}
+                </p>
+                <p>
+                  <strong>Customer:</strong> {detail.booking.customer_name ?? "—"}
+                </p>
+                <p>
+                  <strong>Company:</strong> {detail.booking.customer_company_name ?? "—"}
                 </p>
                 <p>
                   <strong>Pickup:</strong> {detail.booking.pickup_location}
@@ -195,7 +201,26 @@ export default function DriverScheduleBookingsPage() {
                 <p>
                   <strong>Quoted:</strong> {formatPhp(detail.booking.estimated_cost)}
                 </p>
+                <p>
+                  <strong>Paid (verified):</strong>{" "}
+                  {detail.booking.paid_amount_verified != null
+                    ? formatPhp(detail.booking.paid_amount_verified)
+                    : "—"}
+                </p>
               </div>
+            ) : null}
+            <p style={{ fontSize: "0.95rem" }}>
+              <strong>Current location:</strong>{" "}
+              {(() => {
+                const locs = detail.location_updates;
+                const last = locs?.length ? locs[locs.length - 1]?.location_name : null;
+                return last || detail.latest_location || "No update yet";
+              })()}
+            </p>
+            {detail.helper_name ? (
+              <p style={{ fontSize: "0.95rem" }}>
+                <strong>Helper:</strong> {detail.helper_name}
+              </p>
             ) : null}
             {detail.truck ? (
               <p style={{ marginTop: 12 }}>

@@ -43,7 +43,7 @@ function sumFuelCost(pipeline: AnalyticsDashboard | undefined): number {
 }
 
 /** Rough liters from spend using indicative PH pump price (₱/L). */
-function estimateLitersFromSpend(fuelSpend: number, pricePerLiter = 65): number {
+function litersFromFuelSpend(fuelSpend: number, pricePerLiter = 65): number {
   if (fuelSpend <= 0) return 0;
   return Math.round(fuelSpend / pricePerLiter);
 }
@@ -91,7 +91,7 @@ export default function ManagerDashboardPage() {
   const activeTrucks = pipeline?.kpis.active_trucks ?? 0;
   const utilPct = fleetSize > 0 ? Math.round((activeTrucks / fleetSize) * 100) : 0;
   const fuelSpend = sumFuelCost(pipeline);
-  const fuelL = estimateLitersFromSpend(fuelSpend);
+  const fuelL = litersFromFuelSpend(fuelSpend);
   const nextForecast = data?.demand_forecast?.[0];
   const secondForecast = data?.demand_forecast?.[1];
   const highRisk = (data?.maintenance_risk || []).filter((m) => m.severity?.toLowerCase().includes("high")).length;

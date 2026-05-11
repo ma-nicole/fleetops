@@ -25,46 +25,46 @@ class RouteEstimateRequest(BaseModel):
         return v
 
 
-class RouteEstimateResponse(BaseModel):
+class TruckLoadLine(BaseModel):
+    truck_index: int
+    weight_tons: float
     distance_km: float
+    cargo_gross_php: float
     diesel_liters: float
     diesel_cost_php: float
-    wear_misc_php: float
-    depreciation_php: float
-    helper_pay_php: float
-    freight_base_php: float
-    fuel_route_charge: float
-    driver_fee: float
-    estimated_total: float
+    driver_share_php: float
+    helper_share_php: float
+    toll_fees_php: float
+    additives_total_php: float
+    net_profit_php: float
+
+
+class RouteQuoteResponse(BaseModel):
+    distance_km: float
+    weight_tons: float
+    total_trucks: int
+    cargo_rate_php_per_ton: float
+    cargo_gross_php: float
+    diesel_liters: float
+    diesel_cost_php: float
+    driver_share_php: float
+    helper_share_php: float
+    toll_fees_php: float
+    additives_total_php: float
+    net_profit_total_php: float
+    quoted_total: float
     diesel_price_per_liter: float
-    driver_commission_pct: float
+    driver_freight_share_pct: float
+    helper_freight_share_pct: float
+    truck_loads: list[TruckLoadLine]
     pickup_resolution: str
     dropoff_resolution: str
-    estimate_tier: str
+    pricing_tier: str
     routing_method: str
-    pickup_lat: float | None = None
-    pickup_lng: float | None = None
-    dropoff_lat: float | None = None
-    dropoff_lng: float | None = None
 
 
-class MapsJsKeyResponse(BaseModel):
-    """Browser may load Maps JS with this key (referrer-restricted); mirrors server geocoding key."""
-
-    api_key: str | None = None
-
-
-@router.get("/maps-js-key", response_model=MapsJsKeyResponse)
-def customer_maps_js_key(
-    _customer: User = Depends(require_roles(UserRole.CUSTOMER)),
-):
-    """Expose `GOOGLE_MAPS_GEOCODING_API_KEY` for the embedded map when `NEXT_PUBLIC_*` is unset."""
-    k = ((settings.google_maps_geocoding_api_key or "").strip() or (settings.google_maps_server_api_key or "").strip())
-    return MapsJsKeyResponse(api_key=k or None)
-
-
-@router.post("/route-estimate", response_model=RouteEstimateResponse)
-def estimate_customer_route(
+@router.post("/route-quote", response_model=RouteQuoteResponse)
+def quote_customer_route(
     payload: RouteEstimateRequest,
     db: Session = Depends(get_db),
     _customer: User = Depends(require_roles(UserRole.CUSTOMER)),
@@ -81,25 +81,43 @@ def estimate_customer_route(
     routing_method = est.routing_method
     knobs = resolve_booking_freight_knobs(db, settings)
     pricing = customer_freight_pricing(km, payload.weight_tons, knobs)
-    return RouteEstimateResponse(
-        distance_km=pricing["distance_km"],
-        diesel_liters=pricing["diesel_liters"],
-        diesel_cost_php=pricing["diesel_cost_php"],
-        wear_misc_php=pricing["wear_misc_php"],
-        depreciation_php=pricing["depreciation_php"],
-        helper_pay_php=pricing["helper_pay_php"],
-        freight_base_php=pricing["freight_base_php"],
-        fuel_route_charge=pricing["fuel_route_charge"],
-        driver_fee=pricing["driver_fee"],
-        estimated_total=pricing["estimated_total"],
-        diesel_price_per_liter=pricing["diesel_price_per_liter"],
-        driver_commission_pct=pricing["driver_commission_pct"],
+    loads_raw = pricing["truck_loads"]
+    truck_loads = [
+        TruckLoadLine(
+            truck_index=int(row["truck_index"]),
+            weight_tons=float(row["weight_tons"]),
+            distance_km=float(row["distance_km"]),
+            cargo_gross_php=float(row["cargo_gross_php"]),
+            diesel_liters=float(row["diesel_liters"]),
+            diesel_cost_php=float(row["diesel_cost_php"]),
+            driver_share_php=float(row["driver_share_php"]),
+            helper_share_php=float(row["helper_share_php"]),
+            toll_fees_php=float(row["toll_fees_php"]),
+            additives_total_php=float(row["additives_total_php"]),
+            net_profit_php=float(row["net_profit_php"]),
+        )
+        for row in loads_raw
+    ]
+    return RouteQuoteResponse(
+        distance_km=float(pricing["distance_km"]),
+        weight_tons=float(pricing["weight_tons"]),
+        total_trucks=int(pricing["total_trucks"]),
+        cargo_rate_php_per_ton=float(pricing["cargo_rate_php_per_ton"]),
+        cargo_gross_php=float(pricing["cargo_gross_php"]),
+        diesel_liters=float(pricing["diesel_liters"]),
+        diesel_cost_php=float(pricing["diesel_cost_php"]),
+        driver_share_php=float(pricing["driver_share_php"]),
+        helper_share_php=float(pricing["helper_share_php"]),
+        toll_fees_php=float(pricing["toll_fees_php"]),
+        additives_total_php=float(pricing["additives_total_php"]),
+        net_profit_total_php=float(pricing["net_profit_total_php"]),
+        quoted_total=float(pricing["quoted_total"]),
+        diesel_price_per_liter=float(pricing["diesel_price_per_liter"]),
+        driver_freight_share_pct=float(pricing["driver_freight_share_pct"]),
+        helper_freight_share_pct=float(pricing["helper_freight_share_pct"]),
+        truck_loads=truck_loads,
         pickup_resolution=p_res,
         dropoff_resolution=d_res,
-        estimate_tier=tier,
+        pricing_tier=tier,
         routing_method=routing_method,
-        pickup_lat=est.pickup_lat,
-        pickup_lng=est.pickup_lng,
-        dropoff_lat=est.dropoff_lat,
-        dropoff_lng=est.dropoff_lng,
     )

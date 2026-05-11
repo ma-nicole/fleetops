@@ -53,7 +53,43 @@ class UserRead(BaseModel):
     email: EmailStr
     full_name: str
     company_name: str | None = None
+    phone: str | None = None
     role: UserRole
+
+
+class UserProfileUpdate(BaseModel):
+    """Customer self-service profile (name, company, phone). Email changes are not supported here."""
+
+    full_name: str
+    company_name: str | None = None
+    phone: str | None = None
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name_update(cls, v: str) -> str:
+        if not v or len(v.strip()) < 3:
+            raise ValueError("Full name must be at least 3 characters")
+        return v.strip()
+
+    @field_validator("company_name")
+    @classmethod
+    def validate_company_name_update(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        t = v.strip()
+        return None if not t else t
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone_update(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        p = v.strip()
+        if not p:
+            return None
+        if len(p) < 7:
+            raise ValueError("Phone number seems too short")
+        return p
 
 
 class Token(BaseModel):

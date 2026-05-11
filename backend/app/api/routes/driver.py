@@ -7,12 +7,16 @@ from app.core.security import get_current_user, require_roles
 from app.db import get_db
 from app.models.entities import (
     AttendanceRecord,
+    Booking,
     DriverProfile,
     HelperProfile,
     Trip,
+    TripLocationUpdate,
+    TripStatusUpdate,
     User,
     UserRole,
 )
+from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
 
 
 router = APIRouter(prefix="/driver", tags=["driver"])
@@ -23,16 +27,22 @@ def my_trips(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
 ):
-    q = db.query(Trip).options(joinedload(Trip.booking), joinedload(Trip.truck))
+    q = db.query(Trip).options(
+        joinedload(Trip.booking).joinedload(Booking.customer),
+        joinedload(Trip.truck),
+        joinedload(Trip.helper),
+    )
     if user.role == UserRole.DRIVER:
         q = q.filter(Trip.driver_id == user.id)
     else:
         q = q.filter(Trip.helper_id == user.id)
     trips = q.order_by(Trip.id.desc()).limit(100).all()
+    paid_map = paid_verified_amount_by_booking_ids(db, [t.booking_id for t in trips])
     out = []
     for t in trips:
         bk = t.booking
         tk = t.truck
+        cust = bk.customer if bk else None
         out.append(
             {
                 "id": t.id,
@@ -58,18 +68,48 @@ def my_trips(
                 "completed_at": t.completed_at.isoformat() if t.completed_at else None,
                 "proof_of_delivery": t.proof_of_delivery,
                 "pod_notes": t.pod_notes,
-                "current_latitude": t.current_latitude,
-                "current_longitude": t.current_longitude,
+                "latest_location": getattr(t, "latest_location", None),
                 "estimated_delivery_time": t.estimated_delivery_time.isoformat()
                 if t.estimated_delivery_time
                 else None,
                 "helper_id": t.helper_id,
+                "helper_name": t.helper.full_name if getattr(t, "helper", None) else None,
                 "helper_progress_status": getattr(t, "helper_progress_status", None),
                 "helper_last_proof_path": getattr(t, "helper_last_proof_path", None),
+                "location_updates": [
+                    {
+                        "location_name": lu.location_name,
+                        "remarks": lu.remarks,
+                        "photo_url": lu.photo_url,
+                        "created_at": lu.created_at.isoformat(),
+                    }
+                    for lu in db.query(TripLocationUpdate)
+                    .filter(TripLocationUpdate.trip_id == t.id)
+                    .order_by(TripLocationUpdate.created_at.asc())
+                    .limit(50)
+                    .all()
+                ],
+                "status_timeline": [
+                    {
+                        "status": su.status,
+                        "location_name": su.location_name,
+                        "remarks": su.remarks,
+                        "photo_url": su.photo_url,
+                        "created_at": su.created_at.isoformat(),
+                    }
+                    for su in db.query(TripStatusUpdate)
+                    .filter(TripStatusUpdate.trip_id == t.id)
+                    .order_by(TripStatusUpdate.created_at.asc())
+                    .limit(100)
+                    .all()
+                ],
                 "booking": (
                     {
                         "id": bk.id,
                         "customer_id": bk.customer_id,
+                        "customer_name": cust.full_name if cust else None,
+                        "customer_company_name": (cust.company_name or None) if cust else None,
+                        "paid_amount_verified": paid_map.get(bk.id),
                         "pickup_location": bk.pickup_location,
                         "dropoff_location": bk.dropoff_location,
                         "scheduled_date": bk.scheduled_date.isoformat(),

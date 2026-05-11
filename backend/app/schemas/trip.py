@@ -61,8 +61,7 @@ class TripRead(BaseModel):
     completed_at: datetime | None
     proof_of_delivery: str | None
     pod_notes: str | None
-    current_latitude: float | None
-    current_longitude: float | None
+    latest_location: str | None = None
     estimated_delivery_time: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -73,19 +72,17 @@ class TripRead(BaseModel):
 
 class TripStatusUpdate(BaseModel):
     status: TripStatus
-    latitude: float | None = None
-    longitude: float | None = None
     notes: str | None = None
+    """Optional manual location label (GPS coordinates are not stored)."""
+    location_name: str | None = None
 
-    @field_validator("latitude", "longitude")
+    @field_validator("location_name", "notes", mode="before")
     @classmethod
-    def validate_coords(cls, v: float | None) -> float | None:
+    def strip_optional_text(cls, v: str | None) -> str | None:
         if v is None:
             return None
-        if not (-90 <= v <= 90) and not (-180 <= v <= 180):
-            # allow either latitude or longitude semantics separately in callers
-            return v
-        return v
+        s = str(v).strip()
+        return s or None
 
 
 class TripAcceptRequest(BaseModel):

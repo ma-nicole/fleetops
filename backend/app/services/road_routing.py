@@ -26,16 +26,13 @@ _OSRM_PROFILE_RE = re.compile(r"^[a-z][a-z0-9_-]{0,48}$", re.IGNORECASE)
 
 
 def effective_google_directions_key(settings: Settings) -> str:
-    """Directions API key suitable for server-side HTTP (not HTTP-referrer-only)."""
+    """Directions API key: dedicated key, or GOOGLE_MAPS_GEOCODING_API_KEY when fallback is enabled."""
     d = (getattr(settings, "google_maps_directions_api_key", None) or "").strip()
     if d:
         return d
-    if not getattr(settings, "google_directions_fallback_to_geocoding_key", True):
-        return ""
-    srv = (getattr(settings, "google_maps_server_api_key", None) or "").strip()
-    if srv:
-        return srv
-    return (getattr(settings, "google_maps_geocoding_api_key", None) or "").strip()
+    if getattr(settings, "google_directions_fallback_to_geocoding_key", True):
+        return (getattr(settings, "google_maps_geocoding_api_key", None) or "").strip()
+    return ""
 
 
 def _sanitize_osrm_profile(raw: str | None) -> str:
@@ -80,8 +77,8 @@ def _google_directions_driving_km(
     status = data.get("status")
     if status != "OK":
         logger.warning(
-            "Google Directions status=%s error_message=%s — enable Directions API; use a server key "
-            "(GOOGLE_MAPS_SERVER_API_KEY) if this key is websites-only",
+            "Google Directions status=%s error_message=%s — enable Directions API on the key; server must not use "
+            "HTTP-referrer-only restricted keys",
             status,
             data.get("error_message") or "",
         )

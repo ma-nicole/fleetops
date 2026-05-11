@@ -97,7 +97,7 @@ export default function DashboardReportsPage() {
           <ul style={{ color: "#666666", paddingLeft: "1.5rem" }}>
             <li>Daily / shift summary — trips, SLA, utilization</li>
             <li>Weekly trend — congestion, delays, reassignment counts</li>
-            <li>Monthly financial rollup — bookings, payments, estimated vs actual costs</li>
+            <li>Monthly financial rollup — bookings, payments, quoted vs actual costs</li>
             <li>Driver &amp; helper performance — ratings, completions (ties to dispatcher completion workflow)</li>
           </ul>
         </div>

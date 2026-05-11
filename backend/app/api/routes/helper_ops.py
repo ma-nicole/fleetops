@@ -1,8 +1,7 @@
-"""Helper-only execution: status milestones, photo proof, and ≥3 km location pings."""
+"""Helper-only operational updates: ordered statuses, live locations, and proof photos."""
 
 from __future__ import annotations
 
-import math
 from datetime import datetime
 from pathlib import Path
 from secrets import token_hex
@@ -10,150 +9,246 @@ from secrets import token_hex
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
+from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
+
 from app.constants.fleet_capacity import trucks_required_for_cargo
 from app.core.security import require_roles
 from app.db import get_db
-from app.models.entities import Booking, BookingStatus, Trip, TripStatus, Truck, User, UserRole
+from app.models.entities import (
+    Booking,
+    BookingStatus,
+    Trip,
+    TripLocationUpdate,
+    TripStatus,
+    TripStatusUpdate,
+    Truck,
+    TruckAssignment,
+    TruckAssignmentStatus,
+    User,
+    UserRole,
+)
+from app.services.trip_status_sync import sync_trip_and_booking_status
 
 router = APIRouter(prefix="/helper", tags=["helper"])
 
 UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "helper_proofs"
-
-ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".img"}
-
-HELPER_PHASES_IN_ORDER = (
-    "for_pick_up",
-    "picked_up",
-    "on_route",
-    "dropped_off",
-    "complete_trip",
-)
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".img"}
+STATUS_FLOW = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"]
+STATUS_INDEX = {s: i for i, s in enumerate(STATUS_FLOW)}
 
 
 def _ensure_upload_dir() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6371.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    h = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(min(1, math.sqrt(h)))
-
-
-def _require_photo_ext(filename: str) -> str:
+def _save_photo(trip_id: int, file: UploadFile | None) -> str | None:
+    if not file:
+        return None
+    filename = file.filename or ""
     ext = Path(filename.lower()).suffix
     if ext not in ALLOWED_EXT:
-        raise HTTPException(status_code=400, detail="Photo must be .jpg, .jpeg, .png, or .img")
-    return ext
+        raise HTTPException(status_code=400, detail="Photo must be .jpg, .jpeg, .png, .webp, or .img")
+    _ensure_upload_dir()
+    stored_name = f"t{trip_id}_{token_hex(8)}{ext}"
+    dest = UPLOAD_DIR / stored_name
+    content = file.file.read()
+    if len(content) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB)")
+    dest.write_bytes(content)
+    return f"helper_proofs/{stored_name}"
 
 
-def _refresh_booking_if_fully_delivered(db: Session, booking_id: int) -> None:
+def _sync_booking_completion(db: Session, booking_id: int) -> None:
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         return
-    need = trucks_required_for_cargo(booking.cargo_weight_tons)
-    done = (
-        db.query(Trip)
-        .filter(Trip.booking_id == booking_id, Trip.status == TripStatus.COMPLETED)
-        .count()
-    )
+    need = int(booking.required_truck_count or trucks_required_for_cargo(booking.cargo_weight_tons))
+    done = db.query(Trip).filter(Trip.booking_id == booking_id, Trip.status == TripStatus.COMPLETED).count()
     if done >= need:
         booking.status = BookingStatus.COMPLETED
 
 
-@router.post("/trips/{trip_id}/progress")
-async def helper_update_progress(
+def _status_to_assignment_status(status: str) -> TruckAssignmentStatus:
+    mapping = {
+        "for_pickup": TruckAssignmentStatus.FOR_PICKUP,
+        "picked_up": TruckAssignmentStatus.PICKED_UP,
+        "en_route": TruckAssignmentStatus.EN_ROUTE,
+        "dropped_off": TruckAssignmentStatus.DROPPED_OFF,
+        "completed": TruckAssignmentStatus.COMPLETED,
+    }
+    return mapping[status]
+
+
+def _trip_operational_status(status: str) -> TripStatus:
+    mapping = {
+        "for_pickup": TripStatus.ACCEPTED,
+        "picked_up": TripStatus.LOADING,
+        "en_route": TripStatus.IN_DELIVERY,
+        "dropped_off": TripStatus.IN_DELIVERY,
+        "completed": TripStatus.COMPLETED,
+    }
+    return mapping[status]
+
+
+@router.post("/trips/{trip_id}/status")
+async def helper_update_status(
     trip_id: int,
     status: str = Form(...),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
-    photo: UploadFile = File(...),
+    location_name: str = Form(default=""),
+    remarks: str = Form(default=""),
+    photo: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
-    phase = (status or "").strip()
-    if phase not in HELPER_PHASES_IN_ORDER:
-        raise HTTPException(
-            status_code=400,
-            detail=f"status must be one of: {', '.join(HELPER_PHASES_IN_ORDER)}",
-        )
+    step = (status or "").strip().lower()
+    if step not in STATUS_INDEX:
+        raise HTTPException(status_code=400, detail=f"status must be one of: {', '.join(STATUS_FLOW)}")
 
     trip = (
         db.query(Trip)
-        .options(joinedload(Trip.booking))
+        .options(joinedload(Trip.booking), joinedload(Trip.truck))
         .filter(Trip.id == trip_id, Trip.helper_id == user.id)
+        .with_for_update()
         .first()
     )
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found for this helper")
+    if trip.status in {TripStatus.CANCELLED, TripStatus.COMPLETED}:
+        raise HTTPException(status_code=400, detail="Trip already closed.")
 
-    _require_photo_ext(photo.filename or "")
+    current = (trip.helper_progress_status or "for_pickup").strip().lower()
+    if current not in STATUS_INDEX:
+        current = "for_pickup"
+    if current == "completed":
+        raise HTTPException(status_code=400, detail="Trip already completed. No more updates allowed.")
+    next_step = STATUS_FLOW[min(STATUS_INDEX[current] + 1, len(STATUS_FLOW) - 1)]
+    if step != next_step:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only next status is allowed: {next_step}",
+        )
 
-    prev_lat = trip.current_latitude
-    prev_lng = trip.current_longitude
-    if prev_lat is not None and prev_lng is not None:
-        delta_km = _haversine_km(float(prev_lat), float(prev_lng), latitude, longitude)
-        if delta_km + 1e-6 < 3.0:
-            raise HTTPException(
-                status_code=400,
-                detail="Move at least 3 km from your last reported location before the next update.",
-            )
+    if step in {"picked_up", "dropped_off"} and photo is None:
+        raise HTTPException(status_code=400, detail=f"{step} requires proof photo.")
 
-    _ensure_upload_dir()
-    ext = _require_photo_ext(photo.filename or "proof.jpg")
-    stored_name = f"t{trip_id}_{token_hex(8)}{ext}"
-    dest = UPLOAD_DIR / stored_name
-    content = await photo.read()
-    if len(content) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Photo too large (max 12 MB)")
-    dest.write_bytes(content)
-    rel_path = f"helper_proofs/{stored_name}"
+    enroute_count = (
+        db.query(TripLocationUpdate)
+        .filter(TripLocationUpdate.trip_id == trip.id, TripLocationUpdate.helper_id == user.id)
+        .count()
+    )
+    if step == "dropped_off" and enroute_count < 3:
+        raise HTTPException(status_code=400, detail="Submit at least 3 en-route location updates before dropped_off.")
+    if step == "completed" and (trip.helper_progress_status or "").strip().lower() != "dropped_off":
+        raise HTTPException(status_code=400, detail="Trip must be dropped_off before completed.")
 
-    trip.helper_progress_status = phase
-    trip.helper_last_proof_path = rel_path
-    trip.current_latitude = latitude
-    trip.current_longitude = longitude
+    photo_path = _save_photo(trip.id, photo)
+    trip.helper_last_proof_path = photo_path or trip.helper_last_proof_path
+    synced_trip, _ = sync_trip_and_booking_status(
+        db,
+        trip.id,
+        step,
+        helper_id=user.id,
+        location_name=(location_name or "").strip(),
+        remarks=(remarks or "").strip(),
+        photo_url=photo_path,
+    )
 
-    booking = trip.booking
-    if phase == "for_pick_up":
-        if trip.status == TripStatus.ASSIGNED:
-            trip.status = TripStatus.ACCEPTED
-        if booking:
-            booking.status = BookingStatus.ACCEPTED
-    elif phase == "picked_up":
-        trip.status = TripStatus.LOADING
-        trip.arrival_pickup_time = datetime.utcnow()
-        if booking:
-            booking.status = BookingStatus.LOADING
-    elif phase == "on_route":
-        trip.status = TripStatus.IN_DELIVERY
-        if booking:
-            booking.status = BookingStatus.OUT_FOR_DELIVERY
-    elif phase == "dropped_off":
-        trip.status = TripStatus.IN_DELIVERY
-        trip.arrival_delivery_time = datetime.utcnow()
-        if booking:
-            booking.status = BookingStatus.OUT_FOR_DELIVERY
-    elif phase == "complete_trip":
-        trip.status = TripStatus.COMPLETED
-        trip.completed_at = datetime.utcnow()
-        if booking:
-            _refresh_booking_if_fully_delivered(db, booking.id)
-            db.refresh(booking)
-
+    if step == "completed":
+        # Release truck and assignment resources immediately for future scheduling.
+        if synced_trip.truck_id:
+            truck = db.query(Truck).filter(Truck.id == synced_trip.truck_id).first()
+            if truck and (truck.status or "").lower() != "maintenance":
+                truck.status = "available"
+                truck.availability_status = "available"
+        if synced_trip.driver_id:
+            driver = db.query(User).filter(User.id == synced_trip.driver_id, User.role == UserRole.DRIVER).first()
+            if driver:
+                driver.availability_status = "available"
+        helper_user = db.query(User).filter(User.id == user.id).first()
+        if helper_user:
+            helper_user.availability_status = "available"
     db.commit()
-    db.refresh(trip)
+    db.refresh(synced_trip)
     return {
-        "trip_id": trip.id,
-        "helper_progress_status": trip.helper_progress_status,
-        "trip_status": trip.status.value,
-        "proof_path": rel_path,
-        "latitude": trip.current_latitude,
-        "longitude": trip.current_longitude,
+        "trip_id": synced_trip.id,
+        "status": step,
+        "trip_status": synced_trip.status.value if hasattr(synced_trip.status, "value") else str(synced_trip.status),
+        "location_updates_submitted": enroute_count if step != "en_route" else enroute_count + 1,
+        "required_location_updates": 3,
+        "photo_path": photo_path,
     }
+
+
+@router.post("/trips/{trip_id}/location")
+async def helper_location_update(
+    trip_id: int,
+    location_name: str = Form(...),
+    remarks: str = Form(default=""),
+    photo: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.HELPER)),
+):
+    trip = (
+        db.query(Trip)
+        .filter(Trip.id == trip_id, Trip.helper_id == user.id)
+        .with_for_update()
+        .first()
+    )
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found for this helper")
+    if (trip.helper_progress_status or "").strip().lower() != "en_route":
+        raise HTTPException(status_code=400, detail="Location updates are allowed only while status is en_route.")
+    if not location_name.strip():
+        raise HTTPException(status_code=400, detail="location_name is required")
+
+    photo_path = _save_photo(trip.id, photo)
+    loc = location_name.strip()
+    trip.latest_location = loc
+    bk = db.query(Booking).filter(Booking.id == trip.booking_id).with_for_update().first()
+    if bk:
+        bk.latest_location = loc
+    db.add(
+        TripLocationUpdate(
+            booking_id=trip.booking_id,
+            trip_id=trip.id,
+            helper_id=user.id,
+            location_name=loc,
+            latitude=None,
+            longitude=None,
+            remarks=(remarks or "").strip() or None,
+            photo_url=photo_path,
+        )
+    )
+    db.commit()
+    count = db.query(TripLocationUpdate).filter(TripLocationUpdate.trip_id == trip.id).count()
+    return {"trip_id": trip.id, "location_updates_submitted": count, "required_location_updates": 3}
+
+
+@router.post("/trips/{trip_id}/progress")
+async def helper_update_progress_compat(
+    trip_id: int,
+    status: str = Form(...),
+    photo: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.HELPER)),
+):
+    mapped = {
+        "for_pick_up": "for_pickup",
+        "picked_up": "picked_up",
+        "on_route": "en_route",
+        "dropped_off": "dropped_off",
+        "complete_trip": "completed",
+    }.get((status or "").strip(), (status or "").strip())
+    # Backward-compatible endpoint calls new status flow.
+    return await helper_update_status(
+        trip_id=trip_id,
+        status=mapped,
+        location_name="Field update",
+        remarks="",
+        photo=photo,
+        db=db,
+        user=user,
+    )
 
 
 @router.get("/bookings")
@@ -161,30 +256,58 @@ def helper_list_bookings(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
-    """Assigned trips for the signed-in helper with booking + truck context."""
     trips = (
         db.query(Trip)
-        .options(joinedload(Trip.booking), joinedload(Trip.truck))
+        .options(
+            joinedload(Trip.booking).joinedload(Booking.customer),
+            joinedload(Trip.truck),
+            joinedload(Trip.driver),
+        )
         .filter(Trip.helper_id == user.id)
         .order_by(Trip.id.desc())
         .limit(100)
         .all()
     )
+    paid_map = paid_verified_amount_by_booking_ids(db, [t.booking_id for t in trips])
     out = []
     for t in trips:
         bk = t.booking
+        cust = bk.customer if bk else None
         tk = t.truck
+        updates = (
+            db.query(TripLocationUpdate)
+            .filter(TripLocationUpdate.trip_id == t.id)
+            .order_by(TripLocationUpdate.created_at.desc())
+            .limit(5)
+            .all()
+        )
         out.append(
             {
                 "trip_id": t.id,
                 "trip_status": t.status.value if hasattr(t.status, "value") else str(t.status),
-                "helper_progress_status": getattr(t, "helper_progress_status", None),
+                "helper_progress_status": (t.helper_progress_status or "for_pickup"),
+                "location_updates_submitted": db.query(TripLocationUpdate).filter(TripLocationUpdate.trip_id == t.id).count(),
+                "required_location_updates": 3,
                 "distance_km": t.distance_km,
-                "current_latitude": t.current_latitude,
-                "current_longitude": t.current_longitude,
+                "driver_name": t.driver.full_name if t.driver else None,
+                "latest_location_name": updates[0].location_name if updates else None,
+                "latest_location": getattr(t, "latest_location", None),
+                "recent_locations": [
+                    {
+                        "location_name": u.location_name,
+                        "remarks": u.remarks,
+                        "photo_url": u.photo_url,
+                        "created_at": u.created_at.isoformat(),
+                    }
+                    for u in updates
+                ],
                 "booking": (
                     {
                         "id": bk.id,
+                        "customer_id": bk.customer_id,
+                        "customer_name": cust.full_name if cust else None,
+                        "customer_company_name": (cust.company_name or None) if cust else None,
+                        "paid_amount_verified": paid_map.get(bk.id),
                         "pickup_location": bk.pickup_location,
                         "dropoff_location": bk.dropoff_location,
                         "scheduled_date": bk.scheduled_date.isoformat(),

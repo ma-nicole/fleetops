@@ -34,7 +34,7 @@ export default function PredictiveAnalyticsPage() {
           <h3 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Predictive Models</h3>
           <ul style={{ color: "#666666", paddingLeft: "1.5rem" }}>
             <li><strong>Demand Forecasting</strong>: Predict trip volume for future periods</li>
-            <li><strong>Revenue Projection</strong>: Estimate future revenue based on trends</li>
+            <li><strong>Revenue projection</strong>: Project future revenue based on trends</li>
             <li><strong>Cost Prediction</strong>: Forecast operational costs</li>
             <li><strong>Fuel Consumption</strong>: Predict fuel requirements for planning</li>
             <li><strong>Driver Performance</strong>: Identify high-performing and at-risk drivers</li>

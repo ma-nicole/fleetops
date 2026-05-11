@@ -25,17 +25,17 @@ export default function BookingPage() {
         />
         <div>
           <h1 style={{ margin: "0 0 0.5rem 0", fontSize: "2rem" }}>Create Booking Request</h1>
-          <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>Fill in your shipment details below. Cost updates in real-time.</p>
+          <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>Fill in your shipment details below. The quoted amount updates in real time.</p>
         </div>
 
         <div className="booking-tip-grid">
           <div className="booking-tip-card">
-            <strong>Live estimate</strong>
-            <span>Updates while you type pickup, dropoff, and weight.</span>
+            <strong>Live quote</strong>
+            <span>Updates while you choose pickup, dropoff, and weight.</span>
           </div>
           <div className="booking-tip-card">
-            <strong>Accurate estimate</strong>
-            <span>Pickup, dropoff, and tonnage drive the live quote—fill them in carefully.</span>
+            <strong>Accurate pricing</strong>
+            <span>Pickup, dropoff, and tonnage drive the quoted total—fill them in carefully.</span>
           </div>
         </div>
 
@@ -61,7 +61,7 @@ export default function BookingPage() {
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>
           <p style={{ margin: 0, fontSize: "1.1rem" }}>Transparent Costs</p>
           <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            See estimated distance, fuel/route charge, and driver fee (10%) before confirming.
+            See road distance, fuel/route charge, and driver fee (10%) before you pay.
           </p>
         </div>
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>

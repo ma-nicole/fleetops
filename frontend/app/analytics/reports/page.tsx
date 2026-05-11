@@ -45,7 +45,7 @@ export default function AnalyticsReportsPage() {
               </p>
             </div>
             <div style={{ padding: "0.7rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
-              <p style={{ margin: 0, color: "#666" }}>Estimated Next Month Expense</p>
+              <p style={{ margin: 0, color: "#666" }}>Projected next month expense</p>
               <p style={{ margin: "0.35rem 0 0", fontWeight: 700 }}>
                 {formatPhp(pipeline.connectorAI.currentMonthForecast?.estimatedMonthlyExpense || 0)}
               </p>
