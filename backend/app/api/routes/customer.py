@@ -118,7 +118,7 @@ def customer_cancel_booking(
         )
     booking.status = BookingStatus.CANCELLED
     db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
-        {"hold_status": TruckSlotHoldStatus.CANCELLED}
+        {"hold_status": TruckSlotHoldStatus.RELEASED}
     )
     db.commit()
     return {"status": "cancelled"}

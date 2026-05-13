@@ -1,18 +1,24 @@
 import json
 from collections import defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
+from secrets import token_hex
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.core.security import require_roles
 from app.db import get_db
+from app.constants.operational_log import PRIORITY_VALUES, REPORT_TYPE_LABELS, REPORT_TYPE_VALUES
+from app.constants.vehicle_issue_report import VEHICLE_ISSUE_TYPE_LABELS
+from app.constants.general_operational_report import GENERAL_OPS_CATEGORY_LABELS, GENERAL_OPS_TRIP_STATUS_LABELS
 from app.models.entities import (
     Booking,
     BookingStatus,
     DriverProfile,
+    OperationalLog,
     Trip,
     TripLocationUpdate,
     TruckAssignment,
@@ -23,6 +29,9 @@ from app.models.entities import (
     Truck,
     User,
     UserRole,
+    VehicleIssueReport,
+    VehicleIssueReportStatus,
+    GeneralOperationalReport,
 )
 from app.services.email_templates import EmailTemplate
 from app.services.notifications import send_email_notification
@@ -42,9 +51,41 @@ from app.services.booking_schedule import (
     intervals_overlap,
     truck_free_for_booking,
 )
+from app.services.dispatch_operations_center import build_operations_center_payload
+from app.services.dispatch_trip_logs import build_trip_logs_payload
+from app.services.dispatch_trip_monitoring_board import build_trip_monitoring_board_payload
+from app.services.latest_location_display import latest_location_display_for_trip
 
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
+
+OPERATIONAL_LOG_UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "operational_logs"
+OPERATIONAL_LOG_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".img"}
+
+
+def _ensure_operational_log_upload_dir() -> None:
+    OPERATIONAL_LOG_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _save_operational_log_attachment(trip_id: int, file: UploadFile | None) -> str | None:
+    if not file or not (file.filename or "").strip():
+        return None
+    name = (file.filename or "").strip().lower()
+    ext = Path(name).suffix
+    if ext not in OPERATIONAL_LOG_ALLOWED_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail="Attachment must be .jpg, .jpeg, .png, .webp, .pdf, or .img",
+        )
+    _ensure_operational_log_upload_dir()
+    stored_name = f"t{trip_id}_{token_hex(8)}{ext}"
+    dest = OPERATIONAL_LOG_UPLOAD_DIR / stored_name
+    content = file.file.read()
+    if len(content) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Attachment too large (max 12 MB)")
+    dest.write_bytes(content)
+    return f"/uploads/operational_logs/{stored_name}"
+
 
 ACTIVE_TRIP_STATUSES = [
     TripStatus.PENDING,
@@ -56,6 +97,46 @@ ACTIVE_TRIP_STATUSES = [
 ]
 
 
+def _bookings_needing_dispatcher_assignment(db: Session) -> int:
+    """Bookings that can still receive trip legs (paid / approved / partial assign)."""
+    terminal = (TripStatus.COMPLETED, TripStatus.CANCELLED)
+    candidates = (
+        db.query(
+            Booking.id,
+            Booking.cargo_weight_tons,
+            Booking.required_truck_count,
+        )
+        .filter(
+            Booking.status.in_(
+                [
+                    BookingStatus.PAYMENT_VERIFIED,
+                    BookingStatus.READY_FOR_ASSIGNMENT,
+                    BookingStatus.APPROVED,
+                    BookingStatus.ASSIGNED,
+                ]
+            )
+        )
+        .all()
+    )
+    if not candidates:
+        return 0
+    booking_ids = [row[0] for row in candidates]
+    trip_counts = (
+        db.query(Trip.booking_id, func.count(Trip.id))
+        .filter(Trip.booking_id.in_(booking_ids), ~Trip.status.in_(terminal))
+        .group_by(Trip.booking_id)
+        .all()
+    )
+    active_by_booking = {bid: int(n) for bid, n in trip_counts}
+    pending = 0
+    for bid, cargo_w, req in candidates:
+        need = int(req or trucks_required_for_cargo(float(cargo_w or 0)))
+        active = active_by_booking.get(bid, 0)
+        if active < need:
+            pending += 1
+    return pending
+
+
 @router.get("/dashboard")
 def dispatcher_dashboard(
     db: Session = Depends(get_db),
@@ -64,20 +145,7 @@ def dispatcher_dashboard(
     """Aggregate stats + recent trips for dispatcher / manager console."""
     today = datetime.utcnow().date()
 
-    pending_orders = (
-        db.query(func.count(Booking.id))
-        .filter(
-            Booking.status.in_([
-                BookingStatus.PAYMENT_VERIFICATION,
-                BookingStatus.PAYMENT_VERIFIED,
-                BookingStatus.READY_FOR_ASSIGNMENT,
-                BookingStatus.PENDING_APPROVAL,
-                BookingStatus.APPROVED,
-            ])
-        )
-        .scalar()
-        or 0
-    )
+    pending_orders = _bookings_needing_dispatcher_assignment(db)
 
     active_trips = (
         db.query(func.count(Trip.id)).filter(Trip.status.in_(ACTIVE_TRIP_STATUSES)).scalar()
@@ -104,15 +172,44 @@ def dispatcher_dashboard(
         or 0
     )
 
-    trucks_total = db.query(func.count(Truck.id)).scalar() or 0
-    busy_truck_ids = (
-        db.query(Trip.truck_id)
-        .filter(Trip.status.in_(ACTIVE_TRIP_STATUSES))
-        .distinct()
-        .all()
+    # In-progress legs that were put on the board today (matches "today's dispatch" subline).
+    active_trips_assigned_today = (
+        db.query(func.count(Trip.id))
+        .filter(
+            Trip.status.in_(ACTIVE_TRIP_STATUSES),
+            Trip.assigned_at.isnot(None),
+            func.date(Trip.assigned_at) == today,
+        )
+        .scalar()
+        or 0
     )
-    busy_trucks_count = len({row[0] for row in busy_truck_ids if row[0] is not None})
-    available_trucks = max(0, trucks_total - busy_trucks_count)
+
+    # Distinct trips that had real calendar-day activity (no double-count assign+complete).
+    today_trip_touchpoints = (
+        db.query(func.count(func.distinct(Trip.id)))
+        .filter(
+            or_(
+                and_(Trip.assigned_at.isnot(None), func.date(Trip.assigned_at) == today),
+                and_(Trip.completed_at.isnot(None), func.date(Trip.completed_at) == today),
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    trucks_total = db.query(func.count(Truck.id)).scalar() or 0
+    operational_trucks = (
+        db.query(func.count(Truck.id)).filter(func.lower(Truck.status) == "available").scalar() or 0
+    )
+    # Only trucks marked operational (`status == available`) count as dispatch pool.
+    busy_operational = (
+        db.query(func.count(func.distinct(Trip.truck_id)))
+        .join(Truck, Truck.id == Trip.truck_id)
+        .filter(Trip.status.in_(ACTIVE_TRIP_STATUSES), func.lower(Truck.status) == "available")
+        .scalar()
+        or 0
+    )
+    available_trucks = max(0, operational_trucks - busy_operational)
 
     drivers_total = (
         db.query(func.count(User.id)).filter(User.role == UserRole.DRIVER).scalar() or 0
@@ -123,8 +220,17 @@ def dispatcher_dashboard(
         .distinct()
         .all()
     )
-    drivers_busy = len({row[0] for row in busy_driver_rows if row[0] is not None})
-    drivers_idle = max(0, drivers_total - drivers_busy)
+    busy_driver_ids = {row[0] for row in busy_driver_rows if row[0] is not None}
+    drivers_busy = len(busy_driver_ids)
+    break_conds = [
+        User.role == UserRole.DRIVER,
+        func.lower(User.availability_status).in_(["on_break", "break"]),
+    ]
+    if busy_driver_ids:
+        break_conds.append(User.id.notin_(busy_driver_ids))
+    drivers_on_break = db.query(func.count(User.id)).filter(*break_conds).scalar() or 0
+    drivers_standby = max(0, drivers_total - drivers_busy - drivers_on_break)
+    drivers_idle = max(0, drivers_total - drivers_busy)  # legacy: drivers not on an active trip
 
     driver_user = aliased(User)
     recent_rows = (
@@ -162,17 +268,267 @@ def dispatcher_dashboard(
         "kpis": {
             "pending_orders": pending_orders,
             "active_trips": active_trips,
+            "active_trips_assigned_today": active_trips_assigned_today,
             "available_trucks": available_trucks,
             "trucks_total": trucks_total,
+            "trucks_operational": operational_trucks,
             "drivers_total": drivers_total,
             "drivers_busy": drivers_busy,
             "drivers_idle": drivers_idle,
+            "drivers_on_break": drivers_on_break,
+            "drivers_standby": drivers_standby,
             "trips_assigned_today": trips_assigned_today,
             "trips_completed_today": trips_completed_today,
-            "today_volume": trips_assigned_today + trips_completed_today,
+            # Distinct trip legs with assign or complete activity today (not assign+complete double count).
+            "today_volume": today_trip_touchpoints,
         },
         "recent_trips": trips_out,
     }
+
+
+@router.get("/operations-center")
+def dispatch_operations_center(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Dispatcher control center: live counts, boards, queues, and rule-based alerts (no mock analytics)."""
+    return build_operations_center_payload(db)
+
+
+@router.get("/trip-logs")
+def dispatch_trip_logs(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Unified operational history per trip leg: milestones, helper updates, locations, issues, POD."""
+    return build_trip_logs_payload(db, limit=100)
+
+
+@router.post("/operational-log")
+def create_operational_log(
+    trip_id: int = Form(...),
+    report_type: str = Form(...),
+    priority_level: str = Form(...),
+    operational_details: str = Form(...),
+    file: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Persist dispatcher operational incident / note for a trip (not customer feedback)."""
+    rt = (report_type or "").strip()
+    if rt not in REPORT_TYPE_VALUES:
+        raise HTTPException(status_code=400, detail="Invalid report type")
+    pl = (priority_level or "").strip().lower()
+    if pl not in PRIORITY_VALUES:
+        raise HTTPException(status_code=400, detail="Invalid priority level")
+    details = (operational_details or "").strip()
+    if len(details) < 3:
+        raise HTTPException(status_code=400, detail="Operational details are required")
+
+    trip = (
+        db.query(Trip)
+        .options(joinedload(Trip.booking))
+        .filter(Trip.id == trip_id)
+        .first()
+    )
+    if not trip or trip.status == TripStatus.CANCELLED:
+        raise HTTPException(status_code=404, detail="Trip not found or cancelled")
+    if not trip.booking_id:
+        raise HTTPException(status_code=400, detail="Trip has no booking")
+
+    attachment_url = _save_operational_log_attachment(trip_id, file)
+
+    row = OperationalLog(
+        booking_id=trip.booking_id,
+        trip_id=trip.id,
+        dispatcher_id=user.id,
+        report_type=rt,
+        priority_level=pl,
+        operational_details=details,
+        attachment_url=attachment_url,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    label = REPORT_TYPE_LABELS.get(rt, rt)
+    return {
+        "id": row.id,
+        "booking_id": row.booking_id,
+        "trip_id": row.trip_id,
+        "dispatcher_id": row.dispatcher_id,
+        "report_type": row.report_type,
+        "report_type_label": label,
+        "priority_level": row.priority_level,
+        "operational_details": row.operational_details,
+        "attachment_url": row.attachment_url,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+class VehicleIssueReportStatusUpdate(BaseModel):
+    status: str = Field(..., min_length=3, max_length=32)
+
+
+@router.get("/vehicle-issue-reports")
+def list_vehicle_issue_reports(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """All driver-submitted vehicle issue reports (newest first)."""
+    rows = (
+        db.query(VehicleIssueReport)
+        .options(
+            joinedload(VehicleIssueReport.trip),
+            joinedload(VehicleIssueReport.booking),
+            joinedload(VehicleIssueReport.truck),
+            joinedload(VehicleIssueReport.driver),
+            joinedload(VehicleIssueReport.helper),
+        )
+        .order_by(VehicleIssueReport.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    out = []
+    for r in rows:
+        bk = r.booking
+        tk = r.truck
+        route = ""
+        if bk:
+            route = f"{bk.pickup_location} → {bk.dropoff_location}"
+        st = r.status.value if hasattr(r.status, "value") else str(r.status)
+        out.append(
+            {
+                "id": r.id,
+                "booking_id": r.booking_id,
+                "trip_id": r.trip_id,
+                "truck_id": r.truck_id,
+                "truck_plate": tk.code if tk else "",
+                "truck_model": (tk.model_name or None) if tk else None,
+                "route": route,
+                "driver_id": r.driver_id,
+                "driver_name": r.driver.full_name if r.driver else None,
+                "helper_id": r.helper_id,
+                "helper_name": r.helper.full_name if r.helper else None,
+                "issue_type": r.issue_type,
+                "issue_type_label": VEHICLE_ISSUE_TYPE_LABELS.get(r.issue_type, r.issue_type.replace("_", " ").title()),
+                "priority": r.priority,
+                "description": r.description,
+                "attachment_url": r.attachment_url,
+                "status": st,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+        )
+    return {"reports": out}
+
+
+@router.patch("/vehicle-issue-reports/{report_id}")
+def patch_vehicle_issue_report(
+    report_id: int,
+    body: VehicleIssueReportStatusUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Mark a vehicle issue as reviewed or resolved."""
+    row = db.query(VehicleIssueReport).filter(VehicleIssueReport.id == report_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found")
+    raw = (body.status or "").strip().lower()
+    try:
+        new_status = VehicleIssueReportStatus(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid status") from exc
+    if new_status == VehicleIssueReportStatus.SUBMITTED:
+        raise HTTPException(status_code=400, detail="Cannot revert to submitted")
+
+    cur = row.status
+    if cur == VehicleIssueReportStatus.RESOLVED:
+        if new_status != VehicleIssueReportStatus.RESOLVED:
+            raise HTTPException(status_code=400, detail="Report is already resolved")
+        return {"id": row.id, "status": cur.value}
+
+    if new_status == cur:
+        return {"id": row.id, "status": cur.value}
+
+    if cur == VehicleIssueReportStatus.SUBMITTED:
+        if new_status not in (VehicleIssueReportStatus.REVIEWED, VehicleIssueReportStatus.RESOLVED):
+            raise HTTPException(status_code=400, detail="From submitted, status may only become reviewed or resolved")
+    elif cur == VehicleIssueReportStatus.REVIEWED:
+        if new_status != VehicleIssueReportStatus.RESOLVED:
+            raise HTTPException(status_code=400, detail="From reviewed, status may only become resolved")
+
+    row.status = new_status
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "status": row.status.value if hasattr(row.status, "value") else str(row.status)}
+
+
+@router.get("/general-operational-reports")
+def list_general_operational_reports_feed(
+    booking_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Driver-submitted general operational forms (newest first); optional filter by booking."""
+    q = (
+        db.query(GeneralOperationalReport)
+        .options(
+            joinedload(GeneralOperationalReport.driver),
+            joinedload(GeneralOperationalReport.booking),
+            joinedload(GeneralOperationalReport.trip).joinedload(Trip.truck),
+        )
+    )
+    if booking_id is not None:
+        q = q.filter(GeneralOperationalReport.booking_id == booking_id)
+    rows = q.order_by(GeneralOperationalReport.created_at.desc()).limit(200).all()
+    out: list[dict] = []
+    for r in rows:
+        bk = r.booking
+        route = ""
+        if bk:
+            route = f"{bk.pickup_location} → {bk.dropoff_location}"
+        tk = r.trip.truck if r.trip else None
+        plate = tk.code if tk else ""
+        ts_label = None
+        if r.status:
+            ts_label = GENERAL_OPS_TRIP_STATUS_LABELS.get(
+                r.status, r.status.replace("_", " ").title()
+            )
+        out.append(
+            {
+                "id": r.id,
+                "booking_id": r.booking_id,
+                "trip_id": r.trip_id,
+                "driver_id": r.driver_id,
+                "driver_name": r.driver.full_name if r.driver else None,
+                "category": r.category,
+                "category_label": GENERAL_OPS_CATEGORY_LABELS.get(
+                    r.category, r.category.replace("_", " ").title()
+                ),
+                "trip_status": r.status,
+                "trip_status_label": ts_label,
+                "report_date": r.report_date.isoformat(),
+                "starting_odometer_km": r.starting_odometer_km,
+                "ending_odometer_km": r.ending_odometer_km,
+                "fuel_consumed": r.fuel_consumed,
+                "description": r.description,
+                "notes": r.notes,
+                "attachment_url": r.attachment_url,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "route": route,
+                "truck_plate": plate,
+            }
+        )
+    return {"reports": out}
+
+
+@router.get("/trip-monitoring-board")
+def dispatch_trip_monitoring_board(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Live trip monitoring: DB-backed summary counts, one card per active trip leg, human-readable locations."""
+    return build_trip_monitoring_board_payload(db, list_limit=200)
 
 
 @router.get("/roster")
@@ -318,6 +674,7 @@ def assignments_board(
             .first()
         )
         loc_name = (latest_loc[0] if latest_loc else None) or getattr(tr, "latest_location", None)
+        loc_display = latest_location_display_for_trip(tr, bk.dropoff_location, loc_name)
         helper_status = getattr(tr, "helper_progress_status", None)
         effective_booking_status = booking_display_status.get(
             bk.id, bk.status.value if hasattr(bk.status, "value") else str(bk.status)
@@ -350,7 +707,7 @@ def assignments_board(
                 "helper_name": hp.full_name if hp else None,
                 "helper_progress_status": helper_status,
                 "distance_km": display_distance_km,
-                "latest_location": loc_name,
+                "latest_location": loc_display,
                 "last_updated": latest_loc[1].isoformat() if latest_loc and latest_loc[1] else None,
             }
         )

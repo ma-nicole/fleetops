@@ -1,190 +1,197 @@
 "use client";
 
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
+import { WorkflowApi, type DriverPaySummary } from "@/lib/workflowApi";
+import { useRoleGuard } from "@/lib/useRoleGuard";
 
-type PayBreakdown = {
-  period: string;
-  baseSalary: number;
-  bonuses: number;
-  deductions: number;
-  total: number;
-  status: string;
-};
+function shorten(s: string, max: number): string {
+  const t = (s || "").trim();
+  if (!t) return "—";
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
+function statusBadge(status: string): { color: string; label: string } {
+  const s = (status || "").toLowerCase();
+  if (s === "paid") return { color: "#15803D", label: "Paid" };
+  if (s === "unpaid") return { color: "#64748B", label: "Unpaid" };
+  if (s === "pending" || s === "pending_payroll") return { color: "#C2410C", label: "Pending payroll processing" };
+  return { color: "#64748B", label: status.replace(/_/g, " ") };
+}
 
 export default function PayPage() {
   useRoleGuard(["driver"]);
 
-  const [payHistory] = useState<PayBreakdown[]>([
-    {
-      period: "April 1-15, 2024",
-      baseSalary: 1200,
-      bonuses: 150,
-      deductions: 80,
-      total: 1270,
-      status: "paid",
-    },
-    {
-      period: "April 16-30, 2024",
-      baseSalary: 1250,
-      bonuses: 200,
-      deductions: 100,
-      total: 1350,
-      status: "pending",
-    },
-    {
-      period: "March 16-31, 2024",
-      baseSalary: 1180,
-      bonuses: 100,
-      deductions: 75,
-      total: 1205,
-      status: "paid",
-    },
-  ]);
+  const [data, setData] = useState<DriverPaySummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [currentPeriod] = useState({
-    tripsCompleted: 24,
-    totalDistance: "402 km",
-    baseRateTripPeso: 2500,
-    distanceRatePesoPerKm: 35,
-    baseEarnings: 1650,
-    bonusEarned: 150,
-    currentEarnings: 2450.5,
-    safetyBonus: "0%",
-  });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const d = await WorkflowApi.driverPaySummary();
+      setData(d);
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "Could not load pay summary.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const getStatusBadge = (status: string) => {
-    return status === "paid"
-      ? { color: "#4CAF50", label: " Paid" }
-      : { color: "#FF9800", label: "⏳ Pending" };
-  };
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   return (
-    <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem" }}>
+    <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem", maxWidth: 1200 }}>
       <div>
         <Link href="/driver/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
           ← Back to Dashboard
         </Link>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Total Pay</h1>
-        <p style={{ color: "#666666", margin: "0" }}>Track your earnings and payment history</p>
+        <p style={{ color: "#666666", margin: "0" }}>Earnings from your completed trips (current month). No placeholder data.</p>
       </div>
 
-      {/* Current Period Overview */}
-      <div style={{ padding: "2rem", border: "2px solid #4CAF50", borderRadius: "8px", background: "rgba(76, 175, 80, 0.05)" }}>
-        <h2 style={{ color: "#4CAF50", marginBottom: "1.5rem" }}>Current Period (April 1-30, 2024)</h2>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1.5rem" }}>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TRIPS COMPLETED</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.8rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              {currentPeriod.tripsCompleted}
-            </p>
-          </div>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TOTAL DISTANCE</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              {currentPeriod.totalDistance}
-            </p>
-          </div>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>BASE RATE</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.2rem", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-              {formatPhp(currentPeriod.baseRateTripPeso)}/trip
-            </p>
-          </div>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DISTANCE RATE</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.2rem", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-              {formatPhp(currentPeriod.distanceRatePesoPerKm)}/km
-            </p>
-          </div>
+      {error ? (
+        <div role="alert" style={{ background: "#FEF2F2", color: "#991B1B", padding: 12, borderRadius: 8, border: "1px solid #FECACA" }}>
+          {error}
         </div>
+      ) : null}
 
-        <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "2px solid #E8E8E8" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem" }}>
-            <div>
-              <p style={{ color: "#999", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>BASE EARNINGS</p>
-              <p style={{ color: "#1A1A1A", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-                {formatPhp(currentPeriod.baseEarnings)}
-              </p>
-            </div>
-            <div>
-              <p style={{ color: "#999", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>BONUS</p>
-              <p style={{ color: "#4CAF50", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-                {formatPhp(currentPeriod.bonusEarned)}
-              </p>
-            </div>
-            <div style={{ paddingTop: "1.5rem", borderTop: "2px solid #4CAF50" }}>
-              <p style={{ color: "#999", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>CURRENT TOTAL (this month)</p>
-              <p style={{ color: "#4CAF50", fontSize: "2rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-                {formatPhp(currentPeriod.currentEarnings)}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+      {loading ? (
+        <p style={{ color: "#64748B", margin: 0 }}>Loading…</p>
+      ) : data ? (
+        <>
+          <div style={{ padding: "2rem", border: "2px solid #4CAF50", borderRadius: "8px", background: "rgba(76, 175, 80, 0.05)" }}>
+            <h2 style={{ color: "#166534", marginBottom: "1.25rem", marginTop: 0, fontSize: "1.25rem" }}>
+              Current period ({data.period_label})
+            </h2>
 
-      {/* Detailed Breakdown */}
-      <div>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1.5rem" }}>Payment History</h2>
-        <div style={{ border: "1px solid #E8E8E8", borderRadius: "8px", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 1fr 1fr", padding: "1rem", background: "#F5F5F5", borderBottom: "1px solid #E8E8E8", gap: "1rem" }}>
-            <p style={{ color: "#999", fontWeight: "600", margin: "0", fontSize: "0.75rem" }}>PERIOD</p>
-            <p style={{ color: "#999", fontWeight: "600", margin: "0", fontSize: "0.75rem" }}>BASE</p>
-            <p style={{ color: "#999", fontWeight: "600", margin: "0", fontSize: "0.75rem" }}>BONUS</p>
-            <p style={{ color: "#999", fontWeight: "600", margin: "0", fontSize: "0.75rem" }}>DEDUCTIONS</p>
-            <p style={{ color: "#999", fontWeight: "600", margin: "0", fontSize: "0.75rem" }}>TOTAL</p>
-            <p style={{ color: "#999", fontWeight: "600", margin: "0", fontSize: "0.75rem" }}>STATUS</p>
-          </div>
-
-          {payHistory.map((payment, idx) => {
-            const statusBadge = getStatusBadge(payment.status);
-            return (
-              <div key={idx} style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr 1fr 1fr 1fr", padding: "1rem", borderBottom: idx < payHistory.length - 1 ? "1px solid #E8E8E8" : "none", gap: "1rem", background: payment.status === "pending" ? "rgba(255, 152, 0, 0.03)" : "white" }}>
-                <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0", fontSize: "0.9rem" }}>
-                  {payment.period}
-                </p>
-                <p style={{ color: "#1A1A1A", margin: "0", fontSize: "0.9rem" }}>{formatPhp(payment.baseSalary)}</p>
-                <p style={{ color: "#4CAF50", fontWeight: "600", margin: "0", fontSize: "0.9rem" }}>
-                  {formatPhp(payment.bonuses)}
-                </p>
-                <p style={{ color: "#F44336", margin: "0", fontSize: "0.9rem" }}>{formatPhp(payment.deductions)}</p>
-                <p style={{ color: "#1A1A1A", fontWeight: "700", margin: "0", fontSize: "0.95rem" }}>
-                  {formatPhp(payment.total)}
-                </p>
-                <span
-                  style={{
-                    padding: "0.4rem 0.8rem",
-                    background: statusBadge.color + "20",
-                    color: statusBadge.color,
-                    borderRadius: "4px",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                    textAlign: "center",
-                    width: "fit-content",
-                  }}
-                >
-                  {statusBadge.label}
-                </span>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
+              <div>
+                <p style={{ color: "#64748B", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TRIPS COMPLETED</p>
+                <p style={{ color: "#1A1A1A", fontSize: "1.8rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{data.trips_completed}</p>
               </div>
-            );
-          })}
-        </div>
-      </div>
+              <div>
+                <p style={{ color: "#64748B", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TOTAL DISTANCE</p>
+                <p style={{ color: "#1A1A1A", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{data.total_distance_km} km</p>
+              </div>
+              <div style={{ gridColumn: "span 1" }}>
+                <p style={{ color: "#64748B", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DRIVER SHARE RULE</p>
+                <p style={{ color: "#334155", fontSize: "0.88rem", fontWeight: 600, margin: "0.5rem 0 0 0", lineHeight: 1.45 }}>
+                  {data.driver_share_formula.description}
+                </p>
+              </div>
+            </div>
 
-      {/* Pay Info Card */}
-      <div style={{ padding: "1.5rem", background: "#E3F2FD", borderRadius: "8px", border: "1px solid #2196F3" }}>
-        <p style={{ color: "#1565C0", fontWeight: "600", margin: "0" }}> Pay Information:</p>
-        <ul style={{ color: "#1565C0", margin: "0.5rem 0 0 0", paddingLeft: "1.5rem" }}>
-          <li>Base salary calculated on completed trips</li>
-          <li>Distance bonuses applied per kilometer</li>
-          <li>Safety bonuses awarded for 0 incident weeks</li>
-          <li>Payments processed bi-weekly on Fridays</li>
-          <li>Deductions for fuel, tolls, and equipment</li>
-        </ul>
-      </div>
+            <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "2px solid #E8E8E8" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1.5rem" }}>
+                <div>
+                  <p style={{ color: "#64748B", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>BASE EARNINGS</p>
+                  <p style={{ color: "#1A1A1A", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{formatPhp(data.base_earnings)}</p>
+                </div>
+                <div>
+                  <p style={{ color: "#64748B", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>BONUS</p>
+                  <p style={{ color: "#15803D", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{formatPhp(data.bonus)}</p>
+                </div>
+                <div>
+                  <p style={{ color: "#64748B", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>DEDUCTIONS</p>
+                  <p style={{ color: "#B91C1C", fontSize: "1.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{formatPhp(data.deductions)}</p>
+                </div>
+                <div style={{ paddingTop: "0.5rem", borderTop: "2px solid #22C55E" }}>
+                  <p style={{ color: "#64748B", fontSize: "0.8rem", fontWeight: "600", margin: "0" }}>CURRENT TOTAL (this month)</p>
+                  <p style={{ color: "#15803D", fontSize: "2rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>{formatPhp(data.current_total)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h2 style={{ color: "#1A1A1A", marginBottom: "1rem", fontSize: "1.15rem" }}>Payment history (completed trips)</h2>
+            <p style={{ color: "#64748B", fontSize: "0.88rem", marginTop: 0, marginBottom: "0.75rem" }}>{data.payroll_note}</p>
+            <div style={{ border: "1px solid #E8E8E8", borderRadius: "8px", overflow: "hidden", background: "#fff" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", minWidth: 980, borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                  <thead>
+                    <tr style={{ background: "#F5F5F5", borderBottom: "1px solid #E8E8E8" }}>
+                      <th style={{ textAlign: "left", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Completed</th>
+                      <th style={{ textAlign: "left", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Trip</th>
+                      <th style={{ textAlign: "left", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Booking</th>
+                      <th style={{ textAlign: "left", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Route</th>
+                      <th style={{ textAlign: "right", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Cargo (t)</th>
+                      <th style={{ textAlign: "right", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Km</th>
+                      <th style={{ textAlign: "right", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Driver pay</th>
+                      <th style={{ textAlign: "right", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Bonus</th>
+                      <th style={{ textAlign: "right", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Deduction</th>
+                      <th style={{ textAlign: "right", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Total</th>
+                      <th style={{ textAlign: "left", padding: "0.75rem 0.65rem", fontWeight: 700, color: "#64748B" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.payment_history.length === 0 ? (
+                      <tr>
+                        <td colSpan={11} style={{ padding: "1.25rem", color: "#64748B" }}>
+                          No completed trips / pay records yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      data.payment_history.map((row) => {
+                        const b = statusBadge(row.status);
+                        return (
+                          <tr key={`${row.trip_id}-${row.completed_at}`} style={{ borderBottom: "1px solid #F1F5F9" }}>
+                            <td style={{ padding: "0.65rem", whiteSpace: "nowrap" }}>{row.period_label}</td>
+                            <td style={{ padding: "0.65rem", fontWeight: 600 }}>#{row.trip_id}</td>
+                            <td style={{ padding: "0.65rem" }}>#{row.booking_id}</td>
+                            <td style={{ padding: "0.65rem", maxWidth: 220 }} title={row.route_label}>
+                              {shorten(row.route_label, 56)}
+                            </td>
+                            <td style={{ padding: "0.65rem", textAlign: "right" }}>{row.cargo_weight_tons}</td>
+                            <td style={{ padding: "0.65rem", textAlign: "right" }}>{row.distance_km}</td>
+                            <td style={{ padding: "0.65rem", textAlign: "right" }}>{formatPhp(row.driver_pay)}</td>
+                            <td style={{ padding: "0.65rem", textAlign: "right" }}>{formatPhp(row.bonus)}</td>
+                            <td style={{ padding: "0.65rem", textAlign: "right" }}>{formatPhp(row.deduction)}</td>
+                            <td style={{ padding: "0.65rem", textAlign: "right", fontWeight: 700 }}>{formatPhp(row.total_pay)}</td>
+                            <td style={{ padding: "0.65rem" }}>
+                              <span
+                                style={{
+                                  padding: "0.25rem 0.5rem",
+                                  background: `${b.color}18`,
+                                  color: b.color,
+                                  borderRadius: 6,
+                                  fontWeight: 700,
+                                  fontSize: "0.72rem",
+                                  display: "inline-block",
+                                  maxWidth: 180,
+                                  lineHeight: 1.25,
+                                }}
+                              >
+                                {b.label}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: "1.25rem", background: "#F8FAFC", borderRadius: "8px", border: "1px solid #E2E8F0" }}>
+            <p style={{ color: "#334155", fontWeight: 700, margin: "0 0 0.35rem 0" }}>How this page works</p>
+            <p style={{ color: "#475569", margin: 0, fontSize: "0.9rem", lineHeight: 1.55 }}>
+              Figures are computed from your <strong>completed</strong> trip legs in the database (booking cargo weight and trip
+              distance). Settlement status is shown as pending until a payroll module records paid amounts.
+            </p>
+          </div>
+        </>
+      ) : (
+        <p style={{ color: "#64748B" }}>No data.</p>
+      )}
     </div>
   );
 }

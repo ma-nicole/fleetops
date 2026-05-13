@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.routes import (
@@ -93,3 +96,7 @@ app.include_router(customer_route_estimate.router, prefix="/api", dependencies=_
 app.include_router(schedule.router, prefix="/api", dependencies=_api_deps)
 app.include_router(analytics_predict.router, prefix="/api", dependencies=_api_deps)
 app.include_router(analytics_prescribe.router, prefix="/api", dependencies=_api_deps)
+
+_uploads_root = Path(__file__).resolve().parents[1] / "uploads"
+_uploads_root.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads_root)), name="uploads")

@@ -16,12 +16,16 @@ export const API_BASE_URL = normalizeApiBase(
 /** Absolute URL for fetch (handles `/api-proxy` during SSR vs browser). */
 export function apiFullUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
+  const origin =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+  /** Backend-served files (see next.config rewrites for `/uploads/*`). */
+  if (p.startsWith("/uploads/")) {
+    return `${origin}${p}`;
+  }
   const base = API_BASE_URL;
   if (base.startsWith("/")) {
-    const origin =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
     return `${origin}${base}${p}`;
   }
   return `${base.replace(/\/+$/, "")}${p}`;

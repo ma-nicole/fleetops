@@ -9,8 +9,6 @@ from secrets import token_hex
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
-from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
-
 from app.constants.fleet_capacity import trucks_required_for_cargo
 from app.core.security import require_roles
 from app.db import get_db
@@ -27,6 +25,7 @@ from app.models.entities import (
     User,
     UserRole,
 )
+from app.services.crew_assigned_bookings import list_crew_assigned_bookings
 from app.services.trip_status_sync import sync_trip_and_booking_status
 
 router = APIRouter(prefix="/helper", tags=["helper"])
@@ -256,75 +255,4 @@ def helper_list_bookings(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
-    trips = (
-        db.query(Trip)
-        .options(
-            joinedload(Trip.booking).joinedload(Booking.customer),
-            joinedload(Trip.truck),
-            joinedload(Trip.driver),
-        )
-        .filter(Trip.helper_id == user.id)
-        .order_by(Trip.id.desc())
-        .limit(100)
-        .all()
-    )
-    paid_map = paid_verified_amount_by_booking_ids(db, [t.booking_id for t in trips])
-    out = []
-    for t in trips:
-        bk = t.booking
-        cust = bk.customer if bk else None
-        tk = t.truck
-        updates = (
-            db.query(TripLocationUpdate)
-            .filter(TripLocationUpdate.trip_id == t.id)
-            .order_by(TripLocationUpdate.created_at.desc())
-            .limit(5)
-            .all()
-        )
-        out.append(
-            {
-                "trip_id": t.id,
-                "trip_status": t.status.value if hasattr(t.status, "value") else str(t.status),
-                "helper_progress_status": (t.helper_progress_status or "for_pickup"),
-                "location_updates_submitted": db.query(TripLocationUpdate).filter(TripLocationUpdate.trip_id == t.id).count(),
-                "required_location_updates": 3,
-                "distance_km": t.distance_km,
-                "driver_name": t.driver.full_name if t.driver else None,
-                "latest_location_name": updates[0].location_name if updates else None,
-                "latest_location": getattr(t, "latest_location", None),
-                "recent_locations": [
-                    {
-                        "location_name": u.location_name,
-                        "remarks": u.remarks,
-                        "photo_url": u.photo_url,
-                        "created_at": u.created_at.isoformat(),
-                    }
-                    for u in updates
-                ],
-                "booking": (
-                    {
-                        "id": bk.id,
-                        "customer_id": bk.customer_id,
-                        "customer_name": cust.full_name if cust else None,
-                        "customer_company_name": (cust.company_name or None) if cust else None,
-                        "paid_amount_verified": paid_map.get(bk.id),
-                        "pickup_location": bk.pickup_location,
-                        "dropoff_location": bk.dropoff_location,
-                        "scheduled_date": bk.scheduled_date.isoformat(),
-                        "scheduled_time_slot": bk.scheduled_time_slot,
-                        "cargo_weight_tons": bk.cargo_weight_tons,
-                        "cargo_description": bk.cargo_description,
-                        "estimated_cost": bk.estimated_cost,
-                        "status": bk.status.value if hasattr(bk.status, "value") else str(bk.status),
-                    }
-                    if bk
-                    else None
-                ),
-                "truck": (
-                    {"id": tk.id, "code": tk.code, "capacity_tons": float(tk.capacity_tons or 0)}
-                    if tk
-                    else None
-                ),
-            }
-        )
-    return {"bookings": out}
+    return {"bookings": list_crew_assigned_bookings(db, user)}

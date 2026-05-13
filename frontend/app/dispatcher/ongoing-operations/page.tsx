@@ -1,23 +1,56 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TripBoardDetailModal, type TripBoardRow } from "@/components/TripBoardDetailModal";
 import { formatPhp } from "@/lib/appLocale";
-import { WorkflowApi } from "@/lib/workflowApi";
+import { WorkflowApi, type DispatchTripMonitoringBoardResponse } from "@/lib/workflowApi";
+import { announce } from "@/lib/useAnnouncer";
+
+const REFRESH_MS = 45_000;
+
+function humanizeStatus(raw: string): string {
+  return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function displayOperationalStatus(a: TripBoardRow): string {
+  if ("operational_status" in a && a.operational_status) return humanizeStatus(a.operational_status);
+  return humanizeStatus(a.helper_progress_status || a.trip_status);
+}
 
 export default function OngoingOperationsPage() {
-  const [operations, setOperations] = useState<TripBoardRow[]>([]);
+  const [board, setBoard] = useState<DispatchTripMonitoringBoardResponse | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [detailRow, setDetailRow] = useState<TripBoardRow | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      const board = await WorkflowApi.dispatchAssignmentsBoard();
-      setOperations(board.assignments);
-    })();
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const data = await WorkflowApi.dispatchTripMonitoringBoard();
+      setBoard(data);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Could not load trip monitoring data.";
+      setLoadError(msg);
+      announce(msg, "assertive");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const displayStatus = (a: TripBoardRow) => (a.helper_progress_status || a.trip_status).replace(/_/g, " ");
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      void load();
+    }, REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  const operations = board?.active_assignments ?? [];
+  const summary = board?.summary;
 
   return (
     <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem" }}>
@@ -26,8 +59,22 @@ export default function OngoingOperationsPage() {
           ← Back to Dashboard
         </Link>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Ongoing Operations</h1>
-        <p style={{ color: "#666666", margin: "0" }}>Live board: customer, payment, routes, and trip status</p>
+        <p style={{ color: "#666666", margin: "0" }}>
+          Live board from the database — one row per active trip leg (multi-truck bookings show every leg). Refreshes
+          every {REFRESH_MS / 1000}s.
+        </p>
+        {board?.generated_at ? (
+          <p style={{ color: "#94A3B8", margin: "0.35rem 0 0", fontSize: "0.82rem" }}>
+            Last snapshot: {new Date(board.generated_at).toLocaleString()}
+          </p>
+        ) : null}
       </div>
+
+      {loadError ? (
+        <div role="alert" style={{ padding: "0.85rem 1rem", borderRadius: "8px", background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }}>
+          {loadError}
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
         <div
@@ -41,8 +88,9 @@ export default function OngoingOperationsPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ACTIVE</p>
           <p style={{ color: "#FF6B6B", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {operations.length}
+            {loading ? "—" : (summary?.active_legs ?? 0)}
           </p>
+          <p style={{ color: "#94A3B8", fontSize: "0.7rem", margin: "0.35rem 0 0" }}>Non-completed legs</p>
         </div>
         <div
           style={{
@@ -55,8 +103,9 @@ export default function OngoingOperationsPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>IN TRANSIT</p>
           <p style={{ color: "#FF9800", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {operations.filter((op) => (op.helper_progress_status || op.trip_status) === "en_route").length}
+            {loading ? "—" : (summary?.in_transit_legs ?? 0)}
           </p>
+          <p style={{ color: "#94A3B8", fontSize: "0.7rem", margin: "0.35rem 0 0" }}>Picked up · En route</p>
         </div>
         <div
           style={{
@@ -69,8 +118,9 @@ export default function OngoingOperationsPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LOADING/UNLOADING</p>
           <p style={{ color: "#FFC107", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {operations.filter((op) => ["for_pickup", "picked_up"].includes(op.helper_progress_status || "")).length}
+            {loading ? "—" : (summary?.loading_unloading_legs ?? 0)}
           </p>
+          <p style={{ color: "#94A3B8", fontSize: "0.7rem", margin: "0.35rem 0 0" }}>For pickup · Dropped off</p>
         </div>
         <div
           style={{
@@ -81,14 +131,20 @@ export default function OngoingOperationsPage() {
             textAlign: "center",
           }}
         >
-          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>COMPLETED</p>
+          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>COMPLETED (TODAY)</p>
           <p style={{ color: "#4CAF50", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {operations.filter((op) => (op.helper_progress_status || op.trip_status) === "completed").length}
+            {loading ? "—" : (summary?.completed_trip_legs_today ?? 0)}
+          </p>
+          <p style={{ color: "#94A3B8", fontSize: "0.7rem", margin: "0.35rem 0 0" }}>
+            All-time legs: {summary?.completed_trip_legs_total ?? 0} · Bookings fully closed: {summary?.bookings_all_legs_completed ?? 0}
           </p>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: "1.5rem" }}>
+        {!loading && operations.length === 0 && !loadError ? (
+          <p style={{ color: "#64748B", margin: 0 }}>No active trip legs right now.</p>
+        ) : null}
         {operations.map((op) => (
           <div
             key={op.trip_id}
@@ -118,16 +174,25 @@ export default function OngoingOperationsPage() {
                   {op.customer_company_name ? ` · ${op.customer_company_name}` : ""}
                 </p>
                 <p style={{ color: "#444", fontSize: "0.88rem", margin: "0.25rem 0 0" }}>
-                  <strong>Paid:</strong> {op.paid_amount_verified != null ? formatPhp(op.paid_amount_verified) : "—"} ·{" "}
+                  <strong>Paid (verified):</strong> {op.paid_amount_verified != null ? formatPhp(op.paid_amount_verified) : "—"} ·{" "}
                   <strong>Quoted total:</strong> {formatPhp(op.estimated_cost)}
+                </p>
+                <p style={{ color: "#444", fontSize: "0.88rem", margin: "0.25rem 0 0" }}>
+                  <strong>Payment / booking record:</strong> {humanizeStatus(op.booking_db_status)}
+                </p>
+                <p style={{ color: "#444", fontSize: "0.88rem", margin: "0.25rem 0 0" }}>
+                  <strong>Customer-facing status:</strong> {humanizeStatus(op.booking_status)}
                 </p>
               </div>
 
               <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CURRENT LOCATION</p>
-                <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {op.latest_location ?? "No live update yet"}
-                </p>
+                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LATEST LOCATION</p>
+                <p style={{ color: "#2196F3", fontWeight: "600", margin: "0.25rem 0 0 0" }}>{op.latest_location?.trim() || "—"}</p>
+                {op.last_updated ? (
+                  <p style={{ color: "#94A3B8", fontSize: "0.75rem", margin: "0.35rem 0 0" }}>
+                    Updated {new Date(op.last_updated).toLocaleString()}
+                  </p>
+                ) : null}
               </div>
 
               <div>
@@ -149,7 +214,7 @@ export default function OngoingOperationsPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {displayStatus(op)}
+                {displayOperationalStatus(op)}
               </span>
 
               <button

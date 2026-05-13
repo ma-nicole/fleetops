@@ -18,6 +18,21 @@ type MenuModule = {
   items: SubMenuItem[];
 };
 
+/**
+ * Nav-only: hide academic / stub analytics modules from the sidebar. Routes and files stay available
+ * (bookmarks, direct URLs). Roles listed in ops policy: admin + dispatcher. Lab links under Manager →
+ * Analytics are unchanged here; add `"manager"` to this set to hide those too.
+ */
+const SIDEBAR_NAV_ROLES_HIDING_ANALYTICS_MODULES = new Set(["admin", "dispatcher"]);
+
+function isSidebarAnalyticsModuleHidden(role: string, href: string): boolean {
+  if (!SIDEBAR_NAV_ROLES_HIDING_ANALYTICS_MODULES.has(role)) return false;
+  const path = href.split("?")[0] ?? href;
+  if (path.startsWith("/modules/analytics")) return true;
+  if (path.startsWith("/analytics/")) return true;
+  return false;
+}
+
 const menuModules: MenuModule[] = [
   // DRIVER
   {
@@ -32,7 +47,6 @@ const menuModules: MenuModule[] = [
     label: "Schedule & Pay",
     roles: ["driver"],
     items: [
-      { label: "Designated Schedule", href: "/driver/schedule", roles: ["driver"] },
       { label: "Total Pay", href: "/driver/pay", roles: ["driver"] },
     ],
   },
@@ -40,15 +54,15 @@ const menuModules: MenuModule[] = [
     label: "Vehicle",
     roles: ["driver"],
     items: [
-      { label: "Vehicle Status", href: "/driver/vehicle-status", roles: ["driver"] },
+      { label: "Report Vehicle Issue", href: "/driver/vehicle-status", roles: ["driver"] },
     ],
   },
   {
-    label: "Reports & Ratings",
+    label: "Reports",
     roles: ["driver"],
     items: [
-      { label: "Completion Report", href: "/driver/completion-report", roles: ["driver"] },
-      { label: "Activity & Ratings", href: "/driver/activity-ratings", roles: ["driver"] },
+      { label: "General Form", href: "/driver/general-form", roles: ["driver"] },
+      /* Hidden (not removed): Activity & Ratings — `/driver/activity-ratings` still works via direct URL. */
     ],
   },
 
@@ -64,21 +78,21 @@ const menuModules: MenuModule[] = [
     label: "Schedule & Pay",
     roles: ["helper"],
     items: [
-      { label: "Designated Schedule", href: "/driver/schedule", roles: ["helper"] },
-      { label: "Total Pay", href: "/driver/pay", roles: ["helper"] },
+      { label: "Designated Schedule", href: "/helper/designated-schedule", roles: ["helper"] },
+      { label: "Total Pay", href: "/helper/total-pay", roles: ["helper"] },
     ],
   },
   {
     label: "Vehicle",
     roles: ["helper"],
-    items: [{ label: "Vehicle Status", href: "/driver/vehicle-status", roles: ["helper"] }],
+    items: [{ label: "Vehicle Status", href: "/helper/vehicle-status", roles: ["helper"] }],
   },
   {
     label: "Reports & Ratings",
     roles: ["helper"],
     items: [
-      { label: "Completion Report", href: "/driver/completion-report", roles: ["helper"] },
-      { label: "Activity & Ratings", href: "/driver/activity-ratings", roles: ["helper"] },
+      { label: "Completion Report", href: "/helper/completion-report", roles: ["helper"] },
+      { label: "Activity & Ratings", href: "/helper/activity-ratings", roles: ["helper"] },
     ],
   },
 
@@ -88,25 +102,11 @@ const menuModules: MenuModule[] = [
     roles: ["dispatcher"],
     items: [
       { label: "Dashboard", href: "/dispatcher/dashboard", roles: ["dispatcher"] },
+      { label: "Job assignment", href: "/dispatcher/job-assignments", roles: ["dispatcher"] },
       { label: "Weekly Schedule Board", href: "/dispatcher/week-board", roles: ["dispatcher"] },
-      { label: "Job Assignment", href: "/dispatcher/job-assignments", roles: ["dispatcher"] },
-      { label: "Route Optimizer", href: "/modules/analytics/route-optimizer", roles: ["dispatcher"] },
-      { label: "What-if Simulator", href: "/modules/analytics/whatif", roles: ["dispatcher"] },
-      { label: "Operational predictions", href: "/modules/analytics/predictions", roles: ["dispatcher"] },
-      {
-        label: "Live data snapshot",
-        href: "/modules/analytics/operations-snapshot",
-        roles: ["dispatcher"],
-      },
-      { label: "Model accuracy (read-only)", href: "/modules/analytics/accuracy", roles: ["dispatcher"] },
-      {
-        label: "Analytics report guide",
-        href: "/modules/analytics/reports",
-        roles: ["dispatcher"],
-      },
-      { label: "Schedules", href: "/dispatcher/schedules", roles: ["dispatcher"] },
+      { label: "Trip monitoring", href: "/dispatcher/trip-monitoring", roles: ["dispatcher"] },
+      { label: "Resource Availability", href: "/dispatcher/assets-drivers", roles: ["dispatcher"] },
       { label: "Order Details", href: "/dispatcher/order-details", roles: ["dispatcher"] },
-      { label: "Trip Monitoring", href: "/dispatcher/trip-monitoring", roles: ["dispatcher"] },
     ],
   },
   {
@@ -115,16 +115,8 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Assets & Drivers", href: "/dispatcher/assets-drivers", roles: ["dispatcher"] },
       { label: "Reported Issues", href: "/dispatcher/reported-issues", roles: ["dispatcher"] },
-    ],
-  },
-  {
-    label: "Reports & Completion",
-    roles: ["dispatcher"],
-    items: [
       { label: "System Reports", href: "/dispatcher/reports", roles: ["dispatcher"] },
-      { label: "Accomplishment Report", href: "/dispatcher/accomplishment-report", roles: ["dispatcher"] },
-      { label: "Log Report", href: "/dispatcher/log-report", roles: ["dispatcher"] },
-      { label: "Confirm Completion", href: "/dispatcher/confirm-completion", roles: ["dispatcher"] },
+      { label: "Operational Log", href: "/dispatcher/log-report", roles: ["dispatcher"] },
     ],
   },
 
@@ -150,7 +142,7 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Payment approval", href: "/admin/payment-approval", roles: ["manager"] },
       { label: "Order Details", href: "/manager/orders", roles: ["manager"] },
-      { label: "Accomplishment Report", href: "/manager/accomplishment-report", roles: ["manager"] },
+      { label: "General Form", href: "/manager/general-form", roles: ["manager"] },
       { label: "Pending Bookings", href: "/manager/pending-bookings", roles: ["manager"] },
       { label: "Accomplished Bookings", href: "/manager/accomplished-bookings", roles: ["manager"] },
     ],
@@ -183,6 +175,7 @@ const menuModules: MenuModule[] = [
       { label: "Calculations", href: "/modules/administration/booking-pricing", roles: ["admin"] },
       { label: "Payment Approval", href: "/admin/payment-approval", roles: ["admin"] },
       { label: "Trip Monitoring", href: "/admin/trip-monitoring", roles: ["admin"] },
+      { label: "General Form", href: "/manager/general-form", roles: ["admin"] },
     ],
   },
   {
@@ -191,7 +184,6 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "User Management", href: "/modules/administration/accounts", roles: ["admin"] },
       { label: "Vehicle Management", href: "/modules/administration/vehicles", roles: ["admin"] },
-      { label: "Live data marts", href: "/modules/analytics/operations-snapshot", roles: ["admin"] },
     ],
   },
 
@@ -238,6 +230,18 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
         const adminGroups = ["Overview", "System"];
         const next = new Set(prev);
         adminGroups.forEach((g) => next.add(g));
+        return Array.from(next);
+      });
+    }
+  }, [userRole]);
+
+  // Helpers: expand all nav groups by default so submenu links are not stuck behind collapsed accordions.
+  useEffect(() => {
+    if (userRole === "helper") {
+      setExpandedModules((prev) => {
+        const helperGroups = ["Active Operations", "Schedule & Pay", "Vehicle", "Reports & Ratings"];
+        const next = new Set(prev);
+        helperGroups.forEach((g) => next.add(g));
         return Array.from(next);
       });
     }
@@ -351,6 +355,8 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
           transform: isOpen ? "translateX(0)" : "translateX(-100%)",
           display: "flex",
           flexDirection: "column",
+          /* When the drawer is closed, do not intercept clicks on the main canvas (inert + hit-testing). */
+          pointerEvents: isOpen ? "auto" : "none",
         }}
       >
         {/* Logo + close */}
@@ -407,8 +413,13 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
               const panelId = moduleId(module.label);
               const isExpanded = expandedModules.includes(module.label);
               const visibleItems = module.items.filter(
-                (item) => userRole && item.roles.includes(userRole)
+                (item) =>
+                  userRole &&
+                  item.roles.includes(userRole) &&
+                  !isSidebarAnalyticsModuleHidden(userRole, item.href)
               );
+
+              if (visibleItems.length === 0) return null;
 
               return (
                 <li key={module.label}>
@@ -479,9 +490,10 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
                     {visibleItems.map((item) => {
                       const active = isActive(item.href);
                       return (
-                        <li key={item.href}>
+                        <li key={`${module.label}-${item.href}`}>
                           <Link
                             href={item.href}
+                            prefetch={false}
                             aria-current={active ? "page" : undefined}
                             style={{
                               display: "flex",
@@ -502,6 +514,8 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
                               transition: "background 0.2s ease, color 0.2s ease",
                               fontSize: "0.9rem",
                               fontWeight: active ? 600 : 500,
+                              cursor: "pointer",
+                              pointerEvents: "auto",
                             }}
                             onMouseEnter={(e) => {
                               if (!active) {

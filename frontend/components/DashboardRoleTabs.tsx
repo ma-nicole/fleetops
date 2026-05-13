@@ -9,6 +9,7 @@ const TABS = [
   { role: "manager" as const, label: "Manager", href: "/manager/dashboard" },
   { role: "dispatcher" as const, label: "Dispatcher", href: "/dispatcher/dashboard" },
   { role: "driver" as const, label: "Driver", href: "/driver/dashboard" },
+  { role: "helper" as const, label: "Helper", href: "/driver/dashboard" },
   { role: "customer" as const, label: "Customer", href: "/dashboard/customer" },
 ] as const;
 
@@ -21,7 +22,8 @@ function tabsForSignedInRole(role: string | null): readonly (typeof TABS)[number
   const r = role as UserRole;
   if (r === "manager") return TABS.filter((t) => t.role === "manager");
   if (r === "dispatcher") return TABS.filter((t) => t.role === "dispatcher");
-  if (r === "driver" || r === "helper") return TABS.filter((t) => t.role === "driver");
+  if (r === "driver") return TABS.filter((t) => t.role === "driver");
+  if (r === "helper") return TABS.filter((t) => t.role === "helper");
   if (r === "customer") return TABS.filter((t) => t.role === "customer");
   /** Admin sees every dashboard tab for oversight. */
   if (r === "admin") return TABS;

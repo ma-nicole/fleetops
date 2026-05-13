@@ -1,423 +1,709 @@
 "use client";
 
 import DashboardRoleTabs from "@/components/DashboardRoleTabs";
-import KpiCard from "@/components/KpiCard";
 import { formatTimeShort } from "@/lib/appLocale";
-import { DispatchApi, type DispatcherDashboardTrip } from "@/lib/dispatchApi";
+import { DispatchApi, type OperationsActiveTripRow, type OperationsCenterResponse } from "@/lib/dispatchApi";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type TripSummary = {
-  id: string;
-  driverName: string;
-  route: string;
-  status: "pending" | "assigned" | "in_progress" | "delayed" | "completed";
-  startTime: string;
-  eta: string;
+/** Fleet command center palette — orange used sparingly as brand accent. */
+const C = {
+  pageBg: "#F1F3F5",
+  surface: "#FFFFFF",
+  surfaceMuted: "#FAFBFC",
+  border: "rgba(15, 23, 42, 0.07)",
+  text: "#0F172A",
+  textMuted: "#64748B",
+  textSubtle: "#94A3B8",
+  shadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 8px rgba(15, 23, 42, 0.04)",
+  shadowSm: "0 1px 2px rgba(15, 23, 42, 0.06)",
+  accent: "#EA580C",
+  blue: "#2563EB",
+  indigo: "#4F46E5",
+  teal: "#0D9488",
+  green: "#059669",
+  red: "#DC2626",
+  amber: "#D97706",
+} as const;
+
+function fmtIso(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return formatTimeShort(iso);
+  } catch {
+    return iso;
+  }
+}
+
+function activeLegsTotal(s: OperationsCenterResponse["summary"]): number {
+  return (
+    s.assigned_trips +
+    s.for_pickup +
+    s.picked_up +
+    s.en_route +
+    s.dropped_off
+  );
+}
+
+function statusPillStyle(key: string): { bg: string; fg: string; label: string } {
+  const k = key.toLowerCase().replace(/\s+/g, "_");
+  const map: Record<string, { bg: string; fg: string; label: string }> = {
+    assigned: { bg: "rgba(37, 99, 235, 0.12)", fg: C.blue, label: "Assigned" },
+    for_pickup: { bg: "rgba(37, 99, 235, 0.12)", fg: C.blue, label: "For pickup" },
+    picked_up: { bg: "rgba(234, 88, 12, 0.14)", fg: C.amber, label: "Picked up" },
+    en_route: { bg: "rgba(79, 70, 229, 0.12)", fg: C.indigo, label: "En route" },
+    dropped_off: { bg: "rgba(13, 148, 136, 0.14)", fg: C.teal, label: "Dropped off" },
+    completed: { bg: "rgba(5, 150, 105, 0.12)", fg: C.green, label: "Completed" },
+    delayed: { bg: "rgba(220, 38, 38, 0.1)", fg: C.red, label: "Delayed" },
+    pending: { bg: "rgba(100, 116, 139, 0.12)", fg: "#475569", label: "Pending" },
+    cancelled: { bg: "rgba(100, 116, 139, 0.1)", fg: "#64748B", label: "Cancelled" },
+  };
+  return map[k] ?? { bg: "rgba(100, 116, 139, 0.1)", fg: "#475569", label: key || "—" };
+}
+
+function StatusPill({ status }: { status: string }) {
+  const st = statusPillStyle(status);
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "0.12rem 0.45rem",
+        borderRadius: 999,
+        fontSize: "0.6875rem",
+        fontWeight: 700,
+        letterSpacing: "0.02em",
+        background: st.bg,
+        color: st.fg,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {st.label}
+    </span>
+  );
+}
+
+function KpiTile({
+  label,
+  value,
+  accentBorder,
+  warn,
+}: {
+  label: string;
+  value: number;
+  accentBorder?: "orange" | "blue" | "indigo" | "green" | "slate" | "red";
+  warn?: boolean;
+}) {
+  const border =
+    accentBorder === "orange"
+      ? `3px solid ${C.accent}`
+      : accentBorder === "blue"
+        ? `3px solid ${C.blue}`
+        : accentBorder === "indigo"
+          ? `3px solid ${C.indigo}`
+          : accentBorder === "green"
+            ? `3px solid ${C.green}`
+            : accentBorder === "red"
+              ? `3px solid ${C.red}`
+              : `3px solid #94A3B8`;
+  return (
+    <div
+      style={{
+        background: C.surface,
+        borderRadius: 10,
+        padding: "0.5rem 0.65rem",
+        boxShadow: C.shadowSm,
+        border: `1px solid ${C.border}`,
+        borderLeft: border,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: "0.625rem",
+          fontWeight: 700,
+          color: warn ? C.amber : C.textSubtle,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          lineHeight: 1.2,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+        title={label}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          marginTop: 2,
+          fontSize: "1.25rem",
+          fontWeight: 800,
+          color: warn ? C.amber : C.text,
+          letterSpacing: "-0.03em",
+          lineHeight: 1.15,
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  subtitle,
+  children,
+  dense,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  dense?: boolean;
+}) {
+  return (
+    <section
+      style={{
+        background: C.surface,
+        borderRadius: 12,
+        boxShadow: C.shadow,
+        border: `1px solid ${C.border}`,
+        padding: dense ? "0.65rem 0.75rem" : "0.75rem 0.85rem",
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <div style={{ marginBottom: dense ? 6 : 8 }}>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: "0.8125rem",
+            fontWeight: 800,
+            color: C.text,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {title}
+        </h2>
+        {subtitle ? (
+          <p style={{ margin: "3px 0 0", fontSize: "0.6875rem", color: C.textMuted, lineHeight: 1.35 }}>{subtitle}</p>
+        ) : null}
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
+    </section>
+  );
+}
+
+function ResourceStack({
+  title,
+  total,
+  segments,
+}: {
+  title: string;
+  total: number;
+  segments: { id: string; label: string; value: number; color: string }[];
+}) {
+  const sum = segments.reduce((a, s) => a + s.value, 0);
+  const denom = Math.max(sum, 1);
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: C.text }}>{title}</span>
+        <span style={{ fontSize: "0.625rem", fontWeight: 600, color: C.textSubtle, fontVariantNumeric: "tabular-nums" }}>
+          {total} roster
+        </span>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          height: 5,
+          borderRadius: 4,
+          overflow: "hidden",
+          background: "rgba(148, 163, 184, 0.25)",
+        }}
+      >
+        {segments.map((s) => (
+          <div
+            key={s.id}
+            title={`${s.label}: ${s.value}`}
+            style={{
+              width: `${(s.value / denom) * 100}%`,
+              background: s.color,
+              minWidth: s.value > 0 ? 3 : 0,
+              transition: "width 0.2s ease",
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: 8 }}>
+        {segments.map((s) => (
+          <span
+            key={s.id}
+            style={{
+              fontSize: "0.625rem",
+              fontWeight: 700,
+              padding: "0.15rem 0.45rem",
+              borderRadius: 6,
+              background: "rgba(15, 23, 42, 0.04)",
+              color: C.textMuted,
+              border: `1px solid ${C.border}`,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            <span style={{ color: s.color, marginRight: 4 }}>●</span>
+            {s.label} {s.value}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function tripBadgeStatus(row: OperationsActiveTripRow): string {
+  if (row.badge_status) return row.badge_status;
+  if (row.eta) {
+    const t = new Date(row.eta).getTime();
+    if (!Number.isNaN(t) && t < Date.now()) return "delayed";
+  }
+  return row.current_status;
+}
+
+const th: React.CSSProperties = {
+  textAlign: "left",
+  fontSize: "0.625rem",
+  fontWeight: 800,
+  color: C.textSubtle,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  padding: "0.35rem 0.45rem",
+  borderBottom: `1px solid ${C.border}`,
+  background: C.surfaceMuted,
+  whiteSpace: "nowrap",
 };
 
-function fmtTime(iso: string | null): string {
-  if (!iso) return "—";
-  return formatTimeShort(iso);
-}
-
-function mapTripStatus(api: string, etaIso: string | null): TripSummary["status"] {
-  const now = Date.now();
-  if (api === "completed") return "completed";
-  if (api === "cancelled") return "pending";
-  if (api === "pending") return "pending";
-  if (["assigned", "accepted"].includes(api)) return "assigned";
-  if (["departed", "loading", "in_delivery"].includes(api)) {
-    if (etaIso) {
-      const etaMs = new Date(etaIso).getTime();
-      if (!Number.isNaN(etaMs) && etaMs < now) return "delayed";
-    }
-    return "in_progress";
-  }
-  return "assigned";
-}
-
-function tripsFromApi(rows: DispatcherDashboardTrip[]): TripSummary[] {
-  return rows.map((r) => ({
-    id: r.display_id,
-    driverName: r.driver_name,
-    route: r.route,
-    status: mapTripStatus(r.status, r.eta),
-    startTime: fmtTime(r.start_time),
-    eta: fmtTime(r.eta),
-  }));
-}
-
-const card: React.CSSProperties = {
-  background: "#FFFFFF",
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  padding: "1.25rem",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+const td: React.CSSProperties = {
+  fontSize: "0.8125rem",
+  padding: "0.32rem 0.45rem",
+  borderBottom: `1px solid ${C.border}`,
+  color: C.text,
+  verticalAlign: "middle",
+  lineHeight: 1.35,
 };
 
 export default function DispatcherDashboard() {
-  const [stats, setStats] = useState({
-    todayTrips: 0,
-    todayCompleted: 0,
-    todayActive: 0,
-    availableTrucks: 0,
-    activeDrivers: 0,
-    driversOnBreak: 0,
-    pendingOrders: 0,
-  });
-  const [recentTrips, setRecentTrips] = useState<TripSummary[]>([]);
+  const [data, setData] = useState<OperationsCenterResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const d = await DispatchApi.dashboard();
-        if (!alive) return;
-        setStats({
-          todayTrips: d.kpis.today_volume,
-          todayCompleted: d.kpis.trips_completed_today,
-          todayActive: d.kpis.active_trips,
-          availableTrucks: d.kpis.available_trucks,
-          activeDrivers: d.kpis.drivers_busy,
-          driversOnBreak: d.kpis.drivers_idle,
-          pendingOrders: d.kpis.pending_orders,
-        });
-        setRecentTrips(tripsFromApi(d.recent_trips));
-        setLoadError(null);
-      } catch (e) {
-        if (!alive) return;
-        setLoadError(e instanceof Error ? e.message : "Could not load dispatcher dashboard.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+  const load = useCallback(async () => {
+    try {
+      const d = await DispatchApi.operationsCenter();
+      setData(d);
+      setLoadError(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Could not load operations data.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const getStatusColors = (status: TripSummary["status"]) => {
-    switch (status) {
-      case "pending":
-        return { fg: "#2563eb", bg: "rgba(37, 99, 235, 0.12)", label: "Pending" };
-      case "assigned":
-        return { fg: "#7c3aed", bg: "rgba(124, 58, 237, 0.12)", label: "Assigned" };
-      case "in_progress":
-        return { fg: "#d97706", bg: "rgba(217, 119, 6, 0.15)", label: "Active" };
-      case "delayed":
-        return { fg: "#dc2626", bg: "rgba(220, 38, 38, 0.12)", label: "Delayed" };
-      case "completed":
-        return { fg: "#059669", bg: "rgba(5, 150, 105, 0.12)", label: "Completed" };
-      default:
-        return { fg: "#6b7280", bg: "#F3F4F6", label: "Unknown" };
-    }
-  };
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 45_000);
+    return () => clearInterval(id);
+  }, [load]);
 
-  const scheduleBands = [
-    { time: "06:00", count: 12, label: "", tone: "success" as const },
-    { time: "10:00", count: 18, label: "Peak", tone: "warning" as const },
-    { time: "14:00", count: 9, label: "", tone: "info" as const },
-  ];
-  const maxBand = Math.max(...scheduleBands.map((b) => b.count));
+  const s = data?.summary;
+  const activeTotal = useMemo(() => (s ? activeLegsTotal(s) : 0), [s]);
+  const alertCount = data?.alerts?.length ?? 0;
 
   return (
-    <main style={{ padding: "1.5rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gap: "1.5rem" }}>
-        <header>
-          <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.06em" }}>
-            FleetOpt Analytics
-          </p>
-          <h1 style={{ margin: "0.15rem 0 0", fontSize: "1.35rem", fontWeight: 800 }}>Logistics Management System</h1>
+    <main
+      style={{
+        padding: "0.75rem 0.85rem 1.25rem",
+        background: C.pageBg,
+        minHeight: "100vh",
+        color: C.text,
+      }}
+    >
+      <div style={{ maxWidth: 1480, margin: "0 auto", display: "grid", gap: "0.65rem" }}>
+        <header
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: "0.5rem",
+            paddingBottom: 2,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: "0.625rem", fontWeight: 800, color: C.textSubtle, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              FleetOpt · Dispatch
+            </div>
+            <h1 style={{ margin: "2px 0 0", fontSize: "1.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: C.text }}>
+              Operations command center
+            </h1>
+          </div>
+          <div style={{ fontSize: "0.6875rem", color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>
+            {loading && !data ? "Syncing…" : data?.generated_at ? `Updated ${fmtIso(data.generated_at)}` : null}
+            {" · "}
+            <span style={{ color: C.textSubtle }}>45s refresh</span>
+          </div>
         </header>
 
         <DashboardRoleTabs active="dispatcher" />
 
-        <div>
-          <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Dispatcher Dashboard</h2>
-          <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-            Trip scheduling, route coordination, and order monitoring.
-          </p>
-        </div>
-
-        {loadError && (
-          <div role="alert" style={{ background: "var(--bg-error)", color: "var(--text-error)", padding: 12, borderRadius: 8 }}>
+        {loadError ? (
+          <div
+            role="alert"
+            style={{
+              padding: "0.5rem 0.65rem",
+              borderRadius: 8,
+              background: "rgba(220, 38, 38, 0.08)",
+              color: C.red,
+              fontSize: "0.8125rem",
+              fontWeight: 600,
+              border: `1px solid rgba(220,38,38,0.2)`,
+            }}
+          >
             {loadError}
           </div>
-        )}
-        {loading && <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>Loading live stats…</p>}
+        ) : null}
 
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "1rem",
-          }}
-        >
-          <KpiCard
-            label="Today’s trips"
-            value={stats.todayTrips}
-            delta={`${stats.todayCompleted} completed · ${stats.todayActive} active`}
-            trend="up"
-          />
-          <KpiCard label="Available trucks" value={stats.availableTrucks} delta="Ready for dispatch" tone="neutral" />
-          <KpiCard
-            label="Active drivers"
-            value={stats.activeDrivers}
-            delta={`${stats.driversOnBreak} on break`}
-            tone="neutral"
-          />
-          <KpiCard label="Pending orders" value={stats.pendingOrders} delta="Needs assignment" tone="warning" />
-        </section>
-
-        <section
-          style={{
-            ...card,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.5rem",
-            alignItems: "center",
-          }}
-        >
-          <span style={{ fontWeight: 700, fontSize: "0.88rem", width: "100%", marginBottom: 2 }}>
-            Analytics decision support
-          </span>
-          <GhostLink href="/modules/analytics/predictions">Operational predictions</GhostLink>
-          <GhostLink href="/modules/analytics/whatif">What‑if</GhostLink>
-          <GhostLink href="/modules/analytics/route-optimizer">Route optimizer</GhostLink>
-          <GhostLink href="/modules/analytics/operations-snapshot">Live data snapshot</GhostLink>
-          <GhostLink href="/modules/analytics/accuracy">Model accuracy</GhostLink>
-          <GhostLink href="/modules/analytics/reports">Report map</GhostLink>
-        </section>
-
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
-            gap: "1rem",
-          }}
-        >
-          <article style={{ ...card, display: "grid", gap: "0.85rem" }}>
-            <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Trip schedule optimization</h3>
-            <InsightRow title="Best dispatch window" detail="06:00 – 08:00 AM · Projected efficiency uplift +18% (baseline)" accent="rgba(14,165,233,0.15)" />
-            <InsightRow title="Workload forecast" detail="Peak 10:00 AM – 2:00 PM · Consider extra coverage on the board." accent="rgba(251,146,60,0.18)" />
-            <div style={{ marginTop: 4 }}>
-              <div style={{ fontSize: "0.82rem", fontWeight: 700, marginBottom: 8 }}>Volume by slot</div>
-              {scheduleBands.map((b) => (
-                <div key={b.time} style={{ marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem" }}>
-                    <span>{b.time}</span>
-                    <span style={{ fontWeight: 600 }}>
-                      {b.count} trips {b.label ? `· ${b.label}` : ""}
-                    </span>
-                  </div>
-                  <div style={{ height: 10, background: "#E5E7EB", borderRadius: 6, overflow: "hidden", marginTop: 4 }}>
-                    <div
-                      style={{
-                        width: `${Math.round((b.count / maxBand) * 100)}%`,
-                        height: "100%",
-                        background:
-                          b.tone === "success" ? "#059669" : b.tone === "warning" ? "#d97706" : "#2563eb",
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Link href="/dispatcher/week-board" style={{ ...linkStrong, justifySelf: "start" }}>
-              Open weekly schedule board
-            </Link>
-          </article>
-
-          <article style={{ ...card, display: "grid", gap: "0.75rem" }}>
-            <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Route coordination</h3>
-            <InsightRow title="Suggested corridor" detail="Manila → Quezon → Marikina · Approx. 42 km · Saves ~15 min vs default" accent="rgba(5,150,105,0.12)" />
-            <InsightRow title="Traffic hotspot" detail="Heavy EDSA segment 08:00 – 10:00 · Predict +25 min if dispatched into window" accent="rgba(220,38,38,0.1)" />
-            <div style={{ fontSize: "0.82rem", fontWeight: 700, marginTop: 4 }}>Route performance snapshot</div>
-            <ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "0.88rem", color: "var(--text-secondary)" }}>
-              <li>MNL-North corridor — on-time ~95%</li>
-              <li>MNL-South corridor — on-time ~78%</li>
-            </ul>
-            <Link href="/modules/analytics/route-optimizer" style={{ ...linkStrong, justifySelf: "start" }}>
-              Route optimizer
-            </Link>
-          </article>
-
-          <article style={{ ...card, display: "grid", gap: "0.75rem" }}>
-            <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Fleet &amp; driver assignment</h3>
-            <div style={{ padding: "0.75rem", borderRadius: 8, border: "1px solid var(--border)", background: "#FAFAFA" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontWeight: 700 }}>TRK-001</span>
-                <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.2rem 0.5rem", borderRadius: 6, background: "rgba(5,150,105,0.15)", color: "#059669" }}>
-                  Available
-                </span>
-              </div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: 6 }}>Utilization about 85%. Open Assets for the live fleet table.</div>
-            </div>
-            <div style={{ padding: "0.75rem", borderRadius: 8, border: "1px solid var(--border)", background: "#FAFAFA" }}>
-              <div style={{ fontWeight: 700 }}>Active driver snapshot</div>
-              <div style={{ fontSize: "0.88rem", color: "var(--text-secondary)", marginTop: 6 }}>Detailed ETAs and next jobs live under Driver Activity.</div>
-              <Link href="/dispatcher/driver-activity" style={{ ...linkStrong, marginTop: 10, display: "inline-block" }}>
-                Driver activity
-              </Link>
-            </div>
-            <InsightRow title="Capacity hint" detail="Forecast: consider +3 trucks around 15:00 for afternoon surge." accent="rgba(124,58,237,0.12)" />
-          </article>
-
-          <article style={{ ...card, display: "grid", gap: "0.65rem" }}>
-            <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Order monitoring</h3>
-            <OrderRow order="ORD-1234" line="Metro delivery" badge="On track" tone="good" />
-            <OrderRow order="ORD-1235" line="Laguna loop · Possible traffic slip" badge="Attention" tone="warn" />
-            <OrderRow order="ORD-1236" line="Warehouse transfer" badge="Unassigned" tone="muted" />
-            <div style={{ padding: "0.65rem 0.85rem", borderRadius: 8, background: "rgba(124,58,237,0.08)", fontSize: "0.82rem", marginTop: 6 }}>
-              <strong>Fleet strain:</strong> Shortage risk late afternoon. Review jobs and the week board together.
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: 6 }}>
-              <GhostLink href="/dispatcher/job-assignments">Job assignments</GhostLink>
-              <GhostLink href="/dispatcher/order-details">Order details</GhostLink>
-            </div>
-          </article>
-        </section>
-
-        <section style={card}>
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 700 }}>Live trips</h3>
-          {loading && recentTrips.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>Loading trips…</p>
-          ) : recentTrips.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>No recent trips yet.</p>
+        {/* KPI strip */}
+        <div className="dispatch-kpi-strip" style={{ display: "grid", gap: "0.45rem" }}>
+          {s ? (
+            <>
+              <KpiTile label="Waiting assign" value={s.waiting_for_assignment} accentBorder="orange" warn={s.waiting_for_assignment > 0} />
+              <KpiTile label="Active trips" value={activeTotal} accentBorder="indigo" />
+              <KpiTile label="En route" value={s.en_route} accentBorder="indigo" />
+              <KpiTile label="Done today" value={s.completed_today} accentBorder="green" />
+              <KpiTile label="Avail trucks" value={s.available_trucks} accentBorder="blue" />
+              <KpiTile label="Maint trucks" value={s.trucks_under_maintenance} accentBorder="slate" />
+              <KpiTile label="Avail drivers" value={s.available_drivers} accentBorder="blue" />
+              <KpiTile label="Alerts" value={alertCount} accentBorder={alertCount > 0 ? "red" : "slate"} warn={alertCount > 0} />
+            </>
           ) : (
-            <div style={{ display: "grid", gap: "0.65rem" }}>
-              {recentTrips.map((trip) => {
-                const c = getStatusColors(trip.status);
-                return (
+            <div style={{ gridColumn: "1 / -1", fontSize: "0.75rem", color: C.textMuted }}>Loading KPIs…</div>
+          )}
+        </div>
+
+        {/* Main + sidebar */}
+        <div
+          className="dispatch-main-grid"
+          style={{
+            display: "grid",
+            gap: "0.65rem",
+            alignItems: "stretch",
+          }}
+        >
+          <Panel
+            title="Active trips"
+            subtitle="Live legs in execution — primary dispatch board."
+            dense
+          >
+            {!data?.active_trips?.length ? (
+              <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>No active legs.</p>
+            ) : (
+              <div style={{ overflow: "auto", margin: "0 -0.15rem", WebkitOverflowScrolling: "touch" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Trip</th>
+                      <th style={th}>Truck</th>
+                      <th style={th}>Driver</th>
+                      <th style={th}>Helper</th>
+                      <th style={th}>Status</th>
+                      <th style={th}>Latest location</th>
+                      <th style={th}>ETA</th>
+                      <th style={th}>Last update</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.active_trips.map((r) => (
+                      <tr key={r.trip_id} style={{ background: r.booking_id % 2 === 0 ? "transparent" : "rgba(248,250,252,0.6)" }}>
+                        <td style={{ ...td, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>#{r.trip_id}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{r.truck_code}</td>
+                        <td style={td}>{r.driver_name}</td>
+                        <td style={td}>{r.helper_name}</td>
+                        <td style={td}>
+                          <StatusPill status={tripBadgeStatus(r)} />
+                        </td>
+                        <td style={{ ...td, maxWidth: 200, fontSize: "0.75rem", color: C.textMuted }}>{r.latest_location}</td>
+                        <td style={{ ...td, whiteSpace: "nowrap", fontSize: "0.75rem", fontVariantNumeric: "tabular-nums" }}>
+                          {fmtIso(r.eta ?? null)}
+                        </td>
+                        <td style={{ ...td, whiteSpace: "nowrap", fontSize: "0.75rem", color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                          {fmtIso(r.last_updated)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          <div style={{ display: "grid", gap: "0.65rem", minWidth: 0 }}>
+            <Panel title="Alerts & exceptions" dense>
+              {!data?.alerts?.length ? (
+                <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>No active alerts.</p>
+              ) : (
                 <div
-                  key={trip.id}
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                    gap: "0.75rem",
-                    alignItems: "center",
-                    padding: "0.85rem",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: "#FAFAFA",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    maxHeight: 280,
+                    overflowY: "auto",
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{trip.id}</div>
-                    <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>Driver · {trip.driverName}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontWeight: 600 }}>ROUTE</div>
-                    <div style={{ fontWeight: 600, fontSize: "0.9rem" }}>{trip.route}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontWeight: 600 }}>TIME</div>
-                    <div style={{ fontSize: "0.85rem" }}>
-                      {trip.startTime} → {trip.eta}
+                  {data.alerts.map((a, i) => (
+                    <div
+                      key={`${a.code}-${a.trip_id ?? "x"}-${i}`}
+                      style={{
+                        padding: "0.45rem 0.5rem",
+                        borderRadius: 8,
+                        background: a.severity === "high" ? "rgba(220,38,38,0.06)" : "rgba(217,119,6,0.07)",
+                        border: `1px solid ${a.severity === "high" ? "rgba(220,38,38,0.15)" : "rgba(217,119,6,0.15)"}`,
+                        fontSize: "0.75rem",
+                        lineHeight: 1.4,
+                        color: C.text,
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, fontSize: "0.625rem", color: a.severity === "high" ? C.red : C.amber }}>
+                        {(a.severity || "info").toUpperCase()}
+                      </span>
+                      <span style={{ color: C.textSubtle, fontSize: "0.625rem", marginLeft: 6 }}>{a.code}</span>
+                      <div style={{ marginTop: 3 }}>{a.message}</div>
                     </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <span style={{ fontSize: "0.75rem", fontWeight: 700, padding: "0.35rem 0.6rem", borderRadius: 6, background: c.bg, color: c.fg }}>{c.label}</span>
-                    {trip.status === "pending" && (
-                      <Link
-                        href="/dispatcher/job-assignments"
-                        style={{
-                          fontSize: "0.78rem",
-                          padding: "0.35rem 0.65rem",
-                          borderRadius: 8,
-                          textDecoration: "none",
-                          textAlign: "center",
-                          background: "var(--brand-text-strong)",
-                          color: "#fff",
-                          fontWeight: 700,
-                        }}
-                      >
-                        Assign
-                      </Link>
-                    )}
-                  </div>
+                  ))}
                 </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+              )}
+            </Panel>
 
-        <section style={{ ...card, display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <GhostLink href="/dispatcher/week-board">Week board</GhostLink>
-          <GhostLink href="/dispatcher/schedules">Schedules</GhostLink>
-          <GhostLink href="/dispatcher/assets-drivers">Assets &amp; drivers</GhostLink>
-          <GhostLink href="/dispatcher/reported-issues">Reported issues</GhostLink>
-          <GhostLink href="/dispatcher/confirm-completion">Confirm completion</GhostLink>
-        </section>
+            <Panel title="Recent locations" subtitle="Helper GPS / check-ins." dense>
+              {!data?.recent_location_updates?.length ? (
+                <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>No updates.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 220, overflowY: "auto" }}>
+                  {data.recent_location_updates.slice(0, 8).map((u, i) => (
+                    <div
+                      key={`${u.trip_id}-${u.updated_at}-${i}`}
+                      style={{
+                        padding: "0.4rem 0.5rem",
+                        borderRadius: 8,
+                        background: C.surfaceMuted,
+                        border: `1px solid ${C.border}`,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: 800 }}>Trip #{u.trip_id}</span>
+                        <span style={{ fontSize: "0.625rem", color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                          {fmtIso(u.updated_at)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "0.6875rem", color: C.textMuted, marginTop: 2 }}>{u.helper_name}</div>
+                      <div style={{ fontSize: "0.6875rem", marginTop: 3, color: C.text }}>
+                        <StatusPill status={u.status} />{" "}
+                        <span style={{ color: C.textMuted }}>{u.location_text}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
+        </div>
+
+        {/* Queue + resources */}
+        <div
+          className="dispatch-bottom-grid"
+          style={{
+            display: "grid",
+            gap: "0.65rem",
+            alignItems: "stretch",
+          }}
+        >
+          <Panel title="Waiting for assignment" subtitle="Verified / ready — no legs yet." dense>
+            {!data?.waiting_for_assignment?.length ? (
+              <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>Queue clear.</p>
+            ) : (
+              <div style={{ overflow: "auto", maxHeight: 320 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={th}>Bk</th>
+                      <th style={th}>Route</th>
+                      <th style={th}>t</th>
+                      <th style={th}>Need</th>
+                      <th style={th}>Slot</th>
+                      <th style={th}>Paid</th>
+                      <th style={th} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.waiting_for_assignment.map((b) => (
+                      <tr key={b.booking_id}>
+                        <td style={{ ...td, fontWeight: 800 }}>#{b.booking_id}</td>
+                        <td style={{ ...td, fontSize: "0.75rem", color: C.textMuted, maxWidth: 220 }}>
+                          {(b.pickup_location || "").slice(0, 28)}
+                          {(b.pickup_location || "").length > 28 ? "…" : ""} → {(b.dropoff_location || "").slice(0, 28)}
+                        </td>
+                        <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{b.cargo_weight_tons}</td>
+                        <td style={{ ...td, fontVariantNumeric: "tabular-nums" }}>{b.required_trucks}</td>
+                        <td style={{ ...td, fontSize: "0.75rem", whiteSpace: "nowrap" }}>
+                          {b.scheduled_time_slot}
+                        </td>
+                        <td style={{ ...td, fontSize: "0.6875rem", color: C.textMuted, whiteSpace: "nowrap" }}>
+                          {fmtIso(b.payment_verified_at)}
+                        </td>
+                        <td style={td}>
+                          <Link
+                            href={`/dispatcher/job-assignments?bookingId=${b.booking_id}`}
+                            style={{
+                              display: "inline-block",
+                              padding: "0.22rem 0.5rem",
+                              borderRadius: 6,
+                              background: C.text,
+                              color: "#fff",
+                              fontWeight: 700,
+                              fontSize: "0.625rem",
+                              textDecoration: "none",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Assign
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Resource availability" subtitle="Fleet posture — from live roster & trips." dense>
+            {data?.resources ? (
+              <div style={{ paddingTop: 4 }}>
+                <ResourceStack
+                  title="Trucks"
+                  total={data.resources.trucks.total_registered}
+                  segments={[
+                    { id: "av", label: "Avail", value: data.resources.trucks.available, color: C.blue },
+                    { id: "as", label: "Busy", value: data.resources.trucks.assigned, color: C.indigo },
+                    { id: "hd", label: "Hold", value: data.resources.trucks.on_hold, color: C.amber },
+                    { id: "mt", label: "Maint", value: data.resources.trucks.under_maintenance, color: C.textSubtle },
+                  ]}
+                />
+                <ResourceStack
+                  title="Drivers"
+                  total={data.resources.drivers.total}
+                  segments={[
+                    { id: "da", label: "Avail", value: data.resources.drivers.available, color: C.green },
+                    { id: "ds", label: "Busy", value: data.resources.drivers.assigned, color: C.indigo },
+                    { id: "do", label: "Off", value: data.resources.drivers.off_duty, color: C.textSubtle },
+                  ]}
+                />
+                <ResourceStack
+                  title="Helpers"
+                  total={data.resources.helpers.total}
+                  segments={[
+                    { id: "ha", label: "Avail", value: data.resources.helpers.available, color: C.teal },
+                    { id: "hs", label: "Busy", value: data.resources.helpers.assigned, color: C.indigo },
+                    { id: "ho", label: "Off", value: data.resources.helpers.off_duty, color: C.textSubtle },
+                  ]}
+                />
+              </div>
+            ) : (
+              <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>—</p>
+            )}
+          </Panel>
+        </div>
+
+        <nav
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.35rem",
+            paddingTop: 2,
+          }}
+        >
+          {[
+            ["Week board", "/dispatcher/week-board"],
+            ["Jobs", "/dispatcher/job-assignments"],
+            ["Trips", "/dispatcher/trip-monitoring"],
+            ["Assets", "/dispatcher/assets-drivers"],
+            ["Orders", "/dispatcher/order-details"],
+            ["Drivers", "/dispatcher/driver-activity"],
+          ].map(([label, href]) => (
+            <Link
+              key={href}
+              href={href}
+              className="dispatch-quicklink"
+              style={{
+                padding: "0.28rem 0.55rem",
+                borderRadius: 6,
+                fontSize: "0.6875rem",
+                fontWeight: 700,
+                textDecoration: "none",
+                color: C.textMuted,
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                boxShadow: C.shadowSm,
+              }}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
       </div>
+
+      <style jsx global>{`
+        .dispatch-kpi-strip {
+          grid-template-columns: repeat(8, minmax(0, 1fr));
+        }
+        .dispatch-main-grid {
+          grid-template-columns: minmax(0, 7fr) minmax(240px, 3fr);
+        }
+        .dispatch-bottom-grid {
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        }
+        @media (max-width: 1280px) {
+          .dispatch-kpi-strip {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 1100px) {
+          .dispatch-main-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        @media (max-width: 960px) {
+          .dispatch-bottom-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        @media (max-width: 720px) {
+          .dispatch-kpi-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .dispatch-main-grid {
+            grid-template-columns: 1fr;
+          }
+          .dispatch-bottom-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+        a.dispatch-quicklink:hover {
+          border-color: rgba(234, 88, 12, 0.45) !important;
+          color: #0f172a !important;
+        }
+      `}</style>
     </main>
-  );
-}
-
-const linkStrong: React.CSSProperties = {
-  fontSize: "0.85rem",
-  fontWeight: 700,
-  color: "var(--brand-text-strong)",
-  textDecoration: "none",
-};
-
-function InsightRow({ title, detail, accent }: { title: string; detail: string; accent: string }) {
-  return (
-    <div style={{ padding: "0.65rem 0.85rem", borderRadius: 8, background: accent }}>
-      <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>{title}</div>
-      <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 4 }}>{detail}</div>
-    </div>
-  );
-}
-
-function OrderRow({
-  order,
-  line,
-  badge,
-  tone,
-}: {
-  order: string;
-  line: string;
-  badge: string;
-  tone: "good" | "warn" | "muted";
-}) {
-  const colors =
-    tone === "good"
-      ? { bg: "rgba(5,150,105,0.12)", fg: "#059669" }
-      : tone === "warn"
-        ? { bg: "rgba(217,119,6,0.15)", fg: "#b45309" }
-        : { bg: "#F3F4F6", fg: "#6b7280" };
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-      <div>
-        <div style={{ fontWeight: 800, fontSize: "0.9rem" }}>{order}</div>
-        <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{line}</div>
-      </div>
-      <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.25rem 0.55rem", borderRadius: 6, background: colors.bg, color: colors.fg }}>{badge}</span>
-    </div>
-  );
-}
-
-function GhostLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      style={{
-        padding: "0.45rem 0.85rem",
-        borderRadius: 8,
-        border: "1px solid var(--border)",
-        fontSize: "0.82rem",
-        fontWeight: 600,
-        textDecoration: "none",
-        color: "var(--text)",
-        background: "#fff",
-      }}
-    >
-      {children}
-    </Link>
   );
 }

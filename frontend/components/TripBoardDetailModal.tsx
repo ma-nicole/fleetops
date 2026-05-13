@@ -2,9 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
-import { WorkflowApi } from "@/lib/workflowApi";
+import { apiFullUrl } from "@/lib/api";
+import { WorkflowApi, type DispatchTripMonitoringAssignment } from "@/lib/workflowApi";
 
-export type TripBoardRow = Awaited<ReturnType<typeof WorkflowApi.dispatchAssignmentsBoard>>["assignments"][number];
+type LegacyAssignmentRow = Awaited<ReturnType<typeof WorkflowApi.dispatchAssignmentsBoard>>["assignments"][number];
+
+export type TripBoardRow = DispatchTripMonitoringAssignment | LegacyAssignmentRow;
+
+function operationalLabel(row: TripBoardRow): string {
+  if ("operational_status" in row && row.operational_status) {
+    return row.operational_status.replace(/_/g, " ");
+  }
+  return (row.helper_progress_status || row.trip_status).replace(/_/g, " ");
+}
+
+function bookingRecordStatus(row: TripBoardRow, tdBookingStatus: string | undefined): string {
+  if ("booking_db_status" in row) return row.booking_db_status.replace(/_/g, " ");
+  return (tdBookingStatus ?? row.booking_status).replace(/_/g, " ");
+}
 
 type Props = {
   row: TripBoardRow | null;
@@ -87,10 +102,13 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
               <strong>Company:</strong> {row.customer_company_name ?? "—"}
             </p>
             <p>
-              <strong>Status:</strong> {(row.helper_progress_status || row.trip_status).replace(/_/g, " ")}
+              <strong>Operational status:</strong> {operationalLabel(row)}
             </p>
             <p>
-              <strong>Booking status:</strong> {td?.booking?.status ?? row.booking_status}
+              <strong>Booking record status:</strong> {bookingRecordStatus(row, td?.booking?.status)}
+            </p>
+            <p>
+              <strong>Customer-facing status:</strong> {row.booking_status.replace(/_/g, " ")}
             </p>
             <p>
               <strong>Pickup:</strong> {row.pickup_location}
@@ -121,7 +139,7 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
               <strong>Vehicle:</strong> {row.truck_code}
             </p>
             <p>
-              <strong>Current location:</strong> {assignment?.latest_location_name ?? row.latest_location ?? "—"}
+              <strong>Latest location:</strong> {assignment?.latest_location_name ?? row.latest_location ?? "—"}
             </p>
             <p>
               <strong>Distance:</strong> {Math.round(displayDistanceKm * 10) / 10} km
@@ -147,6 +165,41 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
                 </ul>
               </div>
             ) : null}
+            {(() => {
+              const logs = (td?.operational_logs ?? []).filter((l) => l.trip_id === row.trip_id);
+              if (!logs.length) return null;
+              return (
+                <div>
+                  <strong style={{ display: "block", marginBottom: 6 }}>Dispatcher operational logs</strong>
+                  <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "#475569", fontSize: "0.88rem" }}>
+                    {logs.map((lg) => (
+                      <li key={lg.id} style={{ marginBottom: "0.35rem" }}>
+                        {lg.created_at
+                          ? new Intl.DateTimeFormat(APP_LOCALE, {
+                              timeZone: APP_TIMEZONE,
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            }).format(new Date(lg.created_at))
+                          : "—"}{" "}
+                        — <strong>{lg.report_type_label}</strong> ({lg.priority_level})
+                        {lg.dispatcher_name ? ` · ${lg.dispatcher_name}` : ""}
+                        <div style={{ marginTop: 2 }}>{lg.operational_details}</div>
+                        {lg.attachment_url ? (
+                          <a
+                            href={apiFullUrl(lg.attachment_url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: "0.82rem", color: "#2563EB" }}
+                          >
+                            Attachment
+                          </a>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
         )}
         <button

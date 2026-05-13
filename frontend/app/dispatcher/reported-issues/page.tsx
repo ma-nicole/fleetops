@@ -1,112 +1,103 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
-
+import { apiFullUrl } from "@/lib/api";
+import { WorkflowApi, type DispatchVehicleIssueReportRow } from "@/lib/workflowApi";
 import { announce } from "@/lib/useAnnouncer";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 
-type ReportedIssue = {
-  issueId: string;
-  reportedBy: string;
-  issueType: string;
-  severity: "low" | "medium" | "high" | "critical";
-  description: string;
-  reportedDate: string;
-  status: "reported" | "investigating" | "in_progress" | "resolved" | "closed";
-  assignedTo?: string;
-};
+function attachmentHref(url: string | null | undefined): string | null {
+  const u = (url || "").trim();
+  if (!u) return null;
+  if (u.startsWith("http://") || u.startsWith("https://")) return u;
+  if (u.startsWith("/uploads/")) return apiFullUrl(u);
+  return u;
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "submitted":
+      return "Submitted";
+    case "reviewed":
+      return "Reviewed";
+    case "resolved":
+      return "Resolved";
+    default:
+      return status.replace(/_/g, " ");
+  }
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case "submitted":
+      return "#2563EB";
+    case "reviewed":
+      return "#EA580C";
+    case "resolved":
+      return "#059669";
+    default:
+      return "#64748B";
+  }
+}
+
+function severityColor(priority: string): string {
+  switch (priority) {
+    case "low":
+      return "#2196F3";
+    case "medium":
+      return "#FF9800";
+    case "high":
+      return "#F44336";
+    case "critical":
+      return "#B71C1C";
+    default:
+      return "#999";
+  }
+}
 
 export default function ReportedIssuesPage() {
-  const [issues, setIssues] = useState<ReportedIssue[]>([]);
+  const [issues, setIssues] = useState<DispatchVehicleIssueReportRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await WorkflowApi.dispatchVehicleIssueReports();
+      setIssues(res.reports ?? []);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Could not load reports.";
+      setLoadError(msg);
+      setIssues([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const patchIssue = (issueId: string, patch: Partial<ReportedIssue>) => {
-    setIssues((prev) => prev.map((i) => (i.issueId === issueId ? { ...i, ...patch } : i)));
-  };
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const escalate = (issue: ReportedIssue) => {
-    const nextSeverity: ReportedIssue["severity"] =
-      issue.severity === "low"
-        ? "medium"
-        : issue.severity === "medium"
-          ? "high"
-          : issue.severity === "high"
-            ? "critical"
-            : "critical";
-    patchIssue(issue.issueId, { severity: nextSeverity, status: "investigating" });
-    announce(`Issue ${issue.issueId} escalated to ${nextSeverity.replace("_", " ")} severity`);
-  };
-
-  const assignToTeam = (issue: ReportedIssue) => {
-    patchIssue(issue.issueId, {
-      status: "in_progress",
-      assignedTo: issue.assignedTo ?? "Operations — Dispatch Desk",
-    });
-    announce(`Issue ${issue.issueId} assigned`);
-  };
-
-  const markResolved = (issue: ReportedIssue) => {
-    patchIssue(issue.issueId, { status: "resolved" });
-    announce(`Issue ${issue.issueId} marked resolved`);
-  };
-
-  const toggleDetails = (issueId: string) => {
-    setExpandedId((prev) => {
-      const next = prev === issueId ? null : issueId;
-      announce(next ? `Showing details for ${issueId}` : "Details hidden");
-      return next;
-    });
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "low":
-        return "#2196F3";
-      case "medium":
-        return "#FF9800";
-      case "high":
-        return "#F44336";
-      case "critical":
-        return "#B71C1C";
-      default:
-        return "#999";
+  const setStatus = async (row: DispatchVehicleIssueReportRow, next: "reviewed" | "resolved") => {
+    setBusyId(row.id);
+    try {
+      await WorkflowApi.dispatchVehicleIssueReportUpdate(row.id, next);
+      announce(`Report #${row.id} marked ${next}`);
+      await load();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Update failed";
+      announce(msg);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "reported":
-        return "#2196F3";
-      case "investigating":
-        return "#FF9800";
-      case "in_progress":
-        return "#FF6B6B";
-      case "resolved":
-        return "#4CAF50";
-      case "closed":
-        return "#999";
-      default:
-        return "#999";
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "reported":
-        return " Reported";
-      case "investigating":
-        return " Investigating";
-      case "in_progress":
-        return " In Progress";
-      case "resolved":
-        return " Resolved";
-      case "closed":
-        return " Closed";
-      default:
-        return "Unknown";
-    }
-  };
+  const pendingCount = issues.filter((i) => i.status === "submitted" || i.status === "reviewed").length;
+  const resolvedCount = issues.filter((i) => i.status === "resolved").length;
+  const criticalHigh = issues.filter((i) => i.priority === "high" || i.priority === "critical").length;
 
   return (
     <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem" }}>
@@ -115,10 +106,26 @@ export default function ReportedIssuesPage() {
           ← Back to Dashboard
         </Link>
         <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Reported Issues</h1>
-        <p style={{ color: "#666666", margin: "0" }}>Manage and resolve reported operational issues</p>
+        <p style={{ color: "#666666", margin: "0" }}>
+          Driver-submitted vehicle issue reports (database-backed). Trip logs and operations center include the same
+          records.
+        </p>
       </div>
 
-      {/* Issue Summary */}
+      {loadError ? (
+        <div
+          style={{
+            padding: "1rem 1.25rem",
+            borderRadius: "8px",
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            color: "#B91C1C",
+          }}
+        >
+          {loadError}
+        </div>
+      ) : null}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
         <div
           style={{
@@ -129,9 +136,9 @@ export default function ReportedIssuesPage() {
             textAlign: "center",
           }}
         >
-          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TOTAL ISSUES</p>
+          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TOTAL REPORTS</p>
           <p style={{ color: "#2196F3", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {issues.length}
+            {loading ? "—" : issues.length}
           </p>
         </div>
         <div
@@ -143,9 +150,9 @@ export default function ReportedIssuesPage() {
             textAlign: "center",
           }}
         >
-          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CRITICAL/HIGH</p>
+          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>HIGH / CRITICAL</p>
           <p style={{ color: "#F44336", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {issues.filter((i) => i.severity === "high" || i.severity === "critical").length}
+            {loading ? "—" : criticalHigh}
           </p>
         </div>
         <div
@@ -157,9 +164,9 @@ export default function ReportedIssuesPage() {
             textAlign: "center",
           }}
         >
-          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PENDING</p>
+          <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>OPEN (SUBMITTED / REVIEWED)</p>
           <p style={{ color: "#FF9800", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {issues.filter((i) => i.status === "reported" || i.status === "investigating").length}
+            {loading ? "—" : pendingCount}
           </p>
         </div>
         <div
@@ -173,14 +180,15 @@ export default function ReportedIssuesPage() {
         >
           <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>RESOLVED</p>
           <p style={{ color: "#4CAF50", fontSize: "2rem", fontWeight: "700", margin: "0.25rem 0 0 0" }}>
-            {issues.filter((i) => i.status === "resolved").length}
+            {loading ? "—" : resolvedCount}
           </p>
         </div>
       </div>
 
-      {/* Issues List */}
       <div style={{ display: "grid", gap: "1rem" }}>
-        {issues.length === 0 ? (
+        {loading ? (
+          <p style={{ color: "#666" }}>Loading…</p>
+        ) : issues.length === 0 ? (
           <div
             style={{
               padding: "2rem",
@@ -191,187 +199,217 @@ export default function ReportedIssuesPage() {
               textAlign: "center",
             }}
           >
-            <p style={{ margin: 0 }}>No reported issues yet. Driver-reported trip issues will list here when that feed is connected.</p>
+            <p style={{ margin: 0 }}>No vehicle issue reports yet.</p>
           </div>
         ) : (
-          issues.map((issue) => (
-          <div
-            key={issue.issueId}
-            style={{
-              padding: "1.5rem",
-              border: `2px solid ${getSeverityColor(issue.severity)}`,
-              borderRadius: "8px",
-              background: "#F9F9F9",
-            }}
-          >
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "1.5rem", marginBottom: "1rem", alignItems: "start" }}>
-              <div>
-                <h3 style={{ color: "#1A1A1A", margin: "0" }}>{issue.issueId}</h3>
-                <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-                  {issue.issueType}
-                </p>
-              </div>
-
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>REPORTED BY</p>
-                <p style={{ color: "#1A1A1A", fontSize: "0.9rem", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {issue.reportedBy}
-                </p>
-              </div>
-
-              <div>
-                <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>REPORTED DATE</p>
-                <p style={{ color: "#1A1A1A", fontSize: "0.85rem", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
-                  {issue.reportedDate}
-                </p>
-              </div>
-
-              <div style={{ display: "flex", gap: "0.5rem", flexDirection: "column", alignItems: "flex-end" }}>
-                <span
-                  style={{
-                    padding: "0.4rem 0.75rem",
-                    background: getSeverityColor(issue.severity) + "20",
-                    color: getSeverityColor(issue.severity),
-                    borderRadius: "4px",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {issue.severity.toUpperCase()} SEVERITY
-                </span>
-                <span
-                  style={{
-                    padding: "0.4rem 0.75rem",
-                    background: getStatusColor(issue.status) + "20",
-                    color: getStatusColor(issue.status),
-                    borderRadius: "4px",
-                    fontWeight: "600",
-                    fontSize: "0.75rem",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {getStatusLabel(issue.status)}
-                </span>
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: "1rem",
-                background: "white",
-                borderRadius: "6px",
-                border: "1px solid #E8E8E8",
-                marginBottom: "1rem",
-              }}
-            >
-              <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0 0 0.5rem 0" }}>
-                DESCRIPTION
-              </p>
-              <p style={{ color: "#1A1A1A", margin: "0", lineHeight: "1.5" }}>
-                {issue.description}
-              </p>
-            </div>
-
-            {issue.assignedTo && (
-              <div style={{ marginBottom: "1rem" }}>
-                <p style={{ color: "#4CAF50", fontSize: "0.9rem", fontWeight: "600", margin: "0" }}>
-                  ✓ Assigned to: {issue.assignedTo}
-                </p>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              {(issue.status === "reported" || issue.status === "investigating") && (
-                <>
-                  <button
-                    style={{
-                      padding: "0.5rem 1rem",
-                      background: "#FF9800",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontWeight: "600",
-                      fontSize: "0.85rem",
-                    }}
-                    onClick={() => escalate(issue)}
-                  >
-                    Escalate
-                  </button>
-                  <button
-                    style={{
-                      padding: "0.5rem 1rem",
-                      background: "#2196F3",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontWeight: "600",
-                      fontSize: "0.85rem",
-                    }}
-                    onClick={() => assignToTeam(issue)}
-                  >
-                    Assign
-                  </button>
-                </>
-              )}
-              {issue.status === "in_progress" && (
-                <button
-                  style={{
-                    padding: "0.5rem 1rem",
-                    background: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontWeight: "600",
-                    fontSize: "0.85rem",
-                  }}
-                  onClick={() => markResolved(issue)}
-                >
-                  Mark Resolved
-                </button>
-              )}
-              <button
-                style={{
-                  padding: "0.5rem 1rem",
-                  background: "#F5F5F5",
-                  color: "#1A1A1A",
-                  border: "1px solid #E8E8E8",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "600",
-                  fontSize: "0.85rem",
-                }}
-                type="button"
-                onClick={() => toggleDetails(issue.issueId)}
-              >
-                {expandedId === issue.issueId ? "Hide details" : "View Details"}
-              </button>
-            </div>
-
-            {expandedId === issue.issueId && (
+          issues.map((issue) => {
+            const att = attachmentHref(issue.attachment_url);
+            const busy = busyId === issue.id;
+            return (
               <div
+                key={issue.id}
                 style={{
-                  marginTop: "0.75rem",
-                  padding: "1rem",
-                  background: "#fff",
-                  border: "1px dashed #BDBDBD",
-                  borderRadius: "6px",
-                  fontSize: "0.88rem",
-                  color: "#424242",
+                  padding: "1.5rem",
+                  border: `2px solid ${severityColor(issue.priority)}`,
+                  borderRadius: "8px",
+                  background: "#F9F9F9",
                 }}
               >
-                <p style={{ margin: "0 0 0.5rem 0", fontWeight: 700 }}>Audit trail</p>
-                <p style={{ margin: 0 }}>
-                  Full narrative: {issue.description} — Last update: escalate or assign updates status in this list; FleetOpt
-                  will sync with the API when ticketing is wired.
-                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr auto",
+                    gap: "1.5rem",
+                    marginBottom: "1rem",
+                    alignItems: "start",
+                  }}
+                >
+                  <div>
+                    <h3 style={{ color: "#1A1A1A", margin: "0" }}>Report #{issue.id}</h3>
+                    <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
+                      {issue.issue_type_label}
+                    </p>
+                    <p style={{ color: "#64748B", fontSize: "0.8rem", margin: "0.35rem 0 0 0" }}>
+                      Trip #{issue.trip_id} · Booking #{issue.booking_id}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>DRIVER</p>
+                    <p style={{ color: "#1A1A1A", fontSize: "0.9rem", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
+                      {issue.driver_name ?? `User #${issue.driver_id}`}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>REPORTED</p>
+                    <p style={{ color: "#1A1A1A", fontSize: "0.85rem", fontWeight: "600", margin: "0.25rem 0 0 0" }}>
+                      {issue.created_at ? new Date(issue.created_at).toLocaleString() : "—"}
+                    </p>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "0.5rem", flexDirection: "column", alignItems: "flex-end" }}>
+                    <span
+                      style={{
+                        padding: "0.4rem 0.75rem",
+                        background: severityColor(issue.priority) + "20",
+                        color: severityColor(issue.priority),
+                        borderRadius: "4px",
+                        fontWeight: "600",
+                        fontSize: "0.75rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {issue.priority.toUpperCase()} PRIORITY
+                    </span>
+                    <span
+                      style={{
+                        padding: "0.4rem 0.75rem",
+                        background: statusColor(issue.status) + "20",
+                        color: statusColor(issue.status),
+                        borderRadius: "4px",
+                        fontWeight: "600",
+                        fontSize: "0.75rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {statusLabel(issue.status)}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "1rem",
+                    background: "white",
+                    borderRadius: "6px",
+                    border: "1px solid #E8E8E8",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0 0 0.5rem 0" }}>
+                    ROUTE
+                  </p>
+                  <p style={{ color: "#334155", margin: "0 0 0.75rem", fontSize: "0.9rem" }}>{issue.route || "—"}</p>
+                  <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0 0 0.5rem 0" }}>
+                    DESCRIPTION
+                  </p>
+                  <p style={{ color: "#1A1A1A", margin: "0", lineHeight: "1.5" }}>{issue.description}</p>
+                  {att ? (
+                    <p style={{ margin: "0.75rem 0 0" }}>
+                      <a href={att} target="_blank" rel="noopener noreferrer" style={{ color: "#2563EB" }}>
+                        View attachment
+                      </a>
+                    </p>
+                  ) : null}
+                </div>
+
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {issue.status === "submitted" ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        style={{
+                          padding: "0.5rem 1rem",
+                          background: "#2196F3",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: busy ? "wait" : "pointer",
+                          fontWeight: "600",
+                          fontSize: "0.85rem",
+                        }}
+                        onClick={() => void setStatus(issue, "reviewed")}
+                      >
+                        Mark reviewed
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        style={{
+                          padding: "0.5rem 1rem",
+                          background: "#4CAF50",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: busy ? "wait" : "pointer",
+                          fontWeight: "600",
+                          fontSize: "0.85rem",
+                        }}
+                        onClick={() => void setStatus(issue, "resolved")}
+                      >
+                        Mark resolved
+                      </button>
+                    </>
+                  ) : null}
+                  {issue.status === "reviewed" ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      style={{
+                        padding: "0.5rem 1rem",
+                        background: "#4CAF50",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: busy ? "wait" : "pointer",
+                        fontWeight: "600",
+                        fontSize: "0.85rem",
+                      }}
+                      onClick={() => void setStatus(issue, "resolved")}
+                    >
+                      Mark resolved
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    style={{
+                      padding: "0.5rem 1rem",
+                      background: "#F5F5F5",
+                      color: "#1A1A1A",
+                      border: "1px solid #E8E8E8",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontWeight: "600",
+                      fontSize: "0.85rem",
+                    }}
+                    onClick={() => {
+                      setExpandedId((prev) => {
+                        const next = prev === issue.id ? null : issue.id;
+                        announce(next ? `Details for report ${issue.id}` : "Details hidden");
+                        return next;
+                      });
+                    }}
+                  >
+                    {expandedId === issue.id ? "Hide details" : "View details"}
+                  </button>
+                </div>
+
+                {expandedId === issue.id ? (
+                  <div
+                    style={{
+                      marginTop: "0.75rem",
+                      padding: "1rem",
+                      background: "#fff",
+                      border: "1px dashed #BDBDBD",
+                      borderRadius: "6px",
+                      fontSize: "0.88rem",
+                      color: "#424242",
+                    }}
+                  >
+                    <p style={{ margin: "0 0 0.5rem 0", fontWeight: 700 }}>Trip / truck</p>
+                    <ul style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                      <li>Truck plate: {issue.truck_plate || "—"}</li>
+                      <li>Truck model: {issue.truck_model ?? "—"}</li>
+                      <li>Helper: {issue.helper_name ?? "—"}</li>
+                      <li>Last updated: {issue.updated_at ? new Date(issue.updated_at).toLocaleString() : "—"}</li>
+                    </ul>
+                  </div>
+                ) : null}
               </div>
-            )}
-          </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

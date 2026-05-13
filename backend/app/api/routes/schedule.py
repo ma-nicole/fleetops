@@ -1,10 +1,11 @@
 """Weekly schedule board endpoints (paper Fig 16, 17)."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.security import require_roles
 from app.db import get_db
 from app.models.entities import User, UserRole
+from app.services.schedule_timeline import build_timeline, trip_timeline_detail
 from app.services.scheduler import (
     driver_week_board,
     find_available_driver,
@@ -15,6 +16,32 @@ from app.services.scheduler import (
 
 
 router = APIRouter(prefix="/schedule", tags=["schedule"])
+
+
+@router.get("/timeline")
+def schedule_timeline(
+    start: str | None = None,
+    mode: str | None = None,
+    resource: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Dispatcher Gantt-style timeline (trips, maintenance, slot holds, conflicts)."""
+    return build_timeline(db, start=start, mode=mode, resource=resource, status_filter=status, q=q)
+
+
+@router.get("/timeline/trip/{trip_id}")
+def schedule_timeline_trip_detail(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    detail = trip_timeline_detail(db, trip_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    return detail
 
 
 @router.get("/trucks")

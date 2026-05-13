@@ -1,3 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-export { default } from "../accomplishment-report/page";
+export default function DriverCompletionReportRedirect() {
+  redirect("/driver/general-form");
+}

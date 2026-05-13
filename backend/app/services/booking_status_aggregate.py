@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models.entities import Booking, BookingStatus, Trip, TripStatus
+from app.models.entities import Booking, BookingStatus, Trip, TripStatus, TruckSlotHold, TruckSlotHoldStatus
 
 # Helper milestones (highest progress wins for in-flight aggregate).
 _STEP_RANK: dict[str, int] = {
@@ -184,4 +184,9 @@ def apply_aggregate_booking_status(db: Session, booking: Booking) -> bool:
     if cur == want.value:
         return False
     booking.status = want
+    # Terminal booking: release capacity holds so slots are not tied to completed/cancelled legs.
+    if want in (BookingStatus.COMPLETED, BookingStatus.CANCELLED):
+        db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
+            {"hold_status": TruckSlotHoldStatus.RELEASED}
+        )
     return True

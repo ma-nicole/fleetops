@@ -447,6 +447,22 @@ class Trip(Base):
     route: Mapped["Route | None"] = relationship(foreign_keys=[route_id])
 
 
+class OperationalLog(Base):
+    """Dispatcher-side operational incident / note tied to a trip (not customer feedback)."""
+
+    __tablename__ = "operational_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    dispatcher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority_level: Mapped[str] = mapped_column(String(16), nullable=False, default="medium")
+    operational_details: Mapped[str] = mapped_column(Text, nullable=False)
+    attachment_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class FuelLog(Base):
     """Per-trip fuel entry by driver (paper Driver DFD Fig 13)"""
     __tablename__ = "fuel_logs"
@@ -543,6 +559,7 @@ class AttendanceRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     check_in_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    check_out_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="present")
 
 
@@ -578,6 +595,78 @@ class TripIssue(Base):
 
     trip: Mapped[Trip] = relationship(foreign_keys=[trip_id])
     reported_by: Mapped[User] = relationship(foreign_keys=[reported_by_id])
+
+
+class VehicleIssueReportStatus(str, Enum):
+    SUBMITTED = "submitted"
+    REVIEWED = "reviewed"
+    RESOLVED = "resolved"
+
+
+class VehicleIssueReport(Base):
+    """Driver-submitted truck issue tied to a real trip/booking (dispatcher workflow)."""
+
+    __tablename__ = "vehicle_issue_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    truck_id: Mapped[int] = mapped_column(ForeignKey("trucks.id"), nullable=False)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    helper_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    issue_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    attachment_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[VehicleIssueReportStatus] = mapped_column(
+        SAEnum(
+            VehicleIssueReportStatus,
+            values_callable=lambda obj: [m.value for m in obj],
+            native_enum=False,
+            length=32,
+        ),
+        default=VehicleIssueReportStatus.SUBMITTED,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    booking: Mapped[Booking] = relationship(foreign_keys=[booking_id])
+    trip: Mapped[Trip] = relationship(foreign_keys=[trip_id])
+    truck: Mapped[Truck] = relationship(foreign_keys=[truck_id])
+    driver: Mapped[User] = relationship(foreign_keys=[driver_id])
+    helper: Mapped[User | None] = relationship(foreign_keys=[helper_id])
+
+
+class GeneralOperationalReport(Base):
+    """Driver-submitted trip-related operational report (completion, delays, fuel, incidents, etc.)."""
+
+    __tablename__ = "general_operational_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    helper_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    """Operational leg context when submitted (assigned … completed); optional."""
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False)
+    starting_odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ending_odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_consumed: Mapped[float | None] = mapped_column(Float, nullable=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    booking: Mapped[Booking] = relationship(foreign_keys=[booking_id])
+    trip: Mapped[Trip] = relationship(foreign_keys=[trip_id])
+    driver: Mapped[User] = relationship(foreign_keys=[driver_id])
+    helper: Mapped[User | None] = relationship(foreign_keys=[helper_id])
 
 
 # ------------------------------------------------------------------

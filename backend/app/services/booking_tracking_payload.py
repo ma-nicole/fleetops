@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models.entities import Booking, Trip, TripLocationUpdate, TripStatus, TripStatusUpdate, Truck, User
+from app.models.entities import Booking, Trip, TripLocationUpdate, TripStatusUpdate, Truck, User
+from app.services.latest_location_display import latest_location_display_for_trip
 
 
 def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
@@ -29,16 +30,22 @@ def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
         effective_status = tr.helper_progress_status or (
             tr.status.value if hasattr(tr.status, "value") else str(tr.status)
         )
-        latest_location_name = (
-            location_updates[-1].location_name if location_updates else getattr(tr, "latest_location", None)
+        latest_ping = None
+        if location_updates:
+            latest_ping = location_updates[-1].location_name
+        if not (latest_ping or "").strip():
+            for u in reversed(status_updates):
+                if (u.location_name or "").strip():
+                    latest_ping = u.location_name
+                    break
+        if not (latest_ping or "").strip():
+            latest_ping = getattr(tr, "latest_location", None)
+
+        latest_location_name = latest_location_display_for_trip(
+            tr,
+            booking.dropoff_location,
+            latest_ping,
         )
-        hp_key = (tr.helper_progress_status or "").strip().lower().replace(" ", "_")
-        trip_st_l = (tr.status.value if hasattr(tr.status, "value") else str(tr.status)).lower()
-        drop = (booking.dropoff_location or "").strip()
-        if drop and (
-            hp_key in ("completed", "dropped_off") or trip_st_l == TripStatus.COMPLETED.value
-        ):
-            latest_location_name = drop
         assignment_rows.append(
             {
                 "trip_id": tr.id,

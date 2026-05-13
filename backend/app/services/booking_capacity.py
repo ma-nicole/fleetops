@@ -18,10 +18,11 @@ from app.models.entities import (
 )
 
 
+# Holds that reserve capacity before real trips exist. ASSIGNED holds must not block —
+# the same booking is already represented by active trips on trucks (avoid double-count).
 BLOCKING_HOLD_STATUSES = (
     TruckSlotHoldStatus.ON_HOLD,
     TruckSlotHoldStatus.READY_FOR_ASSIGNMENT,
-    TruckSlotHoldStatus.ASSIGNED,
 )
 
 BOOKING_BLOCKING_STATUSES = (
@@ -80,11 +81,18 @@ def get_available_truck_count(
                     TruckSlotHoldStatus.ON_HOLD.value,
                     "payment_verification",
                     TruckSlotHoldStatus.READY_FOR_ASSIGNMENT.value,
-                    TruckSlotHoldStatus.ASSIGNED.value,
                 ]
             ),
-            # Safety net: if a booking is already cancelled/rejected, its hold should not block availability.
-            Booking.status.notin_([BookingStatus.CANCELLED, BookingStatus.REJECTED]),
+            # Safety net: terminal / dead bookings must not keep slot capacity tied up.
+            Booking.status.notin_(
+                [
+                    BookingStatus.CANCELLED,
+                    BookingStatus.REJECTED,
+                    BookingStatus.PAYMENT_REJECTED,
+                    BookingStatus.COMPLETED,
+                    BookingStatus.EXPIRED,
+                ]
+            ),
             # Extra safety: rejected payment (without any verified payment) should never block slots.
             ~and_(has_rejected_payment, ~has_verified_payment),
         )

@@ -214,6 +214,180 @@ def apply_runtime_schema_fixes() -> None:
                     )
                 )
 
+    if insp.has_table("attendance_records"):
+        ar_cols = {c["name"] for c in insp.get_columns("attendance_records")}
+        if "check_out_time" not in ar_cols:
+            dialect = engine.dialect.name
+            co_null = "DATETIME NULL" if dialect == "mysql" else "DATETIME"
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE attendance_records ADD COLUMN check_out_time {co_null}"))
+                conn.execute(
+                    text(
+                        "UPDATE attendance_records SET check_out_time = check_in_time "
+                        "WHERE check_out_time IS NULL"
+                    )
+                )
+
+    if not insp.has_table("operational_logs"):
+        dialect = engine.dialect.name
+        with engine.begin() as conn:
+            if dialect == "mysql":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE operational_logs (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            booking_id INT NOT NULL,
+                            trip_id INT NOT NULL,
+                            dispatcher_id INT NOT NULL,
+                            report_type VARCHAR(64) NOT NULL,
+                            priority_level VARCHAR(16) NOT NULL,
+                            operational_details TEXT NOT NULL,
+                            attachment_url VARCHAR(512) NULL,
+                            created_at DATETIME NOT NULL,
+                            KEY ix_oplog_booking (booking_id),
+                            KEY ix_oplog_trip (trip_id),
+                            CONSTRAINT fk_oplog_booking FOREIGN KEY (booking_id) REFERENCES bookings(id),
+                            CONSTRAINT fk_oplog_trip FOREIGN KEY (trip_id) REFERENCES trips(id),
+                            CONSTRAINT fk_oplog_dispatcher FOREIGN KEY (dispatcher_id) REFERENCES users(id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE operational_logs (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            booking_id INTEGER NOT NULL,
+                            trip_id INTEGER NOT NULL,
+                            dispatcher_id INTEGER NOT NULL,
+                            report_type VARCHAR(64) NOT NULL,
+                            priority_level VARCHAR(16) NOT NULL,
+                            operational_details TEXT NOT NULL,
+                            attachment_url VARCHAR(512),
+                            created_at DATETIME NOT NULL
+                        )
+                        """
+                    )
+                )
+
+    if not insp.has_table("vehicle_issue_reports"):
+        dialect = engine.dialect.name
+        with engine.begin() as conn:
+            if dialect == "mysql":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE vehicle_issue_reports (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            booking_id INT NOT NULL,
+                            trip_id INT NOT NULL,
+                            truck_id INT NOT NULL,
+                            driver_id INT NOT NULL,
+                            helper_id INT NULL,
+                            issue_type VARCHAR(64) NOT NULL,
+                            priority VARCHAR(16) NOT NULL,
+                            description TEXT NOT NULL,
+                            attachment_url VARCHAR(512) NULL,
+                            status VARCHAR(32) NOT NULL DEFAULT 'submitted',
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL,
+                            KEY ix_vir_trip (trip_id),
+                            KEY ix_vir_booking (booking_id),
+                            KEY ix_vir_driver (driver_id),
+                            CONSTRAINT fk_vir_booking FOREIGN KEY (booking_id) REFERENCES bookings(id),
+                            CONSTRAINT fk_vir_trip FOREIGN KEY (trip_id) REFERENCES trips(id),
+                            CONSTRAINT fk_vir_truck FOREIGN KEY (truck_id) REFERENCES trucks(id),
+                            CONSTRAINT fk_vir_driver FOREIGN KEY (driver_id) REFERENCES users(id),
+                            CONSTRAINT fk_vir_helper FOREIGN KEY (helper_id) REFERENCES users(id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE vehicle_issue_reports (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            booking_id INTEGER NOT NULL,
+                            trip_id INTEGER NOT NULL,
+                            truck_id INTEGER NOT NULL,
+                            driver_id INTEGER NOT NULL,
+                            helper_id INTEGER,
+                            issue_type VARCHAR(64) NOT NULL,
+                            priority VARCHAR(16) NOT NULL,
+                            description TEXT NOT NULL,
+                            attachment_url VARCHAR(512),
+                            status VARCHAR(32) NOT NULL DEFAULT 'submitted',
+                            created_at DATETIME NOT NULL,
+                            updated_at DATETIME NOT NULL
+                        )
+                        """
+                    )
+                )
+
+    if not insp.has_table("general_operational_reports"):
+        dialect = engine.dialect.name
+        with engine.begin() as conn:
+            if dialect == "mysql":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE general_operational_reports (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            booking_id INT NOT NULL,
+                            trip_id INT NOT NULL,
+                            driver_id INT NOT NULL,
+                            helper_id INT NULL,
+                            category VARCHAR(64) NOT NULL,
+                            status VARCHAR(32) NULL,
+                            report_date DATE NOT NULL,
+                            starting_odometer_km FLOAT NULL,
+                            ending_odometer_km FLOAT NULL,
+                            fuel_consumed FLOAT NULL,
+                            description TEXT NOT NULL,
+                            notes TEXT NULL,
+                            attachment_url VARCHAR(512) NULL,
+                            created_at DATETIME NOT NULL,
+                            KEY ix_gor_trip (trip_id),
+                            KEY ix_gor_booking (booking_id),
+                            KEY ix_gor_driver (driver_id),
+                            CONSTRAINT fk_gor_booking FOREIGN KEY (booking_id) REFERENCES bookings(id),
+                            CONSTRAINT fk_gor_trip FOREIGN KEY (trip_id) REFERENCES trips(id),
+                            CONSTRAINT fk_gor_driver FOREIGN KEY (driver_id) REFERENCES users(id),
+                            CONSTRAINT fk_gor_helper FOREIGN KEY (helper_id) REFERENCES users(id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE general_operational_reports (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            booking_id INTEGER NOT NULL,
+                            trip_id INTEGER NOT NULL,
+                            driver_id INTEGER NOT NULL,
+                            helper_id INTEGER,
+                            category VARCHAR(64) NOT NULL,
+                            status VARCHAR(32),
+                            report_date DATE NOT NULL,
+                            starting_odometer_km FLOAT,
+                            ending_odometer_km FLOAT,
+                            fuel_consumed FLOAT,
+                            description TEXT NOT NULL,
+                            notes TEXT,
+                            attachment_url VARCHAR(512),
+                            created_at DATETIME NOT NULL
+                        )
+                        """
+                    )
+                )
+
     # Legacy MySQL ENUM on bookings.status often stored Python enum *names* (PENDING_APPROVAL) not values
     # (pending_approval) — that breaks SQLAlchemy's Enum. Normalize on every startup (idempotent).
     if insp.has_table("bookings"):

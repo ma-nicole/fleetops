@@ -44,6 +44,7 @@ function DispatcherJobAssignmentsInner() {
   const searchParams = useSearchParams();
   const fromDriverId = searchParams.get("fromDriver");
   const fromDriverName = searchParams.get("driverName");
+  const bookingIdParam = searchParams.get("bookingId");
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingId, setBookingId] = useState<number>(0);
@@ -83,6 +84,12 @@ function DispatcherJobAssignmentsInner() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    const n = Number(bookingIdParam);
+    if (!Number.isFinite(n) || n <= 0 || bookings.length === 0) return;
+    if (bookings.some((b) => b.id === n)) setBookingId(n);
+  }, [bookingIdParam, bookings]);
 
   const selected = bookings.find((b) => b.id === bookingId);
 

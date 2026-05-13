@@ -1,295 +1,372 @@
 "use client";
 
+import { WorkflowApi, type DriverVehicleIssueSelectableTrip } from "@/lib/workflowApi";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type VehicleStatus = {
-  plate: string;
-  model: string;
-  status: string;
-  mileage: string;
-  fuelLevel: number;
-  lastService: string;
-  nextService: string;
-  tireCondition: string;
-  brakeCondition: string;
-  batteryCondition: string;
+const OPERATIONAL_STATUS_LABELS: Record<string, string> = {
+  assigned: "Assigned",
+  for_pickup: "For pickup",
+  picked_up: "Picked up",
+  en_route: "En route",
+  dropped_off: "Dropped off",
+  completed: "Completed",
 };
 
-export default function VehicleStatusPage() {
+const ISSUE_TYPES: { value: string; label: string }[] = [
+  { value: "engine_problem", label: "Engine problem" },
+  { value: "tire_issue", label: "Tire issue" },
+  { value: "brake_issue", label: "Brake issue" },
+  { value: "battery_issue", label: "Battery issue" },
+  { value: "fuel_issue", label: "Fuel issue" },
+  { value: "overheating", label: "Overheating" },
+  { value: "body_damage", label: "Body damage" },
+  { value: "other_vehicle_concern", label: "Other vehicle concern" },
+];
+
+const PRIORITIES: { value: string; label: string }[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "critical", label: "Critical" },
+];
+
+function operationalLabel(slug: string) {
+  return OPERATIONAL_STATUS_LABELS[slug] ?? slug.replace(/_/g, " ");
+}
+
+export default function ReportVehicleIssuePage() {
   useRoleGuard(["driver"]);
 
-  const [vehicle] = useState<VehicleStatus>({
-    plate: "AUV-2024-1447",
-    model: "Hino 500 - 6 Wheels Truck",
-    status: "operational",
-    mileage: "158,420 km",
-    fuelLevel: 85,
-    lastService: "April 15, 2024",
-    nextService: "May 15, 2024 (30 days)",
-    tireCondition: "Good",
-    brakeCondition: "Excellent",
-    batteryCondition: "Good",
-  });
+  const [trips, setTrips] = useState<DriverVehicleIssueSelectableTrip[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingTrips, setLoadingTrips] = useState(true);
 
-  const [issues] = useState([
-    {
-      id: 1,
-      type: "Minor",
-      description: "Left mirror slightly loose",
-      severity: "low",
-      reportedDate: "April 28, 2024",
-      status: "reported",
-    },
-    {
-      id: 2,
-      type: "Maintenance",
-      description: "Oil change overdue (last 5000km ago)",
-      severity: "medium",
-      reportedDate: "April 29, 2024",
-      status: "scheduled",
-    },
-  ]);
+  const [tripId, setTripId] = useState<number | "">("");
+  const [issueType, setIssueType] = useState("");
+  const [priority, setPriority] = useState("");
+  const [description, setDescription] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
-  const getConditionColor = (condition: string) => {
-    switch (condition) {
-      case "Excellent":
-        return "#4CAF50";
-      case "Good":
-        return "#8BC34A";
-      case "Fair":
-        return "#FF9800";
-      case "Poor":
-        return "#F44336";
-      default:
-        return "#999";
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitOk, setSubmitOk] = useState<string | null>(null);
+
+  const loadTrips = useCallback(async () => {
+    setLoadingTrips(true);
+    setLoadError(null);
+    try {
+      const res = await WorkflowApi.driverVehicleIssueSelectableTrips();
+      setTrips(res.trips ?? []);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Could not load trips.";
+      setLoadError(msg);
+      setTrips([]);
+    } finally {
+      setLoadingTrips(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTrips();
+  }, [loadTrips]);
+
+  const selected = useMemo(
+    () => (tripId === "" ? undefined : trips.find((t) => t.trip_id === tripId)),
+    [tripId, trips],
+  );
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+    setSubmitOk(null);
+    if (tripId === "") {
+      setSubmitError("Select the trip this issue relates to.");
+      return;
+    }
+    if (!issueType || !priority) {
+      setSubmitError("Issue type and priority are required.");
+      return;
+    }
+    if (description.trim().length < 10) {
+      setSubmitError("Description must be at least 10 characters.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("trip_id", String(tripId));
+      fd.append("issue_type", issueType);
+      fd.append("priority", priority);
+      fd.append("description", description.trim());
+      if (file) fd.append("file", file);
+      const res = await WorkflowApi.driverSubmitVehicleIssueReport(fd);
+      setSubmitOk(`Report #${res.id} submitted. Dispatch has been notified.`);
+      setDescription("");
+      setFile(null);
+      setIssueType("");
+      setPriority("");
+      setTripId("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Submit failed.";
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    maxWidth: "520px",
+    padding: "0.65rem 0.75rem",
+    border: "1px solid #E2E8F0",
+    borderRadius: "8px",
+    fontFamily: "inherit",
+    fontSize: "0.95rem",
+    boxSizing: "border-box",
+    background: "#fff",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    color: "#64748B",
+    marginBottom: "0.35rem",
+    letterSpacing: "0.02em",
+  };
+
   return (
-    <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "2rem" }}>
+    <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "1.75rem", maxWidth: "900px" }}>
       <div>
-        <Link href="/driver/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
+        <Link href="/driver/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: 600 }}>
           ← Back to Dashboard
         </Link>
-        <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Vehicle Status</h1>
-        <p style={{ color: "#666666", margin: "0" }}>Monitor your assigned vehicle condition and maintenance schedule</p>
+        <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem", marginTop: "1rem" }}>Report Vehicle Issue</h1>
+        <p style={{ color: "#666666", margin: 0 }}>
+          Report truck issues related to your assigned trip or booking. Only live trip and fleet data from your
+          assignments are shown—no maintenance placeholders.
+        </p>
       </div>
 
-      {/* Vehicle Info Card */}
-      <div style={{ padding: "2rem", border: "2px solid #2196F3", borderRadius: "8px", background: "rgba(33, 150, 243, 0.05)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "1.5rem" }}>
-          <div>
-            <h2 style={{ color: "#1A1A1A", margin: "0" }}>{vehicle.model}</h2>
-            <p style={{ color: "#999", margin: "0.5rem 0 0 0", fontSize: "0.95rem" }}>Plate: {vehicle.plate}</p>
-          </div>
-          <span
+      {loadError ? (
+        <div
+          style={{
+            padding: "1rem 1.25rem",
+            borderRadius: "8px",
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            color: "#B91C1C",
+          }}
+        >
+          {loadError}
+        </div>
+      ) : null}
+
+      {loadingTrips ? (
+        <p style={{ color: "#64748B", margin: 0 }}>Loading your trips…</p>
+      ) : trips.length === 0 ? (
+        <div
+          style={{
+            padding: "1.5rem",
+            borderRadius: "8px",
+            border: "1px solid #E2E8F0",
+            background: "#FAFAFA",
+            color: "#475569",
+          }}
+        >
+          <p style={{ margin: 0 }}>
+            No eligible trips right now. You need an active or recently completed assigned trip to report a vehicle
+            issue.
+          </p>
+        </div>
+      ) : null}
+
+      <form
+        onSubmit={onSubmit}
+        style={{
+          display: "grid",
+          gap: "1.25rem",
+          padding: "1.5rem",
+          border: "1px solid #E8E8E8",
+          borderRadius: "10px",
+          background: "#fff",
+          boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+        }}
+      >
+        <div>
+          <label htmlFor="trip-select" style={labelStyle}>
+            Related trip / booking <span style={{ color: "#DC2626" }}>*</span>
+          </label>
+          <select
+            id="trip-select"
+            required
+            value={tripId === "" ? "" : String(tripId)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setTripId(v === "" ? "" : Number(v));
+            }}
+            style={inputStyle}
+            disabled={trips.length === 0}
+          >
+            <option value="">Select trip…</option>
+            {trips.map((t) => (
+              <option key={t.trip_id} value={t.trip_id}>
+                Booking #{t.booking_id} · Trip #{t.trip_id} · {t.truck_plate || "—"} · {t.route_label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selected ? (
+          <div
             style={{
-              padding: "0.75rem 1.5rem",
-              background: "#4CAF50",
-              color: "white",
-              borderRadius: "6px",
-              fontWeight: "600",
+              padding: "1rem 1.25rem",
+              borderRadius: "8px",
+              background: "#F8FAFC",
+              border: "1px solid #E2E8F0",
+              display: "grid",
+              gap: "0.5rem",
               fontSize: "0.9rem",
+              color: "#334155",
             }}
           >
-             Operational
-          </span>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1.5rem" }}>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>MILEAGE</p>
-            <p style={{ color: "#1A1A1A", fontSize: "1.2rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
-              {vehicle.mileage}
-            </p>
-          </div>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>FUEL LEVEL</p>
-            <div style={{ marginTop: "0.5rem" }}>
-              <div
-                style={{
-                  height: "8px",
-                  background: "#E8E8E8",
-                  borderRadius: "4px",
-                  overflow: "hidden",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${vehicle.fuelLevel}%`,
-                    background: vehicle.fuelLevel > 25 ? "#4CAF50" : "#F44336",
-                  }}
-                />
+            <div>
+              <strong>Truck plate:</strong> {selected.truck_plate || "—"}
+            </div>
+            <div>
+              <strong>Truck model:</strong> {selected.truck_model?.trim() ? selected.truck_model : "—"}
+            </div>
+            <div>
+              <strong>Booking ID:</strong> {selected.booking_id} · <strong>Trip ID:</strong> {selected.trip_id}
+            </div>
+            <div>
+              <strong>Pickup:</strong> {selected.pickup_location}
+            </div>
+            <div>
+              <strong>Dropoff:</strong> {selected.dropoff_location}
+            </div>
+            <div>
+              <strong>Assigned helper:</strong> {selected.helper_name ?? "—"}
+            </div>
+            <div>
+              <strong>Trip status:</strong> {selected.trip_status.replace(/_/g, " ")} ·{" "}
+              <strong>Operational:</strong> {operationalLabel(selected.operational_status)}
+            </div>
+            {selected.scheduled_date ? (
+              <div>
+                <strong>Scheduled date:</strong> {selected.scheduled_date}
               </div>
-              <p style={{ color: "#1A1A1A", fontSize: "0.9rem", fontWeight: "600", margin: "0" }}>
-                {vehicle.fuelLevel}%
-              </p>
-            </div>
+            ) : null}
           </div>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>LAST SERVICE</p>
-            <p style={{ color: "#1A1A1A", fontSize: "0.9rem", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-              {vehicle.lastService}
-            </p>
-          </div>
-          <div>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>NEXT SERVICE</p>
-            <p style={{ color: "#2196F3", fontSize: "0.9rem", fontWeight: "600", margin: "0.5rem 0 0 0" }}>
-              {vehicle.nextService}
-            </p>
-          </div>
+        ) : null}
+
+        <div>
+          <label htmlFor="issue-type" style={labelStyle}>
+            Issue type <span style={{ color: "#DC2626" }}>*</span>
+          </label>
+          <select
+            id="issue-type"
+            required
+            value={issueType}
+            onChange={(e) => setIssueType(e.target.value)}
+            style={inputStyle}
+            disabled={trips.length === 0}
+          >
+            <option value="">Select issue type…</option>
+            {ISSUE_TYPES.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
 
-      {/* Vehicle Components */}
-      <div>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1.5rem" }}>Component Condition</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
-          <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>TIRES</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.75rem" }}>
-              <div
-                style={{
-                  width: "12px",
-                  height: "12px",
-                  borderRadius: "50%",
-                  background: getConditionColor(vehicle.tireCondition),
-                }}
-              />
-              <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0" }}>{vehicle.tireCondition}</p>
-            </div>
-            <p style={{ color: "#666666", fontSize: "0.8rem", margin: "0.75rem 0 0 0" }}>All 6 tires properly inflated</p>
-          </div>
-
-          <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>BRAKES</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.75rem" }}>
-              <div
-                style={{
-                  width: "12px",
-                  height: "12px",
-                  borderRadius: "50%",
-                  background: getConditionColor(vehicle.brakeCondition),
-                }}
-              />
-              <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0" }}>{vehicle.brakeCondition}</p>
-            </div>
-            <p style={{ color: "#666666", fontSize: "0.8rem", margin: "0.75rem 0 0 0" }}>All brake systems functional</p>
-          </div>
-
-          <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-            <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>BATTERY</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.75rem" }}>
-              <div
-                style={{
-                  width: "12px",
-                  height: "12px",
-                  borderRadius: "50%",
-                  background: getConditionColor(vehicle.batteryCondition),
-                }}
-              />
-              <p style={{ color: "#1A1A1A", fontWeight: "600", margin: "0" }}>{vehicle.batteryCondition}</p>
-            </div>
-            <p style={{ color: "#666666", fontSize: "0.8rem", margin: "0.75rem 0 0 0" }}>Battery voltage stable</p>
-          </div>
+        <div>
+          <label htmlFor="priority" style={labelStyle}>
+            Priority <span style={{ color: "#DC2626" }}>*</span>
+          </label>
+          <select
+            id="priority"
+            required
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+            style={inputStyle}
+            disabled={trips.length === 0}
+          >
+            <option value="">Select priority…</option>
+            {PRIORITIES.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
 
-      {/* Maintenance Issues */}
-      <div>
-        <h2 style={{ color: "#1A1A1A", marginBottom: "1.5rem" }}>Reported Issues</h2>
-        <div style={{ display: "grid", gap: "1rem" }}>
-          {issues.map((issue) => (
-            <div
-              key={issue.id}
-              style={{
-                padding: "1.5rem",
-                border: issue.severity === "high" ? "2px solid #F44336" : "1px solid #E8E8E8",
-                borderRadius: "8px",
-                background: "#F9F9F9",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "0.75rem" }}>
-                <div>
-                  <h3 style={{ color: "#1A1A1A", margin: "0" }}>{issue.description}</h3>
-                  <p style={{ color: "#999", fontSize: "0.85rem", margin: "0.5rem 0 0 0" }}>Type: {issue.type}</p>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <span
-                    style={{
-                      padding: "0.4rem 0.8rem",
-                      background:
-                        issue.severity === "high"
-                          ? "#F4433620"
-                          : issue.severity === "medium"
-                            ? "#FF980020"
-                            : "#2196F320",
-                      color:
-                        issue.severity === "high"
-                          ? "#F44336"
-                          : issue.severity === "medium"
-                            ? "#FF9800"
-                            : "#2196F3",
-                      borderRadius: "4px",
-                      fontWeight: "600",
-                      fontSize: "0.75rem",
-                    }}
-                  >
-                    {issue.severity.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: "2rem", fontSize: "0.85rem" }}>
-                <div>
-                  <p style={{ color: "#999", margin: "0" }}>Reported: {issue.reportedDate}</p>
-                </div>
-                <div>
-                  <p style={{ color: issue.status === "scheduled" ? "#4CAF50" : "#FF9800", margin: "0", fontWeight: "600" }}>
-                    {issue.status === "scheduled" ? "✓ Maintenance Scheduled" : "⏳ Awaiting Action"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div>
+          <label htmlFor="description" style={labelStyle}>
+            Description <span style={{ color: "#DC2626" }}>*</span>
+          </label>
+          <textarea
+            id="description"
+            required
+            minLength={10}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe the issue clearly (minimum 10 characters)."
+            rows={5}
+            style={{ ...inputStyle, maxWidth: "100%", minHeight: "120px", resize: "vertical" }}
+            disabled={trips.length === 0}
+          />
         </div>
-      </div>
 
-      {/* Log New Issue */}
-      <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
-        <h3 style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>Report a New Issue</h3>
-        <textarea
-          placeholder="Describe any vehicle issues or problems you've noticed..."
-          style={{
-            width: "100%",
-            padding: "0.75rem",
-            border: "1px solid #E8E8E8",
-            borderRadius: "6px",
-            fontFamily: "inherit",
-            minHeight: "80px",
-            marginBottom: "1rem",
-            boxSizing: "border-box",
-          }}
-        />
+        <div>
+          <label htmlFor="photo" style={labelStyle}>
+            Photo / attachment (optional)
+          </label>
+          <input
+            id="photo"
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,.pdf,.img"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            disabled={trips.length === 0}
+            style={{ fontSize: "0.9rem" }}
+          />
+          <p style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", color: "#94A3B8" }}>
+            JPG, PNG, WebP, PDF — max 12 MB.
+          </p>
+        </div>
+
+        {submitError ? (
+          <div style={{ color: "#B91C1C", fontSize: "0.9rem" }}>{submitError}</div>
+        ) : null}
+        {submitOk ? (
+          <div style={{ color: "#047857", fontSize: "0.9rem", fontWeight: 600 }}>{submitOk}</div>
+        ) : null}
+
         <button
+          type="submit"
+          disabled={submitting || trips.length === 0}
           style={{
-            padding: "0.75rem 1.5rem",
-            background: "#FF9800",
+            padding: "0.85rem 1.5rem",
+            background: trips.length === 0 ? "#CBD5E1" : "#FF9800",
             color: "white",
             border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontWeight: "600",
+            borderRadius: "8px",
+            cursor: submitting || trips.length === 0 ? "not-allowed" : "pointer",
+            fontWeight: 700,
+            justifySelf: "start",
           }}
-          onClick={() => alert("Issue reported successfully")}
         >
-          Submit Report
+          {submitting ? "Submitting…" : "Submit Vehicle Issue"}
         </button>
-      </div>
+      </form>
+
+      <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748B", lineHeight: 1.5 }}>
+        After you submit, dispatch sees this under <strong style={{ color: "#334155" }}>Reported Issues</strong>, in
+        operations center alerts, and on <strong style={{ color: "#334155" }}>Trip Logs</strong> for that trip.
+      </p>
     </div>
   );
 }

@@ -104,6 +104,97 @@ export type TripTruckSummary = {
   id: number;
   code: string;
   capacity_tons: number;
+  model_name?: string | null;
+  plate_number?: string | null;
+  /** Fleet DB status (e.g. available, maintenance). */
+  status?: string | null;
+  availability_status?: string | null;
+};
+
+/** Shared driver/helper assigned-leg row from GET /driver/bookings and GET /helper/bookings. */
+export type CrewTimelineEvent = {
+  at: string;
+  kind: "milestone" | "location";
+  code: string;
+  title: string;
+  detail: string;
+  remarks: string | null;
+  photo_url: string | null;
+  submitted_by: string | null;
+  update_index?: number;
+};
+
+export type CrewAssignedBookingRow = {
+  trip_id: number;
+  booking_id: number;
+  trip_status: string;
+  helper_progress_status: string | null;
+  operational_status: string;
+  location_updates_submitted: number;
+  required_location_updates: number;
+  location_update_count: number;
+  distance_km: number;
+  road_distance_km: number | null;
+  driver_name: string | null;
+  helper_name: string | null;
+  driver_profile: { rating: number; compliance_status: string } | null;
+  helper_profile: { rating: number } | null;
+  latest_location: string | null;
+  latest_location_name: string | null;
+  payment_status: string;
+  payment_latest_amount_php: number | null;
+  booking_status: string | null;
+  truck_assignment_status: string | null;
+  completed_at: string | null;
+  pod_notes: string | null;
+  timeline_events: CrewTimelineEvent[];
+  location_updates: Array<{
+    id: number;
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+    helper_id: number;
+    submitted_by: string | null;
+  }>;
+  status_updates: Array<{
+    id: number;
+    status: string;
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+    helper_id: number;
+    submitted_by: string | null;
+  }>;
+  proof_photo_urls: string[];
+  general_operational_reports: Array<{
+    id: number;
+    category: string;
+    status: string | null;
+    report_date: string;
+    description: string;
+    notes: string | null;
+    attachment_url: string | null;
+    created_at: string;
+  }>;
+  vehicle_issue_reports: Array<{
+    id: number;
+    issue_type: string;
+    priority: string;
+    description: string;
+    attachment_url: string | null;
+    status: string;
+    created_at: string;
+  }>;
+  recent_locations: Array<{
+    location_name: string;
+    remarks: string | null;
+    photo_url: string | null;
+    created_at: string;
+  }>;
+  booking: TripBookingSummary | null;
+  truck: TripTruckSummary | null;
 };
 
 export type Trip = {
@@ -136,6 +227,12 @@ export type Trip = {
   helper_name?: string | null;
   helper_progress_status?: string | null;
   helper_last_proof_path?: string | null;
+  /** Helper workflow slug (assigned, for_pickup, picked_up, …). */
+  operational_status?: string;
+  operational_status_label?: string;
+  /** Routed pickup→dropoff km when available. */
+  road_distance_km?: number | null;
+  driver_name?: string | null;
   location_updates?: Array<{
     location_name: string;
     remarks: string | null;
@@ -153,6 +250,172 @@ export type Trip = {
   truck?: TripTruckSummary | null;
 };
 
+export type DriverDashboardSummary = {
+  generated_at: string;
+  crew_role?: "driver" | "helper";
+  attendance: {
+    has_open_shift: boolean;
+    check_in_at: string | null;
+    can_check_in: boolean;
+  };
+  assignments_today: {
+    total_assigned_today: number;
+    active_trips: number;
+    completed_today: number;
+    completed_legs_total: number;
+  };
+  distance_loaded_km: {
+    total_km: number;
+    average_km: number;
+    trip_count: number;
+  };
+  fuel_completed_php: number;
+  trip_labor_completed_php: number;
+  completion_rate_percent: number;
+  completion_counts: {
+    completed_assigned_legs: number;
+    assigned_legs_excluded_cancelled: number;
+  };
+  driver_profile: {
+    base_salary_php: number;
+    deductions_php: number;
+    net_salary_php: number;
+    compliance_status: string;
+    rating: number;
+  } | null;
+  helper_profile?: {
+    base_salary_php: number;
+    rating: number;
+  } | null;
+};
+
+export type DriverPayHistoryRow = {
+  trip_id: number;
+  booking_id: number;
+  completed_at: string | null;
+  period_label: string;
+  route_label: string;
+  cargo_weight_tons: number;
+  distance_km: number;
+  driver_pay: number;
+  bonus: number;
+  deduction: number;
+  total_pay: number;
+  status: string;
+};
+
+export type DriverPaySummary = {
+  period_start: string;
+  period_end: string;
+  period_label: string;
+  trips_completed: number;
+  total_distance_km: number;
+  base_earnings: number;
+  bonus: number;
+  deductions: number;
+  current_total: number;
+  driver_share_formula: {
+    description: string;
+    cargo_gross_php_per_ton: number;
+    driver_share_rate: number;
+  };
+  payroll_note: string;
+  payment_history: DriverPayHistoryRow[];
+};
+
+export type DriverVehicleIssueSelectableTrip = {
+  trip_id: number;
+  booking_id: number;
+  truck_plate: string;
+  truck_model: string | null;
+  route_label: string;
+  pickup_location: string;
+  dropoff_location: string;
+  helper_id: number | null;
+  helper_name: string | null;
+  trip_status: string;
+  operational_status: string;
+  scheduled_date: string | null;
+};
+
+export type DriverVehicleIssueReportResponse = {
+  id: number;
+  booking_id: number;
+  trip_id: number;
+  truck_id: number;
+  driver_id: number;
+  helper_id: number | null;
+  issue_type: string;
+  priority: string;
+  description: string;
+  attachment_url: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DispatchVehicleIssueReportRow = {
+  id: number;
+  booking_id: number;
+  trip_id: number;
+  truck_id: number;
+  truck_plate: string;
+  truck_model: string | null;
+  route: string;
+  driver_id: number;
+  driver_name: string | null;
+  helper_id: number | null;
+  helper_name: string | null;
+  issue_type: string;
+  issue_type_label: string;
+  priority: string;
+  description: string;
+  attachment_url: string | null;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type GeneralOperationalReportRow = {
+  id: number;
+  booking_id: number;
+  trip_id: number;
+  driver_id: number;
+  driver_name: string | null;
+  category: string;
+  category_label: string;
+  trip_status: string | null;
+  trip_status_label: string | null;
+  report_date: string;
+  starting_odometer_km: number | null;
+  ending_odometer_km: number | null;
+  fuel_consumed: number | null;
+  description: string;
+  notes: string | null;
+  attachment_url: string | null;
+  created_at: string | null;
+  route: string;
+  truck_plate: string;
+};
+
+export type DriverGeneralOperationalReportResponse = {
+  id: number;
+  booking_id: number;
+  trip_id: number;
+  driver_id: number;
+  helper_id: number | null;
+  category: string;
+  trip_status: string | null;
+  report_date: string;
+  starting_odometer_km: number | null;
+  ending_odometer_km: number | null;
+  fuel_consumed: number | null;
+  description: string;
+  notes: string | null;
+  attachment_url: string | null;
+  created_at: string;
+};
+
 export type Payment = {
   id: number;
   booking_id: number;
@@ -167,6 +430,122 @@ export type Payment = {
   proof_uploaded_at?: string | null;
   reviewed_at?: string | null;
   created_at: string;
+};
+
+export type ScheduleTimelineResource = {
+  id: number;
+  label: string;
+  sub: string;
+  availability: "available" | "maintenance" | "lane";
+};
+
+export type ScheduleTimelineEvent = {
+  id: string;
+  type: string;
+  trip_id: number | null;
+  booking_id: number | null;
+  resource_kind: string;
+  resource_id: number;
+  start: string;
+  end: string;
+  state: string;
+  title: string;
+  subtitle: string;
+  pickup?: string;
+  dropoff?: string;
+  truck_code?: string;
+  driver_name?: string;
+  helper_name?: string;
+  trip_status?: string;
+  helper_progress?: string | null;
+  customer_name?: string;
+  cargo_tons?: number;
+  conflict?: boolean;
+  conflict_reasons?: string[];
+};
+
+export type ScheduleTimelineResponse = {
+  window_start: string;
+  window_end: string;
+  mode: string;
+  resource: string;
+  total_hours: number;
+  start_date: string;
+  resources: ScheduleTimelineResource[];
+  events: ScheduleTimelineEvent[];
+  conflicts: Array<{
+    event_id: string;
+    trip_id: number | null;
+    booking_id: number | null;
+    reasons: string[];
+    label?: string;
+  }>;
+};
+
+export type ScheduleTimelineTripDetail = {
+  trip_id: number;
+  booking_id: number;
+  customer: string;
+  customer_email: string | null;
+  cargo_tons: number;
+  pickup: string;
+  dropoff: string;
+  scheduled_date: string;
+  scheduled_time_slot: string;
+  booking_status: string;
+  trip_status: string;
+  helper_progress: string | null;
+  truck: { id: number; code: string | null } | null;
+  driver: { id: number; name: string | null } | null;
+  helper: { id: number; name: string | null } | null;
+  eta: string | null;
+  payment: { status: string | null; amount: number | null };
+  window_start: string;
+  window_end: string;
+  latest_location: { text: string; at: string } | null;
+  status_history: Array<{ status: string; location: string; at: string }>;
+};
+
+export type DispatchTripMonitoringAssignment = {
+  trip_id: number;
+  trip_status: string;
+  operational_status: string;
+  booking_id: number;
+  customer_id: number;
+  customer_name: string | null;
+  customer_company_name: string | null;
+  pickup_location: string;
+  dropoff_location: string;
+  scheduled_date: string;
+  scheduled_time_slot: string;
+  cargo_weight_tons: number;
+  estimated_cost: number;
+  booking_status: string;
+  booking_db_status: string;
+  paid_amount_verified?: number | null;
+  truck_id: number | null;
+  truck_code: string;
+  driver_id: number | null;
+  driver_name: string | null;
+  helper_id: number | null;
+  helper_name: string | null;
+  helper_progress_status: string | null;
+  distance_km: number;
+  latest_location: string | null;
+  last_updated: string | null;
+};
+
+export type DispatchTripMonitoringBoardResponse = {
+  generated_at: string;
+  summary: {
+    active_legs: number;
+    in_transit_legs: number;
+    loading_unloading_legs: number;
+    completed_trip_legs_today: number;
+    completed_trip_legs_total: number;
+    bookings_all_legs_completed: number;
+  };
+  active_assignments: DispatchTripMonitoringAssignment[];
 };
 
 export const WorkflowApi = {
@@ -241,6 +620,39 @@ export const WorkflowApi = {
           created_at: string;
         }>;
       }>;
+      /** Dispatcher operational logs (staff only; omitted for customers). */
+      operational_logs?: Array<{
+        id: number;
+        trip_id: number;
+        booking_id: number;
+        dispatcher_id: number;
+        dispatcher_name: string | null | undefined;
+        report_type: string;
+        report_type_label: string;
+        priority_level: string;
+        operational_details: string;
+        attachment_url: string | null;
+        created_at: string | null;
+      }>;
+      general_operational_reports?: Array<{
+        id: number;
+        trip_id: number;
+        booking_id: number;
+        driver_id: number;
+        driver_name: string | null | undefined;
+        category: string;
+        category_label: string;
+        trip_status: string | null;
+        trip_status_label: string | null;
+        report_date: string;
+        starting_odometer_km: number | null;
+        ending_odometer_km: number | null;
+        fuel_consumed: number | null;
+        description: string;
+        notes: string | null;
+        attachment_url: string | null;
+        created_at: string | null;
+      }>;
     }>(`/bookings/${id}/tracking-details`),
   cancelBooking: (id: number) => apiPost<{ status: string }>(`/bookings/${id}/cancel`),
 
@@ -264,9 +676,21 @@ export const WorkflowApi = {
 
   // Driver
   myTrips: () => apiGet<Trip[]>("/driver/trips"),
+  driverDashboardSummary: () => apiGet<DriverDashboardSummary>("/driver/dashboard-summary"),
+  driverPaySummary: () => apiGet<DriverPaySummary>("/driver/pay-summary"),
+  driverVehicleIssueSelectableTrips: () =>
+    apiGet<{ trips: DriverVehicleIssueSelectableTrip[] }>("/driver/vehicle-issue/trips"),
+  driverSubmitVehicleIssueReport: (formData: FormData) =>
+    apiPostMultipart<DriverVehicleIssueReportResponse>("/driver/vehicle-issue-reports", formData),
+  driverGeneralOperationalFormTrips: () =>
+    apiGet<{ trips: DriverVehicleIssueSelectableTrip[] }>("/driver/general-operational-form/trips"),
+  driverSubmitGeneralOperationalReport: (formData: FormData) =>
+    apiPostMultipart<DriverGeneralOperationalReportResponse>("/driver/general-operational-reports", formData),
   driverSalary: () => apiGet<Record<string, unknown>>("/driver/salary"),
   driverCheckIn: () =>
     apiPost<{ checked_in: boolean; timestamp: string }>("/driver/attendance/check-in", {}),
+  driverCheckOut: () =>
+    apiPost<{ checked_out: boolean; timestamp: string }>("/driver/attendance/check-out", {}),
   acceptJob: (trip_id: number) => apiPost<Trip>(`/workflow/job/${trip_id}/accept`),
   depart: (trip_id: number, opts?: { location_name?: string; notes?: string }) =>
     apiPost<Trip>(`/workflow/job/${trip_id}/depart`, {
@@ -332,6 +756,25 @@ export const WorkflowApi = {
     apiGet(`/schedule/trucks${week ? `?week=${encodeURIComponent(week)}` : ""}`),
   scheduleDrivers: (week?: string) =>
     apiGet(`/schedule/drivers${week ? `?week=${encodeURIComponent(week)}` : ""}`),
+  /** Gantt-style timeline (trips, maintenance, holds, conflicts). */
+  scheduleTimeline: (params?: {
+    start?: string;
+    mode?: "day" | "week";
+    resource?: "truck" | "driver";
+    status?: string;
+    q?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.start) q.set("start", params.start);
+    if (params?.mode) q.set("mode", params.mode);
+    if (params?.resource) q.set("resource", params.resource);
+    if (params?.status) q.set("status", params.status);
+    if (params?.q) q.set("q", params.q);
+    const qs = q.toString();
+    return apiGet<ScheduleTimelineResponse>(`/schedule/timeline${qs ? `?${qs}` : ""}`);
+  },
+  scheduleTimelineTripDetail: (tripId: number) =>
+    apiGet<ScheduleTimelineTripDetail>(`/schedule/timeline/trip/${tripId}`),
   availability: (scheduled_date: string) =>
     apiGet(`/schedule/availability?scheduled_date=${encodeURIComponent(scheduled_date)}`),
 
@@ -406,6 +849,22 @@ export const WorkflowApi = {
       }>;
     }>("/dispatch/assignments-board"),
 
+  dispatchTripMonitoringBoard: () => apiGet<DispatchTripMonitoringBoardResponse>("/dispatch/trip-monitoring-board"),
+
+  dispatchVehicleIssueReports: () =>
+    apiGet<{ reports: DispatchVehicleIssueReportRow[] }>("/dispatch/vehicle-issue-reports"),
+  dispatchVehicleIssueReportUpdate: (report_id: number, status: "reviewed" | "resolved") =>
+    apiPatch<{ id: number; status: string }>(`/dispatch/vehicle-issue-reports/${report_id}`, { status }),
+
+  dispatchGeneralOperationalReports: (params?: { booking_id?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.booking_id != null) q.set("booking_id", String(params.booking_id));
+    const qs = q.toString();
+    return apiGet<{ reports: GeneralOperationalReportRow[] }>(
+      `/dispatch/general-operational-reports${qs ? `?${qs}` : ""}`,
+    );
+  },
+
   dispatchFleetAssets: () =>
     apiGet<{
       drivers: Array<{
@@ -431,28 +890,9 @@ export const WorkflowApi = {
       }>;
     }>("/dispatch/fleet-assets"),
 
-  helperListBookings: () =>
-    apiGet<{
-      bookings: Array<{
-        trip_id: number;
-        trip_status: string;
-        helper_progress_status: string | null;
-        location_updates_submitted: number;
-        required_location_updates: number;
-        latest_location_name: string | null;
-        driver_name: string | null;
-        recent_locations: Array<{
-          location_name: string;
-          remarks: string | null;
-          photo_url: string | null;
-          created_at: string;
-        }>;
-        distance_km: number;
-        latest_location: string | null;
-        booking: TripBookingSummary | null;
-        truck: TripTruckSummary | null;
-      }>;
-    }>("/helper/bookings"),
+  driverAssignedBookings: () => apiGet<{ bookings: CrewAssignedBookingRow[] }>("/driver/bookings"),
+
+  helperListBookings: () => apiGet<{ bookings: CrewAssignedBookingRow[] }>("/helper/bookings"),
 
   helperSubmitProgress: (trip_id: number, fd: FormData) =>
     apiPostMultipart<{

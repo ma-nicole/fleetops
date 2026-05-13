@@ -9,6 +9,8 @@ from app.db import get_db
 from app.models.entities import (
     Booking,
     BookingStatus,
+    GeneralOperationalReport,
+    OperationalLog,
     User,
     UserRole,
 )
@@ -26,6 +28,9 @@ from app.models.entities import TruckSlotHold, TruckSlotHoldStatus
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.booking_tracking_payload import build_assignments_for_booking
 from app.services.booking_status_aggregate import aggregate_customer_display_from_assignment_rows
+from app.services.general_operational_reports import list_general_operational_reports
+from app.constants.general_operational_report import GENERAL_OPS_CATEGORY_LABELS, GENERAL_OPS_TRIP_STATUS_LABELS
+from app.constants.operational_log import REPORT_TYPE_LABELS
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -264,7 +269,7 @@ def cancel_booking(
 
     booking.status = BookingStatus.CANCELLED
     db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
-        {"hold_status": TruckSlotHoldStatus.CANCELLED}
+        {"hold_status": TruckSlotHoldStatus.RELEASED}
     )
     db.commit()
     return {"status": "cancelled"}
@@ -291,7 +296,7 @@ def booking_tracking_details(
         else (booking.status.value if hasattr(booking.status, "value") else str(booking.status))
     )
 
-    return {
+    payload: dict = {
         "booking": {
             "id": booking.id,
             "status": booking_effective_status,
@@ -305,3 +310,63 @@ def booking_tracking_details(
         },
         "assignments": assignment_rows,
     }
+
+    if user.role != UserRole.CUSTOMER:
+        logs = (
+            db.query(OperationalLog)
+            .filter(OperationalLog.booking_id == booking_id)
+            .order_by(OperationalLog.created_at.desc())
+            .all()
+        )
+        disp_ids = list({lg.dispatcher_id for lg in logs})
+        dispatchers = db.query(User).filter(User.id.in_(disp_ids)).all() if disp_ids else []
+        dmap = {u.id: (u.full_name or f"User #{u.id}") for u in dispatchers}
+        payload["operational_logs"] = [
+            {
+                "id": lg.id,
+                "trip_id": lg.trip_id,
+                "booking_id": lg.booking_id,
+                "dispatcher_id": lg.dispatcher_id,
+                "dispatcher_name": dmap.get(lg.dispatcher_id),
+                "report_type": lg.report_type,
+                "report_type_label": REPORT_TYPE_LABELS.get(lg.report_type, lg.report_type),
+                "priority_level": lg.priority_level,
+                "operational_details": lg.operational_details,
+                "attachment_url": lg.attachment_url,
+                "created_at": lg.created_at.isoformat() if lg.created_at else None,
+            }
+            for lg in logs
+        ]
+
+        g_rows = list_general_operational_reports(db, booking_id=booking_id, limit=80)
+        g_driver_ids = list({r.driver_id for r in g_rows})
+        g_drivers = db.query(User).filter(User.id.in_(g_driver_ids)).all() if g_driver_ids else []
+        g_dmap = {u.id: (u.full_name or f"User #{u.id}") for u in g_drivers}
+        payload["general_operational_reports"] = [
+            {
+                "id": gr.id,
+                "trip_id": gr.trip_id,
+                "booking_id": gr.booking_id,
+                "driver_id": gr.driver_id,
+                "driver_name": g_dmap.get(gr.driver_id),
+                "category": gr.category,
+                "category_label": GENERAL_OPS_CATEGORY_LABELS.get(
+                    gr.category, gr.category.replace("_", " ").title()
+                ),
+                "trip_status": gr.status,
+                "trip_status_label": GENERAL_OPS_TRIP_STATUS_LABELS.get(gr.status, gr.status.replace("_", " ").title())
+                if gr.status
+                else None,
+                "report_date": gr.report_date.isoformat(),
+                "starting_odometer_km": gr.starting_odometer_km,
+                "ending_odometer_km": gr.ending_odometer_km,
+                "fuel_consumed": gr.fuel_consumed,
+                "description": gr.description,
+                "notes": gr.notes,
+                "attachment_url": gr.attachment_url,
+                "created_at": gr.created_at.isoformat() if gr.created_at else None,
+            }
+            for gr in g_rows
+        ]
+
+    return payload

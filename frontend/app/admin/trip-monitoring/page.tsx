@@ -5,9 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { TripBoardDetailModal } from "@/components/TripBoardDetailModal";
 import { formatPhp } from "@/lib/appLocale";
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { WorkflowApi } from "@/lib/workflowApi";
+import { WorkflowApi, type DispatchTripMonitoringAssignment } from "@/lib/workflowApi";
 
-type BoardRow = Awaited<ReturnType<typeof WorkflowApi.dispatchAssignmentsBoard>>["assignments"][number];
+type BoardRow = DispatchTripMonitoringAssignment;
 
 type SortKey = "trip" | "booking" | "status" | "customer";
 
@@ -19,8 +19,8 @@ export default function AdminTripMonitoringPage() {
   const [detailRow, setDetailRow] = useState<BoardRow | null>(null);
 
   const load = useCallback(async () => {
-    const board = await WorkflowApi.dispatchAssignmentsBoard();
-    setRows(board.assignments);
+    const board = await WorkflowApi.dispatchTripMonitoringBoard();
+    setRows(board.active_assignments);
   }, []);
 
   useEffect(() => {
@@ -43,7 +43,9 @@ export default function AdminTripMonitoringPage() {
       if (sortKey === "trip") return (a.trip_id - b.trip_id) * dir;
       if (sortKey === "booking") return (a.booking_id - b.booking_id) * dir;
       if (sortKey === "customer") return ((a.customer_name || "").localeCompare(b.customer_name || "")) * dir;
-      return (a.trip_status + (a.helper_progress_status || "")).localeCompare(b.trip_status + (b.helper_progress_status || "")) * dir;
+      return (a.operational_status || a.helper_progress_status || a.trip_status).localeCompare(
+        b.operational_status || b.helper_progress_status || b.trip_status,
+      ) * dir;
     });
   }, [rows, sortKey, sortDir]);
 
@@ -145,11 +147,11 @@ export default function AdminTripMonitoringPage() {
                   <td style={{ padding: "0.75rem" }}>{trip.helper_name ?? "—"}</td>
                   <td style={{ padding: "0.75rem" }}>{trip.truck_code}</td>
                   <td style={{ padding: "0.75rem", maxWidth: 140, fontSize: "0.85rem" }}>
-                    {trip.latest_location ?? "No update yet"}
+                    {trip.latest_location?.trim() || "—"}
                   </td>
                   <td style={{ padding: "0.75rem" }}>#{trip.booking_id}</td>
                   <td style={{ padding: "0.75rem", textTransform: "capitalize" }}>
-                    {(trip.helper_progress_status || trip.trip_status).replace(/_/g, " ")}
+                    {(trip.operational_status || trip.helper_progress_status || trip.trip_status).replace(/_/g, " ")}
                   </td>
                   <td style={{ padding: "0.75rem" }}>
                     <button
