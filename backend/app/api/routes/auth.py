@@ -38,6 +38,22 @@ MAX_LOGIN_ATTEMPTS = 5  # paper UAT: 5-try lockout
 LOCKOUT_MINUTES = 15
 
 
+def _login_role(user: User) -> str:
+    """Resolve role for JWT; reject misconfigured accounts with JSON (not 500)."""
+    role = user.role
+    if isinstance(role, UserRole):
+        return role.value
+    if isinstance(role, str):
+        key = role.strip().lower()
+        valid = {r.value for r in UserRole}
+        if key in valid:
+            return key
+    raise HTTPException(
+        status_code=403,
+        detail="This account does not have a valid role assigned. Contact an administrator.",
+    )
+
+
 def _hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -111,8 +127,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user.locked_until = None
     db.commit()
 
-    token = create_access_token(subject=user.email, role=user.role.value)
-    return Token(access_token=token, role=user.role.value)
+    role_value = _login_role(user)
+    token = create_access_token(subject=user.email, role=role_value)
+    return Token(access_token=token, role=role_value)
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)

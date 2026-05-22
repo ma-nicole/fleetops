@@ -55,6 +55,7 @@ export default function DashboardReportsPage() {
             <li>
               <strong>Dispatcher / ops:</strong>{" "}
               <Link href="/modules/analytics/operations-snapshot">Live data snapshot</Link>,{" "}
+              <Link href="/modules/analytics/expenses">Expense summary</Link>,{" "}
               <Link href="/dispatcher/trip-logs">Trip logs</Link>,{" "}
               <Link href="/modules/analytics/predictions">Operational predictions</Link>
             </li>

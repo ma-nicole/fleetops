@@ -2,6 +2,8 @@
  * Typed wrapper around the booking → trip → payment lifecycle.
  */
 import { apiGet, apiPatch, apiPost, apiPostMultipart } from "./api";
+import type { CargoTypeScreening, CargoTypeValidationAdminRow } from "./cargoTypeCategories";
+import type { DispatcherAssignmentRow, DispatcherUserOption } from "./dispatcherAssignment";
 
 export type BookingStatus =
   | "pending_payment"
@@ -82,6 +84,66 @@ export type Booking = {
   created_at: string;
   updated_at: string;
   latest_location?: string | null;
+  cargo_declaration_original_filename?: string | null;
+  cargo_declaration_uploaded_at?: string | null;
+  cargo_declaration_file_url?: string | null;
+  terms_agreement_original_filename?: string | null;
+  terms_agreement_uploaded_at?: string | null;
+  terms_agreement_file_url?: string | null;
+  terms_agreed_at?: string | null;
+  customs_clearance_status?: string | null;
+  customs_tariff_notes?: string | null;
+  customs_additional_charges_php?: number | null;
+  customs_customer_updated_at?: string | null;
+  customs_admin_validated?: boolean;
+  customs_validated_by_id?: number | null;
+  customs_validated_at?: string | null;
+  customs_admin_notes?: string | null;
+  customs_validated_additional_charges_php?: number | null;
+  goods_declaration_validated?: boolean;
+  cargo_type_validated?: boolean;
+  goods_declaration_review_status?: string | null;
+  goods_declaration_review_remarks?: string | null;
+  goods_declaration_reviewed_at?: string | null;
+  goods_declaration_reviewed_by_id?: number | null;
+  cargo_type_category?: string | null;
+  cargo_type_admin_notes?: string | null;
+  cargo_restricted_flag?: boolean;
+  cargo_restricted_reasons?: string | null;
+  cargo_type_validated_by_id?: number | null;
+  cargo_type_validated_at?: string | null;
+};
+
+export type GoodsDeclarationAdminRow = {
+  booking_id: number;
+  customer_id: number;
+  status: string;
+  pickup_location: string;
+  dropoff_location: string;
+  cargo_description: string | null;
+  cargo_weight_tons: number;
+  cargo_declaration_original_filename: string | null;
+  cargo_declaration_uploaded_at: string | null;
+  cargo_declaration_file_url?: string | null;
+  goods_declaration_review_status: string | null;
+  goods_declaration_review_status_label: string;
+  goods_declaration_review_remarks: string | null;
+  goods_declaration_reviewed_at: string | null;
+  goods_declaration_reviewed_by_id: number | null;
+};
+
+export type PreDeliveryChecklistItem = {
+  key: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+};
+
+export type PreDeliveryChecklist = {
+  booking_id: number;
+  all_passed: boolean;
+  ready_for_delivery: boolean;
+  items: PreDeliveryChecklistItem[];
 };
 
 export type TripBookingSummary = {
@@ -124,6 +186,51 @@ export type CrewTimelineEvent = {
   update_index?: number;
 };
 
+export type DriverTripNotificationRow = {
+  id: number;
+  trip_id: number | null;
+  booking_id: number;
+  kind: "assigned" | "updated" | string;
+  schedule_summary: string;
+  route_summary: string;
+  required_action: string;
+  read: boolean;
+  read_at: string | null;
+  created_at: string | null;
+};
+
+export type CrewSchedulingPlot = {
+  assigned_at: string | null;
+  pickup_date: string | null;
+  pickup_time_slot: string | null;
+  pickup_location: string;
+  delivery_at: string | null;
+  delivery_location: string;
+  route_waypoints: string[];
+  route_distance_km: number;
+  duration_hours: number;
+  truck_code: string | null;
+  truck_model: string | null;
+  driver_name: string | null;
+  helper_name: string | null;
+  status: string;
+  trip_status: string;
+};
+
+export type DeliveryReceivingStatus = {
+  trip_id: number;
+  receiving_document_uploaded: boolean;
+  receiving_document_path: string | null;
+  receiving_document_uploaded_at: string | null;
+  qr_verified: boolean;
+  qr_verified_at: string | null;
+  qr_payload: string | null;
+  digital_signature_uploaded: boolean;
+  digital_signature_path: string | null;
+  digital_signature_uploaded_at: string | null;
+  ready_for_completion: boolean;
+};
+
 export type CrewAssignedBookingRow = {
   trip_id: number;
   booking_id: number;
@@ -135,6 +242,12 @@ export type CrewAssignedBookingRow = {
   location_update_count: number;
   distance_km: number;
   road_distance_km: number | null;
+  assigned_at?: string | null;
+  estimated_delivery_time?: string | null;
+  duration_hours?: number;
+  route_path?: string;
+  route_waypoints?: string[];
+  scheduling_plot?: CrewSchedulingPlot;
   driver_name: string | null;
   helper_name: string | null;
   driver_profile: { rating: number; compliance_status: string } | null;
@@ -147,6 +260,7 @@ export type CrewAssignedBookingRow = {
   truck_assignment_status: string | null;
   completed_at: string | null;
   pod_notes: string | null;
+  delivery_receiving?: DeliveryReceivingStatus;
   timeline_events: CrewTimelineEvent[];
   location_updates: Array<{
     id: number;
@@ -208,6 +322,8 @@ export type Trip = {
   toll_cost: number;
   fuel_cost: number;
   labor_cost: number;
+  driver_allowance_php?: number;
+  helper_allowance_php?: number;
   duration_hours: number;
   status: string;
   assigned_at: string | null;
@@ -428,6 +544,7 @@ export type Payment = {
   refunded_at: string | null;
   proof_original_filename?: string | null;
   proof_uploaded_at?: string | null;
+  proof_file_url?: string | null;
   reviewed_at?: string | null;
   created_at: string;
 };
@@ -583,6 +700,31 @@ export const WorkflowApi = {
     cargo_weight_tons: number;
     cargo_description?: string | null;
   }) => apiPost<Booking>("/bookings", payload),
+  createBookingWithDocuments: (payload: {
+    pickup_location: string;
+    dropoff_location: string;
+    service_type: "fixed" | "customized";
+    scheduled_date: string;
+    scheduled_time_slot: string;
+    cargo_weight_tons: number;
+    cargo_description?: string | null;
+    terms_agreed: boolean;
+    cargo_declaration: File;
+    terms_agreement: File;
+  }) => {
+    const fd = new FormData();
+    fd.append("pickup_location", payload.pickup_location);
+    fd.append("dropoff_location", payload.dropoff_location);
+    fd.append("service_type", payload.service_type);
+    fd.append("scheduled_date", payload.scheduled_date);
+    fd.append("scheduled_time_slot", payload.scheduled_time_slot);
+    fd.append("cargo_weight_tons", String(payload.cargo_weight_tons));
+    if (payload.cargo_description) fd.append("cargo_description", payload.cargo_description);
+    fd.append("terms_agreed", payload.terms_agreed ? "true" : "false");
+    fd.append("cargo_declaration", payload.cargo_declaration);
+    fd.append("terms_agreement", payload.terms_agreement);
+    return apiPostMultipart<Booking>("/bookings/with-documents", fd);
+  },
   getBooking: (id: number) => apiGet<Booking>(`/bookings/${id}`),
   bookingTrackingDetails: (id: number) =>
     apiGet<{
@@ -660,6 +802,54 @@ export const WorkflowApi = {
   customerBookingHistory: () => apiGet<CustomerBookingHistoryRow[]>("/customer/booking-history"),
   customerShipmentTracking: () => apiGet<{ shipments: CustomerBookingRow[] }>("/customer/shipment-tracking"),
   customerCancelBooking: (id: number) => apiPatch<{ status: string }>(`/customer/bookings/${id}/cancel`, {}),
+  customerUpdateBookingCustoms: (
+    id: number,
+    payload: {
+      customs_clearance_status?: string | null;
+      customs_tariff_notes?: string | null;
+      customs_additional_charges_php?: number | null;
+    },
+  ) => apiPatch<Booking>(`/customer/bookings/${id}/customs`, payload),
+  validateBookingCustoms: (
+    id: number,
+    payload: {
+      validated: boolean;
+      customs_admin_notes?: string | null;
+      customs_validated_additional_charges_php?: number | null;
+    },
+  ) => apiPatch<Booking>(`/bookings/${id}/customs/validate`, payload),
+  preDeliveryChecklist: (id: number) => apiGet<PreDeliveryChecklist>(`/bookings/${id}/pre-delivery-checklist`),
+  updatePreDeliveryChecklist: (
+    id: number,
+    payload: { goods_declaration_validated?: boolean; cargo_type_validated?: boolean },
+  ) => apiPatch<PreDeliveryChecklist>(`/bookings/${id}/pre-delivery-checklist`, payload),
+
+  listGoodsDeclarations: () => apiGet<GoodsDeclarationAdminRow[]>("/admin/goods-declarations"),
+  reviewGoodsDeclaration: (
+    bookingId: number,
+    payload: { status: "approved" | "rejected" | "revision_requested"; remarks?: string | null },
+  ) => apiPatch<GoodsDeclarationAdminRow>(`/admin/goods-declarations/${bookingId}`, payload),
+
+  listCargoTypeValidations: () => apiGet<CargoTypeValidationAdminRow[]>("/admin/cargo-type-validations"),
+  previewCargoTypeScreening: (bookingId: number, category: string) =>
+    apiGet<CargoTypeScreening>(
+      `/bookings/${bookingId}/cargo-type/screening?category=${encodeURIComponent(category)}`,
+    ),
+  validateBookingCargoType: (
+    bookingId: number,
+    payload: {
+      validated: boolean;
+      cargo_type_category?: string | null;
+      cargo_type_admin_notes?: string | null;
+    },
+  ) => apiPatch<Booking>(`/bookings/${bookingId}/cargo-type/validate`, payload),
+
+  listDispatchers: () => apiGet<DispatcherUserOption[]>("/admin/dispatchers"),
+  listDispatcherAssignments: () => apiGet<DispatcherAssignmentRow[]>("/admin/dispatcher-assignments"),
+  assignBookingDispatcher: (bookingId: number, dispatcherId: number | null) =>
+    apiPatch<DispatcherAssignmentRow>(`/admin/dispatcher-assignments/${bookingId}`, {
+      dispatcher_id: dispatcherId,
+    }),
 
   // Workflow API
   workflowCreateBooking: (payload: Record<string, unknown>) =>
@@ -702,6 +892,20 @@ export const WorkflowApi = {
     apiPost<Trip>(`/workflow/job/${trip_id}/arrived-pickup`, { status: "loading" }),
   loadingComplete: (trip_id: number) =>
     apiPost<Trip>(`/workflow/job/${trip_id}/loading-complete`),
+  deliveryReceivingStatus: (trip_id: number) =>
+    apiGet<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/delivery-receiving-status`),
+  uploadReceivingDocument: (trip_id: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return apiPostMultipart<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/receiving-document`, fd);
+  },
+  verifyReceivingQr: (trip_id: number, scanned_payload: string) =>
+    apiPost<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/verify-receiving-qr`, { scanned_payload }),
+  uploadDigitalSignature: (trip_id: number, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return apiPostMultipart<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/digital-signature`, fd);
+  },
   completeTrip: (trip_id: number, proof_url?: string, notes?: string) =>
     apiPost<Trip>(`/workflow/job/${trip_id}/complete`, { proof_url, notes }),
   reportIssue: (trip_id: number, issue_type: string, description: string, severity = "medium") =>
@@ -722,11 +926,11 @@ export const WorkflowApi = {
 
   // Payments
   listPayments: () => apiGet<Payment[]>("/payments"),
-  submitPaymentProof: (booking_id: number, method: string, file: File) => {
+  submitPaymentProof: (booking_id: number, method: string, file?: File | null) => {
     const fd = new FormData();
     fd.append("booking_id", String(booking_id));
     fd.append("method", method);
-    fd.append("file", file);
+    if (file) fd.append("file", file);
     return apiPostMultipart<Payment>("/payments/submit-proof", fd);
   },
   verifyPayment: (payment_id: number) => apiPost<Payment>(`/payments/${payment_id}/verify`, {}),
@@ -891,6 +1095,20 @@ export const WorkflowApi = {
     }>("/dispatch/fleet-assets"),
 
   driverAssignedBookings: () => apiGet<{ bookings: CrewAssignedBookingRow[] }>("/driver/bookings"),
+
+  driverTripNotifications: (params?: { unread_only?: boolean; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.unread_only) q.set("unread_only", "true");
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiGet<{ notifications: DriverTripNotificationRow[]; unread_count: number }>(
+      `/driver/notifications${qs ? `?${qs}` : ""}`,
+    );
+  },
+  driverMarkNotificationRead: (notification_id: number) =>
+    apiPatch<DriverTripNotificationRow>(`/driver/notifications/${notification_id}/read`, {}),
+  driverMarkAllNotificationsRead: () =>
+    apiPost<{ marked_read: number }>("/driver/notifications/mark-all-read", {}),
 
   helperListBookings: () => apiGet<{ bookings: CrewAssignedBookingRow[] }>("/helper/bookings"),
 

@@ -1,0 +1,642 @@
+{
+  "exported_at": "2026-05-22T07:58:58.340122Z",
+  "tables": {
+    "attendance_records": {
+      "row_count": 17,
+      "columns": [
+        "id",
+        "user_id",
+        "check_in_time",
+        "status",
+        "check_out_time"
+      ]
+    },
+    "booking_freight_settings": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "diesel_price_php_per_liter",
+        "updated_at",
+        "toll_fees_php_per_trip"
+      ]
+    },
+    "bookings": {
+      "row_count": 7,
+      "columns": [
+        "id",
+        "customer_id",
+        "pickup_location",
+        "dropoff_location",
+        "service_type",
+        "scheduled_date",
+        "cargo_weight_tons",
+        "cargo_description",
+        "estimated_cost",
+        "actual_cost",
+        "status",
+        "approved_by_id",
+        "approved_at",
+        "rejection_reason",
+        "created_at",
+        "updated_at",
+        "scheduled_time_slot",
+        "required_truck_count",
+        "latest_location",
+        "cargo_declaration_original_filename",
+        "cargo_declaration_storage_path",
+        "cargo_declaration_uploaded_at",
+        "terms_agreement_original_filename",
+        "terms_agreement_storage_path",
+        "terms_agreement_uploaded_at",
+        "terms_agreed_at",
+        "route_id"
+      ]
+    },
+    "completion_reports": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "booking_id",
+        "generated_by_id",
+        "summary",
+        "fuel_total",
+        "toll_total",
+        "labor_total",
+        "maintenance_total",
+        "total_cost",
+        "status",
+        "confirmed_by_id",
+        "confirmed_at",
+        "created_at"
+      ]
+    },
+    "customer_saved_sites": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "customer_id",
+        "label",
+        "address",
+        "street",
+        "barangay",
+        "city_municipality",
+        "province",
+        "postal_code",
+        "created_at"
+      ]
+    },
+    "driver_profiles": {
+      "row_count": 3,
+      "columns": [
+        "id",
+        "user_id",
+        "compliance_status",
+        "rating",
+        "deduction_amount"
+      ]
+    },
+    "driver_ratings": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "driver_id",
+        "rated_by_customer_id",
+        "rating",
+        "comment",
+        "created_at"
+      ]
+    },
+    "erd_brokers": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "name",
+        "salary",
+        "date_employed"
+      ]
+    },
+    "erd_customers": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "name",
+        "address",
+        "contact",
+        "balance",
+        "type"
+      ]
+    },
+    "erd_fuel_records": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "truck_id",
+        "liters_used",
+        "fuel_cost",
+        "recorded_date"
+      ]
+    },
+    "erd_maintenance_reports": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "truck_id",
+        "report_type",
+        "description",
+        "report_date",
+        "cost"
+      ]
+    },
+    "erd_payments": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "transaction_id",
+        "payment_method",
+        "payment_status",
+        "amount_paid",
+        "payment_date"
+      ]
+    },
+    "erd_routes": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "origin",
+        "destination",
+        "estimated_distance",
+        "eta"
+      ]
+    },
+    "erd_stock": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "transaction_id",
+        "name"
+      ]
+    },
+    "erd_toll_records": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "toll_amount"
+      ]
+    },
+    "erd_transactions": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "customer_id",
+        "broker_id",
+        "type",
+        "create_time",
+        "creation_time",
+        "cancellation_time"
+      ]
+    },
+    "erd_trips": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "transaction_id",
+        "route_id",
+        "truck_id",
+        "driver_name",
+        "helper_name",
+        "trip_status",
+        "departure_time",
+        "arrival_time"
+      ]
+    },
+    "erd_truck_schedule": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "truck_id",
+        "trip_id",
+        "schedule_start",
+        "schedule_end",
+        "schedule_status"
+      ]
+    },
+    "erd_trucks": {
+      "row_count": 0,
+      "columns": [
+        "plate_number",
+        "truck_type",
+        "capacity"
+      ]
+    },
+    "feedback": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "customer_id",
+        "category",
+        "rating",
+        "message",
+        "created_at"
+      ]
+    },
+    "forecast_results": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "run_id",
+        "target_entity",
+        "target_id",
+        "predicted_value",
+        "breakdown_json",
+        "period",
+        "created_at"
+      ]
+    },
+    "forecast_runs": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "model_name",
+        "triggered_by_id",
+        "triggered_at",
+        "sample_size",
+        "parameters_json",
+        "notes"
+      ]
+    },
+    "fuel_logs": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "truck_id",
+        "driver_id",
+        "liters",
+        "cost",
+        "odometer_km",
+        "receipt_url",
+        "recorded_at"
+      ]
+    },
+    "general_operational_reports": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "trip_id",
+        "driver_id",
+        "helper_id",
+        "category",
+        "status",
+        "report_date",
+        "starting_odometer_km",
+        "ending_odometer_km",
+        "fuel_consumed",
+        "description",
+        "notes",
+        "attachment_url",
+        "created_at"
+      ]
+    },
+    "helper_profiles": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "user_id",
+        "rating",
+        "base_salary"
+      ]
+    },
+    "job_orders": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "issued_by_manager_id",
+        "assigned_dispatcher_id",
+        "instructions",
+        "issued_at",
+        "closed_at"
+      ]
+    },
+    "maintenance_records": {
+      "row_count": 3,
+      "columns": [
+        "id",
+        "truck_id",
+        "reported_issue",
+        "severity",
+        "predicted_risk_score",
+        "scheduled_date",
+        "resolved_at"
+      ]
+    },
+    "model_metrics": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "run_id",
+        "model_name",
+        "mae",
+        "mape",
+        "rmse",
+        "accuracy",
+        "recall",
+        "f1",
+        "brier",
+        "sample_size",
+        "measured_at"
+      ]
+    },
+    "operational_logs": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "trip_id",
+        "dispatcher_id",
+        "report_type",
+        "priority_level",
+        "operational_details",
+        "attachment_url",
+        "created_at"
+      ]
+    },
+    "payments": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "transaction_id",
+        "customer_id",
+        "method",
+        "amount",
+        "status",
+        "reference",
+        "paid_at",
+        "refunded_at",
+        "created_at",
+        "proof_original_filename",
+        "proof_storage_path",
+        "proof_uploaded_at",
+        "reviewed_at",
+        "reviewed_by_id"
+      ]
+    },
+    "prediction_feedback": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "model_name",
+        "predicted_value",
+        "actual_value",
+        "error",
+        "abs_pct_error",
+        "created_at"
+      ]
+    },
+    "pricing_configs": {
+      "row_count": 2,
+      "columns": [
+        "id",
+        "service_type",
+        "base_rate",
+        "labor_rate",
+        "helper_rate"
+      ]
+    },
+    "route_options": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "rank",
+        "path_json",
+        "distance_km",
+        "fuel_cost",
+        "toll_cost",
+        "time_penalty",
+        "maintenance_penalty",
+        "total_cost",
+        "is_selected",
+        "created_at"
+      ]
+    },
+    "routes": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "origin",
+        "destination",
+        "distance_km",
+        "eta_hours",
+        "road_class",
+        "base_toll",
+        "is_active",
+        "created_at"
+      ]
+    },
+    "toll_logs": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "driver_id",
+        "location",
+        "amount",
+        "receipt_url",
+        "recorded_at"
+      ]
+    },
+    "transactions": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "customer_id",
+        "broker_id",
+        "type",
+        "amount",
+        "created_at",
+        "cancelled_at"
+      ]
+    },
+    "trip_issues": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "trip_id",
+        "reported_by_id",
+        "issue_type",
+        "description",
+        "severity",
+        "resolved",
+        "resolution_notes",
+        "created_at",
+        "resolved_at"
+      ]
+    },
+    "trip_location_updates": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "trip_id",
+        "helper_id",
+        "location_name",
+        "latitude",
+        "longitude",
+        "remarks",
+        "photo_url",
+        "created_at"
+      ]
+    },
+    "trip_status_updates": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "trip_id",
+        "helper_id",
+        "status",
+        "location_name",
+        "latitude",
+        "longitude",
+        "remarks",
+        "photo_url",
+        "created_at"
+      ]
+    },
+    "trips": {
+      "row_count": 4,
+      "columns": [
+        "id",
+        "booking_id",
+        "truck_id",
+        "driver_id",
+        "dispatcher_id",
+        "route_path",
+        "distance_km",
+        "toll_cost",
+        "fuel_cost",
+        "labor_cost",
+        "duration_hours",
+        "status",
+        "assigned_at",
+        "accepted_at",
+        "departure_time",
+        "arrival_pickup_time",
+        "loading_start_time",
+        "loading_end_time",
+        "departure_delivery_time",
+        "arrival_delivery_time",
+        "completed_at",
+        "proof_of_delivery",
+        "pod_notes",
+        "current_latitude",
+        "current_longitude",
+        "estimated_delivery_time",
+        "created_at",
+        "updated_at",
+        "helper_progress_status",
+        "helper_last_proof_path",
+        "latest_location"
+      ]
+    },
+    "truck_assignments": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "truck_id",
+        "driver_id",
+        "helper_id",
+        "assigned_weight",
+        "assignment_status",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "truck_ban_rules": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "name",
+        "road_segment",
+        "weekdays_csv",
+        "start_hour",
+        "end_hour",
+        "description",
+        "is_active"
+      ]
+    },
+    "truck_slot_holds": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "schedule_date",
+        "time_slot",
+        "required_truck_count",
+        "hold_status",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "trucks": {
+      "row_count": 5,
+      "columns": [
+        "id",
+        "code",
+        "capacity_tons",
+        "status",
+        "last_maintenance_date",
+        "model_name",
+        "availability_status"
+      ]
+    },
+    "users": {
+      "row_count": 9,
+      "columns": [
+        "id",
+        "clerk_id",
+        "email",
+        "password_hash",
+        "full_name",
+        "role",
+        "phone",
+        "created_at",
+        "failed_login_count",
+        "locked_until",
+        "company_name",
+        "password_reset_token_hash",
+        "password_reset_expires_at",
+        "availability_status"
+      ]
+    },
+    "vehicle_issue_reports": {
+      "row_count": 0,
+      "columns": [
+        "id",
+        "booking_id",
+        "trip_id",
+        "truck_id",
+        "driver_id",
+        "helper_id",
+        "issue_type",
+        "priority",
+        "description",
+        "attachment_url",
+        "status",
+        "created_at",
+        "updated_at"
+      ]
+    }
+  }
+}

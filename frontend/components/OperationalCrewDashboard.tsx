@@ -7,6 +7,8 @@ import KpiCard from "@/components/KpiCard";
 import { getEffectiveRole } from "@/lib/auth";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type DriverDashboardSummary, type Trip } from "@/lib/workflowApi";
+import CrewSchedulingPlotPanel, { schedulingPlotFromTrip } from "@/components/CrewSchedulingPlotPanel";
+import DriverTripNotificationsPanel from "@/components/DriverTripNotificationsPanel";
 import { formatDateTime, formatPhp, formatPhpWhole } from "@/lib/appLocale";
 import { announce } from "@/lib/useAnnouncer";
 import { ApiError } from "@/lib/api";
@@ -335,18 +337,26 @@ export default function OperationalCrewDashboard() {
           </div>
         ) : null}
 
+        {crewRole === "driver" ? (
+          <DriverTripNotificationsPanel scheduleHref="/driver/scheduled-trips" onRefresh={() => void refresh()} />
+        ) : null}
+
         {summary ? (
           <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
             <KpiCard label="Today’s assignments" value={a?.total_assigned_today ?? 0} delta="Legs assigned today (UTC)" tone="neutral" />
             <KpiCard label="Active trips" value={a?.active_trips ?? 0} delta="Assigned through dropped off (not completed/cancelled)" tone="neutral" />
             <KpiCard label="Completed trips" value={a?.completed_legs_total ?? 0} delta={`${a?.completed_today ?? 0} finished today`} tone="neutral" />
-            <KpiCard
-              label="Total distance"
-              value={`${(dkm?.total_km ?? 0).toFixed(1)} km`}
-              delta={dkm?.trip_count ? `Avg ${(dkm?.average_km ?? 0).toFixed(1)} km · ${dkm.trip_count} legs` : "No qualifying legs"}
-              tone="neutral"
-            />
-            <KpiCard label="Trip labor (completed)" value={formatPhpWhole(summary.trip_labor_completed_php ?? 0)} delta={earningsDelta} tone="neutral" />
+            {crewRole === "driver" ? (
+              <>
+                <KpiCard
+                  label="Total distance"
+                  value={`${(dkm?.total_km ?? 0).toFixed(1)} km`}
+                  delta={dkm?.trip_count ? `Avg ${(dkm?.average_km ?? 0).toFixed(1)} km · ${dkm.trip_count} legs` : "No qualifying legs"}
+                  tone="neutral"
+                />
+                <KpiCard label="Trip labor (completed)" value={formatPhpWhole(summary.trip_labor_completed_php ?? 0)} delta={earningsDelta} tone="neutral" />
+              </>
+            ) : null}
           </section>
         ) : loading ? (
           <p style={{ margin: 0, color: "var(--text-secondary)" }}>Loading summary…</p>
@@ -354,7 +364,7 @@ export default function OperationalCrewDashboard() {
           <p style={{ margin: 0, color: "var(--text-secondary)" }}>Could not load summary. Use Refresh.</p>
         )}
 
-        {truckForVehicle ? (
+        {crewRole === "driver" && truckForVehicle ? (
           <article style={{ ...card }}>
             <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.02rem", fontWeight: 800 }}>Assigned vehicle</h3>
             <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem", color: "#334155" }}>
@@ -392,12 +402,12 @@ export default function OperationalCrewDashboard() {
               )}
             </p>
           </article>
-        ) : (
+        ) : crewRole === "driver" ? (
           <article style={{ ...card }}>
             <h3 style={{ margin: "0 0 0.35rem", fontSize: "1.02rem", fontWeight: 800 }}>Assigned vehicle</h3>
             <p style={{ margin: 0, fontSize: "0.9rem", color: "#64748B" }}>No assigned vehicle on your active trips right now.</p>
           </article>
-        )}
+        ) : null}
 
         <article style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Current active trip</h3>
@@ -405,17 +415,27 @@ export default function OperationalCrewDashboard() {
             <p style={{ margin: 0, color: "#64748B", fontSize: "0.95rem" }}>No active trip assigned right now.</p>
           ) : (
             <div style={{ display: "grid", gap: "0.45rem", fontSize: "0.9rem", color: "#1e293b" }}>
-              <div>
-                <strong>Trip ID:</strong> {primary.id} · <strong>Booking ID:</strong> {primary.booking_id}
-              </div>
+              {crewRole === "driver" ? (
+                <div>
+                  <strong>Trip ID:</strong> {primary.id} · <strong>Booking ID:</strong> {primary.booking_id}
+                </div>
+              ) : (
+                <div>
+                  <strong>Booking ID:</strong> {primary.booking_id}
+                </div>
+              )}
               {primary.booking ? (
                 <>
-                  <div>
-                    <strong>Customer:</strong> {primary.booking.customer_name ?? "—"}
-                  </div>
-                  <div>
-                    <strong>Company:</strong> {primary.booking.customer_company_name ?? "—"}
-                  </div>
+                  {crewRole === "driver" ? (
+                    <>
+                      <div>
+                        <strong>Customer:</strong> {primary.booking.customer_name ?? "—"}
+                      </div>
+                      <div>
+                        <strong>Company:</strong> {primary.booking.customer_company_name ?? "—"}
+                      </div>
+                    </>
+                  ) : null}
                   <div>
                     <strong>Pickup:</strong> {primary.booking.pickup_location}
                   </div>
@@ -427,28 +447,35 @@ export default function OperationalCrewDashboard() {
                   </div>
                   <div>
                     <strong>Cargo:</strong> {primary.booking.cargo_weight_tons} t
+                    {primary.booking.cargo_description ? ` — ${primary.booking.cargo_description}` : ""}
                   </div>
-                  <div>
-                    <strong>Quoted:</strong> {formatPhp(Number(primary.booking.estimated_cost || 0))}
-                    {primary.booking.paid_amount_verified != null ? (
-                      <>
-                        {" "}
-                        · <strong>Paid (verified):</strong> {formatPhp(Number(primary.booking.paid_amount_verified))}
-                      </>
-                    ) : null}
-                  </div>
+                  {crewRole === "driver" ? (
+                    <div>
+                      <strong>Quoted:</strong> {formatPhp(Number(primary.booking.estimated_cost || 0))}
+                      {primary.booking.paid_amount_verified != null ? (
+                        <>
+                          {" "}
+                          · <strong>Paid (verified):</strong> {formatPhp(Number(primary.booking.paid_amount_verified))}
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </>
               ) : null}
-              <div>
-                <strong>Truck / plate:</strong>{" "}
-                {primary.truck ? `${primary.truck.code}${primary.truck.model_name ? ` · ${primary.truck.model_name}` : ""}` : "—"}
-              </div>
+              {crewRole === "driver" ? (
+                <div>
+                  <strong>Truck / plate:</strong>{" "}
+                  {primary.truck ? `${primary.truck.code}${primary.truck.model_name ? ` · ${primary.truck.model_name}` : ""}` : "—"}
+                </div>
+              ) : null}
               <div>
                 <strong>Driver:</strong> {primary.driver_name ?? "—"}
               </div>
-              <div>
-                <strong>Helper:</strong> {primary.helper_name ?? "—"}
-              </div>
+              {crewRole === "driver" ? (
+                <div>
+                  <strong>Helper:</strong> {primary.helper_name ?? "—"}
+                </div>
+              ) : null}
               <div>
                 <strong>Current status:</strong> {statusSlugForRow(primary)}
               </div>
@@ -516,35 +543,35 @@ export default function OperationalCrewDashboard() {
         <article style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Assigned trips (not completed)</h3>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ ...tableBase, minWidth: 1040 }}>
+            <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 760 : 1040 }}>
               <thead>
                 <tr>
-                  <th style={th}>Trip ID</th>
+                  {crewRole === "driver" ? <th style={th}>Trip ID</th> : null}
                   <th style={th}>Booking ID</th>
                   <th style={th}>Pickup</th>
                   <th style={th}>Dropoff</th>
                   <th style={th}>Schedule</th>
                   <th style={{ ...th, textAlign: "right" }}>Cargo (t)</th>
-                  <th style={th}>Truck</th>
+                  {crewRole === "driver" ? <th style={th}>Truck</th> : null}
                   <th style={th}>Driver</th>
-                  <th style={th}>Helper</th>
+                  {crewRole === "driver" ? <th style={th}>Helper</th> : null}
                   <th style={th}>Status</th>
-                  <th style={th}>Latest location</th>
+                  {crewRole === "driver" ? <th style={th}>Latest location</th> : null}
                   <th style={{ ...th, textAlign: "center" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {activeTrips.length === 0 ? (
                   <tr>
-                    <td colSpan={12} style={{ ...td, color: "#64748B" }}>
+                    <td colSpan={crewRole === "helper" ? 8 : 12} style={{ ...td, color: "#64748B" }}>
                       No active assigned trips.
                     </td>
                   </tr>
                 ) : (
                   activeTrips.map((t) => (
                     <tr key={t.id}>
-                      <td style={{ ...td, fontWeight: 700 }}>{t.id}</td>
-                      <td style={td}>{t.booking_id}</td>
+                      {crewRole === "driver" ? <td style={{ ...td, fontWeight: 700 }}>{t.id}</td> : null}
+                      <td style={{ ...td, fontWeight: crewRole === "helper" ? 700 : undefined }}>{t.booking_id}</td>
                       <td style={td} title={t.booking?.pickup_location}>
                         {shorten(t.booking?.pickup_location, 48)}
                       </td>
@@ -563,18 +590,20 @@ export default function OperationalCrewDashboard() {
                         )}
                       </td>
                       <td style={{ ...td, textAlign: "right" }}>{t.booking ? t.booking.cargo_weight_tons : "—"}</td>
-                      <td style={td}>{t.truck?.code ?? "—"}</td>
+                      {crewRole === "driver" ? <td style={td}>{t.truck?.code ?? "—"}</td> : null}
                       <td style={td}>{t.driver_name ?? "—"}</td>
-                      <td style={td}>{t.helper_name ?? "—"}</td>
+                      {crewRole === "driver" ? <td style={td}>{t.helper_name ?? "—"}</td> : null}
                       <td style={td}>
                         <StatusPill ok={false} slug={statusSlugForRow(t)} />
                       </td>
-                      <td style={td} title={t.latest_location || ""}>
-                        {shorten(t.latest_location, 40)}
-                      </td>
+                      {crewRole === "driver" ? (
+                        <td style={td} title={t.latest_location || ""}>
+                          {shorten(t.latest_location, 40)}
+                        </td>
+                      ) : null}
                       <td style={{ ...td, textAlign: "center" }}>
                         <button type="button" style={viewBtnStyle} onClick={() => setDetailTrip(t)}>
-                          View details
+                          {crewRole === "helper" ? "Open" : "View details"}
                         </button>
                       </td>
                     </tr>
@@ -588,15 +617,19 @@ export default function OperationalCrewDashboard() {
         <article style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Recent trip history (completed)</h3>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ ...tableBase, minWidth: 880 }}>
+            <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 640 : 880 }}>
               <thead>
                 <tr>
-                  <th style={th}>Trip ID</th>
+                  {crewRole === "driver" ? <th style={th}>Trip ID</th> : null}
                   <th style={th}>Booking ID</th>
-                  <th style={th}>Route</th>
+                  <th style={th}>{crewRole === "helper" ? "Route" : "Route"}</th>
                   <th style={th}>Schedule</th>
-                  <th style={{ ...th, textAlign: "right" }}>Distance</th>
-                  <th style={{ ...th, textAlign: "right" }}>Fuel cost</th>
+                  {crewRole === "driver" ? (
+                    <>
+                      <th style={{ ...th, textAlign: "right" }}>Distance</th>
+                      <th style={{ ...th, textAlign: "right" }}>Fuel cost</th>
+                    </>
+                  ) : null}
                   <th style={th}>Status</th>
                   <th style={th}>Completed</th>
                 </tr>
@@ -604,14 +637,14 @@ export default function OperationalCrewDashboard() {
               <tbody>
                 {historyCompleted.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ ...td, color: "#64748B" }}>
+                    <td colSpan={crewRole === "helper" ? 5 : 8} style={{ ...td, color: "#64748B" }}>
                       No completed trips yet.
                     </td>
                   </tr>
                 ) : (
                   historyCompleted.map((t) => (
                     <tr key={t.id}>
-                      <td style={{ ...td, fontWeight: 700 }}>{t.id}</td>
+                      {crewRole === "driver" ? <td style={{ ...td, fontWeight: 700 }}>{t.id}</td> : null}
                       <td style={td}>{t.booking_id}</td>
                       <td style={td} title={formatRouteLabel(t)}>
                         {formatRouteLabel(t)}
@@ -627,8 +660,12 @@ export default function OperationalCrewDashboard() {
                           "—"
                         )}
                       </td>
-                      <td style={{ ...td, textAlign: "right" }}>{t.distance_km} km</td>
-                      <td style={{ ...td, textAlign: "right" }}>{formatPhpWhole(t.fuel_cost || 0)}</td>
+                      {crewRole === "driver" ? (
+                        <>
+                          <td style={{ ...td, textAlign: "right" }}>{t.distance_km} km</td>
+                          <td style={{ ...td, textAlign: "right" }}>{formatPhpWhole(t.fuel_cost || 0)}</td>
+                        </>
+                      ) : null}
                       <td style={td}>
                         <StatusPill ok slug={statusSlugForRow(t)} />
                       </td>
@@ -709,7 +746,7 @@ export default function OperationalCrewDashboard() {
             style={{
               background: "white",
               borderRadius: 12,
-              maxWidth: 560,
+              maxWidth: crewRole === "driver" ? 720 : 560,
               width: "100%",
               padding: "1.35rem",
               maxHeight: "88vh",
@@ -718,14 +755,27 @@ export default function OperationalCrewDashboard() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ marginTop: 0 }}>Trip #{detailTrip.id}</h2>
+            <h2 style={{ marginTop: 0 }}>{crewRole === "helper" ? `Booking #${detailTrip.booking_id}` : `Trip #${detailTrip.id}`}</h2>
+            {crewRole === "driver" ? (
+              <CrewSchedulingPlotPanel plot={schedulingPlotFromTrip(detailTrip)} title="Scheduling plot" />
+            ) : null}
             <div style={{ display: "grid", gap: "0.4rem", fontSize: "0.92rem" }}>
+              {crewRole === "driver" ? (
+                <p style={{ margin: 0 }}>
+                  <strong>Booking:</strong> #{detailTrip.booking_id}
+                </p>
+              ) : null}
               <p style={{ margin: 0 }}>
-                <strong>Booking:</strong> #{detailTrip.booking_id}
+                <strong>Pickup:</strong> {detailTrip.booking?.pickup_location ?? "—"}
               </p>
               <p style={{ margin: 0 }}>
-                <strong>Route:</strong> {formatRouteLabel(detailTrip)}
+                <strong>Dropoff:</strong> {detailTrip.booking?.dropoff_location ?? "—"}
               </p>
+              {crewRole === "driver" ? (
+                <p style={{ margin: 0 }}>
+                  <strong>Route:</strong> {formatRouteLabel(detailTrip)}
+                </p>
+              ) : null}
               <p style={{ margin: 0 }}>
                 <strong>Status:</strong> {statusSlugForRow(detailTrip)}
               </p>
@@ -734,19 +784,30 @@ export default function OperationalCrewDashboard() {
               </p>
               {detailTrip.booking ? (
                 <>
-                  <p style={{ margin: 0 }}>
-                    <strong>Customer:</strong> {detailTrip.booking.customer_name ?? "—"}
-                  </p>
+                  {crewRole === "driver" ? (
+                    <p style={{ margin: 0 }}>
+                      <strong>Customer:</strong> {detailTrip.booking.customer_name ?? "—"}
+                    </p>
+                  ) : null}
                   <p style={{ margin: 0 }}>
                     <strong>Schedule:</strong> {detailTrip.booking.scheduled_date} {detailTrip.booking.scheduled_time_slot}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Cargo:</strong> {detailTrip.booking.cargo_weight_tons} t
+                    {detailTrip.booking.cargo_description ? ` — ${detailTrip.booking.cargo_description}` : ""}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Driver:</strong> {detailTrip.driver_name ?? "—"}
                   </p>
                 </>
               ) : null}
             </div>
             <div style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-              <Link href={`/trips/${detailTrip.id}/track`} className="button" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
-                Open live track
-              </Link>
+              {crewRole === "driver" ? (
+                <Link href={`/trips/${detailTrip.id}/track`} className="button" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                  Open live track
+                </Link>
+              ) : null}
               {crewRole === "helper" ? (
                 <Link href="/helper/bookings" className="button" style={{ background: "#FF9800", color: "#fff", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
                   Update status &amp; location

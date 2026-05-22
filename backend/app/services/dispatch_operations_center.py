@@ -12,6 +12,7 @@ from app.constants.booking_time_slots import is_allowed_time_slot
 from app.constants.fleet_capacity import trucks_required_for_cargo
 from app.services.booking_schedule import booking_interval
 from app.services.latest_location_display import latest_location_display_for_trip
+from app.services.dispatcher_booking_assignment import blocked_booking_ids_for_dispatcher, has_dispatcher_booking_scope
 from app.models.entities import (
     Booking,
     BookingStatus,
@@ -111,9 +112,13 @@ def _busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
     return trucks_b, drivers_b, helpers_b
 
 
-def build_operations_center_payload(db: Session) -> dict[str, Any]:
+def build_operations_center_payload(db: Session, viewer: User | None = None) -> dict[str, Any]:
     now = datetime.utcnow()
     today = now.date()
+    blocked: set[int] = set()
+    if viewer is not None and not has_dispatcher_booking_scope(viewer):
+        if viewer.role == UserRole.DISPATCHER:
+            blocked = blocked_booking_ids_for_dispatcher(db, viewer.id)
 
     pending_payment_verification = (
         db.query(func.count(Booking.id))
@@ -136,6 +141,8 @@ def build_operations_center_payload(db: Session) -> dict[str, Any]:
     active_exec_trips = (
         db.query(Trip).filter(Trip.status.in_(ACTIVE_EXECUTION)).all()
     )
+    if blocked:
+        active_exec_trips = [t for t in active_exec_trips if t.booking_id not in blocked]
     bucket_counts = {"assigned": 0, "for_pickup": 0, "picked_up": 0, "en_route": 0, "dropped_off": 0}
     for t in active_exec_trips:
         b = _operational_bucket(t)
@@ -180,6 +187,8 @@ def build_operations_center_payload(db: Session) -> dict[str, Any]:
     waiting_for_assignment: list[dict[str, Any]] = []
     waiting_count = 0
     for bk in wait_rows:
+        if blocked and bk.id in blocked:
+            continue
         need = int(bk.required_truck_count or trucks_required_for_cargo(float(bk.cargo_weight_tons or 0)))
         active_legs = active_by.get(bk.id, 0)
         if active_legs == 0 and need > 0:
@@ -270,6 +279,8 @@ def build_operations_center_payload(db: Session) -> dict[str, Any]:
         .limit(150)
         .all()
     )
+    if blocked:
+        board_trips = [t for t in board_trips if t.booking_id not in blocked]
     trip_ids = [t.id for t in board_trips]
     latest_loc: dict[int, tuple[str, datetime]] = {}
     if trip_ids:
@@ -329,6 +340,8 @@ def build_operations_center_payload(db: Session) -> dict[str, Any]:
         .all()
     )
     for loc, helper, trip in loc_q:
+        if blocked and trip.booking_id in blocked:
+            continue
         recent_updates.append(
             {
                 "trip_id": trip.id,

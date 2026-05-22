@@ -11,7 +11,7 @@ export default function HelperBookingsPage() {
       variant="helper"
       dashboardHref="/driver/dashboard"
       pageTitle="Bookings"
-      pageSubtitle="Assigned trips with operational status, payments, crew, location progress, and updates — same layout as the driver schedule view."
+      pageSubtitle="Assigned trips — pickup/dropoff, schedule, driver, cargo, your milestone tasks, and proof requirements."
     />
   );
 }

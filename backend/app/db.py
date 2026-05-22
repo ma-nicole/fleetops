@@ -110,6 +110,61 @@ def apply_runtime_schema_fixes() -> None:
             alters.append("UPDATE bookings SET required_truck_count = 1 WHERE required_truck_count IS NULL")
         if "latest_location" not in bk_cols:
             alters.append("ALTER TABLE bookings ADD COLUMN latest_location VARCHAR(512) NULL")
+        if "route_id" not in bk_cols:
+            alters.append("ALTER TABLE bookings ADD COLUMN route_id INT NULL")
+        doc_cols = [
+            ("cargo_declaration_original_filename", "VARCHAR(255) NULL"),
+            ("cargo_declaration_storage_path", "VARCHAR(512) NULL"),
+            ("cargo_declaration_uploaded_at", "DATETIME NULL"),
+            ("terms_agreement_original_filename", "VARCHAR(255) NULL"),
+            ("terms_agreement_storage_path", "VARCHAR(512) NULL"),
+            ("terms_agreement_uploaded_at", "DATETIME NULL"),
+            ("terms_agreed_at", "DATETIME NULL"),
+        ]
+        for col, ddl_suffix in doc_cols:
+            if col not in bk_cols:
+                alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
+        customs_cols = [
+            ("customs_clearance_status", "VARCHAR(32) NULL"),
+            ("customs_tariff_notes", "VARCHAR(2000) NULL"),
+            ("customs_additional_charges_php", "FLOAT NULL"),
+            ("customs_customer_updated_at", "DATETIME NULL"),
+            ("customs_admin_validated", "TINYINT(1) NOT NULL DEFAULT 0" if dialect == "mysql" else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("customs_validated_by_id", "INT NULL"),
+            ("customs_validated_at", "DATETIME NULL"),
+            ("customs_admin_notes", "VARCHAR(2000) NULL"),
+            ("customs_validated_additional_charges_php", "FLOAT NULL"),
+        ]
+        for col, ddl_suffix in customs_cols:
+            if col not in bk_cols:
+                alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
+        pre_delivery_cols = [
+            ("goods_declaration_validated", "TINYINT(1) NOT NULL DEFAULT 0" if dialect == "mysql" else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("cargo_type_validated", "TINYINT(1) NOT NULL DEFAULT 0" if dialect == "mysql" else "BOOLEAN NOT NULL DEFAULT 0"),
+        ]
+        for col, ddl_suffix in pre_delivery_cols:
+            if col not in bk_cols:
+                alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
+        goods_review_cols = [
+            ("goods_declaration_review_status", "VARCHAR(32) NULL"),
+            ("goods_declaration_review_remarks", "VARCHAR(2000) NULL"),
+            ("goods_declaration_reviewed_at", "DATETIME NULL"),
+            ("goods_declaration_reviewed_by_id", "INT NULL"),
+        ]
+        for col, ddl_suffix in goods_review_cols:
+            if col not in bk_cols:
+                alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
+        cargo_type_cols = [
+            ("cargo_type_category", "VARCHAR(64) NULL"),
+            ("cargo_type_admin_notes", "VARCHAR(2000) NULL"),
+            ("cargo_restricted_flag", "TINYINT(1) NOT NULL DEFAULT 0" if dialect == "mysql" else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("cargo_restricted_reasons", "VARCHAR(2000) NULL"),
+            ("cargo_type_validated_by_id", "INT NULL"),
+            ("cargo_type_validated_at", "DATETIME NULL"),
+        ]
+        for col, ddl_suffix in cargo_type_cols:
+            if col not in bk_cols:
+                alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
 
     if insp.has_table("payments"):
         pay_cols = {c["name"] for c in insp.get_columns("payments")}
@@ -147,6 +202,26 @@ def apply_runtime_schema_fixes() -> None:
                 alters.append("ALTER TABLE trips ADD COLUMN helper_last_proof_path VARCHAR(512) NULL")
         if "latest_location" not in tr_cols:
             alters.append("ALTER TABLE trips ADD COLUMN latest_location VARCHAR(512) NULL")
+        trip_additions = [
+            ("helper_id", "INT NULL"),
+            ("route_id", "INT NULL"),
+            ("selected_route_option_id", "INT NULL"),
+            ("maintenance_cost", "FLOAT NOT NULL DEFAULT 0"),
+            ("predicted_total_cost", "FLOAT NOT NULL DEFAULT 0"),
+            ("predicted_fuel_liters", "FLOAT NOT NULL DEFAULT 0"),
+            ("predicted_duration_hours", "FLOAT NOT NULL DEFAULT 0"),
+            ("driver_allowance_php", "FLOAT NOT NULL DEFAULT 0"),
+            ("helper_allowance_php", "FLOAT NOT NULL DEFAULT 0"),
+            ("receiving_document_path", "VARCHAR(512) NULL"),
+            ("receiving_document_uploaded_at", "DATETIME NULL"),
+            ("receiving_qr_token", "VARCHAR(64) NULL"),
+            ("receiving_qr_verified_at", "DATETIME NULL"),
+            ("digital_signature_path", "VARCHAR(512) NULL"),
+            ("digital_signature_uploaded_at", "DATETIME NULL"),
+        ]
+        for col, ddl_suffix in trip_additions:
+            if col not in tr_cols:
+                alters.append(f"ALTER TABLE trips ADD COLUMN {col} {ddl_suffix}")
 
     if insp.has_table("booking_freight_settings"):
         bf_cols = {c["name"] for c in insp.get_columns("booking_freight_settings")}
@@ -182,6 +257,33 @@ def apply_runtime_schema_fixes() -> None:
             alters.append("UPDATE trucks SET status = LOWER(COALESCE(status,'available'))")
         if "availability_status" not in tk_cols:
             alters.append("ALTER TABLE trucks ADD COLUMN availability_status VARCHAR(32) NOT NULL DEFAULT 'available'")
+        truck_additions = [
+            ("fuel_efficiency_kmpl", "FLOAT NOT NULL DEFAULT 4"),
+            ("odometer_km", "FLOAT NOT NULL DEFAULT 0"),
+            ("age_years", "FLOAT NOT NULL DEFAULT 1"),
+        ]
+        for col, ddl_suffix in truck_additions:
+            if col not in tk_cols:
+                alters.append(f"ALTER TABLE trucks ADD COLUMN {col} {ddl_suffix}")
+
+    if insp.has_table("driver_profiles"):
+        dp_cols = {c["name"] for c in insp.get_columns("driver_profiles")}
+        if "base_salary" not in dp_cols:
+            alters.append("ALTER TABLE driver_profiles ADD COLUMN base_salary FLOAT NOT NULL DEFAULT 1200")
+
+    if insp.has_table("maintenance_records"):
+        mr_cols = {c["name"] for c in insp.get_columns("maintenance_records")}
+        maint_additions = [
+            ("status", "VARCHAR(32) NOT NULL DEFAULT 'ok'"),
+            ("estimated_cost", "FLOAT NOT NULL DEFAULT 0"),
+            ("actual_cost", "FLOAT NOT NULL DEFAULT 0"),
+            ("parts_used", "VARCHAR(500) NULL"),
+            ("next_service_date", "DATE NULL"),
+            ("created_at", "DATETIME NULL"),
+        ]
+        for col, ddl_suffix in maint_additions:
+            if col not in mr_cols:
+                alters.append(f"ALTER TABLE maintenance_records ADD COLUMN {col} {ddl_suffix}")
 
     if insp.has_table("truck_slot_holds"):
         if dialect == "mysql":
@@ -204,13 +306,40 @@ def apply_runtime_schema_fixes() -> None:
                 conn.execute(text("UPDATE payments SET status = 'verified' WHERE status = 'paid'"))
                 conn.execute(text("UPDATE payments SET status = 'rejected' WHERE status = 'failed'"))
             if insp.has_table("truck_slot_holds") and insp.has_table("bookings"):
+                from app.services.demo_booking_filter import demo_booking_sql_where
+
+                demo_where = demo_booking_sql_where("b.")
                 conn.execute(
                     text(
                         "UPDATE truck_slot_holds h "
                         "INNER JOIN bookings b ON b.id = h.booking_id "
                         "SET h.hold_status = 'released' "
-                        "WHERE b.status IN ('cancelled','rejected') "
+                        "WHERE b.status IN ('cancelled','rejected','payment_rejected','completed','expired') "
                         "AND h.hold_status IN ('on_hold','payment_verification','ready_for_assignment','assigned')"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE truck_slot_holds h "
+                        "INNER JOIN bookings b ON b.id = h.booking_id "
+                        "SET h.hold_status = 'released' "
+                        f"WHERE {demo_where} "
+                        "AND h.hold_status IN ('on_hold','payment_verification','ready_for_assignment','assigned')"
+                    )
+                )
+
+            if insp.has_table("users"):
+                if dialect == "mysql":
+                    conn.execute(
+                        text(
+                            "ALTER TABLE users MODIFY COLUMN role "
+                            "ENUM('ADMIN','MANAGER','DISPATCHER','DRIVER','HELPER','CUSTOMER') NOT NULL"
+                        )
+                    )
+                conn.execute(
+                    text(
+                        "UPDATE users SET role = 'HELPER' "
+                        "WHERE (role = '' OR role IS NULL) AND LOWER(email) LIKE '%helper%'"
                     )
                 )
 
@@ -388,6 +517,54 @@ def apply_runtime_schema_fixes() -> None:
                     )
                 )
 
+    if not insp.has_table("driver_trip_notifications"):
+        dialect = engine.dialect.name
+        with engine.begin() as conn:
+            if dialect == "mysql":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE driver_trip_notifications (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            driver_id INT NOT NULL,
+                            trip_id INT NULL,
+                            booking_id INT NOT NULL,
+                            kind VARCHAR(32) NOT NULL,
+                            schedule_summary VARCHAR(255) NOT NULL DEFAULT '',
+                            route_summary VARCHAR(512) NOT NULL DEFAULT '',
+                            required_action VARCHAR(512) NOT NULL DEFAULT '',
+                            read_at DATETIME NULL,
+                            created_at DATETIME NOT NULL,
+                            KEY ix_dtn_driver (driver_id),
+                            KEY ix_dtn_trip (trip_id),
+                            KEY ix_dtn_booking (booking_id),
+                            CONSTRAINT fk_dtn_driver FOREIGN KEY (driver_id) REFERENCES users(id),
+                            CONSTRAINT fk_dtn_trip FOREIGN KEY (trip_id) REFERENCES trips(id),
+                            CONSTRAINT fk_dtn_booking FOREIGN KEY (booking_id) REFERENCES bookings(id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE driver_trip_notifications (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            driver_id INTEGER NOT NULL,
+                            trip_id INTEGER,
+                            booking_id INTEGER NOT NULL,
+                            kind VARCHAR(32) NOT NULL,
+                            schedule_summary VARCHAR(255) NOT NULL DEFAULT '',
+                            route_summary VARCHAR(512) NOT NULL DEFAULT '',
+                            required_action VARCHAR(512) NOT NULL DEFAULT '',
+                            read_at DATETIME,
+                            created_at DATETIME NOT NULL
+                        )
+                        """
+                    )
+                )
+
     # Legacy MySQL ENUM on bookings.status often stored Python enum *names* (PENDING_APPROVAL) not values
     # (pending_approval) — that breaks SQLAlchemy's Enum. Normalize on every startup (idempotent).
     if insp.has_table("bookings"):
@@ -403,6 +580,12 @@ def apply_runtime_schema_fixes() -> None:
                 text(
                     "UPDATE bookings SET status = 'payment_verification' "
                     "WHERE status IN ('pending_approval')"
+                )
+            )
+            conn.execute(
+                text(
+                    "UPDATE bookings SET status = 'payment_verification' "
+                    "WHERE status IS NULL OR TRIM(status) = ''"
                 )
             )
 

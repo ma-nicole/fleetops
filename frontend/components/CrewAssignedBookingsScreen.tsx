@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
 import { apiFullUrl } from "@/lib/api";
 import { WorkflowApi, type CrewAssignedBookingRow } from "@/lib/workflowApi";
+import CrewSchedulingPlotPanel, { schedulingPlotFromCrewRow } from "@/components/CrewSchedulingPlotPanel";
+import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
+import DeliveryCompletionPanel from "@/components/DeliveryCompletionPanel";
 
 const PHASES = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"] as const;
 type Phase = (typeof PHASES)[number];
@@ -158,6 +161,7 @@ export default function CrewAssignedBookingsScreen({
   const [locationName, setLocationName] = useState("");
   const [remarks, setRemarks] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [deliveryReady, setDeliveryReady] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -202,6 +206,10 @@ export default function CrewAssignedBookingsScreen({
     }
     if (PHOTO_REQUIRED.has(phase) && !photo) {
       setMsg(`Photo proof is required for ${phase.replace(/_/g, " ")}.`);
+      return;
+    }
+    if (phase === "completed" && !deliveryReady) {
+      setMsg("Upload receiving document, verify QR code, and capture digital signature before completing delivery.");
       return;
     }
     setBusy(true);
@@ -259,9 +267,36 @@ export default function CrewAssignedBookingsScreen({
     setLocationName("");
     setRemarks("");
     setMsg(null);
+    setDeliveryReady(Boolean(r.delivery_receiving?.ready_for_completion));
   };
 
   const detailProofs = detail?.proof_photo_urls ?? [];
+  const isHelper = variant === "helper";
+
+  const helperProofCallout = (
+    <div
+      style={{
+        padding: "0.85rem 1rem",
+        borderRadius: 10,
+        border: "1px solid #BFDBFE",
+        background: "#EFF6FF",
+        marginBottom: "1rem",
+        fontSize: "0.86rem",
+        color: "#1e3a8a",
+        lineHeight: 1.5,
+      }}
+    >
+      <strong>Proof &amp; receiving documents</strong>
+      <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.15rem" }}>
+        <li>Photo proof (JPG/PNG) is required when marking <em>picked up</em> and <em>dropped off</em>.</li>
+        <li>Submit all required location updates while <em>en route</em> before drop-off.</li>
+        <li>
+          Before <em>completed</em>: upload receiving document, verify trip QR code, and capture recipient digital
+          signature.
+        </li>
+      </ul>
+    </div>
+  );
 
   return (
     <div style={{ padding: "var(--page-main-padding)", display: "grid", gap: "1.5rem" }}>
@@ -295,30 +330,30 @@ export default function CrewAssignedBookingsScreen({
 
       <div style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden", background: "white" }}>
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", minWidth: 1680, borderCollapse: "collapse" }}>
+          <table style={{ width: "100%", minWidth: isHelper ? 980 : 1680, borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={th}>Trip ID</th>
+                {!isHelper ? <th style={th}>Trip ID</th> : null}
                 <th style={th}>Booking ID</th>
-                <th style={{ ...th, minWidth: 120 }}>Customer / Company</th>
+                {!isHelper ? <th style={{ ...th, minWidth: 120 }}>Customer / Company</th> : null}
                 <th style={{ ...th, minWidth: 140 }}>Pickup</th>
                 <th style={{ ...th, minWidth: 140 }}>Dropoff</th>
                 <th style={th}>Schedule window</th>
                 <th style={{ ...th, textAlign: "right" }}>Cargo (t)</th>
-                <th style={th}>Truck / plate</th>
+                {!isHelper ? <th style={th}>Truck / plate</th> : null}
                 <th style={{ ...th, minWidth: 100 }}>Driver</th>
-                <th style={{ ...th, minWidth: 100 }}>Helper</th>
+                {!isHelper ? <th style={{ ...th, minWidth: 100 }}>Helper</th> : null}
                 <th style={th}>Current status</th>
-                <th style={{ ...th, minWidth: 120 }}>Latest location</th>
-                <th style={th}>Payment status</th>
-                <th style={th}>Progress updates</th>
+                {!isHelper ? <th style={{ ...th, minWidth: 120 }}>Latest location</th> : null}
+                {!isHelper ? <th style={th}>Payment status</th> : null}
+                <th style={th}>{isHelper ? "Your tasks" : "Progress updates"}</th>
                 <th style={{ ...th, textAlign: "center" }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={15} style={{ ...td, padding: "1.5rem", color: "#666" }}>
+                  <td colSpan={isHelper ? 9 : 15} style={{ ...td, padding: "1.5rem", color: "#666" }}>
                     No assigned trips.
                   </td>
                 </tr>
@@ -332,11 +367,13 @@ export default function CrewAssignedBookingsScreen({
                   const warn = progressNeedsWarning(r);
                   return (
                     <tr key={r.trip_id}>
-                      <td style={{ ...td, fontWeight: 700 }}>#{r.trip_id}</td>
-                      <td style={td}>#{r.booking_id}</td>
-                      <td style={td} title={custLine}>
-                        {truncate(custLine, 40)}
-                      </td>
+                      {!isHelper ? <td style={{ ...td, fontWeight: 700 }}>#{r.trip_id}</td> : null}
+                      <td style={{ ...td, fontWeight: isHelper ? 700 : undefined }}>#{r.booking_id}</td>
+                      {!isHelper ? (
+                        <td style={td} title={custLine}>
+                          {truncate(custLine, 40)}
+                        </td>
+                      ) : null}
                       <td style={td} title={bk?.pickup_location}>
                         {bk ? truncate(bk.pickup_location, 44) : "—"}
                       </td>
@@ -355,26 +392,34 @@ export default function CrewAssignedBookingsScreen({
                         )}
                       </td>
                       <td style={{ ...td, textAlign: "right" }}>{bk ? String(bk.cargo_weight_tons) : "—"}</td>
-                      <td style={td} title={truckPlateLine(r)}>
-                        {truncate(truckPlateLine(r), 32)}
-                      </td>
+                      {!isHelper ? (
+                        <td style={td} title={truckPlateLine(r)}>
+                          {truncate(truckPlateLine(r), 32)}
+                        </td>
+                      ) : null}
                       <td style={td} title={r.driver_name || ""}>
                         {r.driver_name ?? "—"}
                       </td>
-                      <td style={td} title={r.helper_name || ""}>
-                        {r.helper_name ?? "—"}
-                      </td>
+                      {!isHelper ? (
+                        <td style={td} title={r.helper_name || ""}>
+                          {r.helper_name ?? "—"}
+                        </td>
+                      ) : null}
                       <td style={td}>
                         <span style={statusPillStyle(slug)} title={slug}>
                           {slug}
                         </span>
                       </td>
-                      <td style={td} title={r.latest_location || ""}>
-                        {truncate(r.latest_location || "—", 40)}
-                      </td>
-                      <td style={{ ...td, whiteSpace: "nowrap", textTransform: "lowercase" }} title={r.payment_status}>
-                        {r.payment_status}
-                      </td>
+                      {!isHelper ? (
+                        <td style={td} title={r.latest_location || ""}>
+                          {truncate(r.latest_location || "—", 40)}
+                        </td>
+                      ) : null}
+                      {!isHelper ? (
+                        <td style={{ ...td, whiteSpace: "nowrap", textTransform: "lowercase" }} title={r.payment_status}>
+                          {r.payment_status}
+                        </td>
+                      ) : null}
                       <td style={td}>
                         <span
                           style={{
@@ -388,7 +433,9 @@ export default function CrewAssignedBookingsScreen({
                           }}
                           title={warn ? "En route: submit required location updates before drop-off." : undefined}
                         >
-                          {r.location_updates_submitted}/{r.required_location_updates}
+                          {isHelper
+                            ? `Locations ${r.location_updates_submitted}/${r.required_location_updates}`
+                            : `${r.location_updates_submitted}/${r.required_location_updates}`}
                         </span>
                       </td>
                       <td style={{ ...td, textAlign: "center" }}>
@@ -407,7 +454,7 @@ export default function CrewAssignedBookingsScreen({
                             whiteSpace: "nowrap",
                           }}
                         >
-                          View
+                          {isHelper ? "Open" : "View"}
                         </button>
                       </td>
                     </tr>
@@ -448,14 +495,108 @@ export default function CrewAssignedBookingsScreen({
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ marginTop: 0, marginBottom: "0.35rem" }}>
-              Trip #{detail.trip_id} · Booking #{detail.booking_id}
+              {isHelper ? `Booking #${detail.booking_id}` : `Trip #${detail.trip_id} · Booking #${detail.booking_id}`}
             </h2>
             <p style={{ margin: "0 0 1rem", fontSize: "0.85rem", color: "#64748B", lineHeight: 1.45 }}>
               {variant === "driver"
                 ? "View only — trip milestones and location updates are submitted by your helper."
-                : "Update trip status and locations below. All fields reflect live database values."}
+                : "Your assigned leg — update milestones, locations, and proof photos below."}
             </p>
 
+            {variant === "driver" ? (
+              <CrewSchedulingPlotPanel plot={schedulingPlotFromCrewRow(detail)} />
+            ) : null}
+
+            {isHelper ? (
+              <>
+                {helperProofCallout}
+                <div style={{ padding: "0.85rem 1rem", border: "1px solid #E8E8E8", borderRadius: 10, background: "#FAFAFA", marginBottom: "1rem" }}>
+                  <h3 style={sectionTitle}>Trip details</h3>
+                  {detail.booking ? (
+                    <div style={{ display: "grid", gap: 6, fontSize: "0.88rem" }}>
+                      <div>
+                        <strong>Pickup:</strong> {detail.booking.pickup_location}
+                      </div>
+                      <div>
+                        <strong>Dropoff:</strong> {detail.booking.dropoff_location}
+                      </div>
+                      <div>
+                        <strong>Schedule:</strong> {detail.booking.scheduled_date} {detail.booking.scheduled_time_slot}
+                      </div>
+                      <div>
+                        <strong>Driver:</strong> {detail.driver_name ?? "—"}
+                      </div>
+                      <div>
+                        <strong>Cargo:</strong> {detail.booking.cargo_weight_tons} t
+                        {detail.booking.cargo_description ? ` — ${detail.booking.cargo_description}` : ""}
+                      </div>
+                      <div>
+                        <strong>Status:</strong>{" "}
+                        <span style={statusPillStyle(operationalSlug(detail))}>{operationalSlug(detail)}</span>
+                      </div>
+                      <div>
+                        <strong>Latest location:</strong> {detail.latest_location ?? "—"}
+                      </div>
+                      <div>
+                        <strong>Location updates:</strong>{" "}
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            padding: "0.1rem 0.4rem",
+                            borderRadius: 6,
+                            background: progressNeedsWarning(detail) ? "#FEF3C7" : "#ECFDF5",
+                            color: progressNeedsWarning(detail) ? "#92400E" : "#065F46",
+                          }}
+                        >
+                          {detail.location_updates_submitted}/{detail.required_location_updates}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ margin: 0, color: "#64748B" }}>No booking details.</p>
+                  )}
+                </div>
+
+                <h3 style={sectionTitle}>Helper updates timeline</h3>
+                <HelperUpdatesTimeline
+                  events={detail.timeline_events}
+                  operationalStatus={operationalSlug(detail)}
+                  locationUpdatesSubmitted={detail.location_updates_submitted}
+                  requiredLocationUpdates={detail.required_location_updates}
+                  mediaSrc={mediaSrc}
+                />
+
+                <h3 style={sectionTitle}>Submitted proof photos</h3>
+                {detailProofs.length === 0 ? (
+                  <p style={{ margin: "0 0 1rem", color: "#64748B", fontSize: "0.88rem" }}>None on file yet.</p>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
+                    {detailProofs.map((ph) =>
+                      ph.toLowerCase().endsWith(".pdf") ? (
+                        <a
+                          key={ph}
+                          href={mediaSrc(ph)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ fontSize: "0.85rem", fontWeight: 600, color: "#2563EB" }}
+                        >
+                          PDF proof
+                        </a>
+                      ) : (
+                        <a key={ph} href={mediaSrc(ph)} target="_blank" rel="noopener noreferrer" style={{ display: "block" }}>
+                          <img
+                            src={mediaSrc(ph)}
+                            alt="Proof"
+                            style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #E2E8F0" }}
+                          />
+                        </a>
+                      ),
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
               <div style={{ padding: "0.85rem 1rem", border: "1px solid #E8E8E8", borderRadius: 10, background: "#FAFAFA" }}>
                 <h3 style={sectionTitle}>Booking &amp; customer</h3>
@@ -687,11 +828,11 @@ export default function CrewAssignedBookingsScreen({
               </div>
             )}
 
-            {(detail.general_operational_reports.length > 0 || detail.vehicle_issue_reports.length > 0) ? (
+            {(detail.general_operational_reports?.length ?? 0) > 0 || (detail.vehicle_issue_reports?.length ?? 0) > 0 ? (
               <>
                 <hr style={divider} />
                 <h3 style={sectionTitle}>Operational notes &amp; reports</h3>
-                {detail.general_operational_reports.map((rep) => (
+                {detail.general_operational_reports?.map((rep) => (
                   <div
                     key={`g-${rep.id}`}
                     style={{
@@ -721,7 +862,7 @@ export default function CrewAssignedBookingsScreen({
                     <div style={{ marginTop: 4, fontSize: "0.78rem", color: "#94A3B8" }}>{formatWhen(rep.created_at)}</div>
                   </div>
                 ))}
-                {detail.vehicle_issue_reports.map((rep) => (
+                {detail.vehicle_issue_reports?.map((rep) => (
                   <div
                     key={`v-${rep.id}`}
                     style={{
@@ -753,6 +894,8 @@ export default function CrewAssignedBookingsScreen({
                 ))}
               </>
             ) : null}
+              </>
+            )}
 
             {variant === "helper" ? (
               <>
@@ -832,7 +975,15 @@ export default function CrewAssignedBookingsScreen({
                           </label>
                         </>
                       ) : (
-                        <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                        <>
+                          {effectivePhase === "completed" || current === "dropped_off" ? (
+                            <DeliveryCompletionPanel
+                              tripId={detail.trip_id}
+                              compact
+                              onReadyChange={setDeliveryReady}
+                            />
+                          ) : null}
+                          <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                           <span style={{ fontSize: "0.85rem", color: "#555" }}>
                             Milestone photo (.jpg, .png) {PHOTO_REQUIRED.has(effectivePhase) ? "(required)" : "(optional)"}
                           </span>
@@ -842,12 +993,13 @@ export default function CrewAssignedBookingsScreen({
                             onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
                           />
                         </label>
+                        </>
                       )}
 
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                         <button
                           type="button"
-                          disabled={busy || !canUpdate}
+                          disabled={busy || !canUpdate || (effectivePhase === "completed" && !deliveryReady)}
                           onClick={() => void (needsLocationOnly ? submitLocation() : submitStatus())}
                           style={{
                             padding: "0.65rem 1rem",

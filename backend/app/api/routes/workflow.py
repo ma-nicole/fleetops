@@ -3,8 +3,9 @@ Workflow orchestration routes for complete booking-to-delivery sequence
 """
 from datetime import datetime, timedelta
 import json
+from secrets import token_urlsafe
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
@@ -25,7 +26,7 @@ from app.models.entities import (
 from app.schemas.booking import BookingApprovalRequest, BookingRead
 from app.schemas.trip import (
     TripRead, TripStatusUpdate, TripAcceptRequest, TripDeliveryProof,
-    TripIssueReport, TripIssueRead
+    TripIssueReport, TripIssueRead, ReceivingQrVerifyRequest,
 )
 from app.services.booking_schedule import slot_available
 from app.constants.fleet_capacity import cargo_exceeds_fleet, trucks_required_for_cargo
@@ -33,14 +34,42 @@ from app.services.costing import estimate_trip_cost
 from app.services.email_templates import EmailTemplate
 from app.services.feedback_loop import record_trip_feedback
 from app.services.notifications import send_email_notification
+from app.services.driver_trip_notifications import notify_driver_trip_assigned
+from app.services.trip_crew_allowances import resolve_trip_crew_allowances
+from app.services.delivery_receiving_verification import (
+    assert_delivery_receiving_complete,
+    build_delivery_receiving_status,
+    ensure_trip_qr_token,
+    mark_qr_verified,
+    save_digital_signature,
+    save_receiving_document,
+)
 from app.services.predictive.cost_model import predict_trip_cost
 from app.services.routing import optimize_route
 from app.services.scheduler import find_available_driver, find_available_truck
+from app.services.dispatcher_booking_assignment import (
+    assert_dispatcher_booking_access,
+    auto_assign_dispatcher_on_dispatch_action,
+    filter_bookings_for_dispatcher,
+)
 from app.schemas.analytics import CostPredictionRequest
 from app.schemas.predict import TripCostPredictRequest
 
 
 router = APIRouter(prefix="/workflow", tags=["workflow"])
+
+
+def _trip_crew_or_driver(db: Session, trip_id: int, user: User) -> Trip:
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if user.role == UserRole.DRIVER and trip.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.HELPER and trip.helper_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if trip.status in {TripStatus.CANCELLED, TripStatus.COMPLETED}:
+        raise HTTPException(status_code=400, detail="Trip is already closed.")
+    return trip
 
 
 # ============================================================================
@@ -165,7 +194,7 @@ def _booking_open_for_dispatch(db: Session, booking: Booking) -> bool:
 @router.get("/booking/assignable", response_model=list[BookingRead])
 def get_assignable_bookings_for_dispatch(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Verified-payment bookings that still need truck/driver/helper assignment."""
     verified = exists().where(
@@ -188,7 +217,8 @@ def get_assignable_bookings_for_dispatch(
         .order_by(Booking.created_at.desc())
         .all()
     )
-    return [b for b in rows if _booking_open_for_dispatch(db, b)]
+    open_rows = [b for b in rows if _booking_open_for_dispatch(db, b)]
+    return filter_bookings_for_dispatcher(db, user, open_rows)
 
 
 @router.post("/booking/{booking_id}/approve", response_model=BookingRead)
@@ -274,6 +304,8 @@ def create_job_from_booking(
     # Optimize route
     route = optimize_route("Warehouse", "City-1", weight="cost")
 
+    driver_allowance, helper_allowance = resolve_trip_crew_allowances(db)
+
     # Create trip
     trip = Trip(
         booking_id=booking.id,
@@ -285,6 +317,9 @@ def create_job_from_booking(
         toll_cost=45,
         fuel_cost=120,
         labor_cost=80,
+        driver_allowance_php=driver_allowance,
+        helper_allowance_php=helper_allowance,
+        receiving_qr_token=token_urlsafe(16),
         duration_hours=6,
         status=TripStatus.ASSIGNED,
         assigned_at=datetime.utcnow(),
@@ -294,6 +329,8 @@ def create_job_from_booking(
     booking.status = BookingStatus.ASSIGNED
 
     db.add(trip)
+    db.flush()
+    notify_driver_trip_assigned(db, trip, booking)
     db.commit()
     db.refresh(trip)
 
@@ -475,6 +512,73 @@ def loading_complete(
     return trip
 
 
+@router.get("/job/{trip_id}/delivery-receiving-status")
+def get_delivery_receiving_status(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER, UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if user.role == UserRole.DRIVER and trip.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.HELPER and trip.helper_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    ensure_trip_qr_token(trip)
+    db.commit()
+    db.refresh(trip)
+    return build_delivery_receiving_status(trip)
+
+
+@router.post("/job/{trip_id}/receiving-document")
+async def upload_receiving_document(
+    trip_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
+):
+    trip = _trip_crew_or_driver(db, trip_id, user)
+    path = save_receiving_document(trip.id, file)
+    trip.receiving_document_path = path
+    trip.receiving_document_uploaded_at = datetime.utcnow()
+    ensure_trip_qr_token(trip)
+    db.commit()
+    db.refresh(trip)
+    return build_delivery_receiving_status(trip)
+
+
+@router.post("/job/{trip_id}/verify-receiving-qr")
+def verify_receiving_qr(
+    trip_id: int,
+    payload: ReceivingQrVerifyRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
+):
+    trip = _trip_crew_or_driver(db, trip_id, user)
+    ensure_trip_qr_token(trip)
+    mark_qr_verified(trip, payload.scanned_payload)
+    db.commit()
+    db.refresh(trip)
+    return build_delivery_receiving_status(trip)
+
+
+@router.post("/job/{trip_id}/digital-signature")
+async def upload_digital_signature(
+    trip_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
+):
+    trip = _trip_crew_or_driver(db, trip_id, user)
+    path = save_digital_signature(trip.id, file)
+    trip.digital_signature_path = path
+    trip.digital_signature_uploaded_at = datetime.utcnow()
+    db.commit()
+    db.refresh(trip)
+    return build_delivery_receiving_status(trip)
+
+
 @router.post("/job/{trip_id}/complete", response_model=TripRead)
 def complete_delivery(
     trip_id: int,
@@ -493,6 +597,8 @@ def complete_delivery(
 
     if trip.driver_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    assert_delivery_receiving_complete(trip)
 
     trip.arrival_delivery_time = datetime.utcnow()
     trip.completed_at = datetime.utcnow()

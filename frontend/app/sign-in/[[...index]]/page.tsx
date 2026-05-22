@@ -67,6 +67,9 @@ export default function SignInPage() {
           if (err.status === 423) {
             throw new Error(err.message || "This account is temporarily locked. Please try again later.");
           }
+          if (err.status === 403) {
+            throw new Error(err.message || "This account cannot sign in. Contact an administrator.");
+          }
           if (err.status === 429) {
             throw new Error("Too many attempts. Please wait a few minutes before trying again.");
           }

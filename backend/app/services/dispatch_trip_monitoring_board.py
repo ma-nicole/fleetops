@@ -22,6 +22,7 @@ from app.services.booking_road_distance import booking_pickup_dropoff_distance_k
 from app.services.booking_status_aggregate import aggregate_customer_display_from_trips
 from app.services.dispatch_operations_center import _display_status
 from app.services.latest_location_display import latest_location_display_for_trip
+from app.services.dispatcher_booking_assignment import filter_trips_for_dispatcher
 
 _COORDS = re.compile(r"^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$")
 
@@ -105,7 +106,7 @@ def _count_bookings_all_legs_completed(db: Session) -> int:
     return len(rows)
 
 
-def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200) -> dict[str, Any]:
+def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200, viewer=None) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
 
     active_legs = (
@@ -136,6 +137,8 @@ def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200) -
     trips_for_buckets = (
         db.query(Trip).filter(~Trip.status.in_((TripStatus.COMPLETED, TripStatus.CANCELLED))).all()
     )
+    if viewer is not None:
+        trips_for_buckets = filter_trips_for_dispatcher(db, viewer, trips_for_buckets)
     in_transit = 0
     loading_unloading = 0
     for tr in trips_for_buckets:
@@ -161,6 +164,8 @@ def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200) -
         .limit(max(list_limit, 400))
         .all()
     )
+    if viewer is not None:
+        trips = filter_trips_for_dispatcher(db, viewer, trips)
     trips_by_booking: defaultdict[int, list[Trip]] = defaultdict(list)
     for tr in trips:
         trips_by_booking[tr.booking_id].append(tr)

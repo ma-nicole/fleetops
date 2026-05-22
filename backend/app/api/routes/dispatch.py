@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from secrets import token_hex
+from secrets import token_hex, token_urlsafe
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -54,6 +54,26 @@ from app.services.booking_schedule import (
 from app.services.dispatch_operations_center import build_operations_center_payload
 from app.services.dispatch_trip_logs import build_trip_logs_payload
 from app.services.dispatch_trip_monitoring_board import build_trip_monitoring_board_payload
+from app.services.dispatcher_booking_assignment import (
+    assert_dispatcher_booking_access,
+    auto_assign_dispatcher_on_dispatch_action,
+    blocked_booking_ids_for_dispatcher,
+    filter_trips_for_dispatcher,
+)
+from app.services.trip_cost_ledger import add_shoulder_cost_entry, build_trip_cost_ledger_payload, shoulder_cost_category_label
+from app.services.trip_crew_allowances import resolve_trip_crew_allowances
+from app.services.dispatch_route_selection import (
+    generate_route_options_for_booking,
+    list_booking_route_options,
+    resolve_dispatch_route,
+    select_route_option,
+)
+from app.services.driver_trip_notifications import (
+    notify_driver_trip_assigned,
+    notify_drivers_booking_route_updated,
+)
+from app.schemas.trip_shoulder_cost import TripShoulderCostCreate
+from app.schemas.dispatch_route import DispatchRouteSelectRequest
 from app.services.latest_location_display import latest_location_display_for_trip
 
 
@@ -97,9 +117,12 @@ ACTIVE_TRIP_STATUSES = [
 ]
 
 
-def _bookings_needing_dispatcher_assignment(db: Session) -> int:
+def _bookings_needing_dispatcher_assignment(db: Session, user: User | None = None) -> int:
     """Bookings that can still receive trip legs (paid / approved / partial assign)."""
     terminal = (TripStatus.COMPLETED, TripStatus.CANCELLED)
+    blocked: set[int] = set()
+    if user is not None and user.role == UserRole.DISPATCHER:
+        blocked = blocked_booking_ids_for_dispatcher(db, user.id)
     candidates = (
         db.query(
             Booking.id,
@@ -130,6 +153,8 @@ def _bookings_needing_dispatcher_assignment(db: Session) -> int:
     active_by_booking = {bid: int(n) for bid, n in trip_counts}
     pending = 0
     for bid, cargo_w, req in candidates:
+        if bid in blocked:
+            continue
         need = int(req or trucks_required_for_cargo(float(cargo_w or 0)))
         active = active_by_booking.get(bid, 0)
         if active < need:
@@ -140,12 +165,12 @@ def _bookings_needing_dispatcher_assignment(db: Session) -> int:
 @router.get("/dashboard")
 def dispatcher_dashboard(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Aggregate stats + recent trips for dispatcher / manager console."""
     today = datetime.utcnow().date()
 
-    pending_orders = _bookings_needing_dispatcher_assignment(db)
+    pending_orders = _bookings_needing_dispatcher_assignment(db, user)
 
     active_trips = (
         db.query(func.count(Trip.id)).filter(Trip.status.in_(ACTIVE_TRIP_STATUSES)).scalar()
@@ -289,19 +314,19 @@ def dispatcher_dashboard(
 @router.get("/operations-center")
 def dispatch_operations_center(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Dispatcher control center: live counts, boards, queues, and rule-based alerts (no mock analytics)."""
-    return build_operations_center_payload(db)
+    return build_operations_center_payload(db, viewer=user)
 
 
 @router.get("/trip-logs")
 def dispatch_trip_logs(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Unified operational history per trip leg: milestones, helper updates, locations, issues, POD."""
-    return build_trip_logs_payload(db, limit=100)
+    return build_trip_logs_payload(db, limit=100, viewer=user)
 
 
 @router.post("/operational-log")
@@ -335,6 +360,7 @@ def create_operational_log(
         raise HTTPException(status_code=404, detail="Trip not found or cancelled")
     if not trip.booking_id:
         raise HTTPException(status_code=400, detail="Trip has no booking")
+    assert_dispatcher_booking_access(db, user, trip.booking_id)
 
     attachment_url = _save_operational_log_attachment(trip_id, file)
 
@@ -525,10 +551,10 @@ def list_general_operational_reports_feed(
 @router.get("/trip-monitoring-board")
 def dispatch_trip_monitoring_board(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Live trip monitoring: DB-backed summary counts, one card per active trip leg, human-readable locations."""
-    return build_trip_monitoring_board_payload(db, list_limit=200)
+    return build_trip_monitoring_board_payload(db, list_limit=200, viewer=user)
 
 
 @router.get("/roster")
@@ -633,7 +659,7 @@ def fleet_assets(
 @router.get("/assignments-board")
 def assignments_board(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Trips already assigned — used for capacity and dispatcher oversight."""
     trips = (
@@ -650,6 +676,7 @@ def assignments_board(
         .limit(200)
         .all()
     )
+    trips = filter_trips_for_dispatcher(db, user, trips)
     trips_by_booking: defaultdict[int, list[Trip]] = defaultdict(list)
     for tr in trips:
         trips_by_booking[tr.booking_id].append(tr)
@@ -724,6 +751,8 @@ class ManualAssignment(BaseModel):
     fuel_cost: float | None = None
     toll_cost: float | None = None
     labor_cost: float | None = None
+    driver_allowance_php: float | None = None
+    helper_allowance_php: float | None = None
     predicted_total_cost: float | None = None
 
 
@@ -856,18 +885,90 @@ def _available_resources_for_booking(db: Session, booking: Booking) -> dict:
 def booking_resource_availability(
     booking_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
     required = int(booking.required_truck_count or trucks_required_for_cargo(booking.cargo_weight_tons))
     return {
         "booking_id": booking.id,
         "required_truck_count": required,
         "cargo_weight_tons": float(booking.cargo_weight_tons),
         "weight_splits": _compute_weight_splits(float(booking.cargo_weight_tons), required),
+        "selected_route_option_id": (
+            resolve_dispatch_route(db, booking).get("selected_route_option_id")
+        ),
         **_available_resources_for_booking(db, booking),
+    }
+
+
+@router.get("/booking/{booking_id}/route-options")
+def booking_route_options(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
+    options = list_booking_route_options(db, booking.id)
+    selected = next((o for o in options if o["is_selected"]), None)
+    return {
+        "booking_id": booking.id,
+        "pickup_location": booking.pickup_location,
+        "dropoff_location": booking.dropoff_location,
+        "selected_route_option_id": selected["id"] if selected else None,
+        "options": options,
+    }
+
+
+@router.post("/booking/{booking_id}/route-options/generate")
+def generate_booking_route_options(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
+    generate_route_options_for_booking(db, booking)
+    db.commit()
+    options = list_booking_route_options(db, booking.id)
+    selected = next((o for o in options if o["is_selected"]), None)
+    return {
+        "booking_id": booking.id,
+        "generated": len(options),
+        "selected_route_option_id": selected["id"] if selected else None,
+        "options": options,
+    }
+
+
+@router.patch("/booking/{booking_id}/route-options/select")
+def select_booking_route_option(
+    booking_id: int,
+    payload: DispatchRouteSelectRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
+    try:
+        select_route_option(db, booking.id, payload.route_option_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    notify_drivers_booking_route_updated(db, booking.id)
+    db.commit()
+    options = list_booking_route_options(db, booking.id)
+    return {
+        "booking_id": booking.id,
+        "selected_route_option_id": payload.route_option_id,
+        "options": options,
     }
 
 
@@ -881,6 +982,7 @@ def assign_batch(
     booking = db.query(Booking).filter(Booking.id == booking_id).with_for_update().first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
     if booking.status not in {
         BookingStatus.PAYMENT_VERIFIED,
         BookingStatus.READY_FOR_ASSIGNMENT,
@@ -936,12 +1038,14 @@ def assign_batch(
                 detail="One or more selected trucks, drivers, or helpers are no longer available for this schedule.",
             )
 
-    geo_km = booking_pickup_dropoff_distance_km(booking)
-    route_fb = legacy_optimize_route(booking.pickup_location, booking.dropoff_location, weight="distance")
-    distance = float(geo_km) if geo_km is not None else float(route_fb.get("score") or 120)
-    if distance <= 0:
-        distance = 120.0
-    duration = max(distance / 50.0, 1.0)
+    route_ctx = resolve_dispatch_route(db, booking)
+    distance = float(route_ctx["distance_km"])
+    duration = float(route_ctx["duration_hours"])
+    route_path_json = json.dumps(route_ctx["path"])
+    trip_fuel_cost = float(route_ctx["fuel_cost"])
+    trip_toll_cost = float(route_ctx["toll_cost"])
+    selected_route_option_id = route_ctx.get("selected_route_option_id")
+    driver_allowance, helper_allowance = resolve_trip_crew_allowances(db)
     for item in rows:
         trip = Trip(
             booking_id=booking.id,
@@ -949,11 +1053,15 @@ def assign_batch(
             driver_id=item.driver_id,
             helper_id=item.helper_id,
             dispatcher_id=user.id,
-            route_path=json.dumps(route_fb.get("path", [booking.pickup_location, booking.dropoff_location])),
+            selected_route_option_id=selected_route_option_id,
+            route_path=route_path_json,
             distance_km=distance,
-            toll_cost=45.0,
-            fuel_cost=120.0,
+            toll_cost=trip_toll_cost,
+            fuel_cost=trip_fuel_cost,
             labor_cost=80.0,
+            driver_allowance_php=driver_allowance,
+            helper_allowance_php=helper_allowance,
+            receiving_qr_token=token_urlsafe(16),
             duration_hours=duration,
             predicted_total_cost=0.0,
             status=TripStatus.ASSIGNED,
@@ -976,8 +1084,10 @@ def assign_batch(
         db.add(ta)
         db.flush()
         created_trip_ids.append(trip.id)
+        notify_driver_trip_assigned(db, trip, booking)
 
     apply_aggregate_booking_status(db, booking)
+    auto_assign_dispatcher_on_dispatch_action(db, booking.id, user)
     db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
         {"hold_status": TruckSlotHoldStatus.ASSIGNED}
     )
@@ -1002,6 +1112,7 @@ def assign_trip(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
     if booking.status not in {
         BookingStatus.PAYMENT_VERIFIED,
         BookingStatus.READY_FOR_ASSIGNMENT,
@@ -1063,21 +1174,34 @@ def assign_trip(
         raise HTTPException(status_code=400, detail="Selected helper is already booked for an overlapping run")
 
     geo_km = booking_pickup_dropoff_distance_km(booking)
-    route_fb = legacy_optimize_route(booking.pickup_location, booking.dropoff_location, weight="distance")
+    route_ctx = resolve_dispatch_route(db, booking)
     path_list = (
         list(payload.route_path)
         if payload.route_path
-        else route_fb.get("path", [booking.pickup_location, booking.dropoff_location])
+        else route_ctx["path"]
     )
     if payload.distance_km is not None and float(payload.distance_km) > 0:
         distance = float(payload.distance_km)
+    elif route_ctx.get("selected_route_option_id") and not payload.route_path:
+        distance = float(route_ctx["distance_km"])
     elif geo_km is not None:
         distance = float(geo_km)
     else:
-        distance = float(route_fb.get("score") or 120)
+        distance = float(route_ctx["distance_km"])
     if distance <= 0:
         distance = 120.0
     duration = payload.duration_hours or max(distance / 50.0, 1.0)
+    fuel_cost = float(payload.fuel_cost) if payload.fuel_cost is not None else float(route_ctx["fuel_cost"])
+    toll_cost = float(payload.toll_cost) if payload.toll_cost is not None else float(route_ctx["toll_cost"])
+    selected_route_option_id = (
+        route_ctx.get("selected_route_option_id") if not payload.route_path else None
+    )
+
+    driver_allowance, helper_allowance = resolve_trip_crew_allowances(
+        db,
+        driver_allowance_php=payload.driver_allowance_php,
+        helper_allowance_php=payload.helper_allowance_php,
+    )
 
     trip = Trip(
         booking_id=booking.id,
@@ -1085,11 +1209,15 @@ def assign_trip(
         driver_id=driver.id,
         helper_id=helper.id if helper else None,
         dispatcher_id=user.id,
+        selected_route_option_id=selected_route_option_id,
         route_path=json.dumps(path_list),
         distance_km=float(distance),
-        toll_cost=float(payload.toll_cost or 45),
-        fuel_cost=float(payload.fuel_cost or 120),
+        toll_cost=toll_cost,
+        fuel_cost=fuel_cost,
         labor_cost=float(payload.labor_cost or 80),
+        driver_allowance_php=driver_allowance,
+        helper_allowance_php=helper_allowance,
+        receiving_qr_token=token_urlsafe(16),
         duration_hours=float(duration),
         predicted_total_cost=float(payload.predicted_total_cost or 0),
         status=TripStatus.ASSIGNED,
@@ -1121,7 +1249,9 @@ def assign_trip(
 
     db.add(trip)
     db.flush()
+    notify_driver_trip_assigned(db, trip, booking)
     apply_aggregate_booking_status(db, booking)
+    auto_assign_dispatcher_on_dispatch_action(db, booking.id, user)
     db.commit()
     db.refresh(trip)
 
@@ -1164,3 +1294,85 @@ def update_trip_status(
     booking.status = status
     db.commit()
     return {"booking_id": booking.id, "status": booking.status}
+
+
+@router.get("/trip-cost-ledger")
+def trip_cost_ledger(
+    trip_id: int | None = None,
+    booking_id: int | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Shoulder-cost ledger summary per trip leg. System trip costs are read-only; ledger is additive."""
+    safe_limit = min(max(limit, 1), 300)
+    return build_trip_cost_ledger_payload(
+        db,
+        viewer=user,
+        trip_id=trip_id,
+        booking_id=booking_id,
+        limit=safe_limit,
+    )
+
+
+@router.get("/trips/{trip_id}/shoulder-costs")
+def list_trip_shoulder_costs(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    assert_dispatcher_booking_access(db, user, trip.booking_id)
+    payload = build_trip_cost_ledger_payload(db, viewer=user, trip_id=trip_id, limit=1)
+    rows = payload["trips"]
+    if not rows:
+        return {"trip_id": trip_id, "entries": [], "shoulder_totals": {}, "shoulder_grand_total": 0}
+    row = rows[0]
+    return {
+        "trip_id": trip_id,
+        "booking_id": row["booking_id"],
+        "system_costs": row["system_costs"],
+        "shoulder_totals": row["shoulder_totals"],
+        "shoulder_grand_total": row["shoulder_grand_total"],
+        "entries": row["entries"],
+    }
+
+
+@router.post("/trips/{trip_id}/shoulder-costs")
+def create_trip_shoulder_cost(
+    trip_id: int,
+    payload: TripShoulderCostCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    """Record a shoulder / out-of-pocket trip expense. Does not modify trip.fuel_cost or other computed fields."""
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if trip.status == TripStatus.CANCELLED:
+        raise HTTPException(status_code=400, detail="Cannot add costs to a cancelled trip.")
+    assert_dispatcher_booking_access(db, user, trip.booking_id)
+
+    entry = add_shoulder_cost_entry(
+        db,
+        trip=trip,
+        dispatcher=user,
+        category=payload.category,
+        amount_php=payload.amount_php,
+        notes=payload.notes,
+    )
+    db.commit()
+    db.refresh(entry)
+    return {
+        "id": entry.id,
+        "trip_id": entry.trip_id,
+        "booking_id": entry.booking_id,
+        "dispatcher_id": entry.dispatcher_id,
+        "category": entry.category,
+        "category_label": shoulder_cost_category_label(entry.category),
+        "amount_php": float(entry.amount_php),
+        "notes": entry.notes,
+        "recorded_at": entry.recorded_at.isoformat() if entry.recorded_at else None,
+    }

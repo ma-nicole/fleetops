@@ -90,6 +90,9 @@ export default function OperationsSnapshotPage() {
         <Link href="/modules/analytics/accuracy" style={pillLink}>
           Model accuracy
         </Link>
+        <Link href="/modules/analytics/expenses" style={pillLink}>
+          Expense summary
+        </Link>
       </div>
 
       {error && (

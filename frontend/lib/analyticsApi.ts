@@ -194,6 +194,55 @@ export type AnalyticsDashboard = {
   };
 };
 
+export type ExpenseCategoryBreakdown = {
+  key: string;
+  label: string;
+  amount_php: number;
+};
+
+export type ExpenseMonthlyTrendRow = {
+  month: string;
+  fuel: number;
+  toll: number;
+  allowance: number;
+  operational: number;
+  labor: number;
+  total: number;
+  trips: number;
+};
+
+export type ExpenseAnalyticsPayload = {
+  generated_at: string;
+  summary: {
+    total_expenses_php: number;
+    trip_count: number;
+    avg_expense_per_trip_php: number;
+    fuel_php: number;
+    toll_php: number;
+    allowance_php: number;
+    driver_allowance_php: number;
+    helper_allowance_php: number;
+    labor_php: number;
+    operational_php: number;
+  };
+  components: {
+    system_trip_fuel_php: number;
+    system_trip_toll_php: number;
+    shoulder_fuel_php: number;
+    shoulder_toll_php: number;
+    shoulder_allowance_php: number;
+    trip_driver_allowance_php: number;
+    trip_helper_allowance_php: number;
+    trip_crew_allowance_php: number;
+    shoulder_operational_php: number;
+    maintenance_records_php: number;
+    trip_maintenance_field_php: number;
+  };
+  category_breakdown: ExpenseCategoryBreakdown[];
+  shoulder_breakdown: Array<{ category: string; label: string; amount_php: number }>;
+  monthly_trend: ExpenseMonthlyTrendRow[];
+};
+
 export const AnalyticsApi = {
   predictTripCost: (req: TripCostPredictRequest) =>
     apiPost<TripCostPredictResponse>("/analytics/predict-trip-cost", req),
@@ -210,6 +259,7 @@ export const AnalyticsApi = {
   feedbackSummary: () => apiGet<FeedbackSummaryResponse>("/analytics/feedback-summary"),
   trainCostModel: () => apiPost<Record<string, unknown>>("/analytics/train-cost-model"),
   dashboard: () => apiGet<AnalyticsDashboard>("/analytics/dashboard"),
+  expenseAnalytics: () => apiGet<ExpenseAnalyticsPayload>("/analytics/expenses"),
   managerDashboard: () => apiGet<Record<string, unknown>>("/manager/dashboard"),
   financeSummary: () =>
     apiGet<{

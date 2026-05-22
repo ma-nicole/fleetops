@@ -4,6 +4,8 @@ from pathlib import Path
 from secrets import token_hex
 from uuid import uuid4
 
+from app.services.upload_urls import media_type_for_path
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -21,6 +23,13 @@ from app.models.entities import (
     User,
     UserRole,
 )
+from app.constants.gcash_payment import (
+    GCASH_QR_FILENAMES,
+    GCASH_QR_PLACEHOLDER,
+    GCASH_QR_UPLOAD_DIR,
+)
+from app.constants.payment_limits import GCASH_MAX_TRANSACTION_PHP
+from app.constants.payment_methods import ALLOWED_PAYMENT_METHODS, PROOF_OPTIONAL_METHODS
 from app.schemas.payment import (
     FinanceSummary,
     PaymentCreate,
@@ -51,6 +60,31 @@ def _validate_upload(filename: str, _content_type: str | None) -> str:
     return ext
 
 
+def _resolve_gcash_qr_path() -> Path:
+    GCASH_QR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    for name in GCASH_QR_FILENAMES:
+        candidate = GCASH_QR_UPLOAD_DIR / name
+        if candidate.is_file():
+            return candidate
+    return GCASH_QR_PLACEHOLDER
+
+
+@router.get("/gcash-qr")
+def get_gcash_qr_image():
+    """Official FleetOps GCash merchant QR (upload to backend/uploads/payment_assets/gcash_qr.png)."""
+    path = _resolve_gcash_qr_path()
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="GCash QR image is not available.")
+    media = {
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(path, media_type=media)
+
+
 @router.post("", response_model=PaymentRead)
 def create_payment(
     payload: PaymentCreate,
@@ -63,6 +97,15 @@ def create_payment(
         raise HTTPException(status_code=404, detail="Booking not found")
     if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
         raise HTTPException(status_code=403, detail="Not your booking")
+
+    if payload.method == "gcash" and payload.amount > GCASH_MAX_TRANSACTION_PHP:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"GCash payments are limited to ₱{GCASH_MAX_TRANSACTION_PHP:,.0f} per transaction. "
+                "Use bank transfer or another payment method for this amount."
+            ),
+        )
 
     if booking.status not in {
         BookingStatus.PENDING_PAYMENT,
@@ -113,7 +156,7 @@ async def submit_payment_proof(
     user: User = Depends(require_roles(UserRole.CUSTOMER)),
     booking_id: int = Form(...),
     method: str = Form("gcash"),
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
 ):
     _ensure_upload_dir()
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
@@ -129,13 +172,42 @@ async def submit_payment_proof(
         raise HTTPException(status_code=400, detail="Cannot submit payment for this booking.")
 
     method = (method or "gcash").lower().strip()
-    if method not in {"gcash", "bank", "card", "cash"}:
+    if method not in ALLOWED_PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail="Invalid payment method")
 
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="File required")
-    ext = _validate_upload(file.filename, file.content_type)
     amount = round(float(booking.estimated_cost or 0), 2)
+
+    if method == "gcash" and amount > GCASH_MAX_TRANSACTION_PHP:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"GCash payments are limited to ₱{GCASH_MAX_TRANSACTION_PHP:,.0f} per transaction. "
+                "Use bank transfer or another payment method for this amount."
+            ),
+        )
+
+    proof_required = method not in PROOF_OPTIONAL_METHODS
+    has_file = file is not None and bool(file.filename)
+    if proof_required and not has_file:
+        raise HTTPException(status_code=400, detail="Proof file required for this payment method.")
+
+    proof_original_filename: str | None = None
+    proof_storage_path: str | None = None
+    proof_uploaded_at: datetime | None = None
+
+    if has_file and file is not None:
+        ext = _validate_upload(file.filename or "", file.content_type)
+        raw = await file.read()
+        if len(raw) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File must be 5MB or smaller.")
+        uid = uuid4().hex
+        stored_name = f"b{booking_id}_{uid}{ext}"
+        rel_path = f"payment_proofs/{stored_name}"
+        abs_path = UPLOAD_DIR / stored_name
+        abs_path.write_bytes(raw)
+        proof_original_filename = file.filename
+        proof_storage_path = rel_path
+        proof_uploaded_at = datetime.utcnow()
 
     existing = (
         db.query(Payment)
@@ -152,18 +224,14 @@ async def submit_payment_proof(
     if existing:
         if existing.status == PaymentStatus.VERIFIED:
             raise HTTPException(status_code=400, detail="Payment already verified for this booking.")
-        if existing.status == PaymentStatus.FOR_VERIFICATION and existing.proof_storage_path:
-            raise HTTPException(status_code=400, detail="Proof already submitted — wait for admin review.")
-
-    raw = await file.read()
-    if len(raw) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File must be 5MB or smaller.")
-
-    uid = uuid4().hex
-    stored_name = f"b{booking_id}_{uid}{ext}"
-    rel_path = f"payment_proofs/{stored_name}"
-    abs_path = UPLOAD_DIR / stored_name
-    abs_path.write_bytes(raw)
+        if existing.status == PaymentStatus.FOR_VERIFICATION:
+            if existing.proof_storage_path:
+                raise HTTPException(status_code=400, detail="Proof already submitted — wait for admin review.")
+            if existing.method in PROOF_OPTIONAL_METHODS:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Payment request already submitted — wait for admin review.",
+                )
 
     if existing and existing.status == PaymentStatus.REJECTED:
         pay = existing
@@ -173,9 +241,9 @@ async def submit_payment_proof(
         pay.reference = pay.reference or f"PAY-{token_hex(4).upper()}"
         pay.paid_at = None
         pay.refunded_at = None
-        pay.proof_original_filename = file.filename
-        pay.proof_storage_path = rel_path
-        pay.proof_uploaded_at = datetime.utcnow()
+        pay.proof_original_filename = proof_original_filename
+        pay.proof_storage_path = proof_storage_path
+        pay.proof_uploaded_at = proof_uploaded_at
         pay.reviewed_at = None
         pay.reviewed_by_id = None
         if booking.status == BookingStatus.PAYMENT_REJECTED:
@@ -201,9 +269,9 @@ async def submit_payment_proof(
         amount=amount,
         status=PaymentStatus.FOR_VERIFICATION,
         reference=f"PAY-{token_hex(4).upper()}",
-        proof_original_filename=file.filename,
-        proof_storage_path=rel_path,
-        proof_uploaded_at=datetime.utcnow(),
+        proof_original_filename=proof_original_filename,
+        proof_storage_path=proof_storage_path,
+        proof_uploaded_at=proof_uploaded_at,
     )
     db.add(payment)
     db.commit()
@@ -300,7 +368,7 @@ def download_payment_proof(
     return FileResponse(
         path,
         filename=fname,
-        media_type="application/octet-stream",
+        media_type=media_type_for_path(path),
     )
 
 

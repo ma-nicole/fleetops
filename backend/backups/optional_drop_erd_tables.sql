@@ -1,0 +1,19 @@
+-- OPTIONAL: drop legacy ERD demo tables only (NOT used by FastAPI ORM, routes, or live workflow).
+-- Backup exported first: backend/backups/schema_inventory_20260522_075858.json
+-- Review row counts before running. All erd_* tables had 0 rows at export time.
+-- Do NOT run until you confirm no external tooling reads these tables.
+
+-- SET FOREIGN_KEY_CHECKS = 0;
+-- DROP TABLE IF EXISTS erd_toll_records;
+-- DROP TABLE IF EXISTS erd_fuel_records;
+-- DROP TABLE IF EXISTS erd_maintenance_reports;
+-- DROP TABLE IF EXISTS erd_payments;
+-- DROP TABLE IF EXISTS erd_trips;
+-- DROP TABLE IF EXISTS erd_truck_schedule;
+-- DROP TABLE IF EXISTS erd_transactions;
+-- DROP TABLE IF EXISTS erd_routes;
+-- DROP TABLE IF EXISTS erd_trucks;
+-- DROP TABLE IF EXISTS erd_stock;
+-- DROP TABLE IF EXISTS erd_brokers;
+-- DROP TABLE IF EXISTS erd_customers;
+-- SET FOREIGN_KEY_CHECKS = 1;

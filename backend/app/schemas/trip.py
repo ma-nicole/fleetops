@@ -13,6 +13,8 @@ class TripCreate(BaseModel):
     toll_cost: float = 0
     fuel_cost: float = 0
     labor_cost: float = 0
+    driver_allowance_php: float = 0
+    helper_allowance_php: float = 0
     duration_hours: float = 0
 
     @field_validator("booking_id", "truck_id", "driver_id", mode="before")
@@ -48,6 +50,8 @@ class TripRead(BaseModel):
     toll_cost: float
     fuel_cost: float
     labor_cost: float
+    driver_allowance_php: float = 0
+    helper_allowance_php: float = 0
     duration_hours: float
     status: TripStatus
     assigned_at: datetime | None
@@ -109,6 +113,18 @@ class TripDeliveryProof(BaseModel):
         if len(v) == 0:
             return None
         return v
+
+
+class ReceivingQrVerifyRequest(BaseModel):
+    scanned_payload: str
+
+    @field_validator("scanned_payload")
+    @classmethod
+    def validate_scanned_payload(cls, v: str) -> str:
+        s = (v or "").strip()
+        if len(s) < 8:
+            raise ValueError("scanned_payload is required")
+        return s
 
 
 class TripIssueReport(BaseModel):

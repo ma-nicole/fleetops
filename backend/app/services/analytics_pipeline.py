@@ -48,7 +48,10 @@ def run_pipeline(db: Session) -> dict[str, Any]:
         fuel = sum(f.cost for f in fuel_logs if f.trip_id == trip.id) or trip.fuel_cost
         toll = sum(t.amount for t in toll_logs if t.trip_id == trip.id) or trip.toll_cost
         labor = trip.labor_cost
-        total = fuel + toll + labor
+        driver_allowance = float(getattr(trip, "driver_allowance_php", 0) or 0)
+        helper_allowance = float(getattr(trip, "helper_allowance_php", 0) or 0)
+        crew_allowance = driver_allowance + helper_allowance
+        total = fuel + toll + labor + crew_allowance
         trip_mart.append({
             "trip_id": trip.id,
             "booking_id": trip.booking_id,
@@ -56,6 +59,9 @@ def run_pipeline(db: Session) -> dict[str, Any]:
             "fuel_cost": round(fuel, 2),
             "toll_cost": round(toll, 2),
             "labor_cost": round(labor, 2),
+            "driver_allowance_php": round(driver_allowance, 2),
+            "helper_allowance_php": round(helper_allowance, 2),
+            "crew_allowance_php": round(crew_allowance, 2),
             "total_cost": round(total, 2),
             "cost_per_km": round(total / trip.distance_km, 2) if trip.distance_km else 0,
             "status": trip.status.value if hasattr(trip.status, "value") else str(trip.status),
@@ -68,7 +74,13 @@ def run_pipeline(db: Session) -> dict[str, Any]:
         if not trip.completed_at:
             continue
         key = _month_key(trip.completed_at)
-        monthly[key]["total_cost"] += float((trip.fuel_cost or 0) + (trip.toll_cost or 0) + (trip.labor_cost or 0))
+        monthly[key]["total_cost"] += float(
+            (trip.fuel_cost or 0)
+            + (trip.toll_cost or 0)
+            + (trip.labor_cost or 0)
+            + float(getattr(trip, "driver_allowance_php", 0) or 0)
+            + float(getattr(trip, "helper_allowance_php", 0) or 0)
+        )
         monthly[key]["trips"] += 1
     monthly_mart = [
         {"month": k, "total_cost": round(v["total_cost"], 2), "trips": int(v["trips"])}

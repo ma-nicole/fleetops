@@ -9,6 +9,8 @@ BOOKING_SLOT_TERMINAL_STATUSES: frozenset[BookingStatus] = frozenset(
         BookingStatus.COMPLETED,
         BookingStatus.CANCELLED,
         BookingStatus.REJECTED,
+        BookingStatus.PAYMENT_REJECTED,
+        BookingStatus.EXPIRED,
     }
 )
 

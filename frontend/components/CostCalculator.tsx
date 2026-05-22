@@ -10,6 +10,8 @@ import { routeUsesGeocodedPinsBoth, type BookingPricingBreakdown } from "@/lib/b
 import { validateCustomerSiteAddress } from "@/lib/formValidation";
 import { MIN_BOOKING_SITES, loadCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
 import { WorkflowApi } from "@/lib/workflowApi";
+import BookingCargoWeightField, { isValidBookingWeightTons, bookingWeightValidationMessage } from "@/components/BookingCargoWeightField";
+import BookingDocumentUploadFields, { validateBookingDocumentFile } from "@/components/BookingDocumentUploadFields";
 
 type QuotedCostBreakdown = {
   cargo_gross_php: number;
@@ -44,12 +46,6 @@ type LiveCostQuote = {
   net_profit_total_php: number;
   quoted_total: number;
   truck_loads: TruckLoadApiLine[];
-};
-
-type BookingResponse = {
-  id: number;
-  estimated_cost: number;
-  status: string;
 };
 
 type FormErrors = {
@@ -216,6 +212,9 @@ export default function CostCalculator({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [routeQuoteMeta, setRouteQuoteMeta] = useState<QuoteGeoMeta | null>(null);
   const [freightLines, setFreightLines] = useState<FreightLineDetail | null>(null);
+  const [cargoDeclaration, setCargoDeclaration] = useState<File | null>(null);
+  const [termsAgreement, setTermsAgreement] = useState<File | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const today = new Date().toISOString().split("T")[0];
 
   const hasEnoughSites = sites.length >= MIN_BOOKING_SITES;
@@ -447,8 +446,8 @@ export default function CostCalculator({
       newErrors.dropoff_location = "Pickup and dropoff must be different.";
     }
     const wTons = parseFloat(weight);
-    if (!Number.isFinite(wTons) || wTons < 0.1 || wTons > 168) {
-      newErrors.cargo_weight_tons = "Weight must be 0.1–168 metric tons (fleet: four trucks × 42 t).";
+    if (!isValidBookingWeightTons(wTons)) {
+      newErrors.cargo_weight_tons = bookingWeightValidationMessage();
     }
     if (!date) {
       newErrors.scheduled_date = "Schedule date required";
@@ -473,6 +472,13 @@ export default function CostCalculator({
         newErrors.scheduled_time_slot = "Not enough trucks available for this schedule. Please choose another date/time.";
       }
     }
+    const declErr = validateBookingDocumentFile(cargoDeclaration);
+    if (declErr) newErrors.cargo_declaration = declErr;
+    const termsFileErr = validateBookingDocumentFile(termsAgreement);
+    if (termsFileErr) newErrors.terms_agreement = termsFileErr;
+    if (!termsAccepted) {
+      newErrors.terms_accepted = "You must accept the Terms & Agreement.";
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -487,18 +493,16 @@ export default function CostCalculator({
     setMessage("");
 
     try {
-      const payload = {
+      const data = await WorkflowApi.createBookingWithDocuments({
         pickup_location: pickup,
         dropoff_location: dropoff,
         service_type: DEFAULT_SERVICE_TYPE,
         scheduled_date: date,
         scheduled_time_slot: pickedSlot,
         cargo_weight_tons: parseFloat(weight),
-      };
-
-      const data = await apiFetch<BookingResponse>("/bookings", {
-        method: "POST",
-        body: JSON.stringify(payload),
+        terms_agreed: termsAccepted,
+        cargo_declaration: cargoDeclaration!,
+        terms_agreement: termsAgreement!,
       });
 
       router.push(`/booking/payment?bookingId=${data.id}`);
@@ -522,7 +526,10 @@ export default function CostCalculator({
     !!pickedSlot &&
     slotAvailability[pickedSlot] !== false &&
     (slotAvailableTrucks[pickedSlot] ?? 0) >= requiredTrucksFromApi &&
-    !slotsLoading;
+    !slotsLoading &&
+    !!cargoDeclaration &&
+    !!termsAgreement &&
+    termsAccepted;
   const requiredTrucks = Math.max(1, requiredTrucksFromApi || Math.ceil((parseFloat(weight) || 1) / 42));
   const selectedAvailableTrucks = pickedSlot ? (slotAvailableTrucks[pickedSlot] ?? 0) : 0;
 
@@ -836,41 +843,12 @@ export default function CostCalculator({
             gap: "1rem",
           }}
         >
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                fontSize: "0.9rem",
-                color: "var(--text-secondary)",
-                marginBottom: "0.5rem",
-              }}
-            >
-              <span>Weight (metric tons)</span>
-              <span className="field-help" title="Cargo weight in metric tons (1 t = 1,000 kg). Used for pricing and how many 42 t trucks you need.">
-                ?
-              </span>
-              {parseFloat(weight) > 0 && !errors.cargo_weight_tons && <span className="field-valid">✓</span>}
-            </label>
-            <input
-              className="input"
-              type="number"
-              min={0.1}
-              max={168}
-              step={0.01}
-              placeholder="1"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              disabled={!hasEnoughSites}
-              style={errors.cargo_weight_tons ? { borderColor: "#F44336" } : {}}
-            />
-            {errors.cargo_weight_tons && (
-              <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.25rem 0 0 0" }}>
-                {errors.cargo_weight_tons}
-              </p>
-            )}
-          </div>
+          <BookingCargoWeightField
+            weight={weight}
+            onWeightChange={setWeight}
+            disabled={!hasEnoughSites}
+            error={errors.cargo_weight_tons}
+          />
 
           <div>
             <label
@@ -1014,6 +992,30 @@ export default function CostCalculator({
             </span>
           </div>
         )}
+
+        <BookingDocumentUploadFields
+          cargoDeclaration={cargoDeclaration}
+          termsAgreement={termsAgreement}
+          termsAccepted={termsAccepted}
+          onCargoDeclarationChange={(file) => {
+            setCargoDeclaration(file);
+            if (errors.cargo_declaration) setErrors((er) => ({ ...er, cargo_declaration: "" }));
+          }}
+          onTermsAgreementChange={(file) => {
+            setTermsAgreement(file);
+            if (errors.terms_agreement) setErrors((er) => ({ ...er, terms_agreement: "" }));
+          }}
+          onTermsAcceptedChange={(accepted) => {
+            setTermsAccepted(accepted);
+            if (errors.terms_accepted) setErrors((er) => ({ ...er, terms_accepted: "" }));
+          }}
+          disabled={!hasEnoughSites}
+          errors={{
+            cargo_declaration: errors.cargo_declaration,
+            terms_agreement: errors.terms_agreement,
+            terms_accepted: errors.terms_accepted,
+          }}
+        />
 
         <button
           className="button"

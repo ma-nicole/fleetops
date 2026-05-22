@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from app.constants.fleet_capacity import trucks_required_for_cargo
+from app.constants.fleet_capacity import FLEET_TRUCK_COUNT, trucks_required_for_cargo
+from app.services.demo_booking_filter import demo_booking_orm_filter
 from app.models.entities import (
     Booking,
     BookingStatus,
@@ -33,6 +34,25 @@ BOOKING_BLOCKING_STATUSES = (
     BookingStatus.ASSIGNED,
     BookingStatus.PENDING_APPROVAL,
     BookingStatus.APPROVED,
+    BookingStatus.ACCEPTED,
+    BookingStatus.ENROUTE,
+    BookingStatus.LOADING,
+    BookingStatus.OUT_FOR_DELIVERY,
+)
+
+BOOKING_TERMINAL_STATUSES = (
+    BookingStatus.CANCELLED,
+    BookingStatus.REJECTED,
+    BookingStatus.PAYMENT_REJECTED,
+    BookingStatus.COMPLETED,
+    BookingStatus.EXPIRED,
+)
+
+NON_OPERATIONAL_TRUCK_STATUSES = (
+    "maintenance",
+    "inactive",
+    "under_maintenance",
+    "in_maintenance",
 )
 
 
@@ -45,6 +65,19 @@ class TruckAvailability:
     can_book: bool
 
 
+def fleet_operational_pool_size(db: Session, *, lock_rows: bool = False) -> int:
+    """Registered operational trucks capped by the customer booking fleet limit."""
+    q = db.query(func.count(Truck.id)).filter(
+        func.lower(func.coalesce(Truck.status, "available")).notin_(NON_OPERATIONAL_TRUCK_STATUSES)
+    )
+    if lock_rows:
+        q = q.with_for_update()
+    registered = int(q.scalar() or 0)
+    if registered <= 0:
+        return 0
+    return min(registered, FLEET_TRUCK_COUNT)
+
+
 def get_available_truck_count(
     db: Session,
     schedule_date: date,
@@ -52,12 +85,7 @@ def get_available_truck_count(
     required_trucks: int,
     lock_rows: bool = False,
 ) -> TruckAvailability:
-    active_trucks_q = db.query(func.count(Truck.id)).filter(
-        func.lower(func.coalesce(Truck.status, "available")).notin_(["maintenance", "inactive"])
-    )
-    if lock_rows:
-        active_trucks_q = active_trucks_q.with_for_update()
-    active_trucks = int(active_trucks_q.scalar() or 0)
+    active_trucks = fleet_operational_pool_size(db, lock_rows=lock_rows)
 
     # NOTE: keep "payment_verification" string for backward/manual compatibility.
     # Canonical hold during payment stage is "on_hold".
@@ -84,18 +112,10 @@ def get_available_truck_count(
                 ]
             ),
             # Safety net: terminal / dead bookings must not keep slot capacity tied up.
-            Booking.status.notin_(
-                [
-                    BookingStatus.CANCELLED,
-                    BookingStatus.REJECTED,
-                    BookingStatus.PAYMENT_REJECTED,
-                    BookingStatus.COMPLETED,
-                    BookingStatus.EXPIRED,
-                ]
-            ),
+            Booking.status.notin_(BOOKING_TERMINAL_STATUSES),
+            ~demo_booking_orm_filter(Booking.pickup_location, Booking.dropoff_location),
             # Extra safety: rejected payment (without any verified payment) should never block slots.
-            ~and_(has_rejected_payment, ~has_verified_payment),
-        )
+            ~and_(has_rejected_payment, ~has_verified_payment),        )
     )
     if lock_rows:
         holds_q = holds_q.with_for_update()
@@ -108,7 +128,17 @@ def get_available_truck_count(
             Booking.scheduled_date == schedule_date,
             Booking.scheduled_time_slot == time_slot,
             Booking.status.in_(BOOKING_BLOCKING_STATUSES),
-            TruckSlotHold.id.is_(None),
+            Booking.status.notin_(BOOKING_TERMINAL_STATUSES),
+            ~demo_booking_orm_filter(Booking.pickup_location, Booking.dropoff_location),
+            or_(
+                TruckSlotHold.id.is_(None),
+                func.lower(func.coalesce(TruckSlotHold.hold_status, "")).in_(
+                    [
+                        TruckSlotHoldStatus.RELEASED.value,
+                        TruckSlotHoldStatus.ASSIGNED.value,
+                    ]
+                ),
+            ),
         )
     )
     if lock_rows:

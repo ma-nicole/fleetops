@@ -1,7 +1,9 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
+from app.constants.payment_limits import GCASH_MAX_TRANSACTION_PHP
+from app.constants.payment_methods import ALLOWED_PAYMENT_METHODS, PROOF_OPTIONAL_METHODS
 from app.models.entities import PaymentStatus
 
 
@@ -20,11 +22,20 @@ class PaymentCreate(BaseModel):
     @field_validator("method")
     @classmethod
     def validate_method(cls, v: str) -> str:
-        allowed = {"card", "gcash", "bank", "cash"}
+        allowed = ALLOWED_PAYMENT_METHODS
         v = (v or "").lower().strip()
         if v not in allowed:
             raise ValueError(f"Method must be one of {sorted(allowed)}")
         return v
+
+    @model_validator(mode="after")
+    def validate_gcash_limit(self) -> "PaymentCreate":
+        if self.method == "gcash" and self.amount > GCASH_MAX_TRANSACTION_PHP:
+            raise ValueError(
+                f"GCash payments are limited to ₱{GCASH_MAX_TRANSACTION_PHP:,.0f} per transaction. "
+                "Use bank transfer or another payment method."
+            )
+        return self
 
 
 class PaymentRead(BaseModel):
@@ -40,6 +51,7 @@ class PaymentRead(BaseModel):
     refunded_at: datetime | None
     proof_original_filename: str | None = None
     proof_uploaded_at: datetime | None = None
+    proof_file_url: str | None = None
     reviewed_at: datetime | None = None
     reviewed_by_id: int | None = None
     created_at: datetime

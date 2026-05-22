@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "npm run dev --prefix ..",
-    "dev:web-only": "next dev",
-    "dev:only": "next dev",
+    "dev:web-only": "next dev -p 3000",
+    "dev:only": "next dev -p 3000",
     "check:api": "node ../scripts/ensure-backend-health.mjs",
     "build": "next build",
     "start": "next start",
@@ -14,6 +14,7 @@
   "dependencies": {
     "countries-list": "^3.3.0",
     "fleetops": "file:..",
+    "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
     "next": "15.1.2",
     "react": "19.0.0",

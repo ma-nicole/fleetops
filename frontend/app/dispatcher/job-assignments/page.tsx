@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "reac
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { WorkflowApi, type Booking } from "@/lib/workflowApi";
+import DispatcherRouteSetter from "@/components/DispatcherRouteSetter";
 
 type BookingAvailability = {
   booking_id: number;
@@ -311,6 +312,16 @@ function DispatcherJobAssignmentsInner() {
               {availability?.required_truck_count ??
                 Math.max(1, selected.required_truck_count || Math.ceil(selected.cargo_weight_tons / 42))}
             </p>
+          ) : null}
+
+          {bookingId > 0 && selected ? (
+            <div style={{ marginTop: 14 }}>
+              <DispatcherRouteSetter
+                bookingId={bookingId}
+                pickupLocation={selected.pickup_location}
+                dropoffLocation={selected.dropoff_location}
+              />
+            </div>
           ) : null}
 
           {availabilityError ? (

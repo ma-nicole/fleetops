@@ -1,4 +1,6 @@
-import { apiGet, apiPostMultipart } from "./api";
+import { apiGet, apiPatch, apiPost, apiPostMultipart } from "./api";
+import type { ShoulderCostEntry, TripCostLedgerResponse } from "./tripShoulderCosts";
+import type { DispatchRouteOptionsResponse } from "./dispatchRoute";
 
 export type DispatcherDashboardTrip = {
   id: number;
@@ -164,4 +166,32 @@ export const DispatchApi = {
       attachment_url: string | null;
       created_at: string | null;
     }>("/dispatch/operational-log", formData),
+
+  tripCostLedger: (params?: { trip_id?: number; booking_id?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.trip_id != null) qs.set("trip_id", String(params.trip_id));
+    if (params?.booking_id != null) qs.set("booking_id", String(params.booking_id));
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return apiGet<TripCostLedgerResponse>(`/dispatch/trip-cost-ledger${q ? `?${q}` : ""}`);
+  },
+
+  addTripShoulderCost: (
+    tripId: number,
+    payload: { category: string; amount_php: number; notes?: string | null },
+  ) => apiPost<ShoulderCostEntry>(`/dispatch/trips/${tripId}/shoulder-costs`, payload),
+
+  getBookingRouteOptions: (bookingId: number) =>
+    apiGet<DispatchRouteOptionsResponse>(`/dispatch/booking/${bookingId}/route-options`),
+
+  generateBookingRouteOptions: (bookingId: number) =>
+    apiPost<DispatchRouteOptionsResponse & { generated: number }>(
+      `/dispatch/booking/${bookingId}/route-options/generate`,
+      {},
+    ),
+
+  selectBookingRouteOption: (bookingId: number, routeOptionId: number) =>
+    apiPatch<DispatchRouteOptionsResponse>(`/dispatch/booking/${bookingId}/route-options/select`, {
+      route_option_id: routeOptionId,
+    }),
 };

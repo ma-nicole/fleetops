@@ -26,6 +26,8 @@ from app.models.entities import (
     UserRole,
 )
 from app.services.crew_assigned_bookings import list_crew_assigned_bookings
+from app.services.delivery_receiving_verification import assert_delivery_receiving_complete
+from app.services.pre_delivery_verification import is_delivery_progression_step, pre_delivery_block_detail
 from app.services.trip_status_sync import sync_trip_and_booking_status
 
 router = APIRouter(prefix="/helper", tags=["helper"])
@@ -139,6 +141,14 @@ async def helper_update_status(
         raise HTTPException(status_code=400, detail="Submit at least 3 en-route location updates before dropped_off.")
     if step == "completed" and (trip.helper_progress_status or "").strip().lower() != "dropped_off":
         raise HTTPException(status_code=400, detail="Trip must be dropped_off before completed.")
+
+    if step == "completed":
+        assert_delivery_receiving_complete(trip)
+
+    if is_delivery_progression_step(step) and trip.booking:
+        block = pre_delivery_block_detail(db, trip.booking)
+        if block:
+            raise HTTPException(status_code=400, detail=block["message"])
 
     photo_path = _save_photo(trip.id, photo)
     trip.helper_last_proof_path = photo_path or trip.helper_last_proof_path

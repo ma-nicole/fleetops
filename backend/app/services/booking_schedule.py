@@ -19,6 +19,8 @@ from app.constants.fleet_capacity import (
 from app.core.config import Settings, settings as app_settings
 from app.models.entities import Booking, Trip, TripStatus
 from app.services.route_estimate import estimate_road_distance_km
+from app.services.booking_capacity import fleet_operational_pool_size
+from app.services.demo_booking_filter import is_demo_placeholder_booking
 
 _TERMINAL_TRIP: frozenset[TripStatus] = frozenset({TripStatus.COMPLETED, TripStatus.CANCELLED})
 
@@ -81,6 +83,66 @@ def intervals_overlap(a0: datetime, a1: datetime, b0: datetime, b1: datetime) ->
     return a0 < b1 and b0 < a1
 
 
+def trucks_committed_for_window(
+    db: Session,
+    scheduled_date: date,
+    time_slot: str,
+    pickup_location: str,
+    dropoff_location: str,
+    cfg: Settings | None = None,
+    exclude_booking_id: int | None = None,
+) -> int:
+    """Sum required trucks for non-terminal bookings whose planned interval overlaps this window."""
+    if not pickup_location.strip() or not dropoff_location.strip():
+        return 0
+    cfg = cfg or app_settings
+    ns, ne = interval_for_pickup_window(
+        scheduled_date, time_slot, pickup_location, dropoff_location, cfg
+    )
+    total = 0
+    rows = (
+        db.query(Booking)
+        .filter(
+            Booking.scheduled_date == scheduled_date,
+            ~Booking.status.in_(BOOKING_SLOT_TERMINAL_STATUSES),
+        )
+        .all()
+    )
+    for b in rows:
+        if exclude_booking_id is not None and b.id == exclude_booking_id:
+            continue
+        if is_demo_placeholder_booking(b.pickup_location, b.dropoff_location):
+            continue
+        s, e = booking_interval(b, cfg)
+        if intervals_overlap(ns, ne, s, e):
+            total += trucks_required_for_cargo(b.cargo_weight_tons)
+    return total
+
+
+def available_trucks_for_window(
+    db: Session,
+    scheduled_date: date,
+    time_slot: str,
+    pickup_location: str,
+    dropoff_location: str,
+    cfg: Settings | None = None,
+    exclude_booking_id: int | None = None,
+) -> int:
+    pool = fleet_operational_pool_size(db)
+    if pool <= 0:
+        return 0
+    committed = trucks_committed_for_window(
+        db,
+        scheduled_date,
+        time_slot,
+        pickup_location,
+        dropoff_location,
+        cfg,
+        exclude_booking_id,
+    )
+    return max(0, pool - committed)
+
+
 def slot_has_capacity(
     db: Session,
     scheduled_date: date,
@@ -111,10 +173,15 @@ def slot_has_capacity(
     for b in rows:
         if exclude_booking_id is not None and b.id == exclude_booking_id:
             continue
+        if is_demo_placeholder_booking(b.pickup_location, b.dropoff_location):
+            continue
         s, e = booking_interval(b, cfg)
         if intervals_overlap(ns, ne, s, e):
             total += trucks_required_for_cargo(b.cargo_weight_tons)
-    return total + need <= FLEET_TRUCK_COUNT
+    pool = fleet_operational_pool_size(db)
+    if pool <= 0:
+        return False
+    return total + need <= pool
 
 
 def slot_available(
@@ -148,15 +215,26 @@ def availability_for_date(
     cfg: Settings | None = None,
 ) -> dict[str, bool]:
     """Map each canonical slot → True when a new booking may start then (fleet trucks + overlap)."""
+    need = trucks_required_for_cargo(cargo_weight_tons)
     return {
-        slot: slot_available(
-            db,
-            scheduled_date,
-            slot,
-            cargo_weight_tons,
-            pickup_location,
-            dropoff_location,
-            cfg,
+        slot: available_trucks_for_window(
+            db, scheduled_date, slot, pickup_location, dropoff_location, cfg
+        )
+        >= need
+        for slot in BOOKING_TIME_SLOTS
+    }
+
+
+def available_trucks_by_slot_for_date(
+    db: Session,
+    scheduled_date: date,
+    pickup_location: str,
+    dropoff_location: str,
+    cfg: Settings | None = None,
+) -> dict[str, int]:
+    return {
+        slot: available_trucks_for_window(
+            db, scheduled_date, slot, pickup_location, dropoff_location, cfg
         )
         for slot in BOOKING_TIME_SLOTS
     }

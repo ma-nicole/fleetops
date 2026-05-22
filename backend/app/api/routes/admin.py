@@ -10,15 +10,31 @@ from app.core.security import hash_password, require_roles
 from app.db import get_db
 from app.core.config import settings as app_settings
 from app.models.entities import (
+    Booking,
+    BookingStatus,
     PricingConfig,
     ServiceType,
     Truck,
     User,
     UserRole,
 )
+from app.schemas.goods_declaration import GoodsDeclarationReviewRequest
+from app.services.goods_declaration_review import (
+    apply_goods_declaration_review,
+    booking_has_goods_declaration,
+    effective_goods_declaration_review_status,
+    goods_declaration_review_label,
+)
+from app.services.dispatcher_booking_assignment import assign_booking_dispatcher, job_order_assignment_map
+from app.models.entities import JobOrder
+from app.schemas.dispatcher_assignment import DispatcherBookingAssignRequest
 from app.services.booking_freight_knobs import (
     booking_freight_knobs_to_dict,
     ensure_booking_freight_row,
+)
+from app.services.cargo_type_classification import (
+    cargo_type_category_label,
+    parse_cargo_restricted_reasons,
 )
 
 
@@ -388,3 +404,226 @@ def remove_truck(
     db.delete(truck)
     db.commit()
     return {"deleted": True}
+
+
+def _serialize_goods_declaration_row(booking: Booking) -> dict:
+    st = booking.status.value if hasattr(booking.status, "value") else str(booking.status)
+    return {
+        "booking_id": booking.id,
+        "customer_id": booking.customer_id,
+        "status": st,
+        "pickup_location": booking.pickup_location,
+        "dropoff_location": booking.dropoff_location,
+        "cargo_description": booking.cargo_description,
+        "cargo_weight_tons": float(booking.cargo_weight_tons or 0),
+        "cargo_declaration_original_filename": booking.cargo_declaration_original_filename,
+        "cargo_declaration_uploaded_at": (
+            booking.cargo_declaration_uploaded_at.isoformat() if booking.cargo_declaration_uploaded_at else None
+        ),
+        "cargo_declaration_file_url": booking.cargo_declaration_file_url,
+        "goods_declaration_review_status": effective_goods_declaration_review_status(booking),
+        "goods_declaration_review_status_label": goods_declaration_review_label(
+            effective_goods_declaration_review_status(booking)
+        ),
+        "goods_declaration_review_remarks": booking.goods_declaration_review_remarks,
+        "goods_declaration_reviewed_at": (
+            booking.goods_declaration_reviewed_at.isoformat() if booking.goods_declaration_reviewed_at else None
+        ),
+        "goods_declaration_reviewed_by_id": booking.goods_declaration_reviewed_by_id,
+    }
+
+
+@router.get("/goods-declarations")
+def list_goods_declaration_reviews(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    rows = (
+        db.query(Booking)
+        .filter(
+            (Booking.cargo_declaration_storage_path.isnot(None))
+            | (Booking.cargo_declaration_original_filename.isnot(None))
+        )
+        .order_by(Booking.cargo_declaration_uploaded_at.desc(), Booking.id.desc())
+        .all()
+    )
+    return [_serialize_goods_declaration_row(b) for b in rows]
+
+
+@router.patch("/goods-declarations/{booking_id}")
+def review_goods_declaration(
+    booking_id: int,
+    payload: GoodsDeclarationReviewRequest,
+    db: Session = Depends(get_db),
+    reviewer: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if not booking_has_goods_declaration(booking):
+        raise HTTPException(status_code=400, detail="This booking has no goods declaration file.")
+
+    if payload.status in {"rejected", "revision_requested"} and not (payload.remarks or "").strip():
+        raise HTTPException(status_code=400, detail="Remarks are required when rejecting or requesting revision.")
+
+    try:
+        apply_goods_declaration_review(
+            booking,
+            status=payload.status,
+            reviewer=reviewer,
+            remarks=payload.remarks,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    db.commit()
+    db.refresh(booking)
+    return _serialize_goods_declaration_row(booking)
+
+
+def _serialize_cargo_type_validation_row(booking: Booking) -> dict:
+    st = booking.status.value if hasattr(booking.status, "value") else str(booking.status)
+    return {
+        "booking_id": booking.id,
+        "customer_id": booking.customer_id,
+        "status": st,
+        "pickup_location": booking.pickup_location,
+        "dropoff_location": booking.dropoff_location,
+        "cargo_description": booking.cargo_description,
+        "cargo_weight_tons": float(booking.cargo_weight_tons or 0),
+        "cargo_type_category": booking.cargo_type_category,
+        "cargo_type_category_label": cargo_type_category_label(booking.cargo_type_category),
+        "cargo_type_validated": bool(booking.cargo_type_validated),
+        "cargo_type_admin_notes": booking.cargo_type_admin_notes,
+        "cargo_restricted_flag": bool(booking.cargo_restricted_flag),
+        "cargo_restricted_reasons": parse_cargo_restricted_reasons(booking.cargo_restricted_reasons),
+        "cargo_type_validated_at": (
+            booking.cargo_type_validated_at.isoformat() if booking.cargo_type_validated_at else None
+        ),
+        "cargo_type_validated_by_id": booking.cargo_type_validated_by_id,
+    }
+
+
+@router.get("/cargo-type-validations")
+def list_cargo_type_validations(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    rows = (
+        db.query(Booking)
+        .filter(Booking.cargo_description.isnot(None))
+        .filter(Booking.cargo_description != "")
+        .order_by(Booking.updated_at.desc(), Booking.id.desc())
+        .all()
+    )
+    return [_serialize_cargo_type_validation_row(b) for b in rows]
+
+
+@router.get("/dispatchers")
+def list_dispatchers(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    rows = (
+        db.query(User)
+        .filter(User.role == UserRole.DISPATCHER)
+        .order_by(User.full_name.asc(), User.id.asc())
+        .all()
+    )
+    return [
+        {
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+        }
+        for u in rows
+    ]
+
+
+def _serialize_dispatcher_assignment_row(booking: Booking, job: JobOrder | None, dispatcher: User | None) -> dict:
+    st = booking.status.value if hasattr(booking.status, "value") else str(booking.status)
+    return {
+        "booking_id": booking.id,
+        "customer_id": booking.customer_id,
+        "status": st,
+        "pickup_location": booking.pickup_location,
+        "dropoff_location": booking.dropoff_location,
+        "cargo_description": booking.cargo_description,
+        "cargo_weight_tons": float(booking.cargo_weight_tons or 0),
+        "scheduled_date": booking.scheduled_date.isoformat(),
+        "scheduled_time_slot": booking.scheduled_time_slot,
+        "assigned_dispatcher_id": job.assigned_dispatcher_id if job else None,
+        "assigned_dispatcher_name": dispatcher.full_name if dispatcher else None,
+        "job_order_id": job.id if job else None,
+        "job_issued_at": job.issued_at.isoformat() if job and job.issued_at else None,
+    }
+
+
+@router.get("/dispatcher-assignments")
+def list_dispatcher_assignments(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    rows = (
+        db.query(Booking)
+        .filter(
+            Booking.status.in_(
+                [
+                    BookingStatus.PAYMENT_VERIFIED,
+                    BookingStatus.READY_FOR_ASSIGNMENT,
+                    BookingStatus.APPROVED,
+                    BookingStatus.ASSIGNED,
+                    BookingStatus.ACCEPTED,
+                    BookingStatus.ENROUTE,
+                    BookingStatus.LOADING,
+                    BookingStatus.OUT_FOR_DELIVERY,
+                ]
+            )
+        )
+        .order_by(Booking.updated_at.desc(), Booking.id.desc())
+        .limit(300)
+        .all()
+    )
+    job_map = job_order_assignment_map(db, [b.id for b in rows])
+    dispatcher_ids = {
+        int(j.assigned_dispatcher_id)
+        for j in job_map.values()
+        if j.assigned_dispatcher_id is not None
+    }
+    dispatchers = (
+        db.query(User).filter(User.id.in_(dispatcher_ids)).all() if dispatcher_ids else []
+    )
+    dmap = {u.id: u for u in dispatchers}
+    out = []
+    for booking in rows:
+        job = job_map.get(booking.id)
+        disp = dmap.get(job.assigned_dispatcher_id) if job and job.assigned_dispatcher_id else None
+        out.append(_serialize_dispatcher_assignment_row(booking, job, disp))
+    return out
+
+
+@router.patch("/dispatcher-assignments/{booking_id}")
+def assign_dispatcher_to_booking(
+    booking_id: int,
+    payload: DispatcherBookingAssignRequest,
+    db: Session = Depends(get_db),
+    assigner: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    try:
+        job = assign_booking_dispatcher(
+            db,
+            booking,
+            dispatcher_id=payload.dispatcher_id,
+            assigned_by=assigner,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    db.refresh(booking)
+    dispatcher = None
+    if job.assigned_dispatcher_id:
+        dispatcher = db.query(User).filter(User.id == job.assigned_dispatcher_id).first()
+    return _serialize_dispatcher_assignment_row(booking, job, dispatcher)

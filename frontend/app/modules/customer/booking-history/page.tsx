@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
 import { customerAssignmentLatestLocation } from "@/lib/customerAssignmentDisplay";
 import { WorkflowApi, type CustomerBookingHistoryRow } from "@/lib/workflowApi";
@@ -275,6 +276,7 @@ export default function BookingHistoryPage() {
                               );
                             })
                           )}
+                          <BookingCustomsClearanceSection booking={booking} editable={false} />
                         </div>
                       )}
                     </div>

@@ -24,6 +24,7 @@ from app.models.entities import (
     VehicleIssueReport,
 )
 from app.services.general_operational_reports import list_general_operational_reports_for_trips
+from app.services.dispatcher_booking_assignment import filter_trips_for_dispatcher
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -38,7 +39,7 @@ def _status_str(st: TripStatus | str) -> str:
     return str(st)
 
 
-def build_trip_logs_payload(db: Session, *, limit: int = 100) -> dict[str, Any]:
+def build_trip_logs_payload(db: Session, *, limit: int = 100, viewer=None) -> dict[str, Any]:
     trips = (
         db.query(Trip)
         .options(
@@ -51,6 +52,8 @@ def build_trip_logs_payload(db: Session, *, limit: int = 100) -> dict[str, Any]:
         .limit(limit)
         .all()
     )
+    if viewer is not None:
+        trips = filter_trips_for_dispatcher(db, viewer, trips)
     if not trips:
         return {"trips": []}
 

@@ -1,0 +1,297 @@
+"use client";
+
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
+import DigitalSignaturePad from "@/components/DigitalSignaturePad";
+import { apiFullUrl } from "@/lib/api";
+import { WorkflowApi, type DeliveryReceivingStatus } from "@/lib/workflowApi";
+
+type DeliveryCompletionPanelProps = {
+  tripId: number;
+  onReadyChange?: (ready: boolean) => void;
+  compact?: boolean;
+};
+
+function mediaSrc(path: string | null | undefined): string | null {
+  const u = (path || "").trim();
+  if (!u) return null;
+  if (u.startsWith("http://") || u.startsWith("https://")) return u;
+  return apiFullUrl(u.startsWith("/") ? u : `/uploads/${u}`);
+}
+
+function CheckRow({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.88rem" }}>
+      <span
+        aria-hidden
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: ok ? "#DCFCE7" : "#FEE2E2",
+          color: ok ? "#166534" : "#991B1B",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "0.72rem",
+          fontWeight: 800,
+        }}
+      >
+        {ok ? "✓" : "!"}
+      </span>
+      <span style={{ color: ok ? "#166534" : "#7F1D1D" }}>{label}</span>
+    </div>
+  );
+}
+
+export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact = false }: DeliveryCompletionPanelProps) {
+  const scanRegionId = useId().replace(/:/g, "");
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const [status, setStatus] = useState<DeliveryReceivingStatus | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [receivingFile, setReceivingFile] = useState<File | null>(null);
+  const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signatureUploadFile, setSignatureUploadFile] = useState<File | null>(null);
+  const [manualQr, setManualQr] = useState("");
+  const [scanning, setScanning] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const s = await WorkflowApi.deliveryReceivingStatus(tripId);
+      setStatus(s);
+      onReadyChange?.(s.ready_for_completion);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Could not load delivery requirements.");
+      onReadyChange?.(false);
+    }
+  }, [tripId, onReadyChange]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    return () => {
+      if (scannerRef.current) {
+        void scannerRef.current.stop().catch(() => undefined);
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+    };
+  }, []);
+
+  const stopScanner = async () => {
+    if (!scannerRef.current) {
+      setScanning(false);
+      return;
+    }
+    try {
+      await scannerRef.current.stop();
+    } catch {
+      /* ignore */
+    }
+    scannerRef.current.clear();
+    scannerRef.current = null;
+    setScanning(false);
+  };
+
+  const startScanner = async () => {
+    setMsg(null);
+    try {
+      await stopScanner();
+      const scanner = new Html5Qrcode(scanRegionId);
+      scannerRef.current = scanner;
+      setScanning(true);
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 8, qrbox: { width: 220, height: 220 } },
+        async (decoded) => {
+          await stopScanner();
+          await verifyQr(decoded);
+        },
+        () => undefined,
+      );
+    } catch (e) {
+      setScanning(false);
+      setMsg(e instanceof Error ? e.message : "Camera QR scan unavailable. Enter the code manually.");
+    }
+  };
+
+  const verifyQr = async (payload: string) => {
+    setBusy("qr");
+    setMsg(null);
+    try {
+      const s = await WorkflowApi.verifyReceivingQr(tripId, payload);
+      setStatus(s);
+      onReadyChange?.(s.ready_for_completion);
+      setManualQr("");
+      setMsg("QR verified.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "QR verification failed.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const uploadReceiving = async () => {
+    if (!receivingFile) {
+      setMsg("Select a receiving document to upload.");
+      return;
+    }
+    setBusy("doc");
+    setMsg(null);
+    try {
+      const s = await WorkflowApi.uploadReceivingDocument(tripId, receivingFile);
+      setStatus(s);
+      onReadyChange?.(s.ready_for_completion);
+      setReceivingFile(null);
+      setMsg("Receiving document uploaded.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const uploadSignature = async () => {
+    const file = signatureUploadFile || signatureFile;
+    if (!file) {
+      setMsg("Draw or upload a digital signature first.");
+      return;
+    }
+    setBusy("sig");
+    setMsg(null);
+    try {
+      const s = await WorkflowApi.uploadDigitalSignature(tripId, file);
+      setStatus(s);
+      onReadyChange?.(s.ready_for_completion);
+      setSignatureFile(null);
+      setSignatureUploadFile(null);
+      setMsg("Digital signature saved.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Signature upload failed.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loadError) {
+    return (
+      <div style={{ padding: "0.85rem", borderRadius: 8, background: "#FEE2E2", color: "#991B1B", fontSize: "0.88rem" }}>
+        {loadError}
+      </div>
+    );
+  }
+
+  const docUrl = mediaSrc(status?.receiving_document_path);
+  const sigUrl = mediaSrc(status?.digital_signature_path);
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: compact ? "0.75rem" : "1rem",
+        padding: compact ? "0.85rem" : "1rem",
+        border: "1px solid #BFDBFE",
+        borderRadius: 10,
+        background: "#F8FAFC",
+      }}
+    >
+      <div>
+        <h3 style={{ margin: "0 0 0.35rem", fontSize: "0.95rem", fontWeight: 800, color: "#0f172a" }}>
+          Delivery completion requirements
+        </h3>
+        <p style={{ margin: 0, fontSize: "0.84rem", color: "#475569", lineHeight: 1.45 }}>
+          Upload the signed receiving document, verify the trip QR code, and capture the recipient digital signature
+          before marking delivery complete.
+        </p>
+      </div>
+
+      <div style={{ display: "grid", gap: 6 }}>
+        <CheckRow ok={!!status?.receiving_document_uploaded} label="Receiving document uploaded" />
+        <CheckRow ok={!!status?.qr_verified} label="QR code verified" />
+        <CheckRow ok={!!status?.digital_signature_uploaded} label="Digital signature captured" />
+      </div>
+
+      {msg ? (
+        <p style={{ margin: 0, fontSize: "0.84rem", color: "#1D4ED8", fontWeight: 600 }}>{msg}</p>
+      ) : null}
+
+      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <strong style={{ fontSize: "0.86rem" }}>1. Receiving document</strong>
+        {docUrl ? (
+          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "#2563EB", fontWeight: 600 }}>
+            View uploaded document
+          </a>
+        ) : null}
+        <input
+          type="file"
+          accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,application/pdf"
+          onChange={(e) => setReceivingFile(e.target.files?.[0] ?? null)}
+        />
+        <button type="button" className="button" disabled={busy === "doc" || !receivingFile} onClick={() => void uploadReceiving()}>
+          {busy === "doc" ? "Uploading…" : "Upload receiving document"}
+        </button>
+      </section>
+
+      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <strong style={{ fontSize: "0.86rem" }}>2. QR verification</strong>
+        {status?.qr_payload ? (
+          <p style={{ margin: 0, fontSize: "0.78rem", color: "#64748B", wordBreak: "break-all" }}>
+            Expected payload: <code>{status.qr_payload}</code>
+          </p>
+        ) : null}
+        <div id={scanRegionId} style={{ width: "100%", maxWidth: 320, minHeight: scanning ? 240 : 0 }} />
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {!scanning ? (
+            <button type="button" className="button" disabled={busy === "qr"} onClick={() => void startScanner()}>
+              Scan QR with camera
+            </button>
+          ) : (
+            <button type="button" className="button" style={{ background: "#6B7280" }} onClick={() => void stopScanner()}>
+              Stop scanner
+            </button>
+          )}
+        </div>
+        <input
+          className="input"
+          placeholder="Or paste scanned QR payload manually"
+          value={manualQr}
+          onChange={(e) => setManualQr(e.target.value)}
+        />
+        <button
+          type="button"
+          className="button"
+          disabled={busy === "qr" || !manualQr.trim()}
+          onClick={() => void verifyQr(manualQr.trim())}
+        >
+          {busy === "qr" ? "Verifying…" : "Verify QR code"}
+        </button>
+      </section>
+
+      <section style={{ display: "grid", gap: "0.5rem" }}>
+        <strong style={{ fontSize: "0.86rem" }}>3. Digital signature</strong>
+        {sigUrl ? (
+          <a href={sigUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "#2563EB", fontWeight: 600 }}>
+            View saved signature
+          </a>
+        ) : null}
+        <DigitalSignaturePad disabled={busy === "sig"} onChange={setSignatureFile} />
+        <label style={{ display: "grid", gap: 4, fontSize: "0.84rem" }}>
+          <span>Or upload signature image (PNG/JPG)</span>
+          <input
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png"
+            onChange={(e) => setSignatureUploadFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        <button type="button" className="button" disabled={busy === "sig"} onClick={() => void uploadSignature()}>
+          {busy === "sig" ? "Saving…" : "Save digital signature"}
+        </button>
+      </section>
+    </div>
+  );
+}

@@ -16,6 +16,7 @@ from app.schemas.predict import (
     FeedbackSummaryResponse,
 )
 from app.services.analytics_pipeline import run_pipeline
+from app.services.expense_analytics import build_expense_analytics
 from app.services.feedback_loop import feedback_summary
 from app.services.predictive.cost_model import predict_trip_cost, train_cost_regression
 from app.services.predictive.demand_model import forecast_monthly_cost
@@ -33,6 +34,15 @@ def analytics_dashboard(
 ):
     """Aggregated analytics view (paper §3.2.8 Fig 23 marts)."""
     return run_pipeline(db)
+
+
+@router.get("/expenses")
+def analytics_expenses(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.DISPATCHER)),
+):
+    """Expense summary from trip system costs, shoulder ledger, and maintenance records."""
+    return build_expense_analytics(db)
 
 
 @router.post("/predict-trip-cost", response_model=TripCostPredictResponse)

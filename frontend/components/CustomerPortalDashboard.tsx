@@ -203,7 +203,7 @@ export default function CustomerPortalDashboard() {
 
                 {activeShow.length === 0 ? (
                   <p style={{ margin: 0, color: "var(--text-secondary)" }}>
-                    No active bookings — save at least {MIN_BOOKING_SITES} sites, then use New booking.
+                    No shipment bookings yet.
                   </p>
                 ) : (
                   <div style={{ display: "grid", gap: "1rem" }}>

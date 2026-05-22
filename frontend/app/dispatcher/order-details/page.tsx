@@ -7,6 +7,9 @@ import { Suspense, useEffect, useState } from "react";
 import { announce } from "@/lib/useAnnouncer";
 import { WorkflowApi, type Booking } from "@/lib/workflowApi";
 import { formatPhp } from "@/lib/appLocale";
+import BookingCargoWeightDisplay from "@/components/BookingCargoWeightDisplay";
+import BookingDocumentsReview from "@/components/BookingDocumentsReview";
+import PreDeliveryVerificationChecklist from "@/components/PreDeliveryVerificationChecklist";
 
 function OrderDetailsInner() {
   const router = useRouter();
@@ -131,10 +134,20 @@ function OrderDetailsInner() {
 
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
         <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Cargo</h2>
-        <p style={{ margin: 0, color: "#333" }}>
-          {booking.cargo_weight_tons} t
-          {booking.cargo_description ? ` — ${booking.cargo_description}` : ""}
-        </p>
+        <BookingCargoWeightDisplay
+          cargoWeightTons={booking.cargo_weight_tons}
+          requiredTruckCount={booking.required_truck_count}
+          cargoDescription={booking.cargo_description}
+        />
+      </div>
+
+      <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
+        <PreDeliveryVerificationChecklist bookingId={booking.id} canValidate />
+      </div>
+
+      <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Documents</h2>
+        <BookingDocumentsReview booking={booking} />
       </div>
 
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>

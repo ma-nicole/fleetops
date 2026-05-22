@@ -9,6 +9,7 @@ from app.models.entities import (
     AttendanceRecord,
     Booking,
     DriverProfile,
+    DriverTripNotification,
     GeneralOperationalReport,
     HelperProfile,
     Trip,
@@ -23,7 +24,12 @@ from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.dispatch_operations_center import _display_status
 from app.services.driver_pay_summary import build_driver_pay_summary
-from app.services.crew_assigned_bookings import list_crew_assigned_bookings
+from app.services.crew_assigned_bookings import list_crew_assigned_bookings, redact_trip_payload_for_helper
+from app.services.driver_trip_notifications import (
+    list_driver_trip_notifications,
+    mark_all_driver_notifications_read,
+    mark_driver_notification_read,
+)
 from app.services.general_operational_reports import (
     parse_optional_float,
     parse_report_date,
@@ -118,6 +124,49 @@ def driver_list_assigned_bookings(
 ):
     """Same payload as GET /helper/bookings — scoped to trips where this user is the driver."""
     return {"bookings": list_crew_assigned_bookings(db, user)}
+
+
+@router.get("/notifications")
+def driver_trip_notifications(
+    unread_only: bool = False,
+    limit: int = 30,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER)),
+):
+    """In-app alerts when trips are assigned or updated for this driver."""
+    rows = list_driver_trip_notifications(db, user.id, unread_only=unread_only, limit=limit)
+    unread_count = (
+        db.query(DriverTripNotification)
+        .filter(
+            DriverTripNotification.driver_id == user.id,
+            DriverTripNotification.read_at.is_(None),
+        )
+        .count()
+    )
+    return {"notifications": rows, "unread_count": unread_count}
+
+
+@router.patch("/notifications/{notification_id}/read")
+def driver_mark_notification_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER)),
+):
+    row = mark_driver_notification_read(db, user.id, notification_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    db.commit()
+    return row
+
+
+@router.post("/notifications/mark-all-read")
+def driver_mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER)),
+):
+    count = mark_all_driver_notifications_read(db, user.id)
+    db.commit()
+    return {"marked_read": count}
 
 
 @router.get("/pay-summary")
@@ -340,6 +389,8 @@ def my_trips(
                 "toll_cost": t.toll_cost,
                 "fuel_cost": t.fuel_cost,
                 "labor_cost": t.labor_cost,
+                "driver_allowance_php": float(getattr(t, "driver_allowance_php", 0) or 0),
+                "helper_allowance_php": float(getattr(t, "helper_allowance_php", 0) or 0),
                 "duration_hours": t.duration_hours,
                 "status": t.status.value if hasattr(t.status, "value") else str(t.status),
                 "assigned_at": t.assigned_at.isoformat() if t.assigned_at else None,
@@ -418,6 +469,8 @@ def my_trips(
                 ),
             }
         )
+    if user.role == UserRole.HELPER:
+        return [redact_trip_payload_for_helper(row) for row in out]
     return out
 
 

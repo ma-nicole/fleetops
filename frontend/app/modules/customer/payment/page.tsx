@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
+import { CUSTOMER_PAYMENT_METHODS, formatPaymentMethodLabel } from "@/lib/paymentMethodOptions";
 import { WorkflowApi, type Payment } from "@/lib/workflowApi";
 import { formatDateTime, formatPhpWhole } from "@/lib/appLocale";
 
@@ -46,6 +47,24 @@ export default function CustomerPaymentPage() {
         )}
 
         <section style={card}>
+          <h2 style={{ marginTop: 0 }}>Payment methods</h2>
+          <p style={{ margin: "0 0 1rem 0", color: "#6B7280", fontSize: "0.9rem" }}>
+            When paying for a booking, you can choose from the options below. Proof upload is required for GCash, bank
+            transfer, and manual offline payments. Cash on delivery does not require upfront proof.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: "1.25rem", display: "grid", gap: "0.65rem", color: "#374151", fontSize: "0.9rem" }}>
+            {CUSTOMER_PAYMENT_METHODS.map((opt) => (
+              <li key={opt.value}>
+                <strong>{opt.label}</strong>
+                {opt.requiresProof ? " — proof required" : " — no upfront proof"}
+                <br />
+                <span style={{ color: "#6B7280", fontSize: "0.85rem" }}>{opt.description}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section style={card}>
           <h2 style={{ marginTop: 0 }}>Payment History</h2>
           {payments.length === 0 ? (
             <p style={{ color: "#6B7280" }}>No payments yet.</p>
@@ -66,7 +85,7 @@ export default function CustomerPaymentPage() {
                   <tr key={p.id}>
                     <td style={td}>{p.reference}</td>
                     <td style={td}>#{p.booking_id}</td>
-                    <td style={td}>{p.method}</td>
+                    <td style={td}>{formatPaymentMethodLabel(p.method)}</td>
                     <td style={td}>{formatPhpWhole(p.amount)}</td>
                     <td style={{ ...td, fontWeight: 700, color: statusColor(p.status) }}>{formatPaymentStatus(p.status)}</td>
                     <td style={td}>{p.paid_at ? formatDateTime(p.paid_at) : "—"}</td>

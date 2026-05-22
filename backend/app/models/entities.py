@@ -16,6 +16,15 @@ class UserRole(str, Enum):
     CUSTOMER = "customer"
 
 
+class CustomsClearanceStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    DOCUMENTS_PREPARED = "documents_prepared"
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
+    CLEARED = "cleared"
+    HELD = "held"
+
+
 class BookingStatus(str, Enum):
     """Booking workflow statuses (paper §3.2.3 + Fig 19)"""
     PENDING_PAYMENT = "pending_payment"
@@ -81,6 +90,31 @@ class MaintenanceStatus(str, Enum):
 class ServiceType(str, Enum):
     FIXED = "fixed"
     CUSTOMIZED = "customized"
+
+
+class GoodsDeclarationReviewStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    REVISION_REQUESTED = "revision_requested"
+
+
+class CargoTypeCategory(str, Enum):
+    GENERAL = "general"
+    ELECTRONICS = "electronics"
+    FURNITURE = "furniture"
+    FOOD_PERISHABLE = "food_perishable"
+    FOOD_NON_PERISHABLE = "food_non_perishable"
+    CONSTRUCTION = "construction"
+    AUTOMOTIVE = "automotive"
+    TEXTILES = "textiles"
+    PHARMACEUTICALS = "pharmaceuticals"
+    CHEMICALS_HAZMAT = "chemicals_hazmat"
+    FLAMMABLE = "flammable"
+    WEAPONS = "weapons"
+    LIVE_ANIMALS = "live_animals"
+    CONTROLLED_SUBSTANCES = "controlled_substances"
+    OTHER = "other"
 
 
 class TruckOperationalStatus(str, Enum):
@@ -272,6 +306,50 @@ class Booking(Base):
     """Latest manual location name from helper (not GPS)."""
     latest_location: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    cargo_declaration_original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cargo_declaration_storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    cargo_declaration_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    terms_agreement_original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    terms_agreement_storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    terms_agreement_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    terms_agreed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    customs_clearance_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    customs_tariff_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    customs_additional_charges_php: Mapped[float | None] = mapped_column(Float, nullable=True)
+    customs_customer_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    customs_admin_validated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    customs_validated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    customs_validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    customs_admin_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    customs_validated_additional_charges_php: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    goods_declaration_validated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cargo_type_validated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    goods_declaration_review_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    goods_declaration_review_remarks: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    goods_declaration_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    goods_declaration_reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    cargo_type_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cargo_type_admin_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    cargo_restricted_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cargo_restricted_reasons: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    cargo_type_validated_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    cargo_type_validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    @property
+    def cargo_declaration_file_url(self) -> str | None:
+        from app.services.upload_urls import public_upload_url
+
+        return public_upload_url(self.cargo_declaration_storage_path)
+
+    @property
+    def terms_agreement_file_url(self) -> str | None:
+        from app.services.upload_urls import public_upload_url
+
+        return public_upload_url(self.terms_agreement_storage_path)
+
     customer: Mapped[User] = relationship(foreign_keys=[customer_id])
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
     route: Mapped[Route | None] = relationship(foreign_keys=[route_id])
@@ -402,6 +480,8 @@ class Trip(Base):
     toll_cost: Mapped[float] = mapped_column(Float, default=0)
     fuel_cost: Mapped[float] = mapped_column(Float, default=0)
     labor_cost: Mapped[float] = mapped_column(Float, default=0)
+    driver_allowance_php: Mapped[float] = mapped_column(Float, default=0)
+    helper_allowance_php: Mapped[float] = mapped_column(Float, default=0)
     maintenance_cost: Mapped[float] = mapped_column(Float, default=0)
     duration_hours: Mapped[float] = mapped_column(Float, default=0)
 
@@ -424,6 +504,13 @@ class Trip(Base):
 
     proof_of_delivery: Mapped[str | None] = mapped_column(String(500), nullable=True)
     pod_notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    receiving_document_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    receiving_document_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    receiving_qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    receiving_qr_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    digital_signature_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    digital_signature_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     """Helper-facing milestone (for_pick_up … complete_trip); mirrored for dispatcher/customer UI."""
     helper_progress_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -488,6 +575,29 @@ class TollLog(Base):
     location: Mapped[str] = mapped_column(String(255), default="")
     amount: Mapped[float] = mapped_column(Float, default=0)
     receipt_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TripShoulderCostCategory(str, Enum):
+    TOLL = "toll"
+    FUEL = "fuel"
+    PARKING = "parking"
+    ALLOWANCE = "allowance"
+    OTHER = "other"
+
+
+class TripShoulderCostEntry(Base):
+    """Dispatcher-captured shoulder / out-of-pocket trip expenses (tracking & analytics only)."""
+
+    __tablename__ = "trip_shoulder_cost_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    dispatcher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    amount_php: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -701,6 +811,12 @@ class Payment(Base):
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    @property
+    def proof_file_url(self) -> str | None:
+        from app.services.upload_urls import public_upload_url
+
+        return public_upload_url(self.proof_storage_path)
+
 
 class Feedback(Base):
     """Customer service feedback (paper Customer DFD Fig 14, Feedback data store)"""
@@ -795,4 +911,26 @@ class PredictionFeedback(Base):
     actual_value: Mapped[float] = mapped_column(Float, default=0)
     error: Mapped[float] = mapped_column(Float, default=0)
     abs_pct_error: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DriverTripNotificationKind(str, Enum):
+    ASSIGNED = "assigned"
+    UPDATED = "updated"
+
+
+class DriverTripNotification(Base):
+    """In-app trip alerts for drivers (assignment and schedule/route updates)."""
+
+    __tablename__ = "driver_trip_notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"), nullable=True, index=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    schedule_summary: Mapped[str] = mapped_column(String(255), default="")
+    route_summary: Mapped[str] = mapped_column(String(512), default="")
+    required_action: Mapped[str] = mapped_column(String(512), default="")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

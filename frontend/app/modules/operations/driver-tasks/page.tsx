@@ -3,6 +3,7 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { useState, useEffect, useCallback } from "react";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import DeliveryCompletionPanel from "@/components/DeliveryCompletionPanel";
 import { formatPhp } from "@/lib/appLocale";
 import { WorkflowApi, type Trip } from "@/lib/workflowApi";
 
@@ -46,6 +47,8 @@ export default function DriverTaskListPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [updatingTripId, setUpdatingTripId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [completionTrip, setCompletionTrip] = useState<Trip | null>(null);
+  const [deliveryReady, setDeliveryReady] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -80,7 +83,13 @@ export default function DriverTaskListPage() {
           await WorkflowApi.loadingComplete(trip.id);
           break;
         case "in_delivery":
+          if (!deliveryReady) {
+            setCompletionTrip(trip);
+            setStatusMessage("Complete receiving document, QR verification, and digital signature first.");
+            return;
+          }
           await WorkflowApi.completeTrip(trip.id);
+          setCompletionTrip(null);
           break;
         default:
           return;
@@ -167,9 +176,9 @@ export default function DriverTaskListPage() {
           <div
             className="card"
             style={{
-              background: "rgba(76, 175, 80, 0.1)",
-              border: "1px solid #4CAF50",
-              color: "#2E7D32",
+              background: statusMessage.includes("Complete receiving") ? "rgba(255, 152, 0, 0.12)" : "rgba(76, 175, 80, 0.1)",
+              border: statusMessage.includes("Complete receiving") ? "1px solid #FF9800" : "1px solid #4CAF50",
+              color: statusMessage.includes("Complete receiving") ? "#9A3412" : "#2E7D32",
               marginBottom: "1rem",
               padding: "0.75rem",
             }}
@@ -177,6 +186,50 @@ export default function DriverTaskListPage() {
             {statusMessage}
           </div>
         )}
+
+        {completionTrip ? (
+          <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
+            <h3 style={{ margin: "0 0 0.75rem", color: "#1A1A1A" }}>
+              Complete delivery — Trip #{completionTrip.id}
+            </h3>
+            <DeliveryCompletionPanel tripId={completionTrip.id} onReadyChange={setDeliveryReady} />
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                disabled={!deliveryReady || updatingTripId === completionTrip.id}
+                onClick={() => void runNextStep(completionTrip)}
+                style={{
+                  padding: "0.75rem 1rem",
+                  background: deliveryReady ? "#4CAF50" : "#9CA3AF",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                  cursor: deliveryReady ? "pointer" : "not-allowed",
+                }}
+              >
+                {updatingTripId === completionTrip.id ? "Completing…" : "Mark delivery complete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletionTrip(null);
+                  setDeliveryReady(false);
+                }}
+                style={{
+                  padding: "0.75rem 1rem",
+                  background: "white",
+                  border: "1px solid #D1D5DB",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div
           style={{
@@ -349,6 +402,11 @@ export default function DriverTaskListPage() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (trip.status === "in_delivery") {
+                            setCompletionTrip(trip);
+                            setDeliveryReady(false);
+                            return;
+                          }
                           void runNextStep(trip);
                         }}
                         disabled={updatingTripId === trip.id}

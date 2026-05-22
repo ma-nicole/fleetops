@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="280" viewBox="0 0 240 280" role="img" aria-label="GCash QR placeholder">
+  <rect width="240" height="280" fill="#ffffff"/>
+  <rect x="20" y="20" width="200" height="200" rx="8" fill="#f3f4f6" stroke="#007cff" stroke-width="3"/>
+  <rect x="36" y="36" width="52" height="52" fill="#111827"/>
+  <rect x="44" y="44" width="36" height="36" fill="#ffffff"/>
+  <rect x="52" y="52" width="20" height="20" fill="#111827"/>
+  <rect x="152" y="36" width="52" height="52" fill="#111827"/>
+  <rect x="160" y="44" width="36" height="36" fill="#ffffff"/>
+  <rect x="168" y="52" width="20" height="20" fill="#111827"/>
+  <rect x="36" y="152" width="52" height="52" fill="#111827"/>
+  <rect x="44" y="160" width="36" height="36" fill="#ffffff"/>
+  <rect x="52" y="168" width="20" height="20" fill="#111827"/>
+  <g fill="#111827">
+    <rect x="100" y="40" width="8" height="8"/><rect x="116" y="40" width="8" height="8"/><rect x="132" y="56" width="8" height="8"/>
+    <rect x="100" y="56" width="8" height="8"/><rect x="124" y="72" width="8" height="8"/><rect x="140" y="88" width="8" height="8"/>
+    <rect x="100" y="88" width="8" height="8"/><rect x="116" y="104" width="8" height="8"/><rect x="132" y="120" width="8" height="8"/>
+    <rect x="100" y="120" width="8" height="8"/><rect x="124" y="136" width="8" height="8"/><rect x="148" y="152" width="8" height="8"/>
+    <rect x="100" y="152" width="8" height="8"/><rect x="116" y="168" width="8" height="8"/><rect x="132" y="184" width="8" height="8"/>
+    <rect x="100" y="184" width="8" height="8"/><rect x="124" y="200" width="8" height="8"/><rect x="140" y="200" width="8" height="8"/>
+  </g>
+  <text x="120" y="244" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="#007cff">FleetOps GCash</text>
+  <text x="120" y="262" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#6b7280">Replace with official merchant QR</text>
+</svg>

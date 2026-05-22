@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,7 +11,7 @@ from app.api.routes.bookings import _sync_bookings_approved_from_verified_paymen
 from app.core.security import require_roles
 from app.db import get_db
 from app.models.entities import Booking, BookingStatus, TruckSlotHold, TruckSlotHoldStatus, User, UserRole
-from app.schemas.booking import BookingRead
+from app.schemas.booking import BookingCustomsUpdate, BookingRead
 from app.services.booking_tracking_payload import build_assignments_for_booking
 from app.services.customer_booking_portal import (
     CUSTOMER_ACTIVE_DISPLAY_STATUSES,
@@ -122,3 +124,39 @@ def customer_cancel_booking(
     )
     db.commit()
     return {"status": "cancelled"}
+
+
+@router.patch("/bookings/{booking_id}/customs")
+def customer_update_booking_customs(
+    booking_id: int,
+    payload: BookingCustomsUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    """Customer-provided customs info — does not change payment or dispatch until admin validates."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking or booking.customer_id != user.id:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.status in (BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.EXPIRED):
+        raise HTTPException(status_code=400, detail="Cannot update customs info for a closed booking.")
+
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="No customs fields to update.")
+
+    if "customs_clearance_status" in data:
+        booking.customs_clearance_status = data["customs_clearance_status"]
+    if "customs_tariff_notes" in data:
+        booking.customs_tariff_notes = data["customs_tariff_notes"]
+    if "customs_additional_charges_php" in data:
+        booking.customs_additional_charges_php = data["customs_additional_charges_php"]
+
+    booking.customs_customer_updated_at = datetime.utcnow()
+    booking.customs_admin_validated = False
+    booking.customs_validated_by_id = None
+    booking.customs_validated_at = None
+    booking.customs_admin_notes = None
+    booking.customs_validated_additional_charges_php = None
+    db.commit()
+    db.refresh(booking)
+    return BookingRead.model_validate(booking).model_dump(mode="json")

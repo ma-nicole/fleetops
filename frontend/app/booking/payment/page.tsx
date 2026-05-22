@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
+import PaymentMethodInstructions from "@/components/PaymentMethodInstructions";
 import { formatPhp } from "@/lib/appLocale";
+import {
+  CUSTOMER_PAYMENT_METHODS,
+  paymentMethodRequiresProof,
+  type CustomerPaymentMethod,
+} from "@/lib/paymentMethodOptions";
+import {
+  GCASH_MAX_TRANSACTION_PHP,
+  gcashAmountExceedsLimit,
+  gcashAllowedForAmount,
+} from "@/lib/paymentLimits";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Booking } from "@/lib/workflowApi";
 
@@ -15,7 +26,7 @@ function BookingPaymentInner() {
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [method, setMethod] = useState<"gcash" | "bank">("gcash");
+  const [method, setMethod] = useState<CustomerPaymentMethod>("gcash");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -41,6 +52,17 @@ function BookingPaymentInner() {
   useEffect(() => {
     void loadBooking();
   }, [loadBooking]);
+
+  const total = booking?.estimated_cost ?? 0;
+  const gcashBlocked = gcashAmountExceedsLimit(total);
+  const requiresProof = paymentMethodRequiresProof(method);
+  const canSubmit = requiresProof ? !!selectedFile : true;
+
+  useEffect(() => {
+    if (gcashBlocked && method === "gcash") {
+      setMethod("bank");
+    }
+  }, [gcashBlocked, method]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,7 +98,17 @@ function BookingPaymentInner() {
   };
 
   const handleUploadProof = async () => {
-    if (!selectedFile || !Number.isFinite(bookingId)) return;
+    if (!Number.isFinite(bookingId)) return;
+    if (method === "gcash" && gcashBlocked) {
+      setUploadError(
+        `GCash cannot be used for amounts over ${formatPhp(GCASH_MAX_TRANSACTION_PHP)}. Please select bank transfer.`,
+      );
+      return;
+    }
+    if (requiresProof && !selectedFile) {
+      setUploadError("Please upload a proof file for this payment method.");
+      return;
+    }
 
     setIsUploading(true);
     setUploadError("");
@@ -115,8 +147,6 @@ function BookingPaymentInner() {
       </div>
     );
   }
-
-  const total = booking.estimated_cost;
 
   return (
     <div style={{ padding: "var(--page-main-padding)", maxWidth: 900, margin: "0 auto" }}>
@@ -158,57 +188,82 @@ function BookingPaymentInner() {
           </section>
 
           <section>
+            {gcashBlocked && (
+              <div
+                role="alert"
+                style={{
+                  padding: "0.85rem 1rem",
+                  background: "#FEF3C7",
+                  border: "1px solid #FCD34D",
+                  borderRadius: "8px",
+                  marginBottom: "1rem",
+                  fontSize: "0.9rem",
+                  color: "#92400E",
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong>GCash limit exceeded.</strong> Your booking total ({formatPhp(total)}) is above the GCash
+                maximum of {formatPhp(GCASH_MAX_TRANSACTION_PHP)} per transaction. GCash has been disabled for this
+                payment — please use <strong>bank transfer</strong> instead.
+              </div>
+            )}
+
             <label style={{ display: "grid", gap: "0.35rem", marginBottom: "1rem" }}>
-              <span style={{ fontWeight: 600, color: "#374151" }}>How did you pay?</span>
+              <span style={{ fontWeight: 600, color: "#374151" }}>Payment method</span>
               <select
                 className="select"
                 value={method}
-                onChange={(e) => setMethod(e.target.value as "gcash" | "bank")}
-              >
-                <option value="gcash">GCash</option>
-                <option value="bank">Bank transfer</option>
-              </select>
-            </label>
-
-            {method === "gcash" ? (
-              <div
-                style={{
-                  padding: "1.5rem",
-                  border: "1px solid #E8E8E8",
-                  borderRadius: "8px",
-                  marginBottom: "1rem",
-                  background: "#FFFBF0",
+                onChange={(e) => {
+                  setMethod(e.target.value as CustomerPaymentMethod);
+                  setUploadError("");
                 }}
               >
-                <h4 style={{ margin: "0 0 0.8rem 0", color: "#1A1A1A" }}>GCash</h4>
-                <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.95rem" }}>
-                  Use the mobile number and merchant name provided by your FleetOps administrator. Do not send payment to
-                  any number shown on unofficial channels.
-                </p>
-                <p style={{ color: "#666666", fontSize: "0.85rem", margin: 0 }}>
-                  Send {formatPhp(total)} and use booking #{booking.id} in the payment note when possible.
-                </p>
-              </div>
-            ) : (
-              <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#FFFBF0" }}>
-                <h4 style={{ margin: "0 0 0.8rem 0", color: "#1A1A1A" }}>Bank transfer</h4>
-                <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.95rem" }}>
-                  Transfer only to the official bank account issued by FleetOps operations (branch, account name, and
-                  number are shared out-of-band or in your contract).
-                </p>
-                <p style={{ color: "#666666", margin: "0.5rem 0", fontSize: "0.85rem" }}>
-                  <strong>Reference:</strong> Booking #{booking.id}
-                </p>
-                <p style={{ color: "#FF9800", fontWeight: 700, margin: "0.75rem 0 0 0" }}>Amount: {formatPhp(total)}</p>
-              </div>
-            )}
+                {CUSTOMER_PAYMENT_METHODS.map((opt) => {
+                  const disabled = opt.value === "gcash" && gcashBlocked;
+                  return (
+                    <option key={opt.value} value={opt.value} disabled={disabled}>
+                      {opt.label}
+                      {disabled ? " (over limit — unavailable)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              {!gcashBlocked && (
+                <span style={{ fontSize: "0.82rem", color: "#6B7280" }}>
+                  GCash maximum per transaction: {formatPhp(GCASH_MAX_TRANSACTION_PHP)}
+                  {gcashAllowedForAmount(total) ? " — your amount is within this limit." : ""}
+                </span>
+              )}
+            </label>
+
+            <PaymentMethodInstructions
+              method={method}
+              bookingId={booking.id}
+              total={total}
+              gcashBlocked={gcashBlocked}
+            />
           </section>
 
           <section style={{ padding: "1.5rem", border: "2px dashed #3B82F6", borderRadius: "8px", background: "#EFF6FF" }}>
-            <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Upload proof of payment</h3>
-            <p style={{ color: "#666666", fontSize: "0.9rem", marginBottom: "1rem" }}>
-              JPEG, PNG, or PDF only (max 5MB).
-            </p>
+            <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>
+              {method === "gcash" && requiresProof
+                ? "Step 2 — Upload GCash payment proof"
+                : requiresProof
+                  ? "Upload proof of payment"
+                  : "Confirm payment request"}
+            </h3>
+            {requiresProof ? (
+              <p style={{ color: "#666666", fontSize: "0.9rem", marginBottom: "1rem" }}>
+                {method === "gcash"
+                  ? "Upload a screenshot or PDF of your GCash receipt. Your payment stays for verification until an admin approves it — it is not auto-confirmed."
+                  : "JPEG, PNG, or PDF only (max 5MB)."}
+              </p>
+            ) : (
+              <p style={{ color: "#666666", fontSize: "0.9rem", marginBottom: "1rem" }}>
+                No proof upload is needed for cash on delivery. Submit your request so an admin can approve COD before
+                dispatch.
+              </p>
+            )}
 
             {uploadError && (
               <div
@@ -236,7 +291,10 @@ function BookingPaymentInner() {
                   fontSize: "0.9rem",
                 }}
               >
-                ✓ Proof submitted. Redirecting to payment history…
+                ✓{" "}
+                {method === "gcash"
+                  ? "GCash proof submitted. Wait for admin verification — your payment is not confirmed until approved."
+                  : "Proof submitted. Redirecting to payment history…"}
               </div>
             )}
 
@@ -248,6 +306,7 @@ function BookingPaymentInner() {
                 textAlign: "center",
                 background: "white",
                 marginBottom: "1rem",
+                display: requiresProof ? "block" : "none",
               }}
             >
               <input
@@ -264,7 +323,7 @@ function BookingPaymentInner() {
               </label>
             </div>
 
-            {selectedFile && (
+            {selectedFile && requiresProof && (
               <button
                 type="button"
                 onClick={() => {
@@ -288,19 +347,25 @@ function BookingPaymentInner() {
             <button
               type="button"
               onClick={() => void handleUploadProof()}
-              disabled={!selectedFile || isUploading || uploadSuccess}
+              disabled={!canSubmit || isUploading || uploadSuccess}
               style={{
                 width: "100%",
                 padding: "0.75rem",
-                background: selectedFile && !isUploading && !uploadSuccess ? "#10B981" : "#D1D5DB",
+                background: canSubmit && !isUploading && !uploadSuccess ? "#10B981" : "#D1D5DB",
                 color: "white",
                 border: "none",
                 borderRadius: "6px",
-                cursor: selectedFile && !isUploading && !uploadSuccess ? "pointer" : "not-allowed",
+                cursor: canSubmit && !isUploading && !uploadSuccess ? "pointer" : "not-allowed",
                 fontWeight: 600,
               }}
             >
-              {isUploading ? "Uploading…" : "Submit proof"}
+              {isUploading
+                ? "Submitting…"
+                : method === "gcash" && requiresProof
+                  ? "Submit GCash proof for verification"
+                  : requiresProof
+                    ? "Submit proof"
+                    : "Confirm COD request"}
             </button>
           </section>
         </div>
@@ -309,8 +374,17 @@ function BookingPaymentInner() {
           <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
             <h3 style={{ color: "#1A1A1A", marginTop: 0 }}>Status</h3>
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.9rem" }}>
-              After you submit proof, status will show as <strong>for verification</strong> in payment history until an
-              admin reviews it.
+              {method === "gcash" ? (
+                <>
+                  After you upload GCash proof, status shows as <strong>for verification</strong> until an admin reviews
+                  and approves it. Your booking is not marked paid until verification completes.
+                </>
+              ) : (
+                <>
+                  After you submit, status will show as <strong>for verification</strong> in payment history until an admin
+                  reviews it{requiresProof ? "" : " and approves your COD request"}.
+                </>
+              )}
             </p>
           </div>
         </aside>

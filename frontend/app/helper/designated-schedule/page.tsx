@@ -11,7 +11,7 @@ export default function HelperDesignatedSchedulePage() {
       variant="helper"
       dashboardHref="/driver/dashboard"
       pageTitle="Designated schedule"
-      pageSubtitle="Your assigned legs with schedule windows, crew, truck, payment state, and progress — same operational data as Bookings, optimized for schedule review."
+      pageSubtitle="Your assigned legs — schedule, driver, cargo, and task progress. Update milestones and proof photos from each booking."
     />
   );
 }
