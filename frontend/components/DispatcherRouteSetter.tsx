@@ -122,7 +122,7 @@ export default function DispatcherRouteSetter({
               padding: "0.45rem 0.75rem",
               borderRadius: 6,
               border: "none",
-              background: "#2563EB",
+              background: "var(--brand-text)",
               color: "#fff",
               cursor: busy ? "wait" : "pointer",
               fontWeight: 600,
@@ -168,7 +168,7 @@ export default function DispatcherRouteSetter({
                 gap: 4,
                 padding: 10,
                 borderRadius: 8,
-                border: `1px solid ${selectedId === opt.id ? "#2563EB" : "#E5E7EB"}`,
+                border: `1px solid ${selectedId === opt.id ? "var(--brand-text)" : "#E5E7EB"}`,
                 background: selectedId === opt.id ? "#EFF6FF" : "#fff",
                 cursor: "pointer",
               }}

@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 
 import Breadcrumbs from "@/components/Breadcrumbs";
 import PhoneInputRow from "@/components/PhoneInputRow";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import ErrorState from "@/components/ui/ErrorState";
+import TableEmptyRow from "@/components/ui/TableEmptyRow";
+import { SkeletonTable } from "@/components/Skeleton";
+import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { announce } from "@/lib/useAnnouncer";
 import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
@@ -36,7 +41,7 @@ export default function AccountsPage() {
       const data = await adminApi.listUsers();
       setUsers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : ERROR_LOAD_DATA);
     } finally {
       setLoading(false);
     }
@@ -87,11 +92,7 @@ export default function AccountsPage() {
         </div>
       </div>
 
-      {error && (
-        <div role="alert" style={{ background: "var(--bg-error)", color: "var(--text-error)", padding: "1rem", borderRadius: 6, marginBottom: "1rem" }}>
-          {error}
-        </div>
-      )}
+      {error && !loading ? <ErrorState message={error} onRetry={() => void refresh()} compact /> : null}
 
       <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
         <label htmlFor="user-filter" className="sr-only">Filter users</label>
@@ -101,9 +102,16 @@ export default function AccountsPage() {
           placeholder="Search by name, email, or role…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
+          disabled={loading}
         />
       </div>
 
+      {loading ? (
+        <div aria-busy="true" style={{ display: "grid", gap: "1rem" }}>
+          <LoadingMessage label="Loading users…" />
+          <SkeletonTable rows={6} cols={5} />
+        </div>
+      ) : (
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
@@ -117,13 +125,9 @@ export default function AccountsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={5} style={{ padding: "2rem", textAlign: "center", color: "var(--text-secondary)" }}>
-                    No users match your filter.
-                  </td>
-                </tr>
-              )}
+              {filtered.length === 0 ? (
+                <TableEmptyRow colSpan={5} message="No users match your filter." />
+              ) : null}
               {filtered.map((user) => (
                 <tr key={user.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={td}>{user.full_name}</td>
@@ -151,6 +155,7 @@ export default function AccountsPage() {
           </table>
         </div>
       </div>
+      )}
 
       {showCreate && (
         <CreateUserModal

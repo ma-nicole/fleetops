@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminDocumentViewButton from "@/components/AdminDocumentViewButton";
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
+import ErrorState from "@/components/ui/ErrorState";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import SubmitButton from "@/components/ui/SubmitButton";
+import TableEmptyRow from "@/components/ui/TableEmptyRow";
+import { SkeletonTable } from "@/components/Skeleton";
+import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { apiFullUrl } from "@/lib/api";
 import { formatPhp, formatDateTime } from "@/lib/appLocale";
@@ -151,6 +157,7 @@ export default function AdminPaymentApprovalPage() {
   useRoleGuard(["admin", "manager"]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | Payment["status"]>("all");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -169,12 +176,15 @@ export default function AdminPaymentApprovalPage() {
 
   const refresh = useCallback(async () => {
     setLoadError(null);
+    setLoading(true);
     try {
       const [p, b] = await Promise.all([WorkflowApi.listPayments(), WorkflowApi.listBookings()]);
       setPayments(p);
       setBookings(b);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Failed to load");
+      setLoadError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -269,7 +279,7 @@ export default function AdminPaymentApprovalPage() {
             href="/admin/trip-monitoring"
             style={{
               textDecoration: "none",
-              background: "#3B82F6",
+              background: "var(--accent)",
               color: "white",
               padding: "0.6rem 1rem",
               borderRadius: "6px",
@@ -280,10 +290,15 @@ export default function AdminPaymentApprovalPage() {
           </Link>
         </div>
 
-        {loadError && (
-          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>{loadError}</div>
-        )}
+        {loadError && !loading ? <ErrorState message={loadError} onRetry={() => void refresh()} /> : null}
 
+        {loading ? (
+          <div aria-busy="true" style={{ display: "grid", gap: "1rem" }}>
+            <LoadingMessage label="Loading payments…" />
+            <SkeletonTable rows={6} cols={7} />
+          </div>
+        ) : (
+        <>
         <div
           style={{
             display: "flex",
@@ -336,11 +351,7 @@ export default function AdminPaymentApprovalPage() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: "2rem", textAlign: "center", color: "#6B7280" }}>
-                    No payments match your filter.
-                  </td>
-                </tr>
+                <TableEmptyRow colSpan={7} message="No payments match your filter." />
               ) : (
                 filtered.map((row) => {
                   const p = row.payment;
@@ -367,40 +378,40 @@ export default function AdminPaymentApprovalPage() {
                       <td style={{ padding: "0.75rem", textAlign: "center" }}>
                         {p.status === "for_verification" && p.proof_original_filename ? (
                           <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center", flexWrap: "wrap" }}>
-                            <button
+                            <SubmitButton
                               type="button"
+                              className=""
+                              busy={busyId === p.id}
+                              busyLabel="Approving…"
+                              label="Approve"
                               onClick={() => void onApprove(p.id)}
-                              disabled={busyId === p.id}
                               style={{
                                 padding: "0.4rem 0.7rem",
                                 background: "#10B981",
                                 color: "white",
                                 border: "none",
                                 borderRadius: "4px",
-                                cursor: busyId === p.id ? "wait" : "pointer",
                                 fontWeight: 600,
                                 fontSize: "0.8rem",
                               }}
-                            >
-                              Approve
-                            </button>
-                            <button
+                            />
+                            <SubmitButton
                               type="button"
+                              className=""
+                              busy={busyId === p.id}
+                              busyLabel="Rejecting…"
+                              label="Reject"
                               onClick={() => void onReject(p.id)}
-                              disabled={busyId === p.id}
                               style={{
                                 padding: "0.4rem 0.7rem",
                                 background: "#EF4444",
                                 color: "white",
                                 border: "none",
                                 borderRadius: "4px",
-                                cursor: busyId === p.id ? "wait" : "pointer",
                                 fontWeight: 600,
                                 fontSize: "0.8rem",
                               }}
-                            >
-                              Reject
-                            </button>
+                            />
                           </div>
                         ) : p.status === "for_verification" && !p.proof_original_filename ? (
                           <span style={{ fontSize: "0.8rem", color: "#B45309" }}>Awaiting proof</span>
@@ -415,6 +426,8 @@ export default function AdminPaymentApprovalPage() {
             </tbody>
           </table>
         </section>
+        </>
+        )}
 
         {error && (
           <div style={{ background: "#FEF2F2", color: "#991B1B", padding: 12, borderRadius: 8 }} role="alert">

@@ -9,6 +9,12 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type DriverDashboardSummary, type Trip } from "@/lib/workflowApi";
 import CrewSchedulingPlotPanel, { schedulingPlotFromTrip } from "@/components/CrewSchedulingPlotPanel";
 import DriverTripNotificationsPanel from "@/components/DriverTripNotificationsPanel";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
+import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
+import ErrorState from "@/components/ui/ErrorState";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import { SkeletonKpiGrid } from "@/components/Skeleton";
+import { EMPTY_TRIPS, ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { formatDateTime, formatPhp, formatPhpWhole } from "@/lib/appLocale";
 import { announce } from "@/lib/useAnnouncer";
 import { ApiError } from "@/lib/api";
@@ -148,7 +154,7 @@ export default function OperationalCrewDashboard() {
       setTrips(t);
       setSummary(d);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : ERROR_LOAD_DATA);
     } finally {
       setLoading(false);
     }
@@ -157,6 +163,8 @@ export default function OperationalCrewDashboard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useHashScrollWhenReady(!loading && !error);
 
   const checkIn = async () => {
     setError(null);
@@ -318,6 +326,14 @@ export default function OperationalCrewDashboard() {
 
         <DashboardRoleTabs active={tabActive} />
 
+        <nav className="tab-pills" aria-label="Jump to dashboard section">
+          <SectionJumpLink targetId="crew-kpis">KPIs</SectionJumpLink>
+          {crewRole === "driver" ? <SectionJumpLink targetId="crew-notifications">Alerts</SectionJumpLink> : null}
+          <SectionJumpLink targetId="crew-active-trip">Active trip</SectionJumpLink>
+          <SectionJumpLink targetId="crew-trips-table">Trips</SectionJumpLink>
+          <SectionJumpLink targetId="crew-history">History</SectionJumpLink>
+        </nav>
+
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "1rem", alignItems: "baseline" }}>
           <div>
             <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800 }}>Trip overview</h2>
@@ -338,14 +354,16 @@ export default function OperationalCrewDashboard() {
         ) : null}
 
         {crewRole === "driver" ? (
-          <DriverTripNotificationsPanel scheduleHref="/driver/scheduled-trips" onRefresh={() => void refresh()} />
+          <div id="crew-notifications" className="scroll-section">
+            <DriverTripNotificationsPanel scheduleHref="/driver/scheduled-trips" onRefresh={() => void refresh()} />
+          </div>
         ) : null}
 
         {summary ? (
-          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+          <section id="crew-kpis" className="scroll-section" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
             <KpiCard label="Today’s assignments" value={a?.total_assigned_today ?? 0} delta="Legs assigned today (UTC)" tone="neutral" />
-            <KpiCard label="Active trips" value={a?.active_trips ?? 0} delta="Assigned through dropped off (not completed/cancelled)" tone="neutral" />
-            <KpiCard label="Completed trips" value={a?.completed_legs_total ?? 0} delta={`${a?.completed_today ?? 0} finished today`} tone="neutral" />
+            <KpiCard label="Active trips" value={a?.active_trips ?? 0} delta="Assigned through dropped off (not completed/cancelled)" tone="neutral" scrollTargetId="crew-trips-table" />
+            <KpiCard label="Completed trips" value={a?.completed_legs_total ?? 0} delta={`${a?.completed_today ?? 0} finished today`} tone="neutral" scrollTargetId="crew-history" />
             {crewRole === "driver" ? (
               <>
                 <KpiCard
@@ -359,9 +377,12 @@ export default function OperationalCrewDashboard() {
             ) : null}
           </section>
         ) : loading ? (
-          <p style={{ margin: 0, color: "var(--text-secondary)" }}>Loading summary…</p>
+          <div aria-busy="true">
+            <LoadingMessage label="Loading summary…" size="sm" />
+            <SkeletonKpiGrid count={4} />
+          </div>
         ) : (
-          <p style={{ margin: 0, color: "var(--text-secondary)" }}>Could not load summary. Use Refresh.</p>
+          <ErrorState message={error ?? ERROR_LOAD_DATA} onRetry={() => void refresh()} compact />
         )}
 
         {crewRole === "driver" && truckForVehicle ? (
@@ -409,10 +430,10 @@ export default function OperationalCrewDashboard() {
           </article>
         ) : null}
 
-        <article style={{ ...card }}>
+        <article id="crew-active-trip" className="scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Current active trip</h3>
           {!primary ? (
-            <p style={{ margin: 0, color: "#64748B", fontSize: "0.95rem" }}>No active trip assigned right now.</p>
+            <p style={{ margin: 0, color: "#64748B", fontSize: "0.95rem" }} role="status">{EMPTY_TRIPS}</p>
           ) : (
             <div style={{ display: "grid", gap: "0.45rem", fontSize: "0.9rem", color: "#1e293b" }}>
               {crewRole === "driver" ? (
@@ -540,7 +561,7 @@ export default function OperationalCrewDashboard() {
           )}
         </article>
 
-        <article style={{ ...card }}>
+        <article id="crew-trips-table" className="scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Assigned trips (not completed)</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 760 : 1040 }}>
@@ -614,7 +635,7 @@ export default function OperationalCrewDashboard() {
           </div>
         </article>
 
-        <article style={{ ...card }}>
+        <article id="crew-history" className="scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Recent trip history (completed)</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 640 : 880 }}>

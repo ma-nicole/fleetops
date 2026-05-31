@@ -130,7 +130,7 @@ export default function ManagerGeneralFormReportsPage() {
                         <td style={{ padding: "1rem", color: "#475569", fontSize: "0.88rem", maxWidth: "320px" }}>
                           <div style={{ lineHeight: 1.45 }}>{r.description}</div>
                           {href ? (
-                            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#2563EB", fontSize: "0.85rem" }}>
+                            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-text)", fontSize: "0.85rem" }}>
                               Attachment
                             </a>
                           ) : null}

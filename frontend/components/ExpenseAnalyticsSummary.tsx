@@ -12,7 +12,7 @@ const CARD: CSSProperties = {
 };
 
 const COLORS: Record<string, string> = {
-  fuel: "#2563EB",
+  fuel: "#F59E0B",
   toll: "#7C3AED",
   allowance: "#D97706",
   labor: "#059669",
@@ -40,7 +40,7 @@ function BarChart({
       {items.map((item) => {
         const val = Number(item[valueKey]) || 0;
         const pct = Math.max(4, Math.round((val / max) * 100));
-        const color = colorKey ? COLORS[String(item[colorKey])] || "#64748B" : "#2563EB";
+        const color = colorKey ? COLORS[String(item[colorKey])] || "#64748B" : "#F59E0B";
         return (
           <div key={String(item[labelKey])}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", marginBottom: 4 }}>
@@ -76,7 +76,7 @@ function StackedMonthChart({ rows }: { rows: ExpenseAnalyticsPayload["monthly_tr
                 width: "100%",
                 maxWidth: 56,
                 borderRadius: "6px 6px 2px 2px",
-                background: "linear-gradient(180deg, #3B82F6 0%, #1D4ED8 100%)",
+                background: "linear-gradient(180deg, var(--accent) 0%, var(--brand-text-strong) 100%)",
               }}
             />
             <div style={{ fontSize: "0.68rem", color: "#64748B", marginTop: 6, fontWeight: 600 }}>{row.month.slice(5)}</div>
@@ -111,8 +111,8 @@ export default function ExpenseAnalyticsSummary({ data }: ExpenseAnalyticsSummar
           gap: "0.85rem",
         }}
       >
-        <SummaryCard label="Total expenses" value={formatPhp(s.total_expenses_php)} accent="#1D4ED8" />
-        <SummaryCard label="Fuel" value={formatPhp(s.fuel_php)} accent="#2563EB" />
+        <SummaryCard label="Total expenses" value={formatPhp(s.total_expenses_php)} accent="#F59E0B" />
+        <SummaryCard label="Fuel" value={formatPhp(s.fuel_php)} accent="#D97706" />
         <SummaryCard label="Toll" value={formatPhp(s.toll_php)} accent="#7C3AED" />
         <SummaryCard label="Allowance" value={formatPhp(s.allowance_php)} accent="#D97706" />
         <SummaryCard label="Driver allowance" value={formatPhp(s.driver_allowance_php)} accent="#EA580C" />

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import SubmitButton from "@/components/ui/SubmitButton";
+import { EMPTY_BOOKINGS } from "@/lib/loadingMessages";
 
 export type Trip = {
   id: number;
@@ -94,7 +96,7 @@ export default function TripAssignment({
         <div style={{ maxHeight: "400px", overflowY: "auto", marginBottom: "2rem" }}>
           {pendingTrips.length === 0 ? (
             <div className="card" style={{ color: "#666666", textAlign: "center", padding: "2rem" }}>
-              No pending trips
+              {EMPTY_BOOKINGS}
             </div>
           ) : (
             <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -280,9 +282,14 @@ export default function TripAssignment({
             )}
 
             {/* Assign Button */}
-            <button
+            <SubmitButton
+              type="button"
+              className=""
               onClick={handleAssign}
-              disabled={loading || !selectedDriver || !selectedVehicle}
+              busy={loading}
+              busyLabel="Assigning…"
+              label="Confirm Assignment"
+              disabled={!selectedDriver || !selectedVehicle}
               style={{
                 width: "100%",
                 padding: "0.75rem",
@@ -290,13 +297,10 @@ export default function TripAssignment({
                 color: "#FFFFFF",
                 border: "none",
                 borderRadius: "6px",
-                cursor: selectedDriver && selectedVehicle && !loading ? "pointer" : "not-allowed",
                 fontWeight: 600,
                 fontSize: "1rem",
               }}
-            >
-              {loading ? "Assigning..." : "Confirm Assignment"}
-            </button>
+            />
           </>
         ) : (
           <div className="card" style={{ color: "#666666", textAlign: "center", padding: "2rem" }}>

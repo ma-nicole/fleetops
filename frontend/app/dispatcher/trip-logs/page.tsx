@@ -21,7 +21,7 @@ function kindAccent(kind: TripLogTimelineEntry["kind"]): { border: string; dot: 
     case "helper_status":
       return { border: "#F59E0B", dot: "#D97706", label: "Helper" };
     case "location_ping":
-      return { border: "#3B82F6", dot: "#2563EB", label: "Location" };
+      return { border: "var(--accent)", dot: "var(--brand-text)", label: "Location" };
     case "issue":
       return { border: "#EF4444", dot: "#DC2626", label: "Issue" };
     case "delivery_proof":
@@ -273,7 +273,7 @@ export default function TripLogsPage() {
                                           href={mediaSrc(ph)}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          style={{ fontSize: "0.85rem", fontWeight: 600, color: "#2563EB" }}
+                                          style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--brand-text)" }}
                                         >
                                           View PDF attachment
                                         </a>

@@ -33,7 +33,7 @@ export default function GenerateReportPage() {
           ))}
         </section>
         <p style={{ margin: 0, color: "#666" }}>Generated reports: {reports.length}</p>
-        <Link href="/reports/final" style={{ width: "fit-content", textDecoration: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Final Completion Report</Link>
+        <Link href="/reports/final" style={{ width: "fit-content", textDecoration: "none", borderRadius: "6px", background: "var(--accent)", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Final Completion Report</Link>
       </div>
     </main>
   );

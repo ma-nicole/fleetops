@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
-import { Space_Grotesk } from "next/font/google";
+import { Inter } from "next/font/google";
 
 import "./globals.css";
 import AppShell from "@/components/AppShell";
 
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "FleetOpt",
@@ -15,7 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en-PH" suppressHydrationWarning>
-      <body className={spaceGrotesk.className} suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
         <AppShell>{children}</AppShell>
       </body>
     </html>

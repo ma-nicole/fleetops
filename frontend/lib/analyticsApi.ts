@@ -243,6 +243,103 @@ export type ExpenseAnalyticsPayload = {
   monthly_trend: ExpenseMonthlyTrendRow[];
 };
 
+export type StatisticsSummary = {
+  minimum: number;
+  maximum: number;
+  average: number;
+  median: number;
+  subtotal: number;
+  standard_deviation: number | null;
+  count: number;
+  insufficient_for_spread?: boolean;
+};
+
+export type AnalyticsValidationCheck = {
+  check: string;
+  passed: boolean;
+  detail: string;
+  expected: unknown;
+  actual: unknown;
+};
+
+export type AnalyticsValidation = {
+  valid: boolean;
+  checks: AnalyticsValidationCheck[];
+};
+
+export type AdminAnalyticsEmpty = { empty: true; message: string };
+
+export type AdminAnalyticsPayload = {
+  generated_at: string;
+  filters_applied: Record<string, string | number | null>;
+  filter_options: {
+    drivers: { id: number; name: string }[];
+    trucks: { id: number; code: string }[];
+    routes: string[];
+    shipment_statuses: string[];
+  };
+  shipments: AdminAnalyticsEmpty | {
+    summary: Record<string, number | null>;
+    statistics: StatisticsSummary | null;
+    status_distribution: { status: string; count: number }[];
+    monthly_deliveries: { month: string; count: number }[];
+    drilldown: Record<string, unknown>[];
+  };
+  expenses: AdminAnalyticsEmpty | {
+    summary: Record<string, number>;
+    statistics: StatisticsSummary | null;
+    fuel_by_truck: { truck_id: number; truck_code: string; fuel_php: number }[];
+    fuel_by_route: { route: string; fuel_php: number }[];
+    expense_breakdown: { key: string; label: string; amount_php: number }[];
+    monthly_totals: { month: string; total: number; fuel: number; toll: number; maintenance: number; allowance: number }[];
+  };
+  fleet: AdminAnalyticsEmpty | {
+    summary: Record<string, string | number | null>;
+    statistics: StatisticsSummary | null;
+    truck_usage: Record<string, unknown>[];
+    drilldown: Record<string, unknown>[];
+  };
+  drivers: AdminAnalyticsEmpty | {
+    summary: Record<string, number>;
+    statistics: StatisticsSummary | null;
+    ranking: Record<string, unknown>[];
+    distribution: { driver_name: string; completed: number; delayed: number }[];
+    drilldown: Record<string, unknown>[];
+  };
+  routes: AdminAnalyticsEmpty | {
+    summary: Record<string, string | number | null>;
+    statistics: StatisticsSummary | null;
+    performance: Record<string, unknown>[];
+    cost_comparison: Record<string, unknown>[];
+    drilldown: Record<string, unknown>[];
+  };
+  financial: AdminAnalyticsEmpty | {
+    summary: Record<string, string | number | null>;
+    statistics: StatisticsSummary | null;
+    revenue_trend: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
+    revenue_vs_expense: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
+    profit_trend: { month: string; profit_php: number }[];
+    revenue_per_client: Record<string, unknown>[];
+  } | null;
+  clients: AdminAnalyticsEmpty | {
+    summary: Record<string, number>;
+    statistics: StatisticsSummary | null;
+    booking_distribution: { client_name: string; bookings: number }[];
+    revenue_contribution: { client_name: string; revenue_php: number }[];
+    drilldown: Record<string, unknown>[];
+  } | null;
+  validation?: AnalyticsValidation;
+};
+
+export type AdminAnalyticsQuery = {
+  date_from?: string;
+  date_to?: string;
+  driver_id?: number;
+  truck_id?: number;
+  route?: string;
+  shipment_status?: string;
+};
+
 export const AnalyticsApi = {
   predictTripCost: (req: TripCostPredictRequest) =>
     apiPost<TripCostPredictResponse>("/analytics/predict-trip-cost", req),
@@ -273,4 +370,15 @@ export const AnalyticsApi = {
       average_ticket: number;
       by_method: Record<string, number>;
     }>("/payments/finance/summary"),
+  adminAnalytics: (query: AdminAnalyticsQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.date_from) params.set("date_from", query.date_from);
+    if (query.date_to) params.set("date_to", query.date_to);
+    if (query.driver_id != null) params.set("driver_id", String(query.driver_id));
+    if (query.truck_id != null) params.set("truck_id", String(query.truck_id));
+    if (query.route) params.set("route", query.route);
+    if (query.shipment_status) params.set("shipment_status", query.shipment_status);
+    const qs = params.toString();
+    return apiGet<AdminAnalyticsPayload>(`/admin/analytics${qs ? `?${qs}` : ""}`);
+  },
 };

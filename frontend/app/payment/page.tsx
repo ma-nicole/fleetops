@@ -36,15 +36,15 @@ export default function PaymentPage() {
             <>
               <p style={{ margin: 0, color: "#666" }}>No booking found.</p>
               {role === "customer" ? (
-                <Link href="/booking" style={{ color: "#2563EB", textDecoration: "none" }}>
+                <Link href="/booking" style={{ color: "var(--brand-text)", textDecoration: "none" }}>
                   Create booking first
                 </Link>
               ) : role ? (
-                <Link href={getDashboardPath(role as UserRole)} style={{ color: "#2563EB", textDecoration: "none" }}>
+                <Link href={getDashboardPath(role as UserRole)} style={{ color: "var(--brand-text)", textDecoration: "none" }}>
                   Go to dashboard
                 </Link>
               ) : (
-                <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none" }}>
+                <Link href="/sign-in" style={{ color: "var(--brand-text)", textDecoration: "none" }}>
                   Sign in
                 </Link>
               )}

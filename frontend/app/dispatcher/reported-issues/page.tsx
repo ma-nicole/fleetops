@@ -30,7 +30,7 @@ function statusLabel(status: string): string {
 function statusColor(status: string): string {
   switch (status) {
     case "submitted":
-      return "#2563EB";
+      return "var(--brand-text)";
     case "reviewed":
       return "#EA580C";
     case "resolved":
@@ -297,7 +297,7 @@ export default function ReportedIssuesPage() {
                   <p style={{ color: "#1A1A1A", margin: "0", lineHeight: "1.5" }}>{issue.description}</p>
                   {att ? (
                     <p style={{ margin: "0.75rem 0 0" }}>
-                      <a href={att} target="_blank" rel="noopener noreferrer" style={{ color: "#2563EB" }}>
+                      <a href={att} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-text)" }}>
                         View attachment
                       </a>
                     </p>

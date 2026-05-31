@@ -8,12 +8,31 @@ import NavBarAuth from "./NavBarAuth";
 import { getDashboardPath, type UserRole as AuthUserRole } from "@/lib/auth";
 import { useAuthStatus } from "@/lib/useAuthStatus";
 
-const ROLE_LABELS: Record<string, string> = {
-  driver: "Driver dashboard",
-  dispatcher: "Dispatcher dashboard",
-  manager: "Manager dashboard",
-  admin: "Admin dashboard",
-  customer: "Customer dashboard",
+const QUICK_ACTIONS: Record<string, { label: string; href: string }[]> = {
+  admin: [
+    { label: "Analytics", href: "/admin/dashboard" },
+    { label: "Payments", href: "/admin/payment-approval" },
+    { label: "Trips", href: "/admin/trip-monitoring" },
+  ],
+  manager: [
+    { label: "Dashboard", href: "/manager/dashboard" },
+    { label: "Pending", href: "/manager/pending-bookings" },
+    { label: "Finance", href: "/manager/finance" },
+  ],
+  dispatcher: [
+    { label: "Assign", href: "/dispatcher/job-assignments" },
+    { label: "Schedule", href: "/dispatcher/week-board" },
+    { label: "Monitor", href: "/dispatcher/trip-monitoring" },
+  ],
+  driver: [
+    { label: "Trips", href: "/driver/scheduled-trips" },
+    { label: "Pay", href: "/driver/pay" },
+  ],
+  helper: [
+    { label: "Bookings", href: "/helper/bookings" },
+    { label: "Schedule", href: "/helper/designated-schedule" },
+  ],
+  customer: [{ label: "New Booking", href: "/booking" }],
 };
 
 export default function NavBar({
@@ -28,6 +47,7 @@ export default function NavBar({
   const { isLoggedIn, role: userRole } = useAuthStatus();
   const showAuthedChrome = isLoggedIn === true;
   const isCustomer = userRole === "customer";
+  const quickActions = userRole ? QUICK_ACTIONS[userRole] ?? [] : [];
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -38,44 +58,22 @@ export default function NavBar({
         router.push("/booking");
       }
     };
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router, showAuthedChrome, isCustomer]);
 
   return (
-    <nav
-      className="navbar"
-      aria-label="Top navigation"
-      style={{
-        display: "grid",
-        gridTemplateColumns: showAuthedChrome ? "auto auto 1fr auto" : "auto 1fr auto",
-        alignItems: "center",
-        gap: "1rem",
-        padding: "1rem",
-        background: "#FFFFFF",
-        borderBottom: "1px solid #ECF0F1",
-        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-      }}
-    >
-      <Link href="/" className="navbar-logo">
-        FleetOpt
-      </Link>
-
+    <nav className="app-navbar" aria-label="Top navigation">
       {showAuthedChrome && (
         <button
           type="button"
-          className="navbar-hamburger"
+          className="app-navbar__menu-btn"
           onClick={onToggleSidebar}
           aria-expanded={isSidebarOpen}
           aria-controls="primary-nav"
           aria-label={isSidebarOpen ? "Close navigation menu" : "Open navigation menu"}
-          title={isSidebarOpen ? "Close navigation" : "Open navigation"}
         >
-          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="3" y1="5" x2="17" y2="5" />
             <line x1="3" y1="10" x2="17" y2="10" />
             <line x1="3" y1="15" x2="17" y2="15" />
@@ -83,27 +81,26 @@ export default function NavBar({
         </button>
       )}
 
-      {showAuthedChrome ? <div style={{ minWidth: 0 }} aria-hidden="true" /> : <span aria-hidden="true" />}
+      <Link href="/" className="app-navbar__brand">
+        Fleet<span>Opt</span>
+      </Link>
 
-      <div className="navbar-links" style={{ justifySelf: "end" }}>
-        {showAuthedChrome && (
-          <>
-            {isCustomer && (
-              <Link href="/booking" className="navbar-link">
-                Booking
-              </Link>
-            )}
-            {userRole && (
-              <Link href={getDashboardPath(userRole as AuthUserRole)} className="navbar-link">
-                {ROLE_LABELS[userRole] || `${userRole} dashboard`}
-              </Link>
-            )}
-          </>
+      <div className="app-navbar__spacer" aria-hidden="true" />
+
+      <div className="app-navbar__actions">
+        {showAuthedChrome && quickActions.map((action) => (
+          <Link key={action.href} href={action.href} className="app-navbar__quick-link">
+            {action.label}
+          </Link>
+        ))}
+
+        {showAuthedChrome && userRole && (
+          <Link href={getDashboardPath(userRole as AuthUserRole)} className="app-navbar__quick-link">
+            Home
+          </Link>
         )}
 
-        <div style={{ marginLeft: "0.5rem" }}>
-          <NavBarAuth />
-        </div>
+        <NavBarAuth />
       </div>
     </nav>
   );

@@ -23,7 +23,7 @@ export default function BookingPage() {
             { label: "New booking" },
           ]}
         />
-        <div>
+        <div id="booking-calculator" className="scroll-section">
           <h1 style={{ margin: "0 0 0.5rem 0", fontSize: "2rem" }}>Create Booking Request</h1>
           <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>Fill in your shipment details below. The quoted amount updates in real time.</p>
         </div>
@@ -42,8 +42,9 @@ export default function BookingPage() {
         <CostCalculator />
       </section>
 
-      {/* Info Cards */}
       <section
+        id="booking-info"
+        className="scroll-section"
         style={{
           maxWidth: "900px",
           margin: "0 auto",

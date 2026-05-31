@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 
 import NavBar from "./NavBar";
 import Sidebar from "./Sidebar";
+import DashboardScrollHandler from "./DashboardScrollHandler";
 import { useAnnouncer } from "@/lib/useAnnouncer";
 import { useAuthStatus } from "@/lib/useAuthStatus";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const announcer = useAnnouncer();
   const mainRef = useRef<HTMLElement | null>(null);
@@ -17,27 +18,31 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const update = () => setIsMobile(window.innerWidth <= 768);
+    const update = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (mobile) setIsSidebarOpen(false);
+      else setIsSidebarOpen(true);
+    };
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // Auto-close the drawer the moment the user signs out (or signs in on a
-  // different tab) so the unauthenticated layout snaps back to a clean state.
   useEffect(() => {
     if (!showAuthedChrome) {
       setIsSidebarOpen(false);
     }
   }, [showAuthedChrome]);
 
-  // Lock body scroll when the drawer is open on mobile.
   useEffect(() => {
     if (typeof document === "undefined") return;
     const shouldLock = showAuthedChrome && isSidebarOpen && isMobile;
     document.body.classList.toggle("has-drawer-open", shouldLock);
     return () => document.body.classList.remove("has-drawer-open");
   }, [showAuthedChrome, isSidebarOpen, isMobile]);
+
+  const sidebarVisible = showAuthedChrome && isSidebarOpen && !isMobile;
 
   return (
     <>
@@ -65,17 +70,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         id="main"
         ref={mainRef}
         tabIndex={-1}
-        style={{
-          marginLeft: showAuthedChrome && isSidebarOpen && !isMobile ? "280px" : "0",
-          marginTop: 0,
-          transition: "margin-left 0.3s ease",
-          outline: "none",
-        }}
+        className={`app-main${sidebarVisible ? " app-main--with-sidebar" : ""}`}
       >
+        <DashboardScrollHandler />
         {children}
       </main>
 
-      {/* Global screen-reader announcer. Components call `announce("...")`. */}
       <div
         role="status"
         aria-live={announcer.politeness}

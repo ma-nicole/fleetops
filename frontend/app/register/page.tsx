@@ -241,7 +241,7 @@ export default function RegisterPage() {
         <button type="submit" style={{ border: "none", borderRadius: "6px", background: "#10B981", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
           Create customer account
         </button>
-        <Link href="/login" style={{ color: "#2563EB", textDecoration: "none", fontSize: "0.9rem" }}>Already registered? Login</Link>
+        <Link href="/login" style={{ color: "var(--brand-text)", textDecoration: "none", fontSize: "0.9rem" }}>Already registered? Login</Link>
       </form>
     </main>
   );

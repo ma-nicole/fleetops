@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import SubmitButton from "@/components/ui/SubmitButton";
 import { Html5Qrcode } from "html5-qrcode";
 import DigitalSignaturePad from "@/components/DigitalSignaturePad";
 import { apiFullUrl } from "@/lib/api";
@@ -217,13 +218,13 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
       </div>
 
       {msg ? (
-        <p style={{ margin: 0, fontSize: "0.84rem", color: "#1D4ED8", fontWeight: 600 }}>{msg}</p>
+        <p style={{ margin: 0, fontSize: "0.84rem", color: "var(--brand-text-strong)", fontWeight: 600 }}>{msg}</p>
       ) : null}
 
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <strong style={{ fontSize: "0.86rem" }}>1. Receiving document</strong>
         {docUrl ? (
-          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "#2563EB", fontWeight: 600 }}>
+          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "var(--brand-text)", fontWeight: 600 }}>
             View uploaded document
           </a>
         ) : null}
@@ -232,9 +233,15 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
           accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,application/pdf"
           onChange={(e) => setReceivingFile(e.target.files?.[0] ?? null)}
         />
-        <button type="button" className="button" disabled={busy === "doc" || !receivingFile} onClick={() => void uploadReceiving()}>
-          {busy === "doc" ? "Uploading…" : "Upload receiving document"}
-        </button>
+        <SubmitButton
+          type="button"
+          className="button"
+          busy={busy === "doc"}
+          busyLabel="Uploading…"
+          label="Upload receiving document"
+          disabled={!receivingFile}
+          onClick={() => void uploadReceiving()}
+        />
       </section>
 
       <section style={{ display: "grid", gap: "0.5rem" }}>
@@ -275,7 +282,7 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <strong style={{ fontSize: "0.86rem" }}>3. Digital signature</strong>
         {sigUrl ? (
-          <a href={sigUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "#2563EB", fontWeight: 600 }}>
+          <a href={sigUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "var(--brand-text)", fontWeight: 600 }}>
             View saved signature
           </a>
         ) : null}

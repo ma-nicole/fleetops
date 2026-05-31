@@ -1,18 +1,19 @@
 import { APP_LOCALE } from "@/lib/appLocale";
+import { scrollToSectionById } from "@/lib/scrollToSection";
 
 type KpiTone = "neutral" | "success" | "warning" | "danger";
+type KpiAccent = "orange" | "green" | "amber" | "red" | "slate" | "blue";
 
 type KpiCardProps = {
   label: string;
   value: string | number;
-  /** Optional change-since-last-period, e.g. "+12.4%". */
   delta?: string;
-  /** "up" | "down" | "flat" — drives the delta color and the SR description. */
   trend?: "up" | "down" | "flat";
-  /** Locale for `Intl.NumberFormat` when `value` is a number. */
   locale?: string;
-  /** Maps to a semantic text color on the value. */
   tone?: KpiTone;
+  accent?: KpiAccent;
+  /** When set, clicking the card scrolls to this section id. */
+  scrollTargetId?: string;
 };
 
 const toneColor: Record<KpiTone, string> = {
@@ -28,6 +29,15 @@ const trendIndicator: Record<NonNullable<KpiCardProps["trend"]>, { glyph: string
   flat: { glyph: "▬", description: "unchanged", color: "var(--text-secondary)" },
 };
 
+const accentClass: Record<KpiAccent, string> = {
+  orange: "kpi-card--accent-orange",
+  blue: "kpi-card--accent-orange",
+  green: "kpi-card--accent-green",
+  amber: "kpi-card--accent-amber",
+  red: "kpi-card--accent-red",
+  slate: "kpi-card--accent-slate",
+};
+
 export default function KpiCard({
   label,
   value,
@@ -35,6 +45,8 @@ export default function KpiCard({
   trend,
   locale,
   tone = "neutral",
+  accent = "orange",
+  scrollTargetId,
 }: KpiCardProps) {
   const resolvedLocale = locale ?? APP_LOCALE;
   const formatted =
@@ -43,44 +55,45 @@ export default function KpiCard({
       : value;
 
   const trendInfo = trend ? trendIndicator[trend] : null;
-  const accessibleDelta = delta && trendInfo
-    ? `${trendInfo.description} ${delta}`
-    : delta;
+  const accessibleDelta = delta && trendInfo ? `${trendInfo.description} ${delta}` : delta;
+
+  const jump = scrollTargetId
+    ? () => scrollToSectionById(scrollTargetId, { maxAttempts: 10, attemptDelay: 120 })
+    : undefined;
 
   return (
-    <article className="card" style={{ display: "grid", gap: "0.4rem" }}>
-      <dl style={{ margin: 0, display: "grid", gap: "0.4rem" }}>
-        <dt style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>{label}</dt>
-        <dd
-          style={{
-            margin: 0,
-            fontSize: "1.5rem",
-            fontWeight: 700,
-            color: toneColor[tone],
-            lineHeight: 1.2,
-          }}
-        >
+    <article
+      className={`kpi-card ${accentClass[accent]}${scrollTargetId ? " kpi-card--clickable scroll-section" : ""}`}
+      id={scrollTargetId ? undefined : undefined}
+      role={scrollTargetId ? "button" : undefined}
+      tabIndex={scrollTargetId ? 0 : undefined}
+      onClick={jump}
+      onKeyDown={
+        scrollTargetId
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                jump?.();
+              }
+            }
+          : undefined
+      }
+    >
+      <dl style={{ margin: 0, display: "grid", gap: "var(--space-1)" }}>
+        <dt className="kpi-card__label">{label}</dt>
+        <dd className="kpi-card__value" style={{ color: toneColor[tone] }}>
           {formatted}
         </dd>
       </dl>
 
       {delta && (
         <p
-          style={{
-            margin: 0,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.35rem",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            color: trendInfo?.color || "var(--text-secondary)",
-          }}
+          className="kpi-card__delta"
+          style={{ color: trendInfo?.color || "var(--text-secondary)" }}
           aria-label={accessibleDelta ? `${label} ${accessibleDelta}` : undefined}
         >
-          {trendInfo && (
-            <span aria-hidden="true">{trendInfo.glyph}</span>
-          )}
-          <span>{delta}</span>
+          {trendInfo && <span aria-hidden="true">{trendInfo.glyph} </span>}
+          {delta}
         </p>
       )}
     </article>

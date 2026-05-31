@@ -4,11 +4,17 @@ import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import DashboardRoleTabs from "@/components/DashboardRoleTabs";
+import PageHeader from "@/components/ui/PageHeader";
+import PageShell from "@/components/ui/PageShell";
 import KpiCard from "@/components/KpiCard";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
+import AsyncDataView from "@/components/ui/AsyncDataView";
+import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { type AnalyticsDashboard } from "@/lib/analyticsApi";
 import { apiGet } from "@/lib/api";
 import { formatNumber, formatPhpWhole } from "@/lib/appLocale";
+import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
 
 type ManagerDashboardPayload = {
   kpis: {
@@ -48,14 +54,6 @@ function litersFromFuelSpend(fuelSpend: number, pricePerLiter = 65): number {
   return Math.round(fuelSpend / pricePerLiter);
 }
 
-const card: CSSProperties = {
-  background: "#FFFFFF",
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  padding: "1.25rem",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-};
-
 export default function ManagerDashboardPage() {
   useRoleGuard(["manager", "admin"]);
 
@@ -70,7 +68,7 @@ export default function ManagerDashboardPage() {
         const payload = await apiGet<ManagerDashboardPayload>("/manager/dashboard");
         if (alive) setData(payload);
       } catch (err) {
-        if (alive) setError(err instanceof Error ? err.message : "Failed to load dashboard");
+        if (alive) setError(err instanceof Error ? err.message : ERROR_LOAD_DATA);
       } finally {
         if (alive) setLoading(false);
       }
@@ -99,70 +97,73 @@ export default function ManagerDashboardPage() {
     ? Math.round(data.cost_model.score * 100)
     : null;
 
+  useHashScrollWhenReady(Boolean(data && !loading));
+
   return (
-    <main style={{ padding: "1.5rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gap: "1.5rem" }}>
-        <header
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: "1rem",
-          }}
-        >
-          <div>
-            <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.06em" }}>
-              FleetOpt Analytics
-            </p>
-            <h1 style={{ margin: "0.15rem 0 0", fontSize: "1.35rem", fontWeight: 800, color: "var(--text)" }}>
-              Logistics Management System
-            </h1>
-          </div>
-        </header>
+    <PageShell maxWidth={1280}>
+        <PageHeader
+          eyebrow="FleetOpt Analytics"
+          title="Manager Dashboard"
+          subtitle="Planning, organizing, execution, and performance monitoring."
+          actions={
+            <>
+              <Link href="/manager/pending-bookings" className="quick-action-btn quick-action-btn--primary">
+                Pending bookings
+              </Link>
+              <Link href="/manager/analytics" className="quick-action-btn">
+                Analytics center
+              </Link>
+            </>
+          }
+        />
 
         <DashboardRoleTabs active="manager" />
 
-        <div>
-          <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800, color: "var(--text)" }}>Manager Dashboard</h2>
-          <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-            Planning, organizing, execution, and performance monitoring.
-          </p>
-        </div>
-
-        {loading && <p style={{ color: "var(--text-secondary)" }}>Loading…</p>}
-        {error && (
-          <div role="alert" style={{ background: "var(--bg-error)", color: "var(--text-error)", padding: 12, borderRadius: 8 }}>
-            {error}
-          </div>
-        )}
-
+        <AsyncDataView
+          loading={loading}
+          error={error}
+          loadingLabel="Loading dashboard…"
+          variant="dashboard"
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+            void apiGet<ManagerDashboardPayload>("/manager/dashboard")
+              .then(setData)
+              .catch((err) => setError(err instanceof Error ? err.message : ERROR_LOAD_DATA))
+              .finally(() => setLoading(false));
+          }}
+        >
         {data && (
           <>
-            <section
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                gap: "1rem",
-              }}
-            >
+            <nav className="tab-pills" aria-label="Jump to dashboard section">
+              <SectionJumpLink targetId="manager-kpis">KPIs</SectionJumpLink>
+              <SectionJumpLink targetId="manager-planning">Planning</SectionJumpLink>
+              <SectionJumpLink targetId="manager-execution">Execution</SectionJumpLink>
+              <SectionJumpLink targetId="manager-maintenance">Maintenance</SectionJumpLink>
+              <SectionJumpLink targetId="manager-actions">Quick actions</SectionJumpLink>
+            </nav>
+
+            <section id="manager-kpis" className="kpi-grid scroll-section">
               <KpiCard
                 label="Total fleet cost"
                 value={formatPesoCompact(kpis?.total_trip_cost ?? 0)}
                 delta="-12% vs prior period"
                 trend="down"
+                scrollTargetId="manager-planning"
               />
               <KpiCard
                 label="Fuel consumption (est.)"
                 value={fuelL > 0 ? `${formatNumber(fuelL, { maximumFractionDigits: 1 })} L` : "—"}
                 delta={fuelL > 0 ? `Fuel spend ${formatPesoCompact(fuelSpend)}` : "No trip mart yet"}
                 trend={fuelL > 0 ? "up" : "flat"}
+                scrollTargetId="manager-planning"
               />
               <KpiCard
                 label="Active bookings / trips"
                 value={ongoing}
                 delta={`${completed} completed · ${totalB} total`}
                 tone="neutral"
+                scrollTargetId="manager-execution"
               />
               <KpiCard
                 label="Delivery success rate"
@@ -170,17 +171,20 @@ export default function ManagerDashboardPage() {
                 delta={totalB ? `${completed} of ${totalB} completed` : "No bookings"}
                 trend={successPct >= 90 ? "up" : "flat"}
                 tone={successPct >= 90 ? "success" : "neutral"}
+                scrollTargetId="manager-execution"
               />
             </section>
 
             <section
+              id="manager-planning"
+              className="scroll-section"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                 gap: "1rem",
               }}
             >
-              <article style={{ ...card, display: "grid", gap: "0.75rem" }}>
+              <article className="panel-card" style={{ display: "grid", gap: "0.75rem" }}>
                 <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Planning &amp; forecasting</h3>
                 <div style={{ display: "grid", gap: "0.5rem" }}>
                   <MiniForecast
@@ -207,7 +211,7 @@ export default function ManagerDashboardPage() {
                 </Link>
               </article>
 
-              <article style={{ ...card, display: "grid", gap: "0.65rem" }}>
+              <article className="panel-card" style={{ display: "grid", gap: "0.65rem" }}>
                 <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Performance &amp; risk</h3>
                 <RiskRow label="Fleet efficiency (cost model)" status="good" detail={costModelScore != null ? `Model confidence ~${costModelScore}%` : data.cost_model.reason || "Train model for score"} />
                 <RiskRow
@@ -226,7 +230,7 @@ export default function ManagerDashboardPage() {
                 </Link>
               </article>
 
-              <article style={{ ...card, display: "grid", gap: "0.85rem" }}>
+              <article className="panel-card" style={{ display: "grid", gap: "0.85rem" }}>
                 <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700 }}>Fleet utilization</h3>
                 <UtilBar label="Active trucks" pct={fleetSize ? utilPct : 0} tone="success" />
                 <UtilBar
@@ -260,7 +264,7 @@ export default function ManagerDashboardPage() {
                 gap: "1rem",
               }}
             >
-              <article style={{ ...card }}>
+              <article id="manager-execution" className="panel-card scroll-section">
                 <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 700 }}>Execution monitor</h3>
                 <p style={{ margin: "0 0 1rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                   Recent trips from the analytics mart (same flow as prototype “live routes”).
@@ -295,7 +299,7 @@ export default function ManagerDashboardPage() {
                 </Link>
               </article>
 
-              <article style={{ ...card }}>
+              <article id="manager-maintenance" className="panel-card scroll-section">
                 <h3 style={{ margin: "0 0 1rem", fontSize: "1rem", fontWeight: 700 }}>Maintenance &amp; control</h3>
                 <div
                   style={{
@@ -317,8 +321,8 @@ export default function ManagerDashboardPage() {
               </article>
             </section>
 
-            <section style={{ ...card, display: "flex", gap: "0.65rem", flexWrap: "wrap" }}>
-              <CtaChip href="/modules/analytics/predictions" accent="#0284c7">
+            <section id="manager-actions" className="panel-card quick-actions scroll-section">
+              <CtaChip href="/modules/analytics/predictions" accent="#F59E0B">
                 Predictions
               </CtaChip>
               <CtaChip href="/modules/analytics/whatif" accent="#7c3aed">
@@ -333,23 +337,23 @@ export default function ManagerDashboardPage() {
             </section>
 
             {pipeline?.marts.monthly_mart && pipeline.marts.monthly_mart.length > 0 && (
-              <section style={card}>
-                <h3 style={{ marginTop: 0 }}>Monthly cost mart</h3>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+              <section className="panel-card">
+                <h3 className="panel-card__title">Monthly cost mart</h3>
+                <div className="data-table-wrap" style={{ maxHeight: "none" }}>
+                  <table className="data-table">
                     <thead>
-                      <tr style={{ background: "#F3F4F6" }}>
-                        <th style={th}>Month</th>
-                        <th style={th}>Trips</th>
-                        <th style={th}>Total cost</th>
+                      <tr>
+                        <th>Month</th>
+                        <th>Trips</th>
+                        <th>Total cost</th>
                       </tr>
                     </thead>
                     <tbody>
                       {pipeline.marts.monthly_mart.map((m) => (
                         <tr key={m.month}>
-                          <td style={td}>{m.month}</td>
-                          <td style={td}>{m.trips}</td>
-                          <td style={td}>{formatPhpWhole(m.total_cost)}</td>
+                          <td>{m.month}</td>
+                          <td>{m.trips}</td>
+                          <td>{formatPhpWhole(m.total_cost)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -359,8 +363,8 @@ export default function ManagerDashboardPage() {
             )}
           </>
         )}
-      </div>
-    </main>
+        </AsyncDataView>
+    </PageShell>
   );
 }
 
@@ -417,7 +421,7 @@ function UtilBar({
   tone: "success" | "info" | "accent";
 }) {
   const color =
-    tone === "success" ? "#059669" : tone === "info" ? "#2563eb" : "#7c3aed";
+    tone === "success" ? "#059669" : tone === "info" ? "#F59E0B" : "#D97706";
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", marginBottom: 4 }}>

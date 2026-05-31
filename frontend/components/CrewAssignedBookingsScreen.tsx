@@ -578,7 +578,7 @@ export default function CrewAssignedBookingsScreen({
                           href={mediaSrc(ph)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          style={{ fontSize: "0.85rem", fontWeight: 600, color: "#2563EB" }}
+                          style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--brand-text)" }}
                         >
                           PDF proof
                         </a>
@@ -763,7 +763,7 @@ export default function CrewAssignedBookingsScreen({
                       <>
                         {" "}
                         ·{" "}
-                        <a href={mediaSrc(ev.photo_url)} target="_blank" rel="noopener noreferrer" style={{ color: "#2563EB" }}>
+                        <a href={mediaSrc(ev.photo_url)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-text)" }}>
                           Photo
                         </a>
                       </>
@@ -789,7 +789,7 @@ export default function CrewAssignedBookingsScreen({
                       <>
                         {" "}
                         ·{" "}
-                        <a href={mediaSrc(lu.photo_url)} target="_blank" rel="noopener noreferrer" style={{ color: "#2563EB" }}>
+                        <a href={mediaSrc(lu.photo_url)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand-text)" }}>
                           Photo
                         </a>
                       </>
@@ -811,7 +811,7 @@ export default function CrewAssignedBookingsScreen({
                       href={mediaSrc(ph)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ fontSize: "0.85rem", fontWeight: 600, color: "#2563EB" }}
+                      style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--brand-text)" }}
                     >
                       PDF proof
                     </a>
@@ -854,7 +854,7 @@ export default function CrewAssignedBookingsScreen({
                         href={mediaSrc(rep.attachment_url)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ display: "inline-block", marginTop: 6, color: "#2563EB", fontWeight: 600 }}
+                        style={{ display: "inline-block", marginTop: 6, color: "var(--brand-text)", fontWeight: 600 }}
                       >
                         Attachment
                       </a>
@@ -884,7 +884,7 @@ export default function CrewAssignedBookingsScreen({
                         href={mediaSrc(rep.attachment_url)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ display: "inline-block", marginTop: 6, color: "#2563EB", fontWeight: 600 }}
+                        style={{ display: "inline-block", marginTop: 6, color: "var(--brand-text)", fontWeight: 600 }}
                       >
                         Attachment
                       </a>

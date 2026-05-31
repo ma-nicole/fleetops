@@ -464,7 +464,7 @@ export default function DriverGeneralFormPage() {
           disabled={submitting || trips.length === 0}
           style={{
             padding: "0.85rem 1.5rem",
-            background: trips.length === 0 ? "#CBD5E1" : "#2563EB",
+            background: trips.length === 0 ? "#CBD5E1" : "var(--brand-text)",
             color: "#fff",
             border: "none",
             borderRadius: "8px",

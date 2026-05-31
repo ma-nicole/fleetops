@@ -577,8 +577,8 @@ function tb(active: boolean): React.CSSProperties {
   return {
     padding: "5px 10px",
     borderRadius: 6,
-    border: `1px solid ${active ? "#2563EB" : "#CBD5E1"}`,
-    background: active ? "#2563EB" : "#fff",
+    border: `1px solid ${active ? "var(--brand-text)" : "#CBD5E1"}`,
+    background: active ? "var(--brand-text)" : "#fff",
     color: active ? "#fff" : "#334155",
     fontWeight: 700,
     fontSize: "0.75rem",

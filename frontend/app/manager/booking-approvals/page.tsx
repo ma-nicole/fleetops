@@ -93,7 +93,7 @@ export default function BookingApprovalsPage() {
                   </div>
                   <button
                     onClick={() => setSelectedBooking(booking)}
-                    style={{ padding: "0.6rem 1rem", borderRadius: "6px", border: "none", background: "#3B82F6", color: "white", fontWeight: 600, cursor: "pointer" }}
+                    style={{ padding: "0.6rem 1rem", borderRadius: "6px", border: "none", background: "var(--accent)", color: "white", fontWeight: 600, cursor: "pointer" }}
                   >
                     Review
                   </button>

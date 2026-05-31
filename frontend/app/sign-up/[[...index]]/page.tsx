@@ -7,6 +7,7 @@ import { apiFullUrl } from "@/lib/api";
 import PhoneInputRow from "@/components/PhoneInputRow";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import FloatingField from "@/components/auth/FloatingField";
+import SubmitButton from "@/components/ui/SubmitButton";
 import {
   buildInternationalPhone,
   isValidEmail,
@@ -324,9 +325,7 @@ export default function SignUpPage() {
           ) : null}
         </fieldset>
 
-        <button type="submit" className="auth-primary-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
-          {isSubmitting ? "Creating account…" : "Create account"}
-        </button>
+        <SubmitButton className="auth-primary-btn" busy={isSubmitting} busyLabel="Creating account…" label="Create account" />
       </form>
 
       <footer className="auth-form-footer">

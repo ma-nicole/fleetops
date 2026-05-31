@@ -12,6 +12,8 @@ import { MIN_BOOKING_SITES, loadCustomerSites, subscribeSitesChanged, type Custo
 import { WorkflowApi } from "@/lib/workflowApi";
 import BookingCargoWeightField, { isValidBookingWeightTons, bookingWeightValidationMessage } from "@/components/BookingCargoWeightField";
 import BookingDocumentUploadFields, { validateBookingDocumentFile } from "@/components/BookingDocumentUploadFields";
+import SubmitButton from "@/components/ui/SubmitButton";
+import LoadingMessage from "@/components/ui/LoadingMessage";
 
 type QuotedCostBreakdown = {
   cargo_gross_php: number;
@@ -648,9 +650,7 @@ export default function CostCalculator({
         </div>
 
         {loading && hasEnoughSites && (
-          <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Calculating road distance & price…
-          </div>
+          <LoadingMessage label="Calculating road distance & price…" size="sm" />
         )}
 
         {cost ? (
@@ -919,7 +919,7 @@ export default function CostCalculator({
               Choose a schedule date to see which pickup windows are still open.
             </p>
           ) : slotsLoading ? (
-            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Checking open slots…</p>
+            <LoadingMessage label="Checking open slots…" size="sm" />
           ) : (
             <div className="booking-slot-strip" role="radiogroup" aria-label="Pickup time slots">
               {BOOKING_TIME_SLOTS.map((slot) => {
@@ -1017,9 +1017,12 @@ export default function CostCalculator({
           }}
         />
 
-        <button
+        <SubmitButton
           className="button"
           type="submit"
+          busy={isSubmitting}
+          busyLabel="Submitting…"
+          label="✓ Confirm & Book"
           disabled={!canSubmit}
           style={{
             opacity: !canSubmit ? 0.5 : 1,
@@ -1027,9 +1030,7 @@ export default function CostCalculator({
             padding: "1rem",
             fontSize: "1rem",
           }}
-        >
-          {isSubmitting ? " Processing..." : "✓ Confirm & Book"}
-        </button>
+        />
         {pickedSlot && selectedAvailableTrucks < requiredTrucks && (
           <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: "0.9rem" }}>
             Not enough trucks available for this schedule. Please choose another date/time.

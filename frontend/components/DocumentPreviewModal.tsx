@@ -56,7 +56,7 @@ export default function DocumentPreviewModal({ preview, onClose, onOpenInNewTab 
                 type="button"
                 onClick={onOpenInNewTab}
                 style={{
-                  background: "#2563EB",
+                  background: "var(--brand-text)",
                   color: "white",
                   border: "none",
                   padding: "0.45rem 0.85rem",

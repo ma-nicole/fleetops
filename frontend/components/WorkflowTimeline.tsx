@@ -50,9 +50,9 @@ export default function WorkflowTimeline({ steps }: WorkflowTimelineProps) {
         }
         
         .timeline-circle.current {
-          background: #3B82F6;
+          background: #F59E0B;
           color: white;
-          box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+          box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
         }
         
         .timeline-circle.pending {
@@ -95,7 +95,7 @@ export default function WorkflowTimeline({ steps }: WorkflowTimelineProps) {
       {steps.map((step, index) => (
         <div key={step.id} className="timeline-step">
           <div className="timeline-connector" style={{
-            background: step.completed ? "#10B981" : step.current ? "#3B82F6" : "#E5E7EB",
+            background: step.completed ? "#10B981" : step.current ? "#F59E0B" : "#E5E7EB",
           }} />
           <div className={`timeline-circle ${step.completed ? "completed" : step.current ? "current" : "pending"}`}>
             {step.completed ? "✓" : index + 1}

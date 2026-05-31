@@ -68,7 +68,7 @@ export default function BookingStatusPage() {
                   <button
                     key={item.id}
                     onClick={() => setSelectedBookingId(item.id)}
-                    style={{ textAlign: "left", border: selectedBookingId === item.id ? "2px solid #3B82F6" : "1px solid #E5E7EB", borderRadius: "8px", background: "white", cursor: "pointer", padding: "0.75rem" }}
+                    style={{ textAlign: "left", border: selectedBookingId === item.id ? "2px solid var(--accent)" : "1px solid #E5E7EB", borderRadius: "8px", background: "white", cursor: "pointer", padding: "0.75rem" }}
                   >
                     <p style={{ margin: "0 0 0.25rem", fontWeight: 700 }}>{item.id}</p>
                     <p style={{ margin: "0 0 0.25rem", color: "#666", fontSize: "0.85rem" }}>{item.pickupLocation}</p>

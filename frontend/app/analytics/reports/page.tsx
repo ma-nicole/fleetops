@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsPipelineService } from "@/lib/analyticsPipelineService";
 import { formatPhp } from "@/lib/appLocale";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
 
 export default function AnalyticsReportsPage() {
   useRoleGuard(["manager", "admin"]);
@@ -22,13 +23,19 @@ export default function AnalyticsReportsPage() {
             <Link href="/analytics/dashboard" style={{ textDecoration: "none", background: "#6B7280", color: "white", padding: "0.55rem 0.9rem", borderRadius: "6px", fontWeight: 600 }}>
               Dashboard
             </Link>
-            <Link href="/analytics/predictions" style={{ textDecoration: "none", background: "#3B82F6", color: "white", padding: "0.55rem 0.9rem", borderRadius: "6px", fontWeight: 600 }}>
+            <Link href="/analytics/predictions" style={{ textDecoration: "none", background: "var(--accent)", color: "white", padding: "0.55rem 0.9rem", borderRadius: "6px", fontWeight: 600 }}>
               Predictions
             </Link>
           </div>
         </div>
 
-        <section className="card">
+        <nav className="tab-pills" aria-label="Jump to report section">
+          <SectionJumpLink targetId="reports-connector">Connector AI</SectionJumpLink>
+          <SectionJumpLink targetId="reports-trip-mart">Trip mart</SectionJumpLink>
+          <SectionJumpLink targetId="reports-monthly-mart">Monthly mart</SectionJumpLink>
+        </nav>
+
+        <section id="reports-connector" className="card scroll-section">
           <h3 style={{ marginTop: 0 }}>Connector AI Output</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "0.7rem" }}>
             <div style={{ padding: "0.7rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
@@ -54,7 +61,7 @@ export default function AnalyticsReportsPage() {
         </section>
 
         <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-          <div className="card" style={{ overflowX: "auto" }}>
+          <div id="reports-trip-mart" className="card scroll-section" style={{ overflowX: "auto" }}>
             <h3 style={{ marginTop: 0 }}>Trip Cost Mart</h3>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -76,7 +83,7 @@ export default function AnalyticsReportsPage() {
             </table>
           </div>
 
-          <div className="card" style={{ overflowX: "auto" }}>
+          <div id="reports-monthly-mart" className="card scroll-section" style={{ overflowX: "auto" }}>
             <h3 style={{ marginTop: 0 }}>Monthly Cost Mart</h3>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>

@@ -14,6 +14,7 @@ import {
 import { announce } from "@/lib/useAnnouncer";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import FloatingField from "@/components/auth/FloatingField";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 const GENERIC_AUTH_ERROR = "Email or password is incorrect.";
 
@@ -185,9 +186,7 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <button type="submit" className="auth-primary-btn" disabled={isSubmitting} aria-busy={isSubmitting}>
-          {isSubmitting ? "Signing in…" : "Log in"}
-        </button>
+        <SubmitButton className="auth-primary-btn" busy={isSubmitting} busyLabel="Signing in…" label="Log in" />
       </form>
 
       <footer className="auth-form-footer">

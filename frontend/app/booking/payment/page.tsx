@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import PaymentMethodInstructions from "@/components/PaymentMethodInstructions";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import SubmitButton from "@/components/ui/SubmitButton";
+import ErrorState from "@/components/ui/ErrorState";
+import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { formatPhp } from "@/lib/appLocale";
 import {
   CUSTOMER_PAYMENT_METHODS,
@@ -25,6 +29,7 @@ function BookingPaymentInner() {
   const bookingIdRaw = searchParams.get("bookingId");
 
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [method, setMethod] = useState<CustomerPaymentMethod>("gcash");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -38,14 +43,18 @@ function BookingPaymentInner() {
   const loadBooking = useCallback(async () => {
     if (!Number.isFinite(bookingId)) {
       setLoadError("Missing booking.");
+      setPageLoading(false);
       return;
     }
+    setPageLoading(true);
     try {
       const b = await WorkflowApi.getBooking(bookingId);
       setBooking(b);
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Could not load booking.");
+      setLoadError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+    } finally {
+      setPageLoading(false);
     }
   }, [bookingId]);
 
@@ -137,10 +146,18 @@ function BookingPaymentInner() {
     );
   }
 
-  if (loadError || !booking) {
+  if (pageLoading) {
     return (
       <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto" }}>
-        <p style={{ color: "#6B7280" }}>{loadError || "Loading…"}</p>
+        <LoadingMessage label="Loading booking…" />
+      </div>
+    );
+  }
+
+  if (loadError || !booking) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto", display: "grid", gap: "1rem" }}>
+        <ErrorState message={loadError ?? ERROR_LOAD_DATA} onRetry={() => void loadBooking()} />
         <Link href="/booking" style={{ color: "#FF9800", fontWeight: 600 }}>
           ← Back to booking
         </Link>
@@ -244,7 +261,7 @@ function BookingPaymentInner() {
             />
           </section>
 
-          <section style={{ padding: "1.5rem", border: "2px dashed #3B82F6", borderRadius: "8px", background: "#EFF6FF" }}>
+          <section style={{ padding: "1.5rem", border: "2px dashed var(--accent)", borderRadius: "8px", background: "#EFF6FF" }}>
             <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>
               {method === "gcash" && requiresProof
                 ? "Step 2 — Upload GCash payment proof"
@@ -317,7 +334,7 @@ function BookingPaymentInner() {
                 style={{ display: "none" }}
                 id="file-upload"
               />
-              <label htmlFor="file-upload" style={{ display: "block", cursor: "pointer", color: "#3B82F6" }}>
+              <label htmlFor="file-upload" style={{ display: "block", cursor: "pointer", color: "var(--accent)" }}>
                 <p style={{ margin: "0 0 0.25rem 0", fontWeight: 600, color: "#1A1A1A" }}>Choose file</p>
                 <p style={{ margin: 0, fontSize: "0.85rem", color: "#666666" }}>{fileName || "No file selected"}</p>
               </label>
@@ -344,10 +361,20 @@ function BookingPaymentInner() {
               </button>
             )}
 
-            <button
+            <SubmitButton
               type="button"
+              className=""
               onClick={() => void handleUploadProof()}
-              disabled={!canSubmit || isUploading || uploadSuccess}
+              busy={isUploading}
+              busyLabel="Submitting…"
+              label={
+                method === "gcash" && requiresProof
+                  ? "Submit GCash proof for verification"
+                  : requiresProof
+                    ? "Submit proof"
+                    : "Confirm COD request"
+              }
+              disabled={!canSubmit || uploadSuccess}
               style={{
                 width: "100%",
                 padding: "0.75rem",
@@ -355,18 +382,9 @@ function BookingPaymentInner() {
                 color: "white",
                 border: "none",
                 borderRadius: "6px",
-                cursor: canSubmit && !isUploading && !uploadSuccess ? "pointer" : "not-allowed",
                 fontWeight: 600,
               }}
-            >
-              {isUploading
-                ? "Submitting…"
-                : method === "gcash" && requiresProof
-                  ? "Submit GCash proof for verification"
-                  : requiresProof
-                    ? "Submit proof"
-                    : "Confirm COD request"}
-            </button>
+            />
           </section>
         </div>
 

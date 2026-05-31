@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ExpenseAnalyticsSummary from "@/components/ExpenseAnalyticsSummary";
+import AsyncDataView from "@/components/ui/AsyncDataView";
+import { EMPTY_ANALYTICS, ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { AnalyticsApi, type ExpenseAnalyticsPayload } from "@/lib/analyticsApi";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 
@@ -39,7 +41,7 @@ export default function ExpenseAnalyticsPage() {
         setData(d);
       } catch (e) {
         if (!alive) return;
-        setError(e instanceof Error ? e.message : "Failed to load expense analytics.");
+        setError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
       } finally {
         if (alive) setLoading(false);
       }
@@ -79,15 +81,18 @@ export default function ExpenseAnalyticsPage() {
         </Link>
       </div>
 
-      {error ? (
-        <div role="alert" style={{ padding: "1rem", background: "#FEE2E2", color: "#991B1B", borderRadius: 8, marginBottom: "1rem" }}>
-          {error}
-        </div>
-      ) : null}
-
-      {loading ? <p style={{ color: "#6B7280" }}>Loading expense analytics…</p> : null}
-
-      {data && !loading ? <ExpenseAnalyticsSummary data={data} /> : null}
+      <AsyncDataView
+        loading={loading}
+        error={error}
+        empty={!data}
+        emptyTitle="No analytics data available yet"
+        emptyDescription={EMPTY_ANALYTICS}
+        loadingLabel="Loading expense analytics…"
+        variant="dashboard"
+        onRetry={() => window.location.reload()}
+      >
+        {data ? <ExpenseAnalyticsSummary data={data} /> : null}
+      </AsyncDataView>
     </div>
   );
 }

@@ -139,7 +139,7 @@ export default function DispatcherOperationalLogPage() {
           to a trip and appear in Trip Logs and booking monitoring — they are not customer feedback.
         </p>
         <p style={{ margin: "0.75rem 0 0", fontSize: "0.9rem" }}>
-          <Link href="/dispatcher/trip-logs" style={{ color: "#2563EB", fontWeight: 600 }}>
+          <Link href="/dispatcher/trip-logs" style={{ color: "var(--brand-text)", fontWeight: 600 }}>
             Open Trip Logs
           </Link>
         </p>
@@ -347,7 +347,7 @@ export default function DispatcherOperationalLogPage() {
       <h2 style={{ color: "#1A1A1A", margin: 0, fontSize: "1.25rem" }}>Driver general forms</h2>
       <p style={{ color: "#64748B", margin: 0, lineHeight: 1.5, maxWidth: "42rem" }}>
         Submissions from the driver <strong>General Form</strong> (operational updates, fuel, delays, completion
-        notes). These records are also merged into <Link href="/dispatcher/trip-logs" style={{ color: "#2563EB", fontWeight: 600 }}>Trip Logs</Link>{" "}
+        notes). These records are also merged into <Link href="/dispatcher/trip-logs" style={{ color: "var(--brand-text)", fontWeight: 600 }}>Trip Logs</Link>{" "}
         per trip.
       </p>
       {genErr ? (

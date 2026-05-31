@@ -86,13 +86,13 @@ export default function LoginPage() {
           )}
         </label>
         {error && <p style={{ margin: 0, color: "#DC2626" }} role="alert">{error}</p>}
-        <button type="submit" style={{ border: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
+        <button type="submit" style={{ border: "none", borderRadius: "6px", background: "var(--accent)", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
           Login
         </button>
-        <Link href="/forgot-password" style={{ color: "#2563EB", textDecoration: "none", fontSize: "0.9rem" }}>
+        <Link href="/forgot-password" style={{ color: "var(--brand-text)", textDecoration: "none", fontSize: "0.9rem" }}>
           Forgot password?
         </Link>
-        <Link href="/register" style={{ color: "#2563EB", textDecoration: "none", fontSize: "0.9rem" }}>No account yet? Register</Link>
+        <Link href="/register" style={{ color: "var(--brand-text)", textDecoration: "none", fontSize: "0.9rem" }}>No account yet? Register</Link>
       </form>
     </main>
   );

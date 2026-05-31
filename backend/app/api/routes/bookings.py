@@ -43,8 +43,8 @@ from app.services.booking_status_aggregate import aggregate_customer_display_fro
 from app.services.general_operational_reports import list_general_operational_reports
 from app.constants.general_operational_report import GENERAL_OPS_CATEGORY_LABELS, GENERAL_OPS_TRIP_STATUS_LABELS
 from app.constants.operational_log import REPORT_TYPE_LABELS
-from app.services.booking_documents import resolve_booking_document_path
-from app.services.upload_urls import media_type_for_path, save_booking_document
+from app.services.booking_documents import resolve_booking_document_path, save_booking_document
+from app.services.upload_urls import media_type_for_path
 from app.services.goods_declaration_review import mark_goods_declaration_pending
 
 

@@ -1,12 +1,22 @@
 "use client";
 
 import DashboardRoleTabs from "@/components/DashboardRoleTabs";
+import PageHeader from "@/components/ui/PageHeader";
+import PageShell from "@/components/ui/PageShell";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
+import { SkeletonKpiGrid, SkeletonTable } from "@/components/Skeleton";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import ErrorState from "@/components/ui/ErrorState";
+import { EMPTY_TRIPS, ERROR_LOAD_DATA } from "@/lib/loadingMessages";
+import StatusPill from "@/components/ui/StatusPill";
+import { scrollToSectionById } from "@/lib/scrollToSection";
+import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
 import { formatTimeShort } from "@/lib/appLocale";
 import { DispatchApi, type OperationsActiveTripRow, type OperationsCenterResponse } from "@/lib/dispatchApi";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-/** Fleet command center palette — orange used sparingly as brand accent. */
+/** Fleet command center palette — brand orange primary. */
 const C = {
   pageBg: "#F1F3F5",
   surface: "#FFFFFF",
@@ -17,9 +27,10 @@ const C = {
   textSubtle: "#94A3B8",
   shadow: "0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 8px rgba(15, 23, 42, 0.04)",
   shadowSm: "0 1px 2px rgba(15, 23, 42, 0.06)",
-  accent: "#EA580C",
-  blue: "#2563EB",
-  indigo: "#4F46E5",
+  accent: "#F59E0B",
+  brand: "#F59E0B",
+  blue: "#64748B",
+  indigo: "#6366F1",
   teal: "#0D9488",
   green: "#059669",
   red: "#DC2626",
@@ -45,60 +56,25 @@ function activeLegsTotal(s: OperationsCenterResponse["summary"]): number {
   );
 }
 
-function statusPillStyle(key: string): { bg: string; fg: string; label: string } {
-  const k = key.toLowerCase().replace(/\s+/g, "_");
-  const map: Record<string, { bg: string; fg: string; label: string }> = {
-    assigned: { bg: "rgba(37, 99, 235, 0.12)", fg: C.blue, label: "Assigned" },
-    for_pickup: { bg: "rgba(37, 99, 235, 0.12)", fg: C.blue, label: "For pickup" },
-    picked_up: { bg: "rgba(234, 88, 12, 0.14)", fg: C.amber, label: "Picked up" },
-    en_route: { bg: "rgba(79, 70, 229, 0.12)", fg: C.indigo, label: "En route" },
-    dropped_off: { bg: "rgba(13, 148, 136, 0.14)", fg: C.teal, label: "Dropped off" },
-    completed: { bg: "rgba(5, 150, 105, 0.12)", fg: C.green, label: "Completed" },
-    delayed: { bg: "rgba(220, 38, 38, 0.1)", fg: C.red, label: "Delayed" },
-    pending: { bg: "rgba(100, 116, 139, 0.12)", fg: "#475569", label: "Pending" },
-    cancelled: { bg: "rgba(100, 116, 139, 0.1)", fg: "#64748B", label: "Cancelled" },
-  };
-  return map[k] ?? { bg: "rgba(100, 116, 139, 0.1)", fg: "#475569", label: key || "—" };
-}
-
-function StatusPill({ status }: { status: string }) {
-  const st = statusPillStyle(status);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "0.12rem 0.45rem",
-        borderRadius: 999,
-        fontSize: "0.6875rem",
-        fontWeight: 700,
-        letterSpacing: "0.02em",
-        background: st.bg,
-        color: st.fg,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {st.label}
-    </span>
-  );
-}
 
 function KpiTile({
   label,
   value,
   accentBorder,
   warn,
+  scrollTargetId,
 }: {
   label: string;
   value: number;
   accentBorder?: "orange" | "blue" | "indigo" | "green" | "slate" | "red";
   warn?: boolean;
+  scrollTargetId?: string;
 }) {
   const border =
     accentBorder === "orange"
       ? `3px solid ${C.accent}`
       : accentBorder === "blue"
-        ? `3px solid ${C.blue}`
+        ? `3px solid ${C.accent}`
         : accentBorder === "indigo"
           ? `3px solid ${C.indigo}`
           : accentBorder === "green"
@@ -106,8 +82,23 @@ function KpiTile({
             : accentBorder === "red"
               ? `3px solid ${C.red}`
               : `3px solid #94A3B8`;
+  const jump = scrollTargetId ? () => scrollToSectionById(scrollTargetId) : undefined;
   return (
     <div
+      className={scrollTargetId ? "kpi-card--clickable scroll-section" : undefined}
+      role={scrollTargetId ? "button" : undefined}
+      tabIndex={scrollTargetId ? 0 : undefined}
+      onClick={jump}
+      onKeyDown={
+        scrollTargetId
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                jump?.();
+              }
+            }
+          : undefined
+      }
       style={{
         background: C.surface,
         borderRadius: 10,
@@ -156,14 +147,18 @@ function Panel({
   subtitle,
   children,
   dense,
+  sectionId,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   dense?: boolean;
+  sectionId?: string;
 }) {
   return (
     <section
+      id={sectionId}
+      className={sectionId ? "scroll-section" : undefined}
       style={{
         background: C.surface,
         borderRadius: 12,
@@ -303,7 +298,7 @@ export default function DispatcherDashboard() {
       setData(d);
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Could not load operations data.");
+      setLoadError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
     } finally {
       setLoading(false);
     }
@@ -319,75 +314,67 @@ export default function DispatcherDashboard() {
   const activeTotal = useMemo(() => (s ? activeLegsTotal(s) : 0), [s]);
   const alertCount = data?.alerts?.length ?? 0;
 
+  useHashScrollWhenReady(Boolean(data && !loading));
+
   return (
-    <main
-      style={{
-        padding: "0.75rem 0.85rem 1.25rem",
-        background: C.pageBg,
-        minHeight: "100vh",
-        color: C.text,
-      }}
-    >
-      <div style={{ maxWidth: 1480, margin: "0 auto", display: "grid", gap: "0.65rem" }}>
-        <header
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-            gap: "0.5rem",
-            paddingBottom: 2,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: "0.625rem", fontWeight: 800, color: C.textSubtle, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              FleetOpt · Dispatch
-            </div>
-            <h1 style={{ margin: "2px 0 0", fontSize: "1.2rem", fontWeight: 800, letterSpacing: "-0.03em", color: C.text }}>
-              Operations command center
-            </h1>
-          </div>
-          <div style={{ fontSize: "0.6875rem", color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>
-            {loading && !data ? "Syncing…" : data?.generated_at ? `Updated ${fmtIso(data.generated_at)}` : null}
-            {" · "}
-            <span style={{ color: C.textSubtle }}>45s refresh</span>
-          </div>
-        </header>
+    <PageShell maxWidth={1480}>
+        <PageHeader
+          eyebrow="FleetOpt · Dispatch"
+          title="Operations command center"
+          subtitle={
+            loading && !data
+              ? "Syncing live operations data…"
+              : data?.generated_at
+                ? `Last updated ${fmtIso(data.generated_at)} · auto-refresh every 45s`
+                : "Live dispatch operations"
+          }
+          actions={
+            <>
+              <Link href="/dispatcher/job-assignments" className="quick-action-btn quick-action-btn--primary">
+                Assign jobs
+              </Link>
+              <Link href="/dispatcher/trip-monitoring" className="quick-action-btn">
+                Monitor trips
+              </Link>
+            </>
+          }
+        />
 
         <DashboardRoleTabs active="dispatcher" />
 
-        {loadError ? (
-          <div
-            role="alert"
-            style={{
-              padding: "0.5rem 0.65rem",
-              borderRadius: 8,
-              background: "rgba(220, 38, 38, 0.08)",
-              color: C.red,
-              fontSize: "0.8125rem",
-              fontWeight: 600,
-              border: `1px solid rgba(220,38,38,0.2)`,
-            }}
-          >
-            {loadError}
-          </div>
-        ) : null}
+        <nav className="tab-pills" aria-label="Jump to dashboard section">
+          <SectionJumpLink targetId="dispatch-kpis">KPIs</SectionJumpLink>
+          <SectionJumpLink targetId="dispatch-active-trips">Active trips</SectionJumpLink>
+          <SectionJumpLink targetId="dispatch-alerts">Alerts</SectionJumpLink>
+          <SectionJumpLink targetId="dispatch-waiting">Queue</SectionJumpLink>
+          <SectionJumpLink targetId="dispatch-resources">Resources</SectionJumpLink>
+        </nav>
 
+        {loadError ? <ErrorState message={loadError} onRetry={() => void load()} compact /> : null}
+
+        {loading && !data ? (
+          <div style={{ display: "grid", gap: "0.75rem" }} aria-busy="true">
+            <LoadingMessage label="Syncing live operations data…" size="sm" />
+            <SkeletonKpiGrid count={8} />
+            <SkeletonTable rows={5} cols={6} />
+          </div>
+        ) : (
+        <>
         {/* KPI strip */}
-        <div className="dispatch-kpi-strip" style={{ display: "grid", gap: "0.45rem" }}>
+        <div id="dispatch-kpis" className="dispatch-kpi-strip scroll-section" style={{ display: "grid", gap: "0.45rem" }}>
           {s ? (
             <>
-              <KpiTile label="Waiting assign" value={s.waiting_for_assignment} accentBorder="orange" warn={s.waiting_for_assignment > 0} />
-              <KpiTile label="Active trips" value={activeTotal} accentBorder="indigo" />
-              <KpiTile label="En route" value={s.en_route} accentBorder="indigo" />
+              <KpiTile label="Waiting assign" value={s.waiting_for_assignment} accentBorder="orange" warn={s.waiting_for_assignment > 0} scrollTargetId="dispatch-waiting" />
+              <KpiTile label="Active trips" value={activeTotal} accentBorder="indigo" scrollTargetId="dispatch-active-trips" />
+              <KpiTile label="En route" value={s.en_route} accentBorder="indigo" scrollTargetId="dispatch-active-trips" />
               <KpiTile label="Done today" value={s.completed_today} accentBorder="green" />
-              <KpiTile label="Avail trucks" value={s.available_trucks} accentBorder="blue" />
-              <KpiTile label="Maint trucks" value={s.trucks_under_maintenance} accentBorder="slate" />
-              <KpiTile label="Avail drivers" value={s.available_drivers} accentBorder="blue" />
-              <KpiTile label="Alerts" value={alertCount} accentBorder={alertCount > 0 ? "red" : "slate"} warn={alertCount > 0} />
+              <KpiTile label="Avail trucks" value={s.available_trucks} accentBorder="blue" scrollTargetId="dispatch-resources" />
+              <KpiTile label="Maint trucks" value={s.trucks_under_maintenance} accentBorder="slate" scrollTargetId="dispatch-resources" />
+              <KpiTile label="Avail drivers" value={s.available_drivers} accentBorder="blue" scrollTargetId="dispatch-resources" />
+              <KpiTile label="Alerts" value={alertCount} accentBorder={alertCount > 0 ? "red" : "slate"} warn={alertCount > 0} scrollTargetId="dispatch-alerts" />
             </>
           ) : (
-            <div style={{ gridColumn: "1 / -1", fontSize: "0.75rem", color: C.textMuted }}>Loading KPIs…</div>
+            <SkeletonKpiGrid count={8} />
           )}
         </div>
 
@@ -404,9 +391,10 @@ export default function DispatcherDashboard() {
             title="Active trips"
             subtitle="Live legs in execution — primary dispatch board."
             dense
+            sectionId="dispatch-active-trips"
           >
             {!data?.active_trips?.length ? (
-              <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>No active legs.</p>
+              <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }} role="status">{EMPTY_TRIPS}</p>
             ) : (
               <div style={{ overflow: "auto", margin: "0 -0.15rem", WebkitOverflowScrolling: "touch" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
@@ -448,7 +436,7 @@ export default function DispatcherDashboard() {
           </Panel>
 
           <div style={{ display: "grid", gap: "0.65rem", minWidth: 0 }}>
-            <Panel title="Alerts & exceptions" dense>
+            <Panel title="Alerts & exceptions" dense sectionId="dispatch-alerts">
               {!data?.alerts?.length ? (
                 <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>No active alerts.</p>
               ) : (
@@ -528,7 +516,7 @@ export default function DispatcherDashboard() {
             alignItems: "stretch",
           }}
         >
-          <Panel title="Waiting for assignment" subtitle="Verified / ready — no legs yet." dense>
+          <Panel title="Waiting for assignment" subtitle="Verified / ready — no legs yet." dense sectionId="dispatch-waiting">
             {!data?.waiting_for_assignment?.length ? (
               <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>Queue clear.</p>
             ) : (
@@ -587,7 +575,7 @@ export default function DispatcherDashboard() {
             )}
           </Panel>
 
-          <Panel title="Resource availability" subtitle="Fleet posture — from live roster & trips." dense>
+          <Panel title="Resource availability" subtitle="Fleet posture — from live roster & trips." dense sectionId="dispatch-resources">
             {data?.resources ? (
               <div style={{ paddingTop: 4 }}>
                 <ResourceStack
@@ -661,7 +649,8 @@ export default function DispatcherDashboard() {
             </Link>
           ))}
         </nav>
-      </div>
+        </>
+        )}
 
       <style jsx global>{`
         .dispatch-kpi-strip {
@@ -704,6 +693,6 @@ export default function DispatcherDashboard() {
           color: #0f172a !important;
         }
       `}</style>
-    </main>
+    </PageShell>
   );
 }

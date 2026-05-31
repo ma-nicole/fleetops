@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.api.routes import (
     admin,
+    admin_analytics,
     analytics_predict,
     analytics_prescribe,
     auth,
@@ -82,6 +83,7 @@ app.include_router(driver.router, prefix="/api", dependencies=_api_deps)
 app.include_router(helper_ops.router, prefix="/api", dependencies=_api_deps)
 app.include_router(manager.router, prefix="/api", dependencies=_api_deps)
 app.include_router(admin.router, prefix="/api", dependencies=_api_deps)
+app.include_router(admin_analytics.router, prefix="/api", dependencies=_api_deps)
 app.include_router(ratings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(reports.router, prefix="/api", dependencies=_api_deps)
 app.include_router(clerk_auth.router, prefix="/api", dependencies=_api_deps)

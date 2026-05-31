@@ -43,7 +43,7 @@ export default function DispatcherConfirmOrderPage() {
             </tbody>
           </table>
         </section>
-        <Link href="/trips/status" style={{ width: "fit-content", textDecoration: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Update Trip Status</Link>
+        <Link href="/trips/status" style={{ width: "fit-content", textDecoration: "none", borderRadius: "6px", background: "var(--accent)", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Update Trip Status</Link>
       </div>
     </main>
   );

@@ -35,7 +35,7 @@ export default function DashboardReportsPage() {
         <h1 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Reporting map</h1>
         <p style={{ color: "#666666", marginBottom: "1.25rem", maxWidth: "44rem" }}>
           Operational staff use predictive and prescriptive tools plus the{" "}
-          <Link href="/modules/analytics/operations-snapshot" style={{ color: "#2563EB", fontWeight: 600 }}>
+          <Link href="/modules/analytics/operations-snapshot" style={{ color: "var(--brand-text)", fontWeight: 600 }}>
             live data snapshot
           </Link>{" "}
           for database-backed KPIs. This page summarizes the analytic reporting layer described in your design (executive vs
@@ -46,7 +46,7 @@ export default function DashboardReportsPage() {
           className="card"
           style={{
             marginBottom: "1.25rem",
-            borderLeft: "4px solid #2563EB",
+            borderLeft: "4px solid var(--brand-text)",
             background: "#F8FAFC",
           }}
         >

@@ -425,7 +425,7 @@ function DispatcherJobAssignmentsInner() {
               disabled={!bookingId || !availability || busy}
               style={{
                 padding: "10px 18px",
-                background: "#2563EB",
+                background: "var(--brand-text)",
                 color: "white",
                 border: "none",
                 borderRadius: 8,

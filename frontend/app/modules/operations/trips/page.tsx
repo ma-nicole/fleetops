@@ -96,12 +96,12 @@ function StatusBadge({
   const s = (displayKey || status).toLowerCase();
   const base = { padding: "0.25rem 0.5rem", borderRadius: 6, fontSize: "0.75rem", fontWeight: 700 as const };
   if (s === "on going" || s === "on_going" || s === "ongoing")
-    return <span style={{ ...base, background: "rgba(37,99,235,0.12)", color: "#1d4ed8" }}>{label}</span>;
+    return <span style={{ ...base, background: "rgba(37,99,235,0.12)", color: "var(--brand-text-strong)" }}>{label}</span>;
   if (s === "completed") return <span style={{ ...base, background: "rgba(5,150,105,0.12)", color: "#047857" }}>{label}</span>;
   if (s === "cancelled" || s === "rejected" || s === "payment_rejected" || s === "expired")
     return <span style={{ ...base, background: "#FEE2E2", color: "#991B1B" }}>{label}</span>;
   if (["enroute", "loading", "out_for_delivery", "accepted", "en_route", "for_pickup", "picked_up", "dropped_off"].includes(s))
-    return <span style={{ ...base, background: "rgba(37,99,235,0.12)", color: "#1d4ed8" }}>{label}</span>;
+    return <span style={{ ...base, background: "rgba(37,99,235,0.12)", color: "var(--brand-text-strong)" }}>{label}</span>;
   if (
     s === "pending_payment" ||
     s === "payment_verification" ||

@@ -42,7 +42,7 @@ export default function TripStatusPage() {
             </div>
           ))}
         </section>
-        <Link href="/reports/generate" style={{ width: "fit-content", textDecoration: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Generate Report</Link>
+        <Link href="/reports/generate" style={{ width: "fit-content", textDecoration: "none", borderRadius: "6px", background: "var(--accent)", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Generate Report</Link>
       </div>
     </main>
   );

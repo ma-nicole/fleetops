@@ -71,7 +71,7 @@ export default function BookingDocumentsReview({
               style={{
                 border: "none",
                 background: "transparent",
-                color: "#2563EB",
+                color: "var(--brand-text)",
                 cursor: "pointer",
                 fontSize: "0.8rem",
                 textDecoration: "underline",

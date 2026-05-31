@@ -6,6 +6,9 @@ import type { CSSProperties, ReactNode } from "react";
 
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
 import KpiCard from "@/components/KpiCard";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
+import AsyncDataView from "@/components/ui/AsyncDataView";
+import { EMPTY_BOOKINGS, EMPTY_SHIPMENTS, ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/appLocale";
 import {
   MIN_BOOKING_SITES,
@@ -16,6 +19,7 @@ import {
   type CustomerSite,
 } from "@/lib/customerSites";
 import { WorkflowApi, type CustomerBookingRow, type Payment } from "@/lib/workflowApi";
+import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
 
 
 function formatShortDate(iso: string): string {
@@ -62,7 +66,7 @@ export default function CustomerPortalDashboard() {
           setPayments(p);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load portal data");
+        if (!cancelled) setError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -150,31 +154,37 @@ export default function CustomerPortalDashboard() {
     [payments],
   );
 
+  useHashScrollWhenReady(!loading && !error);
+
   return (
     <main style={{ display: "grid", gap: "1.5rem", padding: "1rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto", width: "100%", display: "grid", gap: "1.5rem" }}>
-        {loading && <p style={{ color: "var(--text-secondary)" }}>Loading your data…</p>}
-        {error && (
-          <div role="alert" style={{ background: "var(--bg-error)", color: "var(--text-error)", padding: 12, borderRadius: 8 }}>
-            {error}
-          </div>
-        )}
-
+        <AsyncDataView
+          loading={loading}
+          error={error}
+          loadingLabel="Loading your data…"
+          variant="dashboard"
+          onRetry={() => window.location.reload()}
+        >
         {!loading && !error && (
           <>
+            <nav className="tab-pills" aria-label="Jump to portal section">
+              <SectionJumpLink targetId="customer-kpis">Overview</SectionJumpLink>
+              <SectionJumpLink targetId="customer-tracking">Tracking</SectionJumpLink>
+              <SectionJumpLink targetId="customer-sites">Sites</SectionJumpLink>
+              <SectionJumpLink targetId="customer-bookings">Bookings</SectionJumpLink>
+            </nav>
+
             <section
+              id="customer-kpis"
+              className="scroll-section"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
                 gap: "1rem",
               }}
             >
-              <KpiCard
-                label="Active bookings"
-                value={kpis.activeCount}
-                delta={`${kpis.inTransit} in motion · ${kpis.pendingPickup} pre-dispatch`}
-                tone="neutral"
-              />
+              <KpiCard label="Active bookings" value={kpis.activeCount} delta={`${kpis.inTransit} in motion · ${kpis.pendingPickup} pre-dispatch`} tone="neutral" scrollTargetId="customer-tracking" />
               <KpiCard label="Total orders" value={kpis.totalOrders} delta={`${kpis.thisMonth} in last ~31 days`} tone="neutral" />
               <KpiCard
                 label="Total paid"
@@ -193,7 +203,7 @@ export default function CustomerPortalDashboard() {
                 alignItems: "start",
               }}
             >
-              <div className="card" style={{ display: "grid", gap: "1rem" }}>
+              <div id="customer-tracking" className="card scroll-section" style={{ display: "grid", gap: "1rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                   <h2 style={{ margin: 0 }}>Shipment tracking</h2>
                   <a href="/modules/operations/trips" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 600 }}>
@@ -202,8 +212,8 @@ export default function CustomerPortalDashboard() {
                 </div>
 
                 {activeShow.length === 0 ? (
-                  <p style={{ margin: 0, color: "var(--text-secondary)" }}>
-                    No shipment bookings yet.
+                  <p style={{ margin: 0, color: "var(--text-secondary)" }} role="status">
+                    {EMPTY_SHIPMENTS}
                   </p>
                 ) : (
                   <div style={{ display: "grid", gap: "1rem" }}>
@@ -461,8 +471,9 @@ export default function CustomerPortalDashboard() {
                       Add site
                     </button>
                   </div>
+                  <div id="customer-bookings" className="scroll-section">
                   {sites.length >= MIN_BOOKING_SITES ? (
-                    <CustomerCtaPrimary href="/booking">+ New booking</CustomerCtaPrimary>
+                      <CustomerCtaPrimary href="/booking">+ New booking</CustomerCtaPrimary>
                   ) : (
                     <div
                       style={{
@@ -478,6 +489,7 @@ export default function CustomerPortalDashboard() {
                       Add {MIN_BOOKING_SITES - sites.length} more site{MIN_BOOKING_SITES - sites.length === 1 ? "" : "s"} to enable booking
                     </div>
                   )}
+                  </div>
                 </div>
 
                 <div className="card" style={{ display: "grid", gap: "1rem" }}>
@@ -517,6 +529,7 @@ export default function CustomerPortalDashboard() {
             </section>
           </>
         )}
+        </AsyncDataView>
       </div>
     </main>
   );
@@ -533,8 +546,8 @@ const badgeBase: CSSProperties = {
 function ShipmentBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   if (s === "on going" || s === "ongoing")
-    return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "#1d4ed8" }}>{status}</span>;
-  if (s.includes("transit") || s.includes("route") || s.includes("delivery") || s.includes("en route")) return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "#1d4ed8" }}>{status}</span>;
+    return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "var(--brand-text-strong)" }}>{status}</span>;
+  if (s.includes("transit") || s.includes("route") || s.includes("delivery") || s.includes("en route")) return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "var(--brand-text-strong)" }}>{status}</span>;
   if (s.includes("deliver") || s.includes("complet")) return <span style={{ ...badgeBase, background: "rgba(5,150,105,0.12)", color: "#047857" }}>{status}</span>;
   if (s.includes("pending") || s.includes("approv")) return <span style={{ ...badgeBase, background: "rgba(251,191,36,0.35)", color: "#92400e" }}>{status}</span>;
   return <span style={{ ...badgeBase, background: "#F3F4F6", color: "#475569" }}>{status}</span>;

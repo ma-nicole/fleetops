@@ -8,6 +8,9 @@ import { useAuthStatus } from "@/lib/useAuthStatus";
 import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 import { StatusBadge, EmptyState } from "./StatusBadge";
 import { SkeletonGrid } from "./Skeleton";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import ErrorState from "@/components/ui/ErrorState";
+import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 
 type DashboardStats = {
   total_bookings: number;
@@ -120,7 +123,7 @@ export default function AnalyticsDashboard() {
         });
         setStats(data);
       } catch (err) {
-        setError((err as Error).message);
+        setError((err as Error).message || ERROR_LOAD_DATA);
       } finally {
         setLoading(false);
       }
@@ -161,7 +164,7 @@ export default function AnalyticsDashboard() {
       <main className="container" style={{ display: "grid", gap: "2rem", padding: "1.5rem" }}>
         <section>
           <h1 style={{ margin: "0 0 1rem 0" }}>Fleet Analytics Dashboard</h1>
-          <p style={{ margin: 0, opacity: 0.8, color: "var(--text-secondary)" }}>Loading dashboard...</p>
+          <LoadingMessage label="Loading dashboard…" />
         </section>
         <SkeletonGrid count={6} />
       </main>
@@ -174,15 +177,7 @@ export default function AnalyticsDashboard() {
         <section>
           <h1 style={{ margin: "0 0 1rem 0" }}>Fleet Analytics Dashboard</h1>
         </section>
-        <EmptyState
-          icon=""
-          title="Error Loading Dashboard"
-          description={`Failed to load analytics: ${error}`}
-          action={{
-            label: "Retry",
-            onClick: () => window.location.reload(),
-          }}
-        />
+        <ErrorState message={error} onRetry={() => window.location.reload()} />
       </main>
     );
   }
@@ -378,7 +373,7 @@ export default function AnalyticsDashboard() {
           flexWrap: "wrap",
         }}
       >
-        <button className="button" style={{ background: "#3b82f6" }} onClick={exportReport}>
+        <button className="button" style={{ background: "var(--accent)" }} onClick={exportReport}>
            Export Report
         </button>
         <button className="button" style={{ background: "#8b5cf6" }} onClick={scheduleMaintenance}>

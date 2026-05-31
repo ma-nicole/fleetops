@@ -108,7 +108,7 @@ function ResetPasswordForm() {
         style={{
           border: "none",
           borderRadius: "6px",
-          background: "#3B82F6",
+          background: "var(--accent)",
           color: "white",
           fontWeight: 600,
           padding: "0.65rem 1rem",
@@ -118,7 +118,7 @@ function ResetPasswordForm() {
         {isSubmitting ? "Updating..." : "Update password"}
       </button>
 
-      <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none", fontSize: "0.9rem" }}>
+      <Link href="/sign-in" style={{ color: "var(--brand-text)", textDecoration: "none", fontSize: "0.9rem" }}>
         Back to login
       </Link>
     </form>

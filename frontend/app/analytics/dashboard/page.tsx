@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsPipelineService } from "@/lib/analyticsPipelineService";
 import { formatPhp } from "@/lib/appLocale";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
 
 export default function AnalyticsDashboardPage() {
   useRoleGuard(["manager", "admin"]);
@@ -19,7 +20,7 @@ export default function AnalyticsDashboardPage() {
             <p style={{ margin: "0.4rem 0 0", color: "#666" }}>Data ingestion, preparation, and predictive outputs (simulated).</p>
           </div>
           <div style={{ display: "flex", gap: "0.6rem" }}>
-            <Link href="/analytics/predictions" style={{ textDecoration: "none", background: "#3B82F6", color: "white", padding: "0.55rem 0.9rem", borderRadius: "6px", fontWeight: 600 }}>
+            <Link href="/analytics/predictions" style={{ textDecoration: "none", background: "var(--accent)", color: "white", padding: "0.55rem 0.9rem", borderRadius: "6px", fontWeight: 600 }}>
               Predictions
             </Link>
             <Link href="/analytics/reports" style={{ textDecoration: "none", background: "#10B981", color: "white", padding: "0.55rem 0.9rem", borderRadius: "6px", fontWeight: 600 }}>
@@ -28,7 +29,13 @@ export default function AnalyticsDashboardPage() {
           </div>
         </div>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.8rem" }}>
+        <nav className="tab-pills" aria-label="Jump to analytics section">
+          <SectionJumpLink targetId="analytics-kpis">KPIs</SectionJumpLink>
+          <SectionJumpLink targetId="analytics-pipeline">Pipeline</SectionJumpLink>
+          <SectionJumpLink targetId="analytics-features">Features</SectionJumpLink>
+        </nav>
+
+        <section id="analytics-kpis" className="scroll-section" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.8rem" }}>
           <div className="card">
             <p style={{ margin: 0, color: "#666" }}>Trips Ingested</p>
             <h2 style={{ margin: "0.35rem 0 0" }}>{pipeline.ingestion.trips}</h2>
@@ -47,7 +54,7 @@ export default function AnalyticsDashboardPage() {
           </div>
         </section>
 
-        <section className="card" style={{ display: "grid", gap: "0.6rem" }}>
+        <section id="analytics-pipeline" className="card scroll-section" style={{ display: "grid", gap: "0.6rem" }}>
           <h3 style={{ margin: 0 }}>Data Preparation Pipeline</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.6rem" }}>
             <div style={{ padding: "0.7rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
@@ -69,7 +76,7 @@ export default function AnalyticsDashboardPage() {
           </div>
         </section>
 
-        <section className="card" style={{ overflowX: "auto" }}>
+        <section id="analytics-features" className="card scroll-section" style={{ overflowX: "auto" }}>
           <h3 style={{ marginTop: 0 }}>Feature Engineered Trip Metrics</h3>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>

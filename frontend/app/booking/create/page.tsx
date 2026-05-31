@@ -34,7 +34,7 @@ export default function CreateBookingFlowPage() {
           <input value={load} onChange={(e) => setLoad(e.target.value)} placeholder="Load details" style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }} />
           <div style={{ display: "flex", gap: "0.7rem" }}>
             <button onClick={submit} style={{ border: "none", borderRadius: "6px", background: "#10B981", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>Save Booking</button>
-            <Link href="/dispatcher/confirm-order" style={{ textDecoration: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Confirm Order</Link>
+            <Link href="/dispatcher/confirm-order" style={{ textDecoration: "none", borderRadius: "6px", background: "var(--accent)", color: "white", fontWeight: 600, padding: "0.65rem 1rem" }}>Next: Confirm Order</Link>
           </div>
         </section>
         {createdId && <p style={{ margin: 0, color: "#059669" }}>Booking {createdId} created and stored.</p>}

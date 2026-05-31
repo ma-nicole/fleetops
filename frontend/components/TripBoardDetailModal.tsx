@@ -189,7 +189,7 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
                             href={apiFullUrl(lg.attachment_url)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ fontSize: "0.82rem", color: "#2563EB" }}
+                            style={{ fontSize: "0.82rem", color: "var(--brand-text)" }}
                           >
                             Attachment
                           </a>

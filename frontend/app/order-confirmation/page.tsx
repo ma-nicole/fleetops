@@ -32,15 +32,15 @@ export default function OrderConfirmationPage() {
             <>
               <p style={{ margin: 0, color: "#666" }}>No booking found. Please create a booking first.</p>
               {role === "customer" ? (
-                <Link href="/booking" style={{ color: "#2563EB", textDecoration: "none" }}>
+                <Link href="/booking" style={{ color: "var(--brand-text)", textDecoration: "none" }}>
                   Go to booking
                 </Link>
               ) : role ? (
-                <Link href={getDashboardPath(role as UserRole)} style={{ color: "#2563EB", textDecoration: "none" }}>
+                <Link href={getDashboardPath(role as UserRole)} style={{ color: "var(--brand-text)", textDecoration: "none" }}>
                   Go to dashboard
                 </Link>
               ) : (
-                <Link href="/sign-in" style={{ color: "#2563EB", textDecoration: "none" }}>
+                <Link href="/sign-in" style={{ color: "var(--brand-text)", textDecoration: "none" }}>
                   Sign in
                 </Link>
               )}
@@ -53,7 +53,7 @@ export default function OrderConfirmationPage() {
               <p style={{ margin: 0 }}><strong>Load:</strong> {booking.load}</p>
               <p style={{ margin: 0, textTransform: "capitalize" }}><strong>Status:</strong> {booking.status}</p>
               {error && <p style={{ margin: 0, color: "#DC2626" }}>{error}</p>}
-              <button onClick={confirm} style={{ width: "fit-content", marginTop: "0.5rem", border: "none", borderRadius: "6px", background: "#3B82F6", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
+              <button onClick={confirm} style={{ width: "fit-content", marginTop: "0.5rem", border: "none", borderRadius: "6px", background: "var(--accent)", color: "white", fontWeight: 600, padding: "0.65rem 1rem", cursor: "pointer" }}>
                 Confirm and Proceed to Payment
               </button>
             </>

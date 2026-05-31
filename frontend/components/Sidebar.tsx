@@ -18,11 +18,6 @@ type MenuModule = {
   items: SubMenuItem[];
 };
 
-/**
- * Nav-only: hide academic / stub analytics modules from the sidebar. Routes and files stay available
- * (bookmarks, direct URLs). Roles listed in ops policy: admin + dispatcher. Lab links under Manager →
- * Analytics are unchanged here; add `"manager"` to this set to hide those too.
- */
 const SIDEBAR_NAV_ROLES_HIDING_ANALYTICS_MODULES = new Set(["admin", "dispatcher"]);
 
 function isSidebarAnalyticsModuleHidden(role: string, href: string): boolean {
@@ -34,7 +29,6 @@ function isSidebarAnalyticsModuleHidden(role: string, href: string): boolean {
 }
 
 const menuModules: MenuModule[] = [
-  // DRIVER
   {
     label: "Active Operations",
     roles: ["driver"],
@@ -46,26 +40,18 @@ const menuModules: MenuModule[] = [
   {
     label: "Schedule & Pay",
     roles: ["driver"],
-    items: [
-      { label: "Total Pay", href: "/driver/pay", roles: ["driver"] },
-    ],
+    items: [{ label: "Total Pay", href: "/driver/pay", roles: ["driver"] }],
   },
   {
     label: "Vehicle",
     roles: ["driver"],
-    items: [
-      { label: "Report Vehicle Issue", href: "/driver/vehicle-status", roles: ["driver"] },
-    ],
+    items: [{ label: "Report Vehicle Issue", href: "/driver/vehicle-status", roles: ["driver"] }],
   },
   {
     label: "Reports",
     roles: ["driver"],
-    items: [
-      { label: "General Form", href: "/driver/general-form", roles: ["driver"] },
-      /* Hidden (not removed): Activity & Ratings — `/driver/activity-ratings` still works via direct URL. */
-    ],
+    items: [{ label: "General Form", href: "/driver/general-form", roles: ["driver"] }],
   },
-
   {
     label: "Active Operations",
     roles: ["helper"],
@@ -95,8 +81,6 @@ const menuModules: MenuModule[] = [
       { label: "Activity & Ratings", href: "/helper/activity-ratings", roles: ["helper"] },
     ],
   },
-
-  // DISPATCHER
   {
     label: "Dashboard & Operations",
     roles: ["dispatcher"],
@@ -120,8 +104,6 @@ const menuModules: MenuModule[] = [
       { label: "Trip cost ledger", href: "/dispatcher/trip-cost-ledger", roles: ["dispatcher"] },
     ],
   },
-
-  // MANAGER
   {
     label: "Analytics",
     roles: ["manager"],
@@ -170,13 +152,11 @@ const menuModules: MenuModule[] = [
       { label: "Customer Reviews", href: "/manager/customer-reviews", roles: ["manager"] },
     ],
   },
-
-  // ADMIN — compact 2-group layout
   {
     label: "Overview",
     roles: ["admin"],
     items: [
-      { label: "Dashboard", href: "/admin/dashboard", roles: ["admin"] },
+      { label: "Analytics Center", href: "/admin/dashboard", roles: ["admin"] },
       { label: "Calculations", href: "/modules/administration/booking-pricing", roles: ["admin"] },
       { label: "Payment Approval", href: "/admin/payment-approval", roles: ["admin"] },
       { label: "Goods Declarations", href: "/admin/goods-declarations", roles: ["admin"] },
@@ -194,8 +174,6 @@ const menuModules: MenuModule[] = [
       { label: "Vehicle Management", href: "/modules/administration/vehicles", roles: ["admin"] },
     ],
   },
-
-  // CUSTOMER
   {
     label: "Booking",
     roles: ["customer"],
@@ -230,8 +208,6 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
   const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
 
-  // For admin (compact 2-group layout) keep both groups expanded by default
-  // so navigation is one click instead of two.
   useEffect(() => {
     if (userRole === "admin") {
       setExpandedModules((prev) => {
@@ -243,7 +219,6 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
     }
   }, [userRole]);
 
-  // Helpers: expand all nav groups by default so submenu links are not stuck behind collapsed accordions.
   useEffect(() => {
     if (userRole === "helper") {
       setExpandedModules((prev) => {
@@ -254,20 +229,18 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
       });
     }
   }, [userRole]);
+
   const asideRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const syncRole = () => {
       if (!isAuthenticated()) {
         setUserRole(null);
         return;
       }
-      // Match NavBar / guards: JWT role first — never default to "customer" or staff lose admin menu (e.g. diesel settings).
       setUserRole(getEffectiveRole());
     };
-
     syncRole();
     window.addEventListener(AUTH_CHANGE_EVENT, syncRole);
     window.addEventListener("storage", syncRole);
@@ -285,7 +258,6 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // Close on Escape (only when open).
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -298,46 +270,28 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onCloseSidebar]);
 
-  // Trap focus inside the drawer when modal (mobile + open). On desktop the
-  // sidebar is non-modal and users can freely tab in and out.
   useFocusTrap(asideRef, isOpen && isMobile);
 
-  const visibleModules = menuModules.filter(
-    (module) => userRole && module.roles.includes(userRole)
-  );
+  const visibleModules = menuModules.filter((module) => userRole && module.roles.includes(userRole));
 
-  // Auto-expand the module that contains the current page when the route or
-  // role changes. Do not depend on expandedModules — that would re-run after
-  // every manual collapse and immediately re-expand the active section.
   useEffect(() => {
     if (!userRole) return;
     const containing = menuModules.find((module) =>
-      module.items.some(
-        (item) => pathname === item.href || pathname.startsWith(item.href + "/")
-      )
+      module.items.some((item) => pathname === item.href || pathname.startsWith(item.href + "/")),
     );
     if (!containing) return;
-    setExpandedModules((prev) =>
-      prev.includes(containing.label) ? prev : [...prev, containing.label]
-    );
+    setExpandedModules((prev) => (prev.includes(containing.label) ? prev : [...prev, containing.label]));
   }, [pathname, userRole]);
 
   if (!userRole) return null;
 
   const toggleModule = (moduleLabel: string) => {
     setExpandedModules((prev) =>
-      prev.includes(moduleLabel)
-        ? prev.filter((m) => m !== moduleLabel)
-        : [...prev, moduleLabel]
+      prev.includes(moduleLabel) ? prev.filter((m) => m !== moduleLabel) : [...prev, moduleLabel],
     );
   };
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
-
-  // React 19 types `inert` as a proper boolean attribute. Spread it only when
-  // the sidebar is closed so React renders the bare attribute (no value) and
-  // omits it entirely when open.
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const inertProps = !isOpen ? { inert: true } : {};
 
   return (
@@ -348,74 +302,21 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
         aria-label="Primary navigation"
         aria-hidden={!isOpen}
         {...inertProps}
-        style={{
-          position: "fixed",
-          left: 0,
-          top: "76px",
-          width: isOpen ? "280px" : "0",
-          height: "calc(100vh - 76px)",
-          background: "#FFFFFF",
-          borderRight: "1px solid #E8E8E8",
-          overflowX: "hidden",
-          transition: "width 0.3s ease, transform 0.3s ease",
-          zIndex: 1000,
-          paddingTop: "1rem",
-          transform: isOpen ? "translateX(0)" : "translateX(-100%)",
-          display: "flex",
-          flexDirection: "column",
-          /* When the drawer is closed, do not intercept clicks on the main canvas (inert + hit-testing). */
-          pointerEvents: isOpen ? "auto" : "none",
-        }}
+        className={`app-sidebar${isOpen ? "" : " app-sidebar--closed"}`}
       >
-        {/* Logo + close */}
-        <div
-          style={{
-            padding: "1rem 1rem 0.75rem",
-            borderBottom: "1px solid #E8E8E8",
-            marginBottom: "1rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "1rem",
-          }}
-        >
-          <Link
-            href="/"
-            style={{
-              fontSize: "1.2rem",
-              fontWeight: 800,
-              color: "var(--brand-text)",
-              textDecoration: "none",
-            }}
-          >
-            FleetOpt
-          </Link>
-
-          <button
-            type="button"
-            onClick={onCloseSidebar}
-            aria-label="Close navigation"
-            style={{
-              minHeight: "44px",
-              minWidth: "44px",
-              display: "inline-grid",
-              placeItems: "center",
-              borderRadius: "6px",
-              border: "1px solid #E8E8E8",
-              background: "transparent",
-              color: "var(--text)",
-              cursor: "pointer",
-              fontSize: "1.25rem",
-            }}
-          >
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <div className="app-sidebar__header">
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--sidebar-text-active)", letterSpacing: "0.04em" }}>
+            NAVIGATION
+          </span>
+          <button type="button" onClick={onCloseSidebar} aria-label="Close navigation" className="app-sidebar__close">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="3" x2="15" y2="15" />
               <line x1="15" y1="3" x2="3" y2="15" />
             </svg>
           </button>
         </div>
 
-        <nav aria-label="Main menu" style={{ padding: "0 0.5rem", flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <nav aria-label="Main menu" className="app-sidebar__nav">
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {visibleModules.map((module) => {
               const panelId = moduleId(module.label);
@@ -424,9 +325,8 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
                 (item) =>
                   userRole &&
                   item.roles.includes(userRole) &&
-                  !isSidebarAnalyticsModuleHidden(userRole, item.href)
+                  !isSidebarAnalyticsModuleHidden(userRole, item.href),
               );
-
               if (visibleItems.length === 0) return null;
 
               return (
@@ -436,65 +336,15 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
                     onClick={() => toggleModule(module.label)}
                     aria-expanded={isExpanded}
                     aria-controls={panelId}
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.75rem",
-                      padding: "0.75rem 1rem",
-                      margin: "0.25rem 0",
-                      minHeight: "44px",
-                      borderRadius: "8px",
-                      border: "none",
-                      background: "rgba(255, 152, 0, 0.08)",
-                      color: "var(--text)",
-                      cursor: "pointer",
-                      transition: "background 0.2s ease",
-                      fontSize: "0.95rem",
-                      fontWeight: 600,
-                      textAlign: "left",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background =
-                        "rgba(255, 152, 0, 0.15)";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background =
-                        "rgba(255, 152, 0, 0.08)";
-                    }}
+                    className="app-sidebar__group-btn"
                   >
                     <span>{module.label}</span>
-                    <svg
-                      aria-hidden="true"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 14 14"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{
-                        transition: "transform 0.2s ease",
-                        transform: isExpanded ? "rotate(180deg)" : "rotate(0)",
-                        color: "var(--text-secondary)",
-                        flexShrink: 0,
-                      }}
-                    >
+                    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="2,4 7,10 12,4" />
                     </svg>
                   </button>
 
-                  <ul
-                    id={panelId}
-                    hidden={!isExpanded}
-                    style={{
-                      listStyle: "none",
-                      margin: 0,
-                      padding: 0,
-                    }}
-                  >
+                  <ul id={panelId} hidden={!isExpanded} style={{ listStyle: "none", margin: 0, padding: 0 }}>
                     {visibleItems.map((item) => {
                       const active = isActive(item.href);
                       return (
@@ -503,40 +353,7 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
                             href={item.href}
                             prefetch={false}
                             aria-current={active ? "page" : undefined}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "0.75rem",
-                              padding: "0.6rem 1rem",
-                              marginLeft: "1rem",
-                              marginTop: "0.2rem",
-                              marginBottom: "0.2rem",
-                              minHeight: "44px",
-                              borderRadius: "6px",
-                              color: active ? "var(--brand-text-strong)" : "var(--text)",
-                              textDecoration: "none",
-                              background: active ? "rgba(255, 152, 0, 0.18)" : "transparent",
-                              borderLeft: active
-                                ? "3px solid var(--brand-text)"
-                                : "3px solid transparent",
-                              transition: "background 0.2s ease, color 0.2s ease",
-                              fontSize: "0.9rem",
-                              fontWeight: active ? 600 : 500,
-                              cursor: "pointer",
-                              pointerEvents: "auto",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!active) {
-                                (e.currentTarget as HTMLElement).style.background =
-                                  "rgba(255, 152, 0, 0.08)";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!active) {
-                                (e.currentTarget as HTMLElement).style.background =
-                                  "transparent";
-                              }
-                            }}
+                            className={`app-sidebar__link${active ? " app-sidebar__link--active" : ""}`}
                             onClick={() => {
                               if (typeof window !== "undefined" && window.innerWidth <= 768) {
                                 onCloseSidebar();
@@ -555,45 +372,13 @@ export default function Sidebar({ isOpen, onCloseSidebar }: SidebarProps) {
           </ul>
         </nav>
 
-        <p
-          style={{
-            margin: "1rem",
-            padding: "0.75rem",
-            background: "rgba(255, 152, 0, 0.1)",
-            border: "1px solid rgba(255, 152, 0, 0.25)",
-            borderRadius: "8px",
-            textAlign: "center",
-            fontSize: "0.85rem",
-            color: "var(--brand-text-strong)",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-          aria-label={`Signed in as ${userRole}`}
-        >
-          <span style={{ textTransform: "capitalize" }}>{userRole}</span>
+        <p className="app-sidebar__role-badge" aria-label={`Signed in as ${userRole}`}>
+          {userRole} account
         </p>
       </aside>
 
-      {/* Click-away overlay (mobile only). It's a real button so screen-reader
-          users can also dismiss the drawer; visually it sits behind the panel. */}
       {isOpen && isMobile && (
-        <button
-          type="button"
-          onClick={onCloseSidebar}
-          aria-label="Close navigation"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.4)",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
-            zIndex: 999,
-          }}
-        />
+        <button type="button" onClick={onCloseSidebar} aria-label="Close navigation" className="app-sidebar-overlay" />
       )}
     </>
   );

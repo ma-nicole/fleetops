@@ -206,7 +206,7 @@ export default function OngoingOperationsPage() {
                 style={{
                   padding: "0.5rem 0.75rem",
                   background: "rgba(37,99,235,0.12)",
-                  color: "#1d4ed8",
+                  color: "var(--brand-text-strong)",
                   borderRadius: "4px",
                   fontWeight: "600",
                   fontSize: "0.75rem",

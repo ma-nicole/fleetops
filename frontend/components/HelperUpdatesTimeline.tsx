@@ -271,7 +271,7 @@ export default function HelperUpdatesTimeline({
                     href={mediaSrc(row.photo_url)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ display: "inline-block", marginTop: 6, color: "#2563EB", fontWeight: 600, fontSize: "0.82rem" }}
+                    style={{ display: "inline-block", marginTop: 6, color: "var(--brand-text)", fontWeight: 600, fontSize: "0.82rem" }}
                   >
                     View attached photo
                   </a>

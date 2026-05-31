@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CustomerPortalDashboard from "@/components/CustomerPortalDashboard";
 import KpiCard from "@/components/KpiCard";
+import SectionJumpLink from "@/components/ui/SectionJumpLink";
 
 const roleConfigs: Record<string, {
   title: string;
@@ -167,7 +168,15 @@ export default function RoleDashboardPage() {
 
   return (
     <main className="container" style={{ display: "grid", gap: "1rem" }}>
-      <section className="card" style={{ display: "grid", gap: "1rem" }}>
+      <nav className="tab-pills" aria-label="Jump to dashboard section">
+        <SectionJumpLink targetId="role-kpis">KPIs</SectionJumpLink>
+        <SectionJumpLink targetId="role-actions">Quick actions</SectionJumpLink>
+        <SectionJumpLink targetId="role-alerts">Alerts</SectionJumpLink>
+        <SectionJumpLink targetId="role-timeline">Timeline</SectionJumpLink>
+        <SectionJumpLink targetId="role-modules">Modules</SectionJumpLink>
+      </nav>
+
+      <section id="role-kpis" className="card scroll-section" style={{ display: "grid", gap: "1rem" }}>
         <Breadcrumbs
           items={[
             { label: "Dashboard", href: "/dashboard/manager" },
@@ -183,7 +192,7 @@ export default function RoleDashboardPage() {
         </div>
       </section>
 
-      <section className="card" style={{ display: "grid", gap: "0.75rem" }}>
+      <section id="role-actions" className="card scroll-section" style={{ display: "grid", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>Quick actions</h2>
         <div className="quick-action-grid">
           {config.quickActions.map((action) => (
@@ -195,7 +204,7 @@ export default function RoleDashboardPage() {
         </div>
       </section>
 
-      <section className="card" style={{ display: "grid", gap: "0.75rem" }}>
+      <section id="role-alerts" className="card scroll-section" style={{ display: "grid", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>At-a-glance alerts</h2>
         <div className="alert-row">
           {config.alerts.map((alert) => (
@@ -206,7 +215,7 @@ export default function RoleDashboardPage() {
         </div>
       </section>
 
-      <section className="card" style={{ display: "grid", gap: "0.75rem" }}>
+      <section id="role-timeline" className="card scroll-section" style={{ display: "grid", gap: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>Workflow timeline</h2>
         <div className="timeline">
           {config.timeline.map((step, index) => (
@@ -218,7 +227,7 @@ export default function RoleDashboardPage() {
         </div>
       </section>
 
-      <section className="card" style={{ display: "grid", gap: "0.7rem" }}>
+      <section id="role-modules" className="card scroll-section" style={{ display: "grid", gap: "0.7rem" }}>
         <h2 style={{ margin: 0 }}>Role Modules</h2>
         {config.modules.map((item) => (
           <div key={item} style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "0.7rem" }}>

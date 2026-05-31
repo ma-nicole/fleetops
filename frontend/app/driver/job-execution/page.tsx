@@ -90,7 +90,7 @@ export default function DriverJobExecutionPage() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1rem" }}>
                 {activeJob.status === "assigned" && <button onClick={() => runAction("accepted")} style={{ border: "none", borderRadius: "6px", padding: "0.75rem", background: "#10B981", color: "white", fontWeight: 600, cursor: "pointer" }}>Accept Job</button>}
-                {activeJob.status === "accepted" && <button onClick={() => runAction("enroute")} style={{ border: "none", borderRadius: "6px", padding: "0.75rem", background: "#3B82F6", color: "white", fontWeight: 600, cursor: "pointer" }}>Depart to Pickup</button>}
+                {activeJob.status === "accepted" && <button onClick={() => runAction("enroute")} style={{ border: "none", borderRadius: "6px", padding: "0.75rem", background: "var(--accent)", color: "white", fontWeight: 600, cursor: "pointer" }}>Depart to Pickup</button>}
                 {activeJob.status === "enroute" && <button onClick={() => runAction("loading")} style={{ border: "none", borderRadius: "6px", padding: "0.75rem", background: "#F59E0B", color: "white", fontWeight: 600, cursor: "pointer" }}>Arrived & Loading Started</button>}
                 {activeJob.status === "loading" && <button onClick={() => runAction("out_for_delivery")} style={{ border: "none", borderRadius: "6px", padding: "0.75rem", background: "#8B5CF6", color: "white", fontWeight: 600, cursor: "pointer" }}>Out for Delivery</button>}
                 {activeJob.status === "out_for_delivery" && <button onClick={() => runAction("completed")} style={{ border: "none", borderRadius: "6px", padding: "0.75rem", background: "#059669", color: "white", fontWeight: 600, cursor: "pointer" }}>Delivered (Capture POD)</button>}
@@ -124,7 +124,7 @@ export default function DriverJobExecutionPage() {
               <button
                 key={job.id}
                 onClick={() => setActiveJob(job)}
-                style={{ border: activeJob?.id === job.id ? "2px solid #3B82F6" : "1px solid #E5E7EB", borderRadius: "8px", background: "white", cursor: "pointer", textAlign: "left", padding: "0.75rem" }}
+                style={{ border: activeJob?.id === job.id ? "2px solid var(--accent)" : "1px solid #E5E7EB", borderRadius: "8px", background: "white", cursor: "pointer", textAlign: "left", padding: "0.75rem" }}
               >
                 <p style={{ margin: "0 0 0.3rem", fontWeight: 700 }}>{job.id}</p>
                 <p style={{ margin: "0 0 0.3rem", color: "#666", fontSize: "0.85rem" }}>{job.pickupLocation}</p>
