@@ -99,6 +99,17 @@ def validate_admin_analytics(payload: dict[str, Any]) -> dict[str, Any]:
             fuel_summary,
             fuel_chart,
         )
+        drill = expenses.get("drilldown") or {}
+        recs = drill.get("records") or []
+        if recs:
+            rec_total = round(sum(float(r.get("amount_php") or 0) for r in recs), 2)
+            record(
+                "expenses_records_vs_summary",
+                abs(rec_total - total_op) < 0.02,
+                "Drill-down expense records must sum to total operational cost.",
+                total_op,
+                rec_total,
+            )
 
     financial = payload.get("financial")
     clients = payload.get("clients")

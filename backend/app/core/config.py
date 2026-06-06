@@ -1,6 +1,6 @@
-import os
+from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,11 +34,22 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         description="Frontend URL for CORS",
     )
+    cors_origins: str | None = Field(
+        default=None,
+        description="Comma-separated allowlist of CORS origins for production.",
+    )
+
+    # Upload storage root (relative paths resolve from backend/ directory)
+    uploads_root: str = Field(
+        default="uploads",
+        description="Base directory for uploaded files.",
+    )
 
     # Clerk authentication (optional)
     use_clerk_auth: bool = False
     clerk_api_key: str | None = None
     clerk_frontend_api: str | None = None
+    clerk_webhook_secret: str | None = None
 
     # Email notifications (optional)
     resend_api_key: str | None = None
@@ -159,6 +170,64 @@ class Settings(BaseSettings):
             if v == "dev-key-change-in-production":
                 raise ValueError("Set a strong SECRET_KEY in .env for production.")
         return v
+
+    @model_validator(mode="after")
+    def validate_production_requirements(self):
+        env = (self.app_env or "").strip().lower()
+        if env != "production":
+            return self
+
+        missing: list[str] = []
+        if not self.secret_key:
+            missing.append("SECRET_KEY")
+        if not self.database_url:
+            missing.append("DATABASE_URL")
+        if not self.frontend_url:
+            missing.append("FRONTEND_URL")
+        if missing:
+            raise ValueError("Missing required production environment values: " + ", ".join(missing))
+
+        if self.secret_key == "dev-key-change-in-production":
+            raise ValueError("SECRET_KEY must not use the development default in production.")
+        lowered = [o.lower() for o in self.allowed_cors_origins]
+        if any("localhost" in o or "127.0.0.1" in o for o in lowered):
+            raise ValueError(
+                "Production CORS origins must not include localhost/127.0.0.1. "
+                "Set FRONTEND_URL and/or CORS_ORIGINS to your approved domains."
+            )
+        return self
+
+    @property
+    def resolved_uploads_root(self) -> Path:
+        configured = Path(self.uploads_root).expanduser()
+        if configured.is_absolute():
+            return configured
+        backend_root = Path(__file__).resolve().parents[2]
+        return (backend_root / configured).resolve()
+
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        env = (self.app_env or "").strip().lower()
+        local_dev = {"http://localhost:3000", "http://127.0.0.1:3000"}
+        origins: list[str] = []
+
+        raw = (self.cors_origins or "").strip()
+        if raw:
+            for item in raw.split(","):
+                cleaned = item.strip().rstrip("/")
+                if cleaned and cleaned not in origins:
+                    origins.append(cleaned)
+
+        frontend = (self.frontend_url or "").strip().rstrip("/")
+        if frontend and frontend not in origins:
+            origins.append(frontend)
+
+        if env != "production":
+            for local in local_dev:
+                if local not in origins:
+                    origins.append(local)
+
+        return origins
 
 
 settings = Settings()

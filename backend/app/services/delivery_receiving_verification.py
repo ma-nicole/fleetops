@@ -9,7 +9,9 @@ from typing import Any
 
 from fastapi import HTTPException, UploadFile
 
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "delivery_receiving"
+from app.core.paths import uploads_subdir
+
+UPLOAD_DIR = uploads_subdir("delivery_receiving")
 DOC_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 SIG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_BYTES = 12 * 1024 * 1024
@@ -60,7 +62,7 @@ def build_delivery_receiving_status(trip) -> dict[str, Any]:
     return {
         "trip_id": trip.id,
         "receiving_document_uploaded": has_doc,
-        "receiving_document_path": getattr(trip, "receiving_document_path", None),
+        "receiving_document_path": None,
         "receiving_document_uploaded_at": (
             trip.receiving_document_uploaded_at.isoformat()
             if getattr(trip, "receiving_document_uploaded_at", None)
@@ -74,7 +76,7 @@ def build_delivery_receiving_status(trip) -> dict[str, Any]:
         ),
         "qr_payload": qr_payload(trip.id, token) if token else None,
         "digital_signature_uploaded": has_sig,
-        "digital_signature_path": getattr(trip, "digital_signature_path", None),
+        "digital_signature_path": None,
         "digital_signature_uploaded_at": (
             trip.digital_signature_uploaded_at.isoformat()
             if getattr(trip, "digital_signature_uploaded_at", None)

@@ -3,10 +3,31 @@ import nextEnv from "@next/env";
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
 
+const isProd = process.env.NODE_ENV === "production";
+const requiredProdVars = ["NEXT_PUBLIC_API_URL", "BACKEND_ORIGIN"];
+if (isProd) {
+  const missing = requiredProdVars.filter((key) => !(process.env[key] || "").trim());
+  if (missing.length) {
+    throw new Error(
+      `Missing required production environment variables: ${missing.join(", ")}. ` +
+        "Set these before running `next build`.",
+    );
+  }
+  const publicApi = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+  if (!(publicApi.startsWith("https://") || publicApi.startsWith("/api-proxy"))) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL must be an HTTPS URL or `/api-proxy` in production.",
+    );
+  }
+}
+
 const backendOrigin = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  turbopack: {
+    root: process.cwd(),
+  },
   async rewrites() {
     const origin = backendOrigin.replace(/\/+$/, "");
     return [

@@ -14,10 +14,11 @@ from app.constants.vehicle_issue_report import (
     VEHICLE_ISSUE_PRIORITY_VALUES,
     VEHICLE_ISSUE_TYPE_VALUES,
 )
+from app.core.paths import uploads_subdir
 from app.models.entities import Booking, BookingStatus, Trip, TripStatus, Truck
 from app.services.dispatch_operations_center import _display_status
 
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "vehicle_issue_reports"
+UPLOAD_DIR = uploads_subdir("vehicle_issue_reports")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".img"}
 
 _BAD_BOOKING_STATUSES: frozenset[BookingStatus] = frozenset(

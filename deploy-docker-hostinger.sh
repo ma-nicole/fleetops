@@ -24,6 +24,13 @@ DOMAIN="${DOMAIN:-https://yourdomain.com}"
 DOMAIN="${DOMAIN%/}"
 NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-${DOMAIN}/api}"
 FRONTEND_URL="${FRONTEND_URL:-${DOMAIN}}"
+BACKEND_ORIGIN="${BACKEND_ORIGIN:-http://fleetopt-backend:8080}"
+APP_ENV="${APP_ENV:-production}"
+UPLOADS_ROOT="${UPLOADS_ROOT:-/app/uploads}"
+CORS_ORIGINS="${CORS_ORIGINS:-${FRONTEND_URL}}"
+if [ -z "${SECRET_KEY:-}" ]; then
+  SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+fi
 
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-rootpassword}"
 MYSQL_DATABASE="${MYSQL_DATABASE:-fleetopt}"
@@ -50,6 +57,7 @@ DATABASE_URL="mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@${DB_HOST_INTERNAL
 log_info "Configuration:"
 echo "  FRONTEND_URL=$FRONTEND_URL"
 echo "  NEXT_PUBLIC_API_URL (build)=$NEXT_PUBLIC_API_URL"
+echo "  BACKEND_ORIGIN (build)=$BACKEND_ORIGIN"
 echo "  DATABASE_URL host=$DB_HOST_INTERNAL"
 
 # Docker network (hindi na --link; deprecated na iyon sa Docker API)
@@ -63,6 +71,7 @@ log_info "Building images (frontend kailangan ang NEXT_PUBLIC_* sa build)..."
 docker build -t "$BACKEND_IMAGE" ./backend
 docker build \
   --build-arg "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}" \
+  --build-arg "BACKEND_ORIGIN=${BACKEND_ORIGIN}" \
   -t "$FRONTEND_IMAGE" \
   ./frontend
 
@@ -87,22 +96,32 @@ for i in $(seq 1 45); do
 done
 
 log_info "Starting backend..."
+log_info "Running alembic migrations..."
+docker run --rm \
+  --network "$NETWORK" \
+  -e APP_ENV="$APP_ENV" \
+  -e SECRET_KEY="$SECRET_KEY" \
+  -e DATABASE_URL="$DATABASE_URL" \
+  -e FRONTEND_URL="$FRONTEND_URL" \
+  -e CORS_ORIGINS="$CORS_ORIGINS" \
+  -e UPLOADS_ROOT="$UPLOADS_ROOT" \
+  -v fleetopt_uploads:"$UPLOADS_ROOT" \
+  "$BACKEND_IMAGE" \
+  alembic upgrade head
+
+log_info "Starting backend..."
 docker run -d \
   --name "$BACKEND_CONTAINER" \
   --network "$NETWORK" \
+  -e APP_ENV="$APP_ENV" \
+  -e SECRET_KEY="$SECRET_KEY" \
   -e DATABASE_URL="$DATABASE_URL" \
   -e FRONTEND_URL="$FRONTEND_URL" \
+  -e CORS_ORIGINS="$CORS_ORIGINS" \
+  -e UPLOADS_ROOT="$UPLOADS_ROOT" \
+  -v fleetopt_uploads:"$UPLOADS_ROOT" \
   -p 8000:8080 \
   "$BACKEND_IMAGE"
-
-log_info "Initializing DB tables (FastAPI startup also runs create_all)..."
-sleep 3
-docker exec "$BACKEND_CONTAINER" python -c "
-from app.db import engine
-from app.models.base import Base
-Base.metadata.create_all(bind=engine)
-print('OK: tables ensured')
-" || log_warn "create_all skipped or already applied"
 
 log_info "Starting frontend..."
 docker run -d \
@@ -111,12 +130,54 @@ docker run -d \
   -p 3000:8080 \
   "$FRONTEND_IMAGE"
 
+cat > /tmp/fleetopt-nginx.conf << 'EOF'
+upstream backend {
+    server 127.0.0.1:8000;
+}
+
+upstream frontend {
+    server 127.0.0.1:3000;
+}
+
+server {
+    listen 80;
+    server_name yourdomain.com www.yourdomain.com;
+    client_max_body_size 15M; # Backend max validated upload is 12MB
+
+    location /api/ {
+        proxy_pass http://backend/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /uploads/ {
+        proxy_pass http://backend/uploads/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://frontend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+
 echo ""
 log_info "Tapos na ang container run."
 docker ps --filter "name=fleetopt" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 echo ""
 echo "Sunod:"
-echo "  1. Nginx reverse proxy: /api → 127.0.0.1:8000, / → 127.0.0.1:3000"
-echo "  2. SSL (Let's Encrypt sa VPS o Hostinger panel)"
-echo "  3. Palitan ang lahat ng yourdomain placeholder at mga DB password via env exports"
+echo "  1. Nginx reverse proxy: /api → 127.0.0.1:8000, /uploads → 127.0.0.1:8000/uploads, / → 127.0.0.1:3000"
+echo "  2. Nginx template written to /tmp/fleetopt-nginx.conf"
+echo "  3. SSL (Let's Encrypt sa VPS o Hostinger panel)"
+echo "  4. Palitan ang lahat ng yourdomain placeholder at mga DB password via env exports"
+echo "  5. Check probes: curl http://127.0.0.1:8000/health && curl http://127.0.0.1:8000/ready"
 echo "  Logs: docker logs -f $BACKEND_CONTAINER | $FRONTEND_CONTAINER | $MYSQL_CONTAINER"

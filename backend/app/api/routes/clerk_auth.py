@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, Header
+import base64
+import hashlib
+import hmac
+import json
+from secrets import compare_digest
+from time import time
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.security import hash_password
 from app.db import get_db
 from app.models.entities import User, UserRole
-from app.schemas.auth import Token, UserCreate, UserRead
+from app.schemas.auth import UserRead
 
 
 router = APIRouter(prefix="/clerk", tags=["clerk"])
@@ -13,18 +19,52 @@ router = APIRouter(prefix="/clerk", tags=["clerk"])
 
 @router.post("/webhook")
 async def clerk_webhook(
-    request_body: dict = Body(...),
-    svix_id: str = Header(..., alias="svix-id"),
-    svix_timestamp: str = Header(..., alias="svix-timestamp"),
-    svix_signature: str = Header(..., alias="svix-signature"),
+    request: Request,
+    svix_id: str | None = Header(default=None, alias="svix-id"),
+    svix_timestamp: str | None = Header(default=None, alias="svix-timestamp"),
+    svix_signature: str | None = Header(default=None, alias="svix-signature"),
     db: Session = Depends(get_db),
 ):
     """
     Clerk webhook handler for user creation/update/deletion events.
     Validates webhook signature and syncs user data with database.
     """
-    # TODO: Verify signature using Clerk's webhook verification
-    # For now, basic implementation
+    if not settings.clerk_webhook_secret:
+        raise HTTPException(status_code=503, detail="Clerk webhook secret is not configured.")
+    if not svix_id or not svix_timestamp or not svix_signature:
+        raise HTTPException(status_code=401, detail="Missing webhook signature headers.")
+    try:
+        ts = int(svix_timestamp)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail="Invalid webhook timestamp.") from exc
+    if abs(int(time()) - ts) > 300:
+        raise HTTPException(status_code=401, detail="Webhook timestamp is outside allowed window.")
+
+    raw_body = await request.body()
+    payload_to_sign = f"{svix_id}.{svix_timestamp}.{raw_body.decode('utf-8')}".encode("utf-8")
+    secret = settings.clerk_webhook_secret.strip()
+    if secret.startswith("whsec_"):
+        secret = secret[6:]
+    try:
+        secret_bytes = base64.b64decode(secret)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Invalid Clerk webhook secret format.") from exc
+
+    expected = base64.b64encode(
+        hmac.new(secret_bytes, payload_to_sign, hashlib.sha256).digest()
+    ).decode("utf-8")
+    signatures = [part.strip() for part in svix_signature.split(" ")]
+    valid = any(
+        sig.startswith("v1,") and compare_digest(sig[3:], expected)
+        for sig in signatures
+    )
+    if not valid:
+        raise HTTPException(status_code=401, detail="Invalid webhook signature.")
+
+    try:
+        request_body = json.loads(raw_body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload JSON.") from exc
 
     event_type = request_body.get("type")
 

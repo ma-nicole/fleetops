@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.constants.booking_time_slots import BOOKING_TIME_SLOTS
 from app.models.entities import BookingStatus, CustomsClearanceStatus, ServiceType
@@ -39,6 +39,19 @@ class BookingCreate(BaseModel):
         if t not in BOOKING_TIME_SLOTS:
             raise ValueError(f"Time slot must be one of: {', '.join(BOOKING_TIME_SLOTS)}")
         return t
+
+    @field_validator("scheduled_date")
+    @classmethod
+    def validate_scheduled_date(cls, v: date) -> date:
+        if v < date.today():
+            raise ValueError("Scheduled date cannot be in the past.")
+        return v
+
+    @model_validator(mode="after")
+    def validate_route_points(self):
+        if self.pickup_location.strip().lower() == self.dropoff_location.strip().lower():
+            raise ValueError("Pickup and delivery locations cannot be the same.")
+        return self
 
 
 class BookingScheduleAvailabilityRead(BaseModel):

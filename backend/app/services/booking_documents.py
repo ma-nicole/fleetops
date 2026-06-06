@@ -7,7 +7,9 @@ from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "booking_documents"
+from app.core.paths import uploads_root, uploads_subdir
+
+UPLOAD_DIR = uploads_subdir("booking_documents")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".pdf"}
 MAX_BYTES = 5 * 1024 * 1024
 
@@ -38,6 +40,8 @@ async def save_booking_document(
         raise HTTPException(status_code=400, detail="Document file is required.")
     ext = validate_booking_document(file.filename, file.content_type)
     raw = await file.read()
+    if len(raw) == 0:
+        raise HTTPException(status_code=400, detail="Empty file is not allowed.")
     if len(raw) > MAX_BYTES:
         raise HTTPException(status_code=400, detail="Document must be 5MB or smaller.")
     stored_name = f"b{booking_id}_{prefix}_{uuid4().hex}{ext}"
@@ -50,7 +54,7 @@ async def save_booking_document(
 def resolve_booking_document_path(rel_path: str | None) -> Path:
     if not rel_path:
         raise HTTPException(status_code=404, detail="No document on record.")
-    base = Path(__file__).resolve().parents[2] / "uploads"
+    base = uploads_root()
     path = base / rel_path
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Document file missing on server.")

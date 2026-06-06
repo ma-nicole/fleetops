@@ -4,7 +4,13 @@ from __future__ import annotations
 import mimetypes
 from pathlib import Path
 
-UPLOADS_ROOT = Path(__file__).resolve().parents[2] / "uploads"
+from app.core.paths import uploads_root
+
+SENSITIVE_UPLOAD_PREFIXES = (
+    "payment_proofs/",
+    "booking_documents/",
+    "delivery_receiving/",
+)
 
 
 def public_upload_url(storage_path: str | None) -> str | None:
@@ -12,7 +18,9 @@ def public_upload_url(storage_path: str | None) -> str | None:
     if not storage_path or not str(storage_path).strip():
         return None
     rel = str(storage_path).strip().replace("\\", "/").lstrip("/")
-    full = UPLOADS_ROOT / rel
+    if rel.lower().startswith(SENSITIVE_UPLOAD_PREFIXES):
+        return None
+    full = uploads_root() / rel
     if not full.is_file():
         return None
     return f"/uploads/{rel}"

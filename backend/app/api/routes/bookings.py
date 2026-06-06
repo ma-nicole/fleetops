@@ -12,6 +12,7 @@ from app.models.entities import (
     BookingStatus,
     GeneralOperationalReport,
     OperationalLog,
+    Trip,
     User,
     UserRole,
 )
@@ -25,6 +26,7 @@ from app.schemas.booking import (
 from app.schemas.cargo_type import BookingCargoTypeValidate, CargoTypeScreeningRead
 from app.services.pre_delivery_verification import build_pre_delivery_checklist
 from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
+from app.services.dispatcher_booking_assignment import filter_bookings_for_dispatcher
 from app.services.cargo_type_classification import apply_cargo_type_validation, screen_cargo_type
 from app.services.email_templates import EmailTemplate
 from app.services.notifications import send_email_notification
@@ -171,16 +173,37 @@ def _finalize_new_booking(db: Session, user: User, booking: Booking) -> Booking:
     return booking
 
 
-def _assert_booking_document_access(booking: Booking, user: User) -> None:
-    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    if user.role not in {
-        UserRole.CUSTOMER,
-        UserRole.ADMIN,
-        UserRole.MANAGER,
-        UserRole.DISPATCHER,
-    }:
-        raise HTTPException(status_code=403, detail="Not allowed")
+def _user_assigned_to_booking(db: Session, booking_id: int, user: User) -> bool:
+    if user.role == UserRole.DRIVER:
+        return (
+            db.query(Trip.id)
+            .filter(Trip.booking_id == booking_id, Trip.driver_id == user.id)
+            .first()
+            is not None
+        )
+    if user.role == UserRole.HELPER:
+        return (
+            db.query(Trip.id)
+            .filter(Trip.booking_id == booking_id, Trip.helper_id == user.id)
+            .first()
+            is not None
+        )
+    return False
+
+
+def _assert_booking_access(db: Session, booking: Booking, user: User) -> None:
+    if user.role in {UserRole.ADMIN, UserRole.MANAGER}:
+        return
+    if user.role == UserRole.CUSTOMER:
+        if booking.customer_id != user.id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        return
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, booking.id)
+        return
+    if _user_assigned_to_booking(db, booking.id, user):
+        return
+    raise HTTPException(status_code=403, detail="Not allowed")
 
 
 @router.post("", response_model=BookingRead)
@@ -266,7 +289,7 @@ def download_cargo_declaration(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    _assert_booking_document_access(booking, user)
+    _assert_booking_access(db, booking, user)
     path = resolve_booking_document_path(booking.cargo_declaration_storage_path)
     fname = booking.cargo_declaration_original_filename or path.name
     return FileResponse(path, filename=fname, media_type=media_type_for_path(path))
@@ -281,7 +304,7 @@ def download_terms_agreement(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    _assert_booking_document_access(booking, user)
+    _assert_booking_access(db, booking, user)
     path = resolve_booking_document_path(booking.terms_agreement_storage_path)
     fname = booking.terms_agreement_original_filename or path.name
     return FileResponse(path, filename=fname, media_type=media_type_for_path(path))
@@ -351,7 +374,24 @@ def list_bookings(
     query = db.query(Booking)
     if user.role == UserRole.CUSTOMER:
         query = query.filter(Booking.customer_id == user.id)
-    return query.order_by(Booking.created_at.desc()).all()
+    rows = query.order_by(Booking.created_at.desc()).all()
+    if user.role == UserRole.DISPATCHER:
+        rows = filter_bookings_for_dispatcher(db, user, rows)
+    if user.role in {UserRole.DRIVER, UserRole.HELPER}:
+        assigned_booking_ids = {
+            int(row[0])
+            for row in (
+                db.query(Trip.booking_id)
+                .filter(
+                    Trip.booking_id.isnot(None),
+                    Trip.driver_id == user.id if user.role == UserRole.DRIVER else Trip.helper_id == user.id,
+                )
+                .all()
+            )
+            if row[0] is not None
+        }
+        rows = [row for row in rows if int(row.id) in assigned_booking_ids]
+    return rows
 
 
 @router.get("/{booking_id}", response_model=BookingRead)
@@ -365,10 +405,7 @@ def get_booking(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    if user.role == UserRole.DISPATCHER:
-        assert_dispatcher_booking_access(db, user, booking.id)
+    _assert_booking_access(db, booking, user)
     return booking
 
 
@@ -382,14 +419,19 @@ def cancel_booking(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _assert_booking_access(db, booking, user)
 
     if user.role == UserRole.CUSTOMER:
         if booking.status not in (BookingStatus.PENDING_PAYMENT, BookingStatus.PAYMENT_VERIFICATION):
             raise HTTPException(
                 status_code=400,
                 detail="Cancellation is only allowed before payment is verified.",
+            )
+    else:
+        if booking.status in (BookingStatus.COMPLETED, BookingStatus.CANCELLED):
+            raise HTTPException(
+                status_code=400,
+                detail="Completed or cancelled bookings can no longer be cancelled.",
             )
 
     booking.status = BookingStatus.CANCELLED
@@ -487,19 +529,7 @@ def booking_pre_delivery_checklist(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    if user.role not in {
-        UserRole.CUSTOMER,
-        UserRole.ADMIN,
-        UserRole.MANAGER,
-        UserRole.DISPATCHER,
-        UserRole.DRIVER,
-        UserRole.HELPER,
-    }:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    if user.role == UserRole.DISPATCHER:
-        assert_dispatcher_booking_access(db, user, booking.id)
+    _assert_booking_access(db, booking, user)
     return build_pre_delivery_checklist(db, booking)
 
 
@@ -514,6 +544,8 @@ def update_pre_delivery_checklist(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    if reviewer.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, reviewer, booking.id)
 
     data = payload.model_dump(exclude_unset=True)
     if not data:
@@ -550,8 +582,7 @@ def booking_tracking_details(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _assert_booking_access(db, booking, user)
 
     assignment_rows = build_assignments_for_booking(db, booking)
     road_km = booking_pickup_dropoff_distance_km(booking)

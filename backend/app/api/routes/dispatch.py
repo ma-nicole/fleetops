@@ -43,6 +43,7 @@ from app.services.booking_status_aggregate import (
 from app.services.routing import optimize_route as legacy_optimize_route
 from app.services.scheduler import find_available_driver, find_available_helper, find_available_truck
 from app.constants.fleet_capacity import FLEET_TRUCK_COUNT, trucks_required_for_cargo
+from app.core.paths import uploads_subdir
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.booking_schedule import (
     booking_interval,
@@ -79,7 +80,7 @@ from app.services.latest_location_display import latest_location_display_for_tri
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
-OPERATIONAL_LOG_UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "operational_logs"
+OPERATIONAL_LOG_UPLOAD_DIR = uploads_subdir("operational_logs")
 OPERATIONAL_LOG_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".img"}
 
 

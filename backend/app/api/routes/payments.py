@@ -17,6 +17,7 @@ from app.models.entities import (
     BookingStatus,
     Payment,
     PaymentStatus,
+    Trip,
     TruckSlotHold,
     TruckSlotHoldStatus,
     Transaction,
@@ -30,6 +31,7 @@ from app.constants.gcash_payment import (
 )
 from app.constants.payment_limits import GCASH_MAX_TRANSACTION_PHP
 from app.constants.payment_methods import ALLOWED_PAYMENT_METHODS, PROOF_OPTIONAL_METHODS
+from app.core.paths import uploads_root, uploads_subdir
 from app.schemas.payment import (
     FinanceSummary,
     PaymentCreate,
@@ -37,10 +39,11 @@ from app.schemas.payment import (
     PaymentRefundRequest,
 )
 from app.services.notifications import send_email_notification
+from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
-UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "payment_proofs"
+UPLOAD_DIR = uploads_subdir("payment_proofs")
 
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".pdf"}
 
@@ -50,6 +53,8 @@ def _ensure_upload_dir() -> None:
 
 
 def _validate_upload(filename: str, _content_type: str | None) -> str:
+    if not filename:
+        raise HTTPException(status_code=400, detail="Payment proof file is required.")
     lower = filename.lower()
     ext = Path(lower).suffix
     if ext not in ALLOWED_EXT:
@@ -67,6 +72,39 @@ def _resolve_gcash_qr_path() -> Path:
         if candidate.is_file():
             return candidate
     return GCASH_QR_PLACEHOLDER
+
+
+def _user_assigned_to_booking(db: Session, booking_id: int, user: User) -> bool:
+    if user.role == UserRole.DRIVER:
+        return (
+            db.query(Trip.id)
+            .filter(Trip.booking_id == booking_id, Trip.driver_id == user.id)
+            .first()
+            is not None
+        )
+    if user.role == UserRole.HELPER:
+        return (
+            db.query(Trip.id)
+            .filter(Trip.booking_id == booking_id, Trip.helper_id == user.id)
+            .first()
+            is not None
+        )
+    return False
+
+
+def _assert_payment_access(db: Session, user: User, payment: Payment) -> None:
+    if user.role in {UserRole.ADMIN, UserRole.MANAGER}:
+        return
+    if user.role == UserRole.CUSTOMER:
+        if payment.customer_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        return
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, payment.booking_id)
+        return
+    if _user_assigned_to_booking(db, payment.booking_id, user):
+        return
+    raise HTTPException(status_code=403, detail="Not authorized")
 
 
 @router.get("/gcash-qr")
@@ -198,6 +236,8 @@ async def submit_payment_proof(
     if has_file and file is not None:
         ext = _validate_upload(file.filename or "", file.content_type)
         raw = await file.read()
+        if len(raw) == 0:
+            raise HTTPException(status_code=400, detail="Empty file is not allowed.")
         if len(raw) > 5 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="File must be 5MB or smaller.")
         uid = uuid4().hex
@@ -287,7 +327,34 @@ def list_payments(
     query = db.query(Payment)
     if user.role == UserRole.CUSTOMER:
         query = query.filter(Payment.customer_id == user.id)
+    elif user.role in {UserRole.DRIVER, UserRole.HELPER}:
+        trip_booking_ids = {
+            int(row[0])
+            for row in (
+                db.query(Trip.booking_id)
+                .filter(
+                    Trip.booking_id.isnot(None),
+                    Trip.driver_id == user.id if user.role == UserRole.DRIVER else Trip.helper_id == user.id,
+                )
+                .all()
+            )
+            if row[0] is not None
+        }
+        if not trip_booking_ids:
+            return []
+        query = query.filter(Payment.booking_id.in_(trip_booking_ids))
+    elif user.role == UserRole.DISPATCHER:
+        rows = query.order_by(Payment.created_at.desc()).all()
+        return [row for row in rows if not _deny_dispatcher_payment(db, user, row)]
     return query.order_by(Payment.created_at.desc()).all()
+
+
+def _deny_dispatcher_payment(db: Session, user: User, payment: Payment) -> bool:
+    try:
+        assert_dispatcher_booking_access(db, user, payment.booking_id)
+    except HTTPException:
+        return True
+    return False
 
 
 @router.get("/booking/{booking_id}", response_model=list[PaymentRead])
@@ -301,7 +368,14 @@ def list_booking_payments(
         raise HTTPException(status_code=404, detail="Booking not found")
     if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    return db.query(Payment).filter(Payment.booking_id == booking_id).order_by(Payment.created_at.desc()).all()
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, booking_id)
+    if user.role in {UserRole.DRIVER, UserRole.HELPER} and not _user_assigned_to_booking(db, booking_id, user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rows = db.query(Payment).filter(Payment.booking_id == booking_id).order_by(Payment.created_at.desc()).all()
+    for row in rows:
+        _assert_payment_access(db, user, row)
+    return rows
 
 
 @router.get("/finance/summary", response_model=FinanceSummary)
@@ -352,14 +426,11 @@ def download_payment_proof(
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    if user.role == UserRole.CUSTOMER and payment.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    if user.role not in {UserRole.ADMIN, UserRole.MANAGER} and payment.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _assert_payment_access(db, user, payment)
     if not payment.proof_storage_path:
         raise HTTPException(status_code=404, detail="No proof file on record")
 
-    base = Path(__file__).resolve().parents[3] / "uploads"
+    base = uploads_root()
     path = base / payment.proof_storage_path
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Proof file missing on server")
@@ -383,7 +454,7 @@ def verify_payment(
         raise HTTPException(status_code=404, detail="Payment not found")
     if payment.status != PaymentStatus.FOR_VERIFICATION:
         raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be approved")
-    if not payment.proof_storage_path:
+    if payment.method not in PROOF_OPTIONAL_METHODS and not payment.proof_storage_path:
         raise HTTPException(status_code=400, detail="No proof uploaded for this payment")
 
     payment.status = PaymentStatus.VERIFIED
@@ -392,6 +463,16 @@ def verify_payment(
     payment.reviewed_by_id = reviewer.id
 
     book = db.query(Booking).filter(Booking.id == payment.booking_id).first()
+    if book:
+        expected = round(float(book.estimated_cost or 0), 2)
+        if abs(round(float(payment.amount or 0), 2) - expected) > 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Payment amount does not match the booking's expected amount. "
+                    "Please ask the customer to resubmit payment proof."
+                ),
+            )
     if book and book.status in {
         BookingStatus.PENDING_PAYMENT,
         BookingStatus.PAYMENT_VERIFICATION,

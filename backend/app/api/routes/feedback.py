@@ -1,14 +1,49 @@
 """Customer feedback endpoints (paper Customer DFD Fig 14)."""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.db import get_db
-from app.models.entities import Booking, Feedback, User, UserRole
+from app.models.entities import Booking, Feedback, Trip, User, UserRole
 from app.schemas.feedback import FeedbackCreate, FeedbackRead
+from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
 
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
+logger = logging.getLogger(__name__)
+
+
+def _assert_feedback_booking_access(db: Session, booking: Booking, user: User) -> None:
+    if user.role in {UserRole.ADMIN, UserRole.MANAGER}:
+        return
+    if user.role == UserRole.CUSTOMER:
+        if booking.customer_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        return
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, booking.id)
+        return
+    if user.role == UserRole.DRIVER:
+        assigned = (
+            db.query(Trip.id)
+            .filter(Trip.booking_id == booking.id, Trip.driver_id == user.id)
+            .first()
+            is not None
+        )
+        if assigned:
+            return
+    if user.role == UserRole.HELPER:
+        assigned = (
+            db.query(Trip.id)
+            .filter(Trip.booking_id == booking.id, Trip.helper_id == user.id)
+            .first()
+            is not None
+        )
+        if assigned:
+            return
+    raise HTTPException(status_code=403, detail="Not authorized")
 
 
 @router.post("", response_model=FeedbackRead)
@@ -57,8 +92,8 @@ def submit_feedback(
             rating=payload.rating,
             message=payload.message,
         )
-    except Exception as exc:
-        print(f"[feedback] Inbox notification failed: {exc}")
+    except Exception:
+        logger.warning("Feedback inbox notification failed.", exc_info=True)
 
     return fb
 
@@ -71,6 +106,8 @@ def list_feedback(
     query = db.query(Feedback)
     if user.role == UserRole.CUSTOMER:
         query = query.filter(Feedback.customer_id == user.id)
+    elif user.role not in {UserRole.ADMIN, UserRole.MANAGER}:
+        return []
     return query.order_by(Feedback.created_at.desc()).all()
 
 
@@ -83,6 +120,5 @@ def feedback_for_booking(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    _assert_feedback_booking_access(db, booking, user)
     return db.query(Feedback).filter(Feedback.booking_id == booking_id).all()

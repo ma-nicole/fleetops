@@ -1,6 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.49
+alembic==1.14.1
 PyMySQL==1.1.1
 # Use PyMySQL for SQLAlchemy MySQL driver; remove mysql-connector to avoid redundancy
 python-jose==3.3.0

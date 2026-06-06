@@ -61,9 +61,12 @@ if [ ! -f ".env" ]; then
   log_info "Creating .env file..."
   cat > .env << EOF
 # Backend Environment Variables
+APP_ENV=production
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
 DATABASE_URL=mysql+pymysql://fleetopt:fleetopt@localhost:3306/fleetopt
 FRONTEND_URL=https://yourdomain.com
+CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+UPLOADS_ROOT=/var/lib/fleetopt/uploads
 RESEND_API_KEY=
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
@@ -80,10 +83,14 @@ CLOUD_SQL_DB_NAME=fleetopt
 # Clerk Configuration
 CLERK_API_KEY=
 CLERK_FRONTEND_API=
+CLERK_WEBHOOK_SECRET=
 USE_CLERK_AUTH=false
 EOF
   log_warn "Created .env with placeholder values. Update these with your actual values."
 fi
+
+log_info "Running database migrations..."
+alembic upgrade head
 
 cd ..
 
@@ -99,6 +106,7 @@ if [ ! -f ".env.local" ]; then
   log_info "Creating .env.local file..."
   cat > .env.local << EOF
 NEXT_PUBLIC_API_URL=https://yourdomain.com/api
+BACKEND_ORIGIN=http://127.0.0.1:8000
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 EOF
   log_warn "Created .env.local with placeholder values. Update these with your actual values."
@@ -115,6 +123,7 @@ echo "  1. Ensure MySQL 8.0+ is running on your server"
 echo "  2. Create database: mysql -u root -p -e \"CREATE DATABASE fleetopt;\""
 echo "  3. Create user: mysql -u root -p -e \"CREATE USER 'fleetopt'@'localhost' IDENTIFIED BY 'fleetopt';\""
 echo "  4. Grant privileges: mysql -u root -p -e \"GRANT ALL PRIVILEGES ON fleetopt.* TO 'fleetopt'@'localhost'; FLUSH PRIVILEGES;\""
+echo "  5. Run migrations: cd backend && source .venv/bin/activate && alembic upgrade head"
 
 # 5. Systemd service setup (optional)
 log_info "Setting up systemd services..."
@@ -177,7 +186,7 @@ upstream frontend {
 server {
     listen 80;
     server_name yourdomain.com www.yourdomain.com;
-    client_max_body_size 10M;
+    client_max_body_size 15M; # Backend max validated upload is 12MB
 
     # Redirect HTTP to HTTPS (after SSL setup)
     # return 301 https://$server_name$request_uri;
@@ -190,6 +199,14 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 60s;
         proxy_connect_timeout 60s;
+    }
+
+    location /uploads/ {
+        proxy_pass http://backend/uploads/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location / {
@@ -205,7 +222,7 @@ server {
 # server {
 #     listen 443 ssl http2;
 #     server_name yourdomain.com www.yourdomain.com;
-#     client_max_body_size 10M;
+#     client_max_body_size 15M; # Backend max validated upload is 12MB
 #     
 #     ssl_certificate /path/to/certificate.crt;
 #     ssl_certificate_key /path/to/private.key;
@@ -220,6 +237,14 @@ server {
 #         proxy_set_header X-Forwarded-Proto https;
 #         proxy_read_timeout 60s;
 #         proxy_connect_timeout 60s;
+#     }
+#     
+#     location /uploads/ {
+#         proxy_pass http://backend/uploads/;
+#         proxy_set_header Host $host;
+#         proxy_set_header X-Real-IP $remote_addr;
+#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#         proxy_set_header X-Forwarded-Proto https;
 #     }
 #     
 #     location / {
@@ -265,5 +290,6 @@ echo "   - Update Nginx HTTPS configuration"
 echo ""
 echo "6. Verify deployment:"
 echo "   - Backend health: curl http://localhost:8000/health"
+echo "   - Backend readiness: curl http://localhost:8000/ready"
 echo "   - Frontend: http://yourdomain.com"
 echo ""

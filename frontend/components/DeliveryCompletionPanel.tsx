@@ -13,11 +13,10 @@ type DeliveryCompletionPanelProps = {
   compact?: boolean;
 };
 
-function mediaSrc(path: string | null | undefined): string | null {
-  const u = (path || "").trim();
-  if (!u) return null;
-  if (u.startsWith("http://") || u.startsWith("https://")) return u;
-  return apiFullUrl(u.startsWith("/") ? u : `/uploads/${u}`);
+function tokenHeader(): HeadersInit {
+  if (typeof window === "undefined") return {};
+  const t = window.localStorage.getItem("token") || window.localStorage.getItem("authToken");
+  return t ? { Authorization: `Bearer ${t}` } : {};
 }
 
 function CheckRow({ ok, label }: { ok: boolean; label: string }) {
@@ -179,6 +178,28 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
     }
   };
 
+  const openProtectedFile = useCallback(
+    async (apiPath: string) => {
+      try {
+        const res = await fetch(apiFullUrl(apiPath), {
+          headers: tokenHeader(),
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          setMsg("Unable to load data.");
+          return;
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      } catch {
+        setMsg("Something went wrong. Please try again.");
+      }
+    },
+    [],
+  );
+
   if (loadError) {
     return (
       <div style={{ padding: "0.85rem", borderRadius: 8, background: "#FEE2E2", color: "#991B1B", fontSize: "0.88rem" }}>
@@ -187,8 +208,8 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
     );
   }
 
-  const docUrl = mediaSrc(status?.receiving_document_path);
-  const sigUrl = mediaSrc(status?.digital_signature_path);
+  const hasDoc = !!status?.receiving_document_uploaded;
+  const hasSig = !!status?.digital_signature_uploaded;
 
   return (
     <div
@@ -223,10 +244,15 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
 
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <strong style={{ fontSize: "0.86rem" }}>1. Receiving document</strong>
-        {docUrl ? (
-          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "var(--brand-text)", fontWeight: 600 }}>
+        {hasDoc ? (
+          <button
+            type="button"
+            className="button"
+            style={{ width: "fit-content" }}
+            onClick={() => void openProtectedFile(`/workflow/job/${tripId}/receiving-document`)}
+          >
             View uploaded document
-          </a>
+          </button>
         ) : null}
         <input
           type="file"
@@ -281,10 +307,15 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
 
       <section style={{ display: "grid", gap: "0.5rem" }}>
         <strong style={{ fontSize: "0.86rem" }}>3. Digital signature</strong>
-        {sigUrl ? (
-          <a href={sigUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.84rem", color: "var(--brand-text)", fontWeight: 600 }}>
+        {hasSig ? (
+          <button
+            type="button"
+            className="button"
+            style={{ width: "fit-content" }}
+            onClick={() => void openProtectedFile(`/workflow/job/${tripId}/digital-signature`)}
+          >
             View saved signature
-          </a>
+          </button>
         ) : null}
         <DigitalSignaturePad disabled={busy === "sig"} onChange={setSignatureFile} />
         <label style={{ display: "grid", gap: 4, fontSize: "0.84rem" }}>

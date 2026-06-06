@@ -35,13 +35,13 @@
   --bg-brand: #FFFBEB;
   --bg-brand-muted: #FEF3C7;
 
-  /* Sidebar (dark enterprise nav) */
-  --sidebar-bg: #0F172A;
-  --sidebar-bg-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-bg-active: rgba(245, 158, 11, 0.15);
-  --sidebar-text: #94A3B8;
-  --sidebar-text-active: #FFFFFF;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  /* Sidebar (light enterprise nav) */
+  --sidebar-bg: #FFFFFF;
+  --sidebar-bg-hover: #F8FAFC;
+  --sidebar-bg-active: #FFFBEB;
+  --sidebar-text: #64748B;
+  --sidebar-text-active: #0F172A;
+  --sidebar-border: #E2E8F0;
   --sidebar-width: 260px;
   --header-height: 56px;
   --scroll-offset-extra: 20px;
@@ -436,9 +436,6 @@ body {
 .grid {
   display: grid;
   gap: 1.5rem;
-}
-
-.kpi-grid {
 }
 
 .button {
@@ -2327,6 +2324,16 @@ html {
   }
 }
 
+.expense-pie-legend-btn:hover {
+  border-color: var(--accent) !important;
+  box-shadow: var(--shadow-xs);
+}
+
+.expense-pie-legend-btn:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .table-empty-cell {
   padding: 2rem 1rem !important;
   text-align: center;
@@ -2367,6 +2374,83 @@ html {
   font-size: var(--font-size-xl);
   font-weight: 700;
   color: var(--text);
+}
+
+/* Shared dashboard + analytics hierarchy system */
+.dashboard-standard-main {
+  min-height: calc(100vh - var(--header-height));
+  background: var(--bg-page);
+  padding: var(--page-main-padding);
+}
+
+.dashboard-standard-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  display: grid;
+  gap: var(--space-5);
+}
+
+.dashboard-standard-section {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dashboard-standard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.analytics-structure {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.analytics-structure__section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.analytics-structure__section-title {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.analytics-tier-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.analytics-chart-surface {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-dark);
+  padding: var(--space-3);
+  min-height: 180px;
+  display: grid;
+  align-content: center;
+}
+
+.analytics-table-surface {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: var(--space-2);
 }
 
 /* Button variants */

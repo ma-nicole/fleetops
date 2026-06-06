@@ -84,6 +84,34 @@ def _activity_month(dt: datetime | date | None) -> str | None:
     return dt.strftime("%Y-%m")
 
 
+def _activity_date(dt: datetime | date | None) -> date | None:
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        return dt.date()
+    return dt
+
+
+def _trip_activity_date(trip: Trip) -> date | None:
+    for dt in (trip.completed_at, trip.assigned_at, trip.departure_time):
+        if dt is not None:
+            return _activity_date(dt)
+    if trip.booking and trip.booking.scheduled_date:
+        return trip.booking.scheduled_date
+    return None
+
+
+def _expense_context_year(records: list[dict[str, Any]], f: AnalyticsFilters) -> int:
+    if f.date_to:
+        return f.date_to.year
+    if f.date_from:
+        return f.date_from.year
+    years = [int(r["expense_date"][:4]) for r in records if r.get("expense_date")]
+    if years:
+        return max(years)
+    return datetime.utcnow().year
+
+
 def _date_in_filter(d: date | None, f: AnalyticsFilters) -> bool:
     if d is None:
         return f.date_from is None and f.date_to is None
@@ -212,6 +240,8 @@ def _load_context(db: Session) -> dict[str, Any]:
         "trips": trips,
         "trips_by_booking": trips_by_booking,
         "delay_logs": delay_logs,
+        "fuel_logs": fuel_logs,
+        "toll_logs": toll_logs,
         "fuel_by_trip": fuel_by_trip,
         "toll_by_trip": toll_by_trip,
         "shoulder": shoulder,
@@ -346,68 +376,217 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     }
 
 
-def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
+def _append_expense_record(
+    records: list[dict[str, Any]],
+    *,
+    expense_date: date | None,
+    category: str,
+    amount_php: float,
+    source_type: str,
+    source_id: int | None = None,
+    trip_id: int | None = None,
+    booking_id: int | None = None,
+    truck_id: int | None = None,
+    truck_code: str | None = None,
+    label: str | None = None,
+) -> None:
+    if expense_date is None or amount_php <= 0:
+        return
+    records.append(
+        {
+            "expense_date": expense_date.isoformat(),
+            "category": category,
+            "amount_php": round(float(amount_php), 2),
+            "source_type": source_type,
+            "source_id": source_id,
+            "trip_id": trip_id,
+            "booking_id": booking_id,
+            "truck_id": truck_id,
+            "truck_code": truck_code,
+            "label": label,
+        }
+    )
+
+
+def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, Any]]:
+    """Date-level operational expense line items from real DB sources."""
+    records: list[dict[str, Any]] = []
     filtered_trips = _filtered_trips(ctx, f)
-    fuel_by_truck: dict[int, float] = defaultdict(float)
-    fuel_by_route: dict[str, float] = defaultdict(float)
-    toll_total = 0.0
-    maint_total = 0.0
-    driver_allow = 0.0
-    helper_allow = 0.0
-    monthly: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    fuel_values: list[float] = []
+    filtered_trip_ids = {t.id for t in filtered_trips if t.status != TripStatus.CANCELLED}
+    trip_by_id = {t.id: t for t in ctx["trips"]}
+    truck_map = {t.id: t.code for t in ctx["trucks"]}
+
+    fuel_logged_trip_ids: set[int] = set()
+    for fl in ctx["fuel_logs"]:
+        trip = trip_by_id.get(fl.trip_id)
+        if not trip or trip.id not in filtered_trip_ids:
+            continue
+        ref = _activity_date(fl.recorded_at)
+        if not _date_in_filter(ref, f):
+            continue
+        amt = float(fl.cost or 0)
+        if amt <= 0:
+            continue
+        fuel_logged_trip_ids.add(trip.id)
+        _append_expense_record(
+            records,
+            expense_date=ref,
+            category="fuel",
+            amount_php=amt,
+            source_type="fuel_log",
+            source_id=fl.id,
+            trip_id=trip.id,
+            booking_id=trip.booking_id,
+            truck_id=fl.truck_id,
+            truck_code=truck_map.get(fl.truck_id),
+            label=f"Fuel log #{fl.id}",
+        )
+
+    toll_logged_trip_ids: set[int] = set()
+    for tl in ctx["toll_logs"]:
+        trip = trip_by_id.get(tl.trip_id)
+        if not trip or trip.id not in filtered_trip_ids:
+            continue
+        ref = _activity_date(tl.recorded_at)
+        if not _date_in_filter(ref, f):
+            continue
+        amt = float(tl.amount or 0)
+        if amt <= 0:
+            continue
+        toll_logged_trip_ids.add(trip.id)
+        _append_expense_record(
+            records,
+            expense_date=ref,
+            category="toll",
+            amount_php=amt,
+            source_type="toll_log",
+            source_id=tl.id,
+            trip_id=trip.id,
+            booking_id=trip.booking_id,
+            truck_id=trip.truck_id,
+            truck_code=truck_map.get(trip.truck_id) if trip.truck_id else None,
+            label=tl.location or f"Toll log #{tl.id}",
+        )
 
     for trip in filtered_trips:
         if trip.status == TripStatus.CANCELLED:
             continue
-        booking = trip.booking
-        fuel = _trip_fuel(trip, ctx["fuel_by_trip"])
-        toll = _trip_toll(trip, ctx["toll_by_trip"])
-        da = float(getattr(trip, "driver_allowance_php", 0) or 0)
-        ha = float(getattr(trip, "helper_allowance_php", 0) or 0)
-        maint = float(trip.maintenance_cost or 0)
-        fuel_by_truck[trip.truck_id] += fuel
-        route = _route_key(booking.pickup_location, booking.dropoff_location)
-        fuel_by_route[route] += fuel
-        toll_total += toll
-        maint_total += maint
-        driver_allow += da
-        helper_allow += ha
-        if fuel > 0:
-            fuel_values.append(fuel)
-        month = _activity_month(trip.completed_at or trip.assigned_at)
-        if month:
-            monthly[month]["fuel"] += fuel
-            monthly[month]["toll"] += toll
-            monthly[month]["maintenance"] += maint
-            monthly[month]["allowance"] += da + ha
+        ref = _trip_activity_date(trip)
+        if not _date_in_filter(ref, f):
+            continue
+        truck_code = truck_map.get(trip.truck_id) if trip.truck_id else None
 
-    trip_by_id = {t.id: t for t in ctx["trips"]}
+        if trip.id not in fuel_logged_trip_ids:
+            fuel = float(trip.fuel_cost or 0)
+            if fuel > 0:
+                _append_expense_record(
+                    records,
+                    expense_date=ref,
+                    category="fuel",
+                    amount_php=fuel,
+                    source_type="trip_fuel",
+                    source_id=trip.id,
+                    trip_id=trip.id,
+                    booking_id=trip.booking_id,
+                    truck_id=trip.truck_id,
+                    truck_code=truck_code,
+                    label=f"Trip #{trip.id} fuel",
+                )
+
+        if trip.id not in toll_logged_trip_ids:
+            toll = float(trip.toll_cost or 0)
+            if toll > 0:
+                _append_expense_record(
+                    records,
+                    expense_date=ref,
+                    category="toll",
+                    amount_php=toll,
+                    source_type="trip_toll",
+                    source_id=trip.id,
+                    trip_id=trip.id,
+                    booking_id=trip.booking_id,
+                    truck_id=trip.truck_id,
+                    truck_code=truck_code,
+                    label=f"Trip #{trip.id} toll",
+                )
+
+        da = float(getattr(trip, "driver_allowance_php", 0) or 0)
+        if da > 0:
+            _append_expense_record(
+                records,
+                expense_date=ref,
+                category="driver_allowance",
+                amount_php=da,
+                source_type="trip_allowance",
+                source_id=trip.id,
+                trip_id=trip.id,
+                booking_id=trip.booking_id,
+                truck_id=trip.truck_id,
+                truck_code=truck_code,
+                label=f"Trip #{trip.id} driver allowance",
+            )
+
+        ha = float(getattr(trip, "helper_allowance_php", 0) or 0)
+        if ha > 0:
+            _append_expense_record(
+                records,
+                expense_date=ref,
+                category="helper_allowance",
+                amount_php=ha,
+                source_type="trip_allowance",
+                source_id=trip.id,
+                trip_id=trip.id,
+                booking_id=trip.booking_id,
+                truck_id=trip.truck_id,
+                truck_code=truck_code,
+                label=f"Trip #{trip.id} helper allowance",
+            )
+
+        maint = float(trip.maintenance_cost or 0)
+        if maint > 0:
+            _append_expense_record(
+                records,
+                expense_date=ref,
+                category="maintenance",
+                amount_php=maint,
+                source_type="trip_maintenance",
+                source_id=trip.id,
+                trip_id=trip.id,
+                booking_id=trip.booking_id,
+                truck_id=trip.truck_id,
+                truck_code=truck_code,
+                label=f"Trip #{trip.id} maintenance",
+            )
+
     for row in ctx["shoulder"]:
         trip = trip_by_id.get(row.trip_id)
         if not _shoulder_in_filters(row, trip, f):
             continue
         amt = float(row.amount_php or 0)
+        if amt <= 0:
+            continue
+        ref = _activity_date(row.recorded_at)
         cat = (row.category or "").lower()
-        month = _activity_month(row.recorded_at)
         if cat == "fuel":
-            fuel_values.append(amt)
-            if month:
-                monthly[month]["fuel"] += amt
-            if trip:
-                fuel_by_truck[trip.truck_id] += amt
+            category = "fuel"
         elif cat == "toll":
-            toll_total += amt
-            if month:
-                monthly[month]["toll"] += amt
+            category = "toll"
         elif cat == "allowance":
-            driver_allow += amt
-            if month:
-                monthly[month]["allowance"] += amt
+            category = "driver_allowance"
         else:
-            maint_total += amt
-            if month:
-                monthly[month]["maintenance"] += amt
+            category = "maintenance"
+        _append_expense_record(
+            records,
+            expense_date=ref,
+            category=category,
+            amount_php=amt,
+            source_type="shoulder_cost",
+            source_id=row.id,
+            trip_id=row.trip_id,
+            booking_id=row.booking_id,
+            truck_code=truck_map.get(trip.truck_id) if trip and trip.truck_id else None,
+            label=row.notes or f"Shoulder {cat} #{row.id}",
+        )
 
     for rec in ctx["maintenance"]:
         if not _maintenance_in_filters(rec, f):
@@ -415,22 +594,58 @@ def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
         cost = float(rec.actual_cost or rec.estimated_cost or 0)
         if cost <= 0:
             continue
-        maint_total += cost
-        month = _activity_month(rec.created_at)
-        if month:
-            monthly[month]["maintenance"] += cost
+        ref = _activity_date(rec.created_at)
+        _append_expense_record(
+            records,
+            expense_date=ref,
+            category="maintenance",
+            amount_php=cost,
+            source_type="maintenance_record",
+            source_id=rec.id,
+            trip_id=None,
+            booking_id=None,
+            truck_id=rec.truck_id,
+            truck_code=truck_map.get(rec.truck_id),
+            label=rec.reported_issue or f"Maintenance #{rec.id}",
+        )
 
-    fuel_total = round(sum(fuel_by_truck.values()), 2)
-    toll_total_r = round(toll_total, 2)
-    maint_total_r = round(maint_total, 2)
-    driver_allow_r = round(driver_allow, 2)
-    helper_allow_r = round(helper_allow, 2)
+    records.sort(key=lambda r: (r["expense_date"], r["category"], r.get("source_id") or 0))
+    return records
+
+
+def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
+    records = _collect_expense_records(ctx, f)
+    truck_map = {t.id: t.code for t in ctx["trucks"]}
+
+    fuel_total = round(sum(r["amount_php"] for r in records if r["category"] == "fuel"), 2)
+    toll_total_r = round(sum(r["amount_php"] for r in records if r["category"] == "toll"), 2)
+    maint_total_r = round(sum(r["amount_php"] for r in records if r["category"] == "maintenance"), 2)
+    driver_allow_r = round(sum(r["amount_php"] for r in records if r["category"] == "driver_allowance"), 2)
+    helper_allow_r = round(sum(r["amount_php"] for r in records if r["category"] == "helper_allowance"), 2)
     total = round(fuel_total + toll_total_r + maint_total_r + driver_allow_r + helper_allow_r, 2)
 
-    if total <= 0 and not filtered_trips:
+    if total <= 0 and not records:
         return empty_module()
 
-    truck_map = {t.id: t.code for t in ctx["trucks"]}
+    fuel_by_truck: dict[int, float] = defaultdict(float)
+    fuel_by_route: dict[str, float] = defaultdict(float)
+    fuel_values: list[float] = []
+    monthly: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+
+    trip_by_id = {t.id: t for t in ctx["trips"]}
+    for rec in records:
+        amt = float(rec["amount_php"])
+        month = rec["expense_date"][:7]
+        monthly[month][rec["category"]] += amt
+        if rec["category"] == "fuel":
+            fuel_values.append(amt)
+            if rec.get("truck_id"):
+                fuel_by_truck[int(rec["truck_id"])] += amt
+            trip = trip_by_id.get(rec.get("trip_id") or -1)
+            if trip and trip.booking:
+                route = _route_key(trip.booking.pickup_location, trip.booking.dropoff_location)
+                fuel_by_route[route] += amt
+
     breakdown = [
         {"key": "fuel", "label": "Fuel", "amount_php": fuel_total},
         {"key": "toll", "label": "Toll", "amount_php": toll_total_r},
@@ -442,19 +657,29 @@ def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     monthly_trend = []
     for month in sorted(monthly.keys())[-12:]:
         bucket = monthly[month]
+        fuel_m = bucket.get("fuel", 0)
+        toll_m = bucket.get("toll", 0)
+        maint_m = bucket.get("maintenance", 0)
+        allow_m = bucket.get("driver_allowance", 0) + bucket.get("helper_allowance", 0)
         monthly_trend.append(
             {
                 "month": month,
-                "fuel": round(bucket["fuel"], 2),
-                "toll": round(bucket["toll"], 2),
-                "maintenance": round(bucket["maintenance"], 2),
-                "allowance": round(bucket["allowance"], 2),
-                "total": round(
-                    bucket["fuel"] + bucket["toll"] + bucket["maintenance"] + bucket["allowance"],
-                    2,
-                ),
+                "fuel": round(fuel_m, 2),
+                "toll": round(toll_m, 2),
+                "maintenance": round(maint_m, 2),
+                "allowance": round(allow_m, 2),
+                "total": round(fuel_m + toll_m + maint_m + allow_m, 2),
             }
         )
+
+    context_year = _expense_context_year(records, f)
+    category_labels = {
+        "fuel": "Fuel",
+        "toll": "Toll",
+        "maintenance": "Maintenance",
+        "driver_allowance": "Driver Allowances",
+        "helper_allowance": "Helper Allowances",
+    }
 
     return {
         "summary": {
@@ -476,6 +701,11 @@ def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
         ],
         "expense_breakdown": breakdown,
         "monthly_totals": monthly_trend,
+        "drilldown": {
+            "context_year": context_year,
+            "categories": [{"key": k, "label": v} for k, v in category_labels.items()],
+            "records": records,
+        },
     }
 
 
@@ -857,6 +1087,7 @@ def build_admin_analytics(
     filters: AnalyticsFilters,
     include_financial: bool = True,
     include_clients: bool = True,
+    viewer: User | None = None,
 ) -> dict[str, Any]:
     ctx = _load_context(db)
     filter_options = {
@@ -867,6 +1098,10 @@ def build_admin_analytics(
     }
 
     expenses = build_expense_analytics(ctx, filters)
+    shipments = build_shipment_analytics(ctx, filters)
+    fleet = build_fleet_analytics(ctx, filters)
+    drivers = build_driver_analytics(ctx, filters)
+    routes = build_route_analytics(ctx, filters)
 
     payload: dict[str, Any] = {
         "generated_at": datetime.utcnow().isoformat(),
@@ -879,11 +1114,11 @@ def build_admin_analytics(
             "shipment_status": filters.shipment_status,
         },
         "filter_options": filter_options,
-        "shipments": build_shipment_analytics(ctx, filters),
+        "shipments": shipments,
         "expenses": expenses,
-        "fleet": build_fleet_analytics(ctx, filters),
-        "drivers": build_driver_analytics(ctx, filters),
-        "routes": build_route_analytics(ctx, filters),
+        "fleet": fleet,
+        "drivers": drivers,
+        "routes": routes,
     }
     if include_financial:
         payload["financial"] = build_financial_analytics(ctx, filters)
@@ -893,6 +1128,38 @@ def build_admin_analytics(
         payload["clients"] = build_client_analytics(ctx, filters)
     else:
         payload["clients"] = None
+
+    if include_financial or include_clients:
+        from app.services.manager_role_analytics import build_manager_role_analytics
+
+        payload["role_analytics"] = build_manager_role_analytics(
+            db,
+            ctx,
+            filters,
+            shipments=shipments,
+            expenses=expenses,
+            fleet=fleet,
+            drivers=drivers,
+            routes=routes,
+        )
+    else:
+        payload["role_analytics"] = None
+
+    if not include_financial and not include_clients:
+        from app.services.dispatcher_role_analytics import build_dispatcher_role_analytics
+
+        payload["dispatcher_role_analytics"] = build_dispatcher_role_analytics(
+            db,
+            ctx,
+            filters,
+            viewer=viewer,
+            shipments=shipments,
+            fleet=fleet,
+            drivers=drivers,
+            routes=routes,
+        )
+    else:
+        payload["dispatcher_role_analytics"] = None
 
     payload["validation"] = validate_admin_analytics(payload)
     return payload

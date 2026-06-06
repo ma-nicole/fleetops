@@ -85,7 +85,7 @@ function KpiTile({
   const jump = scrollTargetId ? () => scrollToSectionById(scrollTargetId) : undefined;
   return (
     <div
-      className={scrollTargetId ? "kpi-card--clickable scroll-section" : undefined}
+      className={`kpi-card${scrollTargetId ? " kpi-card--clickable scroll-section" : ""}`}
       role={scrollTargetId ? "button" : undefined}
       tabIndex={scrollTargetId ? 0 : undefined}
       onClick={jump}
@@ -100,11 +100,7 @@ function KpiTile({
           : undefined
       }
       style={{
-        background: C.surface,
-        borderRadius: 10,
-        padding: "0.5rem 0.65rem",
-        boxShadow: C.shadowSm,
-        border: `1px solid ${C.border}`,
+        padding: "0.6rem 0.75rem",
         borderLeft: border,
         minWidth: 0,
       }}
@@ -158,12 +154,8 @@ function Panel({
   return (
     <section
       id={sectionId}
-      className={sectionId ? "scroll-section" : undefined}
+      className={sectionId ? "panel-card scroll-section" : "panel-card"}
       style={{
-        background: C.surface,
-        borderRadius: 12,
-        boxShadow: C.shadow,
-        border: `1px solid ${C.border}`,
         padding: dense ? "0.65rem 0.75rem" : "0.75rem 0.85rem",
         minHeight: 0,
         display: "flex",

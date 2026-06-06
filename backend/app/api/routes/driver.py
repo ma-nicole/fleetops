@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.security import get_current_user, require_roles
@@ -547,4 +547,54 @@ def my_profile(user: User = Depends(get_current_user)):
         "name": user.full_name,
         "email": user.email,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+    }
+
+
+@router.get("/analytics")
+def driver_analytics(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    truck_id: int | None = Query(default=None),
+    route: str | None = Query(default=None),
+    shipment_status: str | None = Query(default=None),
+):
+    """Driver-scoped descriptive and predictive analytics from real trip records."""
+    from app.services.admin_analytics import AnalyticsFilters, _load_context, _route_key
+    from app.services.driver_role_analytics import build_driver_role_analytics
+
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+
+    filters = AnalyticsFilters(
+        date_from=date_from,
+        date_to=date_to,
+        driver_id=user.id,
+        truck_id=truck_id,
+        route=route.strip() if route else None,
+        shipment_status=shipment_status.strip().lower() if shipment_status else None,
+    )
+    ctx = _load_context(db)
+    driver_trips = [t for t in ctx["trips"] if t.driver_id == user.id]
+    trucks = sorted({(t.truck.id, t.truck.code) for t in driver_trips if t.truck}, key=lambda x: x[1])
+    routes = sorted(
+        {_route_key(t.booking.pickup_location, t.booking.dropoff_location) for t in driver_trips if t.booking}
+    )
+    return {
+        "generated_at": datetime.utcnow().isoformat(),
+        "filters_applied": {
+            "date_from": filters.date_from.isoformat() if filters.date_from else None,
+            "date_to": filters.date_to.isoformat() if filters.date_to else None,
+            "driver_id": user.id,
+            "truck_id": filters.truck_id,
+            "route": filters.route,
+            "shipment_status": filters.shipment_status,
+        },
+        "filter_options": {
+            "trucks": [{"id": tid, "code": code} for tid, code in trucks],
+            "routes": routes,
+            "shipment_statuses": ["delivered", "delayed", "cancelled", "in_transit", "pending"],
+        },
+        "driver_role_analytics": build_driver_role_analytics(db, ctx, filters, driver=user),
     }

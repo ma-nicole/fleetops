@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # FleetOpt Database Migration Script
-# This script initializes and migrates the PostgreSQL database
+# Runs Alembic migrations against MySQL (production-safe path).
 
 set -e
 
@@ -11,12 +11,10 @@ echo "╚═══════════════════════�
 
 # Configuration
 DB_HOST="${DB_HOST:-localhost}"
-DB_PORT="${DB_PORT:-5432}"
+DB_PORT="${DB_PORT:-3306}"
 DB_USER="${DB_USER:-fleetopt}"
 DB_PASSWORD="${DB_PASSWORD:-fleetopt}"
 DB_NAME="${DB_NAME:-fleetopt}"
-
-export PGPASSWORD=$DB_PASSWORD
 
 # Colors
 GREEN='\033[0;32m'
@@ -37,41 +35,23 @@ log_error() {
   exit 1
 }
 
-# Check if PostgreSQL is accessible
+# Check if MySQL is accessible
 log_info "Checking database connectivity..."
-psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" > /dev/null 2>&1 || \
-  log_error "Cannot connect to database. Check credentials and ensure PostgreSQL is running."
+mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1" "$DB_NAME" > /dev/null 2>&1 || \
+  log_error "Cannot connect to database. Check credentials and ensure MySQL is running."
 
 log_info "Connected to database: $DB_NAME on $DB_HOST"
 
-# Run Python migration script
-log_info "Running database initialization..."
+# Run Alembic migrations
+log_info "Running Alembic migrations..."
 cd backend
 source .venv/bin/activate
-
-# Execute SQLAlchemy table creation via Python
-python3 << 'EOF'
-import sys
-from app.db import engine
-from app.models.base import Base
-
-try:
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    print("✓ Database tables created successfully")
-except Exception as e:
-    print(f"✗ Error creating tables: {e}", file=sys.stderr)
-    sys.exit(1)
-EOF
-
-if [ $? -ne 0 ]; then
-  log_error "Database initialization failed"
-fi
+alembic upgrade head || log_error "Alembic migration failed"
 
 # Insert seed data (optional)
-log_info "Database initialized successfully!"
+log_info "Database migration completed successfully!"
 echo ""
-echo "✓ All tables created"
+echo "✓ Alembic upgrade head applied"
 echo "✓ Ready for production"
 echo ""
 echo "Next steps:"

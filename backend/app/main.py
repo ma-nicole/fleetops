@@ -1,9 +1,10 @@
 from pathlib import Path
+import logging
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.routes import (
@@ -30,10 +31,14 @@ from app.api.routes import (
     workflow,
 )
 from app.core.config import settings
-from app.db import apply_runtime_schema_fixes, engine, get_db
-from app.models.base import Base
-from app.models import entities  # noqa: F401 - ensure ORM tables are registered
+from app.core.paths import uploads_root
+from app.db import get_db
 from app.services.route_estimate import PreciseDistanceUnavailable
+
+logging.basicConfig(
+    level=logging.INFO if settings.app_env.strip().lower() == "production" else logging.DEBUG,
+    format="ts=%(asctime)s level=%(levelname)s logger=%(name)s msg=%(message)s",
+)
 
 
 def require_db(db=Depends(get_db)) -> None:
@@ -50,7 +55,7 @@ async def precise_distance_unavailable_handler(_request: Request, exc: PreciseDi
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.allowed_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,8 +64,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    apply_runtime_schema_fixes()
+    uploads_root()
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
@@ -70,6 +74,41 @@ def health() -> dict:
     HEAD is allowed so `wait-on` and other probes that use HEAD succeed (GET-only routes return 405).
     """
     return {"status": "ok"}
+
+
+@app.api_route("/ready", methods=["GET", "HEAD"])
+def ready(db=Depends(get_db)) -> dict:
+    """Readiness probe — confirms DB connectivity."""
+    db.execute(text("SELECT 1"))
+    return {"status": "ready"}
+
+
+SENSITIVE_UPLOAD_PREFIXES = (
+    "payment_proofs/",
+    "booking_documents/",
+    "delivery_receiving/",
+)
+
+
+@app.api_route("/uploads/{file_path:path}", methods=["GET", "HEAD"])
+def serve_upload(file_path: str):
+    normalized = str(Path(file_path).as_posix()).lstrip("/")
+    if not normalized:
+        raise HTTPException(status_code=404, detail="File not found")
+    lowered = normalized.lower()
+    if lowered.startswith(SENSITIVE_UPLOAD_PREFIXES):
+        raise HTTPException(
+            status_code=403,
+            detail="Sensitive files must be accessed through authenticated endpoints.",
+        )
+
+    base = uploads_root().resolve()
+    target = (base / normalized).resolve()
+    if not str(target).startswith(str(base)):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(target)
 
 
 _api_deps = [Depends(require_db)]
@@ -99,6 +138,3 @@ app.include_router(schedule.router, prefix="/api", dependencies=_api_deps)
 app.include_router(analytics_predict.router, prefix="/api", dependencies=_api_deps)
 app.include_router(analytics_prescribe.router, prefix="/api", dependencies=_api_deps)
 
-_uploads_root = Path(__file__).resolve().parents[1] / "uploads"
-_uploads_root.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(_uploads_root)), name="uploads")

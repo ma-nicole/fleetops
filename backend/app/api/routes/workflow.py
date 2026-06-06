@@ -6,6 +6,7 @@ import json
 from secrets import token_urlsafe
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
@@ -52,6 +53,8 @@ from app.services.dispatcher_booking_assignment import (
     auto_assign_dispatcher_on_dispatch_action,
     filter_bookings_for_dispatcher,
 )
+from app.services.upload_urls import media_type_for_path
+from app.core.paths import uploads_root
 from app.schemas.analytics import CostPredictionRequest
 from app.schemas.predict import TripCostPredictRequest
 
@@ -548,6 +551,44 @@ async def upload_receiving_document(
     return build_delivery_receiving_status(trip)
 
 
+@router.get("/job/{trip_id}/receiving-document", response_class=FileResponse)
+def download_receiving_document(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.DRIVER and trip.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.HELPER and trip.helper_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, booking.id)
+    if user.role not in {
+        UserRole.CUSTOMER,
+        UserRole.DRIVER,
+        UserRole.HELPER,
+        UserRole.DISPATCHER,
+        UserRole.MANAGER,
+        UserRole.ADMIN,
+    }:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rel = (trip.receiving_document_path or "").strip()
+    if not rel:
+        raise HTTPException(status_code=404, detail="Receiving document not uploaded")
+    path = uploads_root() / rel
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Receiving document missing on server")
+    return FileResponse(path, filename=path.name, media_type=media_type_for_path(path))
+
+
 @router.post("/job/{trip_id}/verify-receiving-qr")
 def verify_receiving_qr(
     trip_id: int,
@@ -577,6 +618,44 @@ async def upload_digital_signature(
     db.commit()
     db.refresh(trip)
     return build_delivery_receiving_status(trip)
+
+
+@router.get("/job/{trip_id}/digital-signature", response_class=FileResponse)
+def download_digital_signature(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.DRIVER and trip.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.HELPER and trip.helper_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, booking.id)
+    if user.role not in {
+        UserRole.CUSTOMER,
+        UserRole.DRIVER,
+        UserRole.HELPER,
+        UserRole.DISPATCHER,
+        UserRole.MANAGER,
+        UserRole.ADMIN,
+    }:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rel = (trip.digital_signature_path or "").strip()
+    if not rel:
+        raise HTTPException(status_code=404, detail="Digital signature not uploaded")
+    path = uploads_root() / rel
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Digital signature missing on server")
+    return FileResponse(path, filename=path.name, media_type=media_type_for_path(path))
 
 
 @router.post("/job/{trip_id}/complete", response_model=TripRead)
@@ -696,6 +775,19 @@ def get_trip_details(
     if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
     if user.role == UserRole.DRIVER and trip.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.HELPER and trip.helper_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if user.role == UserRole.DISPATCHER:
+        assert_dispatcher_booking_access(db, user, booking.id)
+    if user.role not in {
+        UserRole.CUSTOMER,
+        UserRole.DRIVER,
+        UserRole.HELPER,
+        UserRole.DISPATCHER,
+        UserRole.MANAGER,
+        UserRole.ADMIN,
+    }:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     return trip

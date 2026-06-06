@@ -12,6 +12,8 @@ import {
   StatGrid,
   StatisticsTable,
 } from "@/components/admin/AnalyticsCharts";
+import ExpenseDrilldownAnalytics from "@/components/admin/ExpenseDrilldownAnalytics";
+import ManagerRoleAnalyticsTabs from "@/components/admin/ManagerRoleAnalyticsTabs";
 import PageHeader from "@/components/ui/PageHeader";
 import ErrorState from "@/components/ui/ErrorState";
 import LoadingMessage from "@/components/ui/LoadingMessage";
@@ -99,6 +101,11 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setError("Start date cannot be after end date.");
+      setLoading(false);
+      return;
+    }
     try {
       const payload = await AnalyticsApi.adminAnalytics({
         date_from: dateFrom || undefined,
@@ -245,6 +252,8 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
             </div>
           )}
 
+          {data.role_analytics && <ManagerRoleAnalyticsTabs data={data.role_analytics} />}
+
           {show("shipments") && (
             <SectionCard title="1. Shipment / Delivery Analytics" sectionId="analytics-shipments">
               {isEmpty(data.shipments) ? (
@@ -311,31 +320,10 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
             <SectionCard title="2. Fuel & Operational Expense Analytics" sectionId="analytics-expenses">
               {isEmpty(data.expenses) ? (
                 <EmptyChart message={data.expenses.message} />
+              ) : data.expenses.drilldown?.records ? (
+                <ExpenseDrilldownAnalytics drilldown={data.expenses.drilldown} />
               ) : (
-                <>
-                  <StatGrid
-                    items={[
-                      { label: "Fuel", value: formatPhp(data.expenses.summary.fuel_expenses_php) },
-                      { label: "Toll", value: formatPhp(data.expenses.summary.toll_expenses_php) },
-                      { label: "Maintenance", value: formatPhp(data.expenses.summary.maintenance_expenses_php) },
-                      { label: "Driver allowances", value: formatPhp(data.expenses.summary.driver_allowances_php) },
-                      { label: "Helper allowances", value: formatPhp(data.expenses.summary.helper_allowances_php) },
-                      { label: "Total operational", value: formatPhp(data.expenses.summary.total_operational_cost_php) },
-                    ]}
-                  />
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1rem" }}>
-                    <div>
-                      <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.85rem" }}>Fuel cost by truck</p>
-                      <BarChartPhp items={data.expenses.fuel_by_truck} labelKey="truck_code" valueKey="fuel_php" />
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.85rem" }}>Expense breakdown</p>
-                      <BarChartPhp items={data.expenses.expense_breakdown} labelKey="label" valueKey="amount_php" />
-                    </div>
-                  </div>
-                  <StatisticsTable stats={data.expenses.statistics} />
-                  <LineChartVisual items={data.expenses.monthly_totals} xKey="month" yKey="total" />
-                </>
+                <EmptyChart message="No expense data available for this quarter." />
               )}
             </SectionCard>
           )}

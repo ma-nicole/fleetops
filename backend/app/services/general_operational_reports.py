@@ -13,9 +13,10 @@ from app.constants.general_operational_report import (
     GENERAL_OPS_CATEGORY_VALUES,
     GENERAL_OPS_TRIP_STATUS_VALUES,
 )
+from app.core.paths import uploads_subdir
 from app.models.entities import GeneralOperationalReport
 
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads" / "general_operational_reports"
+UPLOAD_DIR = uploads_subdir("general_operational_reports")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".img"}
 
 

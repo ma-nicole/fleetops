@@ -25,9 +25,7 @@ def forecast_monthly_cost(db: Session, periods: int = 6) -> MonthlyForecastRespo
         )
         series = frame.groupby("month")["total"].sum().sort_index()
     else:
-        # Synthetic seed so the chart still renders for new installs.
-        base = [12000 + (i % 4) * 1500 for i in range(12)]
-        series = pd.Series(base)
+        return MonthlyForecastResponse(horizon_months=periods, points=[])
 
     try:
         model = ExponentialSmoothing(series.values, trend="add").fit()

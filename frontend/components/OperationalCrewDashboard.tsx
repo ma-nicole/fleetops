@@ -22,17 +22,13 @@ import { ApiError } from "@/lib/api";
 export type CrewRole = "driver" | "helper";
 
 const card: React.CSSProperties = {
-  background: "#FFFFFF",
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  padding: "1.25rem",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+  padding: "var(--space-5)",
 };
 
 const tableBase: React.CSSProperties = {
   width: "100%",
   borderCollapse: "collapse",
-  fontSize: "0.82rem",
+  fontSize: "var(--font-size-sm)",
 };
 
 const th: React.CSSProperties = {
@@ -263,8 +259,8 @@ export default function OperationalCrewDashboard() {
   const tabActive = crewRole === "helper" ? ("helper" as const) : ("driver" as const);
 
   return (
-    <main style={{ padding: "1.5rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gap: "1.25rem" }}>
+    <main className="dashboard-standard-main">
+      <div className="dashboard-standard-inner" style={{ maxWidth: 1280 }}>
         <header style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start" }}>
           <div>
             <p style={{ margin: 0, fontSize: "0.8rem", fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.06em" }}>
@@ -386,7 +382,7 @@ export default function OperationalCrewDashboard() {
         )}
 
         {crewRole === "driver" && truckForVehicle ? (
-          <article style={{ ...card }}>
+          <article className="panel-card" style={{ ...card }}>
             <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.02rem", fontWeight: 800 }}>Assigned vehicle</h3>
             <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem", color: "#334155" }}>
               <div>
@@ -424,13 +420,13 @@ export default function OperationalCrewDashboard() {
             </p>
           </article>
         ) : crewRole === "driver" ? (
-          <article style={{ ...card }}>
+          <article className="panel-card" style={{ ...card }}>
             <h3 style={{ margin: "0 0 0.35rem", fontSize: "1.02rem", fontWeight: 800 }}>Assigned vehicle</h3>
             <p style={{ margin: 0, fontSize: "0.9rem", color: "#64748B" }}>No assigned vehicle on your active trips right now.</p>
           </article>
         ) : null}
 
-        <article id="crew-active-trip" className="scroll-section" style={{ ...card }}>
+        <article id="crew-active-trip" className="panel-card scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Current active trip</h3>
           {!primary ? (
             <p style={{ margin: 0, color: "#64748B", fontSize: "0.95rem" }} role="status">{EMPTY_TRIPS}</p>
@@ -561,7 +557,7 @@ export default function OperationalCrewDashboard() {
           )}
         </article>
 
-        <article id="crew-trips-table" className="scroll-section" style={{ ...card }}>
+        <article id="crew-trips-table" className="panel-card scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Assigned trips (not completed)</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 760 : 1040 }}>
@@ -635,7 +631,7 @@ export default function OperationalCrewDashboard() {
           </div>
         </article>
 
-        <article id="crew-history" className="scroll-section" style={{ ...card }}>
+        <article id="crew-history" className="panel-card scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Recent trip history (completed)</h3>
           <div style={{ overflowX: "auto" }}>
             <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 640 : 880 }}>
@@ -699,7 +695,7 @@ export default function OperationalCrewDashboard() {
           </div>
         </article>
 
-        <section style={{ ...card, display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <section className="panel-card" style={{ ...card, display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
           <Link
             href={scheduledHref}
             style={{

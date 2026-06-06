@@ -157,8 +157,8 @@ export default function CustomerPortalDashboard() {
   useHashScrollWhenReady(!loading && !error);
 
   return (
-    <main style={{ display: "grid", gap: "1.5rem", padding: "1rem 1.25rem 2.5rem", background: "#F3F4F6", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1280, margin: "0 auto", width: "100%", display: "grid", gap: "1.5rem" }}>
+    <main className="dashboard-standard-main">
+      <div className="dashboard-standard-inner" style={{ maxWidth: 1280 }}>
         <AsyncDataView
           loading={loading}
           error={error}
@@ -195,14 +195,7 @@ export default function CustomerPortalDashboard() {
               <KpiCard label="Fulfillment snapshot" value={`${kpis.rate}%`} delta="Completed vs all bookings" trend={kpis.rate >= 90 ? "up" : "flat"} tone={kpis.rate >= 90 ? "success" : "neutral"} />
             </section>
 
-            <section
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))",
-                gap: "1.5rem",
-                alignItems: "start",
-              }}
-            >
+            <section className="dashboard-standard-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}>
               <div id="customer-tracking" className="card scroll-section" style={{ display: "grid", gap: "1rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                   <h2 style={{ margin: 0 }}>Shipment tracking</h2>

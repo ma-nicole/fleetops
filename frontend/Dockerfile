@@ -8,8 +8,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Inlined sa client bundle sa build time (kailangan sa production Docker)
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api
+ARG NEXT_PUBLIC_API_URL
+ARG BACKEND_ORIGIN
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV BACKEND_ORIGIN=${BACKEND_ORIGIN}
+RUN test -n "$NEXT_PUBLIC_API_URL" || (echo "NEXT_PUBLIC_API_URL is required for production build." && exit 1)
+RUN test -n "$BACKEND_ORIGIN" || (echo "BACKEND_ORIGIN is required for production build." && exit 1)
+RUN node -e "const u=process.env.NEXT_PUBLIC_API_URL||''; if(!(u.startsWith('https://')||u.startsWith('/api-proxy'))){throw new Error('NEXT_PUBLIC_API_URL must be HTTPS or /api-proxy');}"
 RUN npm run build
 
 FROM node:22-alpine AS runner

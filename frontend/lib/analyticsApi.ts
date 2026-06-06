@@ -269,6 +269,79 @@ export type AnalyticsValidation = {
 
 export type AdminAnalyticsEmpty = { empty: true; message: string };
 
+export type RoleAnalyticsFeatureBlock = AdminAnalyticsEmpty | {
+  kpis: { label: string; value: string | number }[];
+  chart: Record<string, unknown>[];
+  drilldown: Record<string, unknown>[];
+  statistics?: StatisticsSummary | null;
+  note?: string;
+};
+
+export type RoleAnalyticsPillar = {
+  descriptive: Record<string, RoleAnalyticsFeatureBlock>;
+  predictive: Record<string, RoleAnalyticsFeatureBlock>;
+};
+
+export type ManagerRoleAnalyticsPayload = {
+  planning: RoleAnalyticsPillar;
+  organizing: RoleAnalyticsPillar;
+  execution: RoleAnalyticsPillar;
+  controlling: RoleAnalyticsPillar;
+  performance_monitoring: RoleAnalyticsPillar;
+  risk_management: RoleAnalyticsPillar;
+};
+
+export type DispatcherRoleAnalyticsPayload = {
+  trip_scheduling: RoleAnalyticsPillar;
+  route_coordination: RoleAnalyticsPillar;
+  truck_assignment: RoleAnalyticsPillar;
+  driver_coordination: RoleAnalyticsPillar;
+  order_monitoring: RoleAnalyticsPillar;
+  operational_support: RoleAnalyticsPillar;
+};
+
+export type DriverRoleAnalyticsPayload = {
+  trip_execution: RoleAnalyticsPillar;
+  route_navigation: RoleAnalyticsPillar;
+  delivery_reporting: RoleAnalyticsPillar;
+  vehicle_monitoring: RoleAnalyticsPillar;
+  trip_status: RoleAnalyticsPillar;
+};
+
+export type DriverAnalyticsPayload = {
+  generated_at: string;
+  filters_applied: Record<string, string | number | null>;
+  filter_options: {
+    trucks: { id: number; code: string }[];
+    routes: string[];
+    shipment_statuses: string[];
+  };
+  driver_role_analytics: DriverRoleAnalyticsPayload;
+};
+
+export type DriverAnalyticsQuery = {
+  date_from?: string;
+  date_to?: string;
+  truck_id?: number;
+  route?: string;
+  shipment_status?: string;
+};
+
+export type ExpenseInterpretationRequest = {
+  context_year: number;
+  quarter: number;
+  quarter_label: string;
+  total_php: number;
+  categories: { key: string; label: string; amount_php: number; percentage: number }[];
+  largest: { key: string; label: string; amount_php: number; percentage: number };
+  smallest: { key: string; label: string; amount_php: number; percentage: number };
+  concentration: "balanced" | "moderately concentrated" | "highly concentrated";
+};
+
+export type ExpenseInterpretationResponse = {
+  interpretation: string;
+};
+
 export type AdminAnalyticsPayload = {
   generated_at: string;
   filters_applied: Record<string, string | number | null>;
@@ -292,6 +365,22 @@ export type AdminAnalyticsPayload = {
     fuel_by_route: { route: string; fuel_php: number }[];
     expense_breakdown: { key: string; label: string; amount_php: number }[];
     monthly_totals: { month: string; total: number; fuel: number; toll: number; maintenance: number; allowance: number }[];
+    drilldown: {
+      context_year: number;
+      categories: { key: string; label: string }[];
+      records: {
+        expense_date: string;
+        category: string;
+        amount_php: number;
+        source_type: string;
+        source_id?: number | null;
+        trip_id?: number | null;
+        booking_id?: number | null;
+        truck_id?: number | null;
+        truck_code?: string | null;
+        label?: string | null;
+      }[];
+    };
   };
   fleet: AdminAnalyticsEmpty | {
     summary: Record<string, string | number | null>;
@@ -328,6 +417,8 @@ export type AdminAnalyticsPayload = {
     revenue_contribution: { client_name: string; revenue_php: number }[];
     drilldown: Record<string, unknown>[];
   } | null;
+  role_analytics?: ManagerRoleAnalyticsPayload | null;
+  dispatcher_role_analytics?: DispatcherRoleAnalyticsPayload | null;
   validation?: AnalyticsValidation;
 };
 
@@ -381,4 +472,16 @@ export const AnalyticsApi = {
     const qs = params.toString();
     return apiGet<AdminAnalyticsPayload>(`/admin/analytics${qs ? `?${qs}` : ""}`);
   },
+  driverAnalytics: (query: DriverAnalyticsQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.date_from) params.set("date_from", query.date_from);
+    if (query.date_to) params.set("date_to", query.date_to);
+    if (query.truck_id != null) params.set("truck_id", String(query.truck_id));
+    if (query.route) params.set("route", query.route);
+    if (query.shipment_status) params.set("shipment_status", query.shipment_status);
+    const qs = params.toString();
+    return apiGet<DriverAnalyticsPayload>(`/driver/analytics${qs ? `?${qs}` : ""}`);
+  },
+  expenseInterpretation: (req: ExpenseInterpretationRequest) =>
+    apiPost<ExpenseInterpretationResponse>("/admin/analytics/expense-interpretation", req),
 };

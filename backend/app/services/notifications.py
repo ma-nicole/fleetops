@@ -1,14 +1,17 @@
 import html
+import logging
 
 import resend
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 def send_email_notification(to_email: str, subject: str, html_body: str) -> bool:
     """Send email notification via Resend"""
     if not settings.resend_api_key:
-        print(f"[MOCK EMAIL] To: {to_email} | Subject: {subject}")
+        logger.info("Email delivery skipped: RESEND_API_KEY is not configured.")
         return False
 
     try:
@@ -22,8 +25,8 @@ def send_email_notification(to_email: str, subject: str, html_body: str) -> bool
             }
         )
         return bool(response.get("id"))
-    except Exception as e:
-        print(f"Email send error: {e}")
+    except Exception:
+        logger.exception("Email delivery failed via provider.")
         return False
 
 
@@ -39,9 +42,8 @@ def notify_fleetops_customer_feedback(
     """Email FleetOps inbox when a customer submits feedback (requires FEEDBACK_INBOX_EMAIL + RESEND_API_KEY for real delivery)."""
     to = (settings.feedback_inbox_email or "").strip()
     if not to:
-        print(
-            "[feedback] FEEDBACK_INBOX_EMAIL is not set — feedback saved but not emailed. "
-            "Set FEEDBACK_INBOX_EMAIL (e.g. fleetops@gmail.com) and RESEND_API_KEY in .env."
+        logger.warning(
+            "Feedback inbox email is not configured; feedback is saved but not forwarded."
         )
         return False
 

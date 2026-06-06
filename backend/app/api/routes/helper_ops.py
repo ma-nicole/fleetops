@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
 from app.constants.fleet_capacity import trucks_required_for_cargo
+from app.core.paths import uploads_subdir
 from app.core.security import require_roles
 from app.db import get_db
 from app.models.entities import (
@@ -32,7 +33,7 @@ from app.services.trip_status_sync import sync_trip_and_booking_status
 
 router = APIRouter(prefix="/helper", tags=["helper"])
 
-UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads" / "helper_proofs"
+UPLOAD_DIR = uploads_subdir("helper_proofs")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".img"}
 STATUS_FLOW = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"]
 STATUS_INDEX = {s: i for i, s in enumerate(STATUS_FLOW)}

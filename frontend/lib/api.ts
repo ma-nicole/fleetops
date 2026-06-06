@@ -13,6 +13,16 @@ export const API_BASE_URL = normalizeApiBase(
   process.env.NEXT_PUBLIC_API_URL ?? "/api-proxy",
 );
 
+if (process.env.NODE_ENV === "production") {
+  const rawApi = (process.env.NEXT_PUBLIC_API_URL ?? "").trim();
+  if (!rawApi) {
+    throw new Error("NEXT_PUBLIC_API_URL is required in production.");
+  }
+  if (!(rawApi.startsWith("https://") || rawApi.startsWith("/api-proxy"))) {
+    throw new Error("NEXT_PUBLIC_API_URL must be an HTTPS URL or /api-proxy in production.");
+  }
+}
+
 /** Absolute URL for fetch (handles `/api-proxy` during SSR vs browser). */
 export function apiFullUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
@@ -56,41 +66,17 @@ export class ApiError extends Error {
 
 /** User-facing text; keeps raw `body` on ApiError for debugging. */
 function messageFromErrorResponse(status: number, text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    if (status >= 502 && status <= 504) {
-      return "Cannot reach the API (gateway or timeout). Start the FastAPI backend on port 8000 and try again.";
-    }
-    return `Request failed (${status}).`;
+  void text;
+  if (status === 403) {
+    return "You are not authorized to access this record.";
   }
-  try {
-    const parsed = JSON.parse(trimmed) as { detail?: unknown };
-    const d = parsed.detail;
-    if (typeof d === "string") return d;
-    if (Array.isArray(d)) {
-      const joined = d.map((x: { msg?: string }) => x.msg).filter(Boolean).join("; ");
-      if (joined) return joined;
-    }
-  } catch {
-    /* not JSON — common when Next.js proxy cannot reach the backend */
+  if (status === 404) {
+    return "Unable to load data.";
   }
-  if (status >= 502 && status <= 504) {
-    return "Cannot reach the API (gateway or timeout). Start the FastAPI backend on port 8000 and try again.";
+  if (status >= 500) {
+    return "Something went wrong. Please try again.";
   }
-  if (status === 500) {
-    const lower = trimmed.toLowerCase();
-    if (
-      trimmed === "Internal Server Error" ||
-      lower.startsWith("<!doctype") ||
-      lower.startsWith("<html")
-    ) {
-      return (
-        "Cannot reach the API or it failed before returning JSON (often the backend is not running). " +
-        "Start uvicorn on port 8000, confirm MySQL is running, then try again."
-      );
-    }
-  }
-  return trimmed.length > 400 ? `${trimmed.slice(0, 400)}…` : trimmed;
+  return "Unable to load data.";
 }
 
 async function handle<T>(response: Response): Promise<T> {
