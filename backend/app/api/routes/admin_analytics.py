@@ -11,7 +11,7 @@ from app.core.security import get_current_user, require_roles
 from app.db import get_db
 from app.models.entities import User, UserRole
 from app.services.admin_analytics import AnalyticsFilters, build_admin_analytics
-from app.services.ai_interpretation import generate_expense_interpretation
+from app.services.ai_interpretation import generate_chart_interpretation, generate_expense_interpretation
 
 router = APIRouter(prefix="/admin/analytics", tags=["admin-analytics"])
 
@@ -35,6 +35,32 @@ class ExpenseInterpretationRequest(BaseModel):
 
 
 class ExpenseInterpretationResponse(BaseModel):
+    interpretation: str
+
+
+class ChartInterpretationItem(BaseModel):
+    label: str | None = None
+    status: str | None = None
+    count: float | None = None
+    value: float | None = None
+    amount_php: float | None = None
+    client_name: str | None = None
+    truck_code: str | None = None
+    driver_name: str | None = None
+    route: str | None = None
+    month: str | None = None
+
+
+class ChartInterpretationRequest(BaseModel):
+    section_title: str
+    selection_label: str
+    chart_type: str = "bar"
+    items: list[ChartInterpretationItem] = Field(default_factory=list)
+    record_count: int = Field(ge=0)
+    statistics: dict[str, float | int | None] | None = None
+
+
+class ChartInterpretationResponse(BaseModel):
     interpretation: str
 
 
@@ -132,3 +158,19 @@ def expense_interpretation(
         concentration=body.concentration,
     )
     return ExpenseInterpretationResponse(interpretation=text)
+
+
+@router.post("/chart-interpretation", response_model=ChartInterpretationResponse)
+def chart_interpretation(
+    body: ChartInterpretationRequest,
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.DISPATCHER)),
+):
+    text = generate_chart_interpretation(
+        section_title=body.section_title,
+        selection_label=body.selection_label,
+        chart_type=body.chart_type,
+        items=[i.model_dump(exclude_none=True) for i in body.items],
+        record_count=body.record_count,
+        statistics=body.statistics,
+    )
+    return ChartInterpretationResponse(interpretation=text)

@@ -331,14 +331,22 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
             hrs = _delivery_hours(trip)
             if hrs is not None and cat == "delivered":
                 delivery_hours.append(hrs)
+        delivery_date = None
+        if trip and trip.completed_at:
+            delivery_date = trip.completed_at.date().isoformat()
+        elif cat == "delivered" and booking.scheduled_date:
+            delivery_date = booking.scheduled_date.isoformat()
         rows.append(
             {
                 "booking_id": booking.id,
                 "trip_id": trip.id if trip else None,
                 "driver": trip.driver.full_name if trip and trip.driver else None,
+                "helper": trip.helper.full_name if trip and trip.helper else None,
                 "truck": trip.truck.code if trip and trip.truck else None,
                 "route": _route_key(booking.pickup_location, booking.dropoff_location),
                 "delivery_status": cat,
+                "delivery_date": delivery_date,
+                "scheduled_month": month,
                 "delay_reason": _trip_delay_reason(trip, ctx["delay_logs"]) if trip else None,
             }
         )
@@ -996,6 +1004,54 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
 
     top_routes = sorted(route_profit.items(), key=lambda x: -x[1])[:5]
 
+    customer_map = {c.id: c.full_name or c.email for c in ctx["customers"]}
+    category_labels = {
+        "fuel": "Fuel",
+        "toll": "Toll",
+        "maintenance": "Maintenance",
+        "allowance": "Allowances",
+        "driver_allowance": "Driver Allowances",
+        "helper_allowance": "Helper Allowances",
+    }
+    drilldown: list[dict[str, Any]] = []
+    for pay, booking, trip in revenue_rows:
+        paid_at = pay.paid_at or pay.created_at
+        month = _activity_month(paid_at)
+        drilldown.append(
+            {
+                "record_type": "revenue",
+                "category": "revenue",
+                "month": month,
+                "payment_id": pay.id,
+                "booking_id": pay.booking_id,
+                "trip_id": trip.id if trip else None,
+                "reference": pay.reference or None,
+                "amount_php": round(float(pay.amount or 0), 2),
+                "route": _route_key(booking.pickup_location, booking.dropoff_location),
+                "client_name": customer_map.get(pay.customer_id),
+                "paid_at": paid_at.isoformat() if paid_at else None,
+            }
+        )
+    if not expense_summary.get("empty"):
+        for rec in expense_summary.get("drilldown", {}).get("records") or []:
+            expense_date = rec.get("expense_date")
+            month = expense_date[:7] if expense_date else None
+            drilldown.append(
+                {
+                    "record_type": "expense",
+                    "category": rec.get("category"),
+                    "category_label": category_labels.get(str(rec.get("category")), rec.get("category")),
+                    "month": month,
+                    "expense_date": expense_date,
+                    "amount_php": rec.get("amount_php"),
+                    "source_type": rec.get("source_type"),
+                    "trip_id": rec.get("trip_id"),
+                    "booking_id": rec.get("booking_id"),
+                    "truck_code": rec.get("truck_code"),
+                    "label": rec.get("label"),
+                }
+            )
+
     return {
         "summary": {
             "total_revenue_php": total_rev,
@@ -1008,6 +1064,11 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
         "revenue_trend": trend,
         "revenue_vs_expense": trend,
         "profit_trend": [{"month": t["month"], "profit_php": t["profit_php"]} for t in trend],
+        "category_summary": [
+            {"category": "revenue", "label": "Revenue", "amount_php": total_rev},
+            {"category": "expenses", "label": "Expenses", "amount_php": total_exp},
+            {"category": "profit", "label": "Profit", "amount_php": round(total_rev - total_exp, 2)},
+        ],
         "revenue_per_client": [
             {
                 "customer_id": cid,
@@ -1019,6 +1080,7 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
             }
             for cid, amt in sorted(client_rev.items(), key=lambda x: -x[1])[:20]
         ],
+        "drilldown": drilldown,
     }
 
 
@@ -1162,4 +1224,25 @@ def build_admin_analytics(
         payload["dispatcher_role_analytics"] = None
 
     payload["validation"] = validate_admin_analytics(payload)
+
+    from app.services.executive_analytics import (
+        build_comparative_analytics,
+        build_executive_overview,
+        build_section_percentages,
+    )
+
+    payload["executive_overview"] = build_executive_overview(
+        ctx,
+        filters,
+        shipments=shipments,
+        expenses=expenses,
+        fleet=fleet,
+        financial=payload.get("financial"),
+    )
+    payload["comparative_analytics"] = build_comparative_analytics(ctx, filters)
+    payload["section_percentages"] = {
+        "shipments": build_section_percentages(shipments, "shipments"),
+        "expenses": build_section_percentages(expenses, "expenses"),
+        "financial": build_section_percentages(payload["financial"], "financial") if payload.get("financial") else None,
+    }
     return payload

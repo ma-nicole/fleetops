@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  BarChartPhp,
-  DrilldownTable,
   EmptyChart,
-  LineChartVisual,
-  PieChartVisual,
   SectionCard,
   StatGrid,
   StatisticsTable,
 } from "@/components/admin/AnalyticsCharts";
 import ExpenseDrilldownAnalytics from "@/components/admin/ExpenseDrilldownAnalytics";
+import {
+  ClientAnalyticsInteractive,
+  DriverAnalyticsInteractive,
+  FinancialAnalyticsInteractive,
+  FleetAnalyticsInteractive,
+  RouteAnalyticsInteractive,
+  ShipmentAnalyticsInteractive,
+} from "@/components/admin/InteractiveAnalyticsSections";
+import { ComparativeAnalyticsBlock, ExecutiveOverviewSection, PercentageBreakdown } from "@/components/admin/BiAnalyticsComponents";
 import ManagerRoleAnalyticsTabs from "@/components/admin/ManagerRoleAnalyticsTabs";
 import PageHeader from "@/components/ui/PageHeader";
 import ErrorState from "@/components/ui/ErrorState";
@@ -252,7 +257,25 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
             </div>
           )}
 
-          {data.role_analytics && <ManagerRoleAnalyticsTabs data={data.role_analytics} />}
+          {data.executive_overview && <ExecutiveOverviewSection overview={data.executive_overview} />}
+
+          {data.comparative_analytics && (
+            <section className="panel-card scroll-section" id="analytics-comparative">
+              <div>
+                <h3 className="panel-card__title">Comparative Analytics</h3>
+                <p className="panel-card__subtitle">
+                  Level 2 — Weekly, monthly, quarterly, and yearly period comparisons with growth rates
+                </p>
+              </div>
+              <div style={{ display: "grid", gap: "1.25rem" }}>
+                <ComparativeAnalyticsBlock title="Revenue" metric={data.comparative_analytics.revenue} />
+                <ComparativeAnalyticsBlock title="Operational expenses" metric={data.comparative_analytics.expenses} />
+                <ComparativeAnalyticsBlock title="Deliveries" metric={data.comparative_analytics.deliveries} defaultGranularity="monthly" />
+              </div>
+            </section>
+          )}
+
+          {data.role_analytics && <ManagerRoleAnalyticsTabs data={data.role_analytics} filterOptions={data.filter_options} />}
 
           {show("shipments") && (
             <SectionCard title="1. Shipment / Delivery Analytics" sectionId="analytics-shipments">
@@ -284,33 +307,13 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                       },
                     ]}
                   />
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1rem" }}>
-                    <div>
-                      <p className="chart-block__title">Status distribution</p>
-                      <PieChartVisual
-                        items={data.shipments.status_distribution}
-                        labelKey="status"
-                        valueKey="count"
-                      />
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.85rem" }}>Monthly deliveries</p>
-                      <LineChartVisual items={data.shipments.monthly_deliveries} xKey="month" yKey="count" />
-                    </div>
-                  </div>
-                  <StatisticsTable stats={data.shipments.statistics} />
-                  <DrilldownTable
-                    columns={[
-                      { key: "booking_id", label: "Booking" },
-                      { key: "trip_id", label: "Trip" },
-                      { key: "driver", label: "Driver" },
-                      { key: "truck", label: "Truck" },
-                      { key: "route", label: "Route" },
-                      { key: "delivery_status", label: "Status" },
-                      { key: "delay_reason", label: "Delay reason" },
-                    ]}
-                    rows={data.shipments.drilldown}
+                  <ShipmentAnalyticsInteractive
+                    data={data.shipments}
+                    filterOptions={data.filter_options}
+                    comparative={data.comparative_analytics?.deliveries}
+                    percentages={data.section_percentages?.shipments ?? null}
                   />
+                  <StatisticsTable stats={data.shipments.statistics} />
                 </>
               )}
             </SectionCard>
@@ -321,7 +324,17 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
               {isEmpty(data.expenses) ? (
                 <EmptyChart message={data.expenses.message} />
               ) : data.expenses.drilldown?.records ? (
-                <ExpenseDrilldownAnalytics drilldown={data.expenses.drilldown} />
+                <>
+                  <ComparativeAnalyticsBlock
+                    title="Expense comparison"
+                    metric={data.comparative_analytics?.expenses}
+                    defaultGranularity="quarterly"
+                  />
+                  {data.section_percentages?.expenses ? (
+                    <PercentageBreakdown title="Expense category share (%)" items={data.section_percentages.expenses} />
+                  ) : null}
+                  <ExpenseDrilldownAnalytics drilldown={data.expenses.drilldown} />
+                </>
               ) : (
                 <EmptyChart message="No expense data available for this quarter." />
               )}
@@ -344,23 +357,8 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                       { label: "Total trips", value: statVal(data.fleet.summary.total_trips) },
                     ]}
                   />
-                  <BarChartPhp
-                    items={data.fleet.truck_usage as Array<Record<string, string | number>>}
-                    labelKey="truck_code"
-                    valueKey="trip_count"
-                  />
+                  <FleetAnalyticsInteractive data={data.fleet} filterOptions={data.filter_options} />
                   <StatisticsTable stats={data.fleet.statistics} />
-                  <DrilldownTable
-                    columns={[
-                      { key: "truck_code", label: "Truck" },
-                      { key: "trip_count", label: "Trips" },
-                      { key: "utilization_rate_pct", label: "Utilization %" },
-                      { key: "fuel_php", label: "Fuel (₱)" },
-                      { key: "maintenance_events", label: "Maintenance" },
-                      { key: "assigned_drivers", label: "Drivers" },
-                    ]}
-                    rows={data.fleet.drilldown}
-                  />
                 </>
               )}
             </SectionCard>
@@ -379,20 +377,8 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                       { label: "Delayed deliveries", value: data.drivers.summary.total_delayed },
                     ]}
                   />
-                  <BarChartPhp items={data.drivers.distribution} labelKey="driver_name" valueKey="completed" />
+                  <DriverAnalyticsInteractive data={data.drivers} filterOptions={data.filter_options} />
                   <StatisticsTable stats={data.drivers.statistics} />
-                  <DrilldownTable
-                    columns={[
-                      { key: "driver_name", label: "Driver" },
-                      { key: "deliveries_completed", label: "Completed" },
-                      { key: "delayed_deliveries", label: "Delayed" },
-                      { key: "on_time_deliveries", label: "On time" },
-                      { key: "attendance_records", label: "Attendance" },
-                      { key: "fuel_php", label: "Fuel (₱)" },
-                      { key: "total_hours", label: "Hours" },
-                    ]}
-                    rows={data.drivers.drilldown}
-                  />
                 </>
               )}
             </SectionCard>
@@ -413,23 +399,8 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                       { label: "Most expensive", value: statVal(data.routes.summary.most_expensive_route as string | null) },
                     ]}
                   />
-                  <BarChartPhp
-                    items={data.routes.cost_comparison as Array<Record<string, string | number>>}
-                    labelKey="route"
-                    valueKey="total_cost_php"
-                  />
+                  <RouteAnalyticsInteractive data={data.routes} filterOptions={data.filter_options} />
                   <StatisticsTable stats={data.routes.statistics} />
-                  <DrilldownTable
-                    columns={[
-                      { key: "route", label: "Route" },
-                      { key: "deliveries", label: "Deliveries" },
-                      { key: "delayed_count", label: "Delays" },
-                      { key: "total_cost_php", label: "Cost (₱)" },
-                      { key: "fuel_php", label: "Fuel (₱)" },
-                      { key: "avg_delivery_hours", label: "Avg hrs" },
-                    ]}
-                    rows={data.routes.drilldown}
-                  />
                 </>
               )}
             </SectionCard>
@@ -449,7 +420,16 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                       { label: "Top route", value: statVal(data.financial.summary.most_profitable_route as string | null) },
                     ]}
                   />
-                  <LineChartVisual items={data.financial.revenue_trend} xKey="month" yKey="revenue_php" />
+                  <FinancialAnalyticsInteractive
+                    data={{
+                      category_summary: data.financial.category_summary ?? [],
+                      revenue_trend: data.financial.revenue_trend,
+                      drilldown: data.financial.drilldown ?? [],
+                    }}
+                    filterOptions={data.filter_options}
+                    comparative={data.comparative_analytics?.revenue}
+                    percentages={data.section_percentages?.financial ?? null}
+                  />
                   <StatisticsTable stats={data.financial.statistics} />
                 </>
               )}
@@ -469,27 +449,8 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                       { label: "Revenue", value: formatPhp(data.clients.summary.total_revenue_php) },
                     ]}
                   />
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1rem" }}>
-                    <div>
-                      <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.85rem" }}>Booking distribution</p>
-                      <BarChartPhp items={data.clients.booking_distribution} labelKey="client_name" valueKey="bookings" />
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.85rem" }}>Revenue contribution</p>
-                      <BarChartPhp items={data.clients.revenue_contribution} labelKey="client_name" valueKey="revenue_php" />
-                    </div>
-                  </div>
+                  <ClientAnalyticsInteractive data={data.clients} filterOptions={data.filter_options} />
                   <StatisticsTable stats={data.clients.statistics} />
-                  <DrilldownTable
-                    columns={[
-                      { key: "client_name", label: "Client" },
-                      { key: "total_bookings", label: "Bookings" },
-                      { key: "deliveries", label: "Deliveries" },
-                      { key: "revenue_php", label: "Revenue (₱)" },
-                      { key: "top_destination", label: "Top destination" },
-                    ]}
-                    rows={data.clients.drilldown}
-                  />
                 </>
               )}
             </SectionCard>

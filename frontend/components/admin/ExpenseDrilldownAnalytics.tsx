@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
-import { DrilldownTable, EmptyChart } from "@/components/admin/AnalyticsCharts";
+import { EmptyChart } from "@/components/admin/AnalyticsCharts";
+import { ChartDrilldownPanel } from "@/components/admin/ChartDrilldownPanel";
 import { AnalyticsApi, type ExpenseInterpretationRequest } from "@/lib/analyticsApi";
 
 export type ExpenseDrilldownRecord = {
@@ -233,6 +234,7 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
   const [category, setCategory] = useState<string | null>(null);
   const [month, setMonth] = useState<string | null>(null);
   const [stat, setStat] = useState<StatKey>("median");
+  const [tableCategoryFilter, setTableCategoryFilter] = useState<string | null>(null);
   const [aiInterpretation, setAiInterpretation] = useState<string>("No data available yet.");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -256,6 +258,10 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
   }, [categories, quarterRecords]);
 
   const quarterTotal = pieData.reduce((s, x) => s + x.amount_php, 0);
+  const highTableRows = useMemo(() => {
+    if (!tableCategoryFilter) return quarterRecords;
+    return quarterRecords.filter((r) => r.category === tableCategoryFilter);
+  }, [quarterRecords, tableCategoryFilter]);
   const aiInput = useMemo<ExpenseInterpretationRequest | null>(() => {
     if (pieData.length === 0 || quarterTotal <= 0) return null;
     const ranked = [...pieData].sort((a, b) => b.amount_php - a.amount_php);
@@ -369,6 +375,7 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
     setLevel("high");
     setCategory(null);
     setMonth(null);
+    setTableCategoryFilter(null);
   };
 
   const goMid = () => {
@@ -377,7 +384,12 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
   };
 
   const onSliceClick = (key: string) => {
-    setCategory(key);
+    setTableCategoryFilter(key);
+  };
+
+  const openMonthlyBreakdown = () => {
+    if (!tableCategoryFilter) return;
+    setCategory(tableCategoryFilter);
     setLevel("mid");
     setMonth(null);
   };
@@ -455,6 +467,38 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
                 Total operational expenses: <strong style={{ color: "var(--text)" }}>{formatPhp(quarterTotal)}</strong>
               </p>
               <ClickablePieChart items={pieData} onSliceClick={onSliceClick} />
+              {tableCategoryFilter ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+                  <button type="button" className="quick-action-btn" onClick={openMonthlyBreakdown}>
+                    Monthly breakdown →
+                  </button>
+                </div>
+              ) : null}
+              <ChartDrilldownPanel
+                filterLabel={
+                  tableCategoryFilter ? categoryLabel(categories, tableCategoryFilter) : null
+                }
+                onClear={() => setTableCategoryFilter(null)}
+                columns={[
+                  { key: "expense_date", label: "Date" },
+                  { key: "category", label: "Category" },
+                  { key: "amount_php", label: "Amount" },
+                  { key: "source_type", label: "Source" },
+                  { key: "trip_id", label: "Trip" },
+                  { key: "booking_id", label: "Booking" },
+                  { key: "truck_code", label: "Truck" },
+                  { key: "label", label: "Description" },
+                ]}
+                rows={highTableRows.map((r) => ({
+                  ...r,
+                  amount_php: formatPhp(r.amount_php),
+                  trip_id: r.trip_id ?? "—",
+                  booking_id: r.booking_id ?? "—",
+                  truck_code: r.truck_code ?? "—",
+                  label: r.label ?? "—",
+                }))}
+                totalCount={quarterRecords.length}
+              />
               <section className="panel-card" style={{ padding: "1rem" }}>
                 <h4 style={{ margin: "0 0 0.5rem", fontSize: "1rem", fontWeight: 700 }}>📊 AI Interpretation</h4>
                 {aiLoading ? (
@@ -540,7 +584,9 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
                 </div>
               </div>
 
-              <DrilldownTable
+              <ChartDrilldownPanel
+                filterLabel={`${categoryLabel(categories, category)} · ${MONTH_NAMES[parseInt(month.split("-")[1], 10) - 1]} ${context_year}`}
+                onClear={goHigh}
                 columns={[
                   { key: "expense_date", label: "Date" },
                   { key: "amount_php", label: "Amount" },
@@ -558,6 +604,7 @@ export default function ExpenseDrilldownAnalytics({ drilldown }: { drilldown: Ex
                   truck_code: r.truck_code ?? "—",
                   label: r.label ?? "—",
                 }))}
+                totalCount={monthRecords.length}
               />
             </>
           )}

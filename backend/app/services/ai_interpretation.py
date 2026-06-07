@@ -66,3 +66,63 @@ def generate_expense_interpretation(
     ]
     return " ".join(lines)
 
+
+def generate_chart_interpretation(
+    *,
+    section_title: str,
+    selection_label: str,
+    chart_type: str,
+    items: list[dict[str, Any]],
+    record_count: int,
+    statistics: dict[str, Any] | None,
+) -> str:
+    if not items and record_count == 0:
+        return "No data available for this chart selection."
+
+    total = sum(float(x.get("value") or x.get("count") or x.get("amount_php") or 0) for x in items)
+    ranked = sorted(
+        items,
+        key=lambda x: float(x.get("value") or x.get("count") or x.get("amount_php") or 0),
+        reverse=True,
+    )
+    dominant = ranked[0] if ranked else None
+    dom_val = float(dominant.get("value") or dominant.get("count") or dominant.get("amount_php") or 0) if dominant else 0
+    dom_pct = round((dom_val / total) * 100, 1) if total > 0 and dominant else 0
+    dom_label = (
+        dominant.get("label")
+        or dominant.get("status")
+        or dominant.get("client_name")
+        or dominant.get("truck_code")
+        or dominant.get("driver_name")
+        or dominant.get("route")
+        or "Top category"
+    ) if dominant else "N/A"
+
+    trend_note = ""
+    if len(items) >= 2:
+        first = float(items[0].get("value") or items[0].get("count") or items[0].get("amount_php") or 0)
+        last = float(items[-1].get("value") or items[-1].get("count") or items[-1].get("amount_php") or 0)
+        if last > first * 1.1:
+            trend_note = "The series shows an upward trend across displayed periods."
+        elif last < first * 0.9:
+            trend_note = "The series shows a downward trend across displayed periods."
+        else:
+            trend_note = "The series is relatively stable across displayed periods."
+
+    stat_note = ""
+    if statistics and statistics.get("count", 0) >= 1:
+        stat_note = (
+            f"For the {record_count} underlying record(s), values average {statistics.get('average')} "
+            f"with a median of {statistics.get('median')} (range {statistics.get('minimum')}–{statistics.get('maximum')})."
+        )
+
+    lines = [
+        f"In {section_title}, the selected segment \"{selection_label}\" ({chart_type} chart) "
+        f"is supported by {record_count} source record(s).",
+        f"The dominant visible category is {dom_label}, contributing about {_pct(dom_pct)} of the displayed chart total.",
+        trend_note,
+        stat_note,
+        "Review the filtered dataset and comparative metrics for operational follow-up on the highest-impact categories.",
+    ]
+    return " ".join(x for x in lines if x)
+

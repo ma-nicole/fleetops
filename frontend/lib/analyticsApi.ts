@@ -342,6 +342,68 @@ export type ExpenseInterpretationResponse = {
   interpretation: string;
 };
 
+export type PercentageItem = {
+  label: string;
+  value: number;
+  percentage: number | null;
+};
+
+export type ExecutiveKpi = {
+  key: string;
+  label: string;
+  value: number | null;
+  format: "php" | "percent" | "count";
+  growth_pct?: number | null;
+  trend?: "up" | "down" | "flat" | null;
+  subtitle?: string | null;
+};
+
+export type ExecutiveOverview = {
+  kpis: ExecutiveKpi[];
+};
+
+export type ComparativePoint = {
+  period: string;
+  value: number;
+};
+
+export type ComparativeComparison = {
+  type: string;
+  label: string;
+  current_period: string;
+  previous_period: string;
+  current_value: number;
+  previous_value: number;
+  change_pct: number | null;
+  trend: "up" | "down" | "flat";
+};
+
+export type ComparativeMetric = {
+  value_format: "php" | "count";
+  granularity_options: ("weekly" | "monthly" | "quarterly" | "yearly")[];
+  series: Partial<Record<"weekly" | "monthly" | "quarterly" | "yearly", ComparativePoint[]>>;
+  comparisons: Partial<Record<"weekly" | "monthly" | "quarterly" | "yearly", ComparativeComparison[]>>;
+};
+
+export type ComparativeAnalytics = {
+  revenue?: ComparativeMetric;
+  expenses?: ComparativeMetric;
+  deliveries?: ComparativeMetric;
+};
+
+export type ChartInterpretationRequest = {
+  section_title: string;
+  selection_label: string;
+  chart_type: string;
+  items: Array<Record<string, string | number | undefined>>;
+  record_count: number;
+  statistics?: StatisticsSummary;
+};
+
+export type ChartInterpretationResponse = {
+  interpretation: string;
+};
+
 export type AdminAnalyticsPayload = {
   generated_at: string;
   filters_applied: Record<string, string | number | null>;
@@ -408,7 +470,9 @@ export type AdminAnalyticsPayload = {
     revenue_trend: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
     revenue_vs_expense: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
     profit_trend: { month: string; profit_php: number }[];
+    category_summary?: { category: string; label: string; amount_php: number }[];
     revenue_per_client: Record<string, unknown>[];
+    drilldown?: Record<string, unknown>[];
   } | null;
   clients: AdminAnalyticsEmpty | {
     summary: Record<string, number>;
@@ -420,6 +484,13 @@ export type AdminAnalyticsPayload = {
   role_analytics?: ManagerRoleAnalyticsPayload | null;
   dispatcher_role_analytics?: DispatcherRoleAnalyticsPayload | null;
   validation?: AnalyticsValidation;
+  executive_overview?: ExecutiveOverview | null;
+  comparative_analytics?: ComparativeAnalytics | null;
+  section_percentages?: {
+    shipments?: PercentageItem[] | null;
+    expenses?: PercentageItem[] | null;
+    financial?: PercentageItem[] | null;
+  } | null;
 };
 
 export type AdminAnalyticsQuery = {
@@ -484,4 +555,6 @@ export const AnalyticsApi = {
   },
   expenseInterpretation: (req: ExpenseInterpretationRequest) =>
     apiPost<ExpenseInterpretationResponse>("/admin/analytics/expense-interpretation", req),
+  chartInterpretation: (req: ChartInterpretationRequest) =>
+    apiPost<ChartInterpretationResponse>("/admin/analytics/chart-interpretation", req),
 };

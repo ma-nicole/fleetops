@@ -2453,7 +2453,279 @@ html {
   padding: var(--space-2);
 }
 
-/* Button variants */
+/* Enterprise BI analytics */
+.bi-executive-overview {
+  border-left: 4px solid var(--accent);
+}
+
+.bi-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.bi-kpi-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-dark) 100%);
+  padding: var(--space-3);
+}
+
+.bi-kpi-card__label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.bi-kpi-card__value {
+  margin: 0.35rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.bi-kpi-card__growth {
+  margin: 0.35rem 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bi-kpi-card__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.bi-trend {
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.bi-trend--up {
+  color: #059669;
+}
+
+.bi-trend--down {
+  color: #dc2626;
+}
+
+.bi-trend--flat {
+  color: var(--text-muted);
+}
+
+.bi-comparative-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  background: var(--bg-card);
+}
+
+.bi-comparative-block__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.bi-comparative-block__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.bi-comparison-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.bi-comparison-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-dark);
+}
+
+.bi-comparison-card__label {
+  margin: 0 0 0.35rem;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.bi-comparison-card__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.bi-comparison-card__change {
+  margin: 0.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bi-series-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.bi-series-strip__item {
+  min-width: 88px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.65rem;
+  background: var(--bg-dark);
+  display: grid;
+  gap: 0.15rem;
+}
+
+.bi-series-strip__period {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.bi-percentage-block {
+  margin-bottom: var(--space-3);
+}
+
+.bi-percentage-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.bi-percentage-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  padding: 0.35rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.bi-percentage-row__value {
+  margin-left: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.bi-drill-hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.bi-drilldown-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding: var(--space-3);
+}
+
+.bi-drilldown-modal {
+  width: min(960px, 100%);
+  max-height: min(90vh, 920px);
+  overflow: auto;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.bi-drilldown-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.bi-drilldown-modal__eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.bi-drilldown-modal__title {
+  margin: 0.25rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.bi-drilldown-modal__subtitle {
+  margin: 0.25rem 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.bi-drilldown-modal__body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.bi-drilldown-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  background: var(--bg-dark);
+}
+
+.bi-drilldown-section__title {
+  margin: 0 0 var(--space-3);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.bi-drilldown-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.bi-drilldown-meta {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.bi-drilldown-empty {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.bi-drilldown-interpretation {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
 .btn-secondary {
   background: var(--bg-card);
   color: var(--text);

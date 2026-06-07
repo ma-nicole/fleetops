@@ -5,6 +5,40 @@ import { EMPTY_ANALYTICS } from "@/lib/loadingMessages";
 
 const PIE_COLORS = ["#F59E0B", "#059669", "#D97706", "#DC2626", "#6366F1", "#64748B", "#EC4899"];
 
+export type ChartClickPayload = {
+  label: string;
+  raw: Record<string, string | number>;
+};
+
+type ChartClickProps = {
+  onItemClick?: (payload: ChartClickPayload) => void;
+  selectedLabel?: string | null;
+};
+
+function isSelected(label: string, selectedLabel?: string | null): boolean {
+  if (!selectedLabel) return false;
+  return label.trim().toLowerCase() === selectedLabel.trim().toLowerCase();
+}
+
+function clickableButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: "var(--font-size-sm)",
+    width: "100%",
+    textAlign: "left",
+    padding: "0.35rem 0.5rem",
+    margin: "-0.35rem -0.5rem",
+    border: active ? "1px solid var(--accent)" : "1px solid transparent",
+    borderRadius: 8,
+    background: active ? "rgba(245, 158, 11, 0.12)" : "transparent",
+    cursor: "pointer",
+    font: "inherit",
+    color: "inherit",
+  };
+}
+
 export function StatGrid({ items }: { items: { label: string; value: string | number }[] }) {
   return (
     <div className="stat-grid-inline">
@@ -64,11 +98,13 @@ export function PieChartVisual({
   items,
   labelKey,
   valueKey,
+  onItemClick,
+  selectedLabel,
 }: {
   items: Array<Record<string, string | number>>;
   labelKey: string;
   valueKey: string;
-}) {
+} & ChartClickProps) {
   const total = items.reduce((s, x) => s + (Number(x[valueKey]) || 0), 0);
   if (total <= 0) return <EmptyChart />;
   let acc = 0;
@@ -80,6 +116,8 @@ export function PieChartVisual({
     return { item, pct, start, color: PIE_COLORS[i % PIE_COLORS.length] };
   });
   const gradient = slices.map((s) => `${s.color} ${s.start}% ${s.start + s.pct}%`).join(", ");
+  const interactive = Boolean(onItemClick);
+
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
       <div
@@ -94,13 +132,35 @@ export function PieChartVisual({
         aria-hidden
       />
       <div style={{ display: "grid", gap: "0.35rem", flex: 1, minWidth: 160 }}>
-        {slices.map((s) => (
-          <div key={String(s.item[labelKey])} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-size-sm)" }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
-            <span style={{ flex: 1, color: "var(--text)" }}>{String(s.item[labelKey])}</span>
-            <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{s.pct.toFixed(1)}%</span>
-          </div>
-        ))}
+        {slices.map((s) => {
+          const label = String(s.item[labelKey]);
+          const active = isSelected(label, selectedLabel);
+          const content = (
+            <>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, color: "var(--text)" }}>{label}</span>
+              <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{s.pct.toFixed(1)}%</span>
+            </>
+          );
+          if (!interactive) {
+            return (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-size-sm)" }}>
+                {content}
+              </div>
+            );
+          }
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onItemClick?.({ label, raw: s.item as Record<string, string | number> })}
+              style={clickableButtonStyle(active)}
+              aria-pressed={active}
+            >
+              {content}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -110,34 +170,63 @@ export function LineChartVisual({
   items,
   xKey,
   yKey,
+  onItemClick,
+  selectedLabel,
 }: {
   items: Array<Record<string, string | number>>;
   xKey: string;
   yKey: string;
-}) {
+} & ChartClickProps) {
   if (items.length === 0) return <EmptyChart />;
   const values = items.map((x) => Number(x[yKey]) || 0);
   const max = Math.max(...values, 1);
+  const interactive = Boolean(onItemClick);
+
   return (
     <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", minHeight: 140, paddingTop: 8 }}>
       {items.map((row) => {
         const val = Number(row[yKey]) || 0;
         const h = Math.max(6, Math.round((val / max) * 120));
+        const xLabel = String(row[xKey]);
+        const active = isSelected(xLabel, selectedLabel);
+        const bar = (
+          <div
+            title={`${xLabel}: ${val}`}
+            style={{
+              height: h,
+              margin: "0 auto",
+              width: "100%",
+              maxWidth: 48,
+              borderRadius: "6px 6px 2px 2px",
+              background: active
+                ? "linear-gradient(180deg, #FDE68A 0%, #D97706 100%)"
+                : "linear-gradient(180deg, #FBBF24 0%, #F59E0B 100%)",
+              boxShadow: active ? "0 0 0 2px var(--accent)" : undefined,
+            }}
+          />
+        );
         return (
-          <div key={String(row[xKey])} style={{ flex: 1, minWidth: 36, textAlign: "center" }}>
-            <div
-              title={`${row[xKey]}: ${val}`}
-              style={{
-                height: h,
-                margin: "0 auto",
-                width: "100%",
-                maxWidth: 48,
-                borderRadius: "6px 6px 2px 2px",
-                background: "linear-gradient(180deg, #FBBF24 0%, #F59E0B 100%)",
-              }}
-            />
+          <div key={xLabel} style={{ flex: 1, minWidth: 36, textAlign: "center" }}>
+            {interactive ? (
+              <button
+                type="button"
+                onClick={() => onItemClick?.({ label: xLabel, raw: row as Record<string, string | number> })}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  width: "100%",
+                  cursor: "pointer",
+                }}
+                aria-pressed={active}
+              >
+                {bar}
+              </button>
+            ) : (
+              bar
+            )}
             <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 6, wordBreak: "break-all" }}>
-              {String(row[xKey]).slice(5)}
+              {xLabel.slice(5)}
             </div>
           </div>
         );
@@ -150,30 +239,124 @@ export function BarChartPhp({
   items,
   labelKey,
   valueKey,
+  formatValue,
+  onItemClick,
+  selectedLabel,
 }: {
   items: Array<Record<string, string | number>>;
   labelKey: string;
   valueKey: string;
-}) {
+  formatValue?: (value: number) => string;
+} & ChartClickProps) {
   if (items.length === 0) return <EmptyChart />;
   const max = Math.max(...items.map((x) => Number(x[valueKey]) || 0), 1);
+  const format = formatValue ?? formatPhp;
+  const interactive = Boolean(onItemClick);
+
   return (
     <div style={{ display: "grid", gap: "0.5rem" }}>
       {items.map((item, i) => {
         const val = Number(item[valueKey]) || 0;
         const pct = Math.max(4, Math.round((val / max) * 100));
-        return (
-          <div key={`${item[labelKey]}-${i}`}>
+        const label = String(item[labelKey]);
+        const active = isSelected(label, selectedLabel);
+        const row = (
+          <>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", marginBottom: 4 }}>
-              <span style={{ fontWeight: 600, color: "var(--text)" }}>{String(item[labelKey])}</span>
-              <span style={{ color: "var(--text-secondary)" }}>{formatPhp(val)}</span>
+              <span style={{ fontWeight: 600, color: "var(--text)" }}>{label}</span>
+              <span style={{ color: "var(--text-secondary)" }}>{format(val)}</span>
             </div>
             <div style={{ height: 8, background: "var(--bg-dark)", borderRadius: 999, overflow: "hidden" }}>
-              <div style={{ width: `${pct}%`, height: "100%", background: PIE_COLORS[i % PIE_COLORS.length], borderRadius: 999 }} />
+              <div
+                style={{
+                  width: `${pct}%`,
+                  height: "100%",
+                  background: PIE_COLORS[i % PIE_COLORS.length],
+                  borderRadius: 999,
+                  opacity: active ? 1 : 0.85,
+                }}
+              />
             </div>
-          </div>
+          </>
+        );
+        if (!interactive) {
+          return <div key={`${label}-${i}`}>{row}</div>;
+        }
+        return (
+          <button
+            key={`${label}-${i}`}
+            type="button"
+            onClick={() => onItemClick?.({ label, raw: item as Record<string, string | number> })}
+            style={{
+              ...clickableButtonStyle(active),
+              display: "block",
+              width: "100%",
+            }}
+            aria-pressed={active}
+          >
+            {row}
+          </button>
         );
       })}
+    </div>
+  );
+}
+
+export function FinancialTrendChart({
+  items,
+  onItemClick,
+  selectedMonth,
+  selectedMetric,
+}: {
+  items: Array<{ month: string; revenue_php: number; expense_php: number; profit_php: number }>;
+  onItemClick?: (payload: { month: string; metric: "revenue" | "expenses" | "profit" }) => void;
+  selectedMonth?: string | null;
+  selectedMetric?: "revenue" | "expenses" | "profit" | null;
+}) {
+  if (items.length === 0) return <EmptyChart />;
+  const max = Math.max(
+    ...items.flatMap((row) => [row.revenue_php, row.expense_php, Math.abs(row.profit_php)]),
+    1,
+  );
+  const metrics = [
+    { key: "revenue" as const, field: "revenue_php" as const, color: "#059669", label: "Rev" },
+    { key: "expenses" as const, field: "expense_php" as const, color: "#DC2626", label: "Exp" },
+    { key: "profit" as const, field: "profit_php" as const, color: "#6366F1", label: "Pft" },
+  ];
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: "0.75rem", minHeight: 160, paddingTop: 8, overflowX: "auto" }}>
+      {items.map((row) => (
+        <div key={row.month} style={{ minWidth: 72, textAlign: "center" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 4, minHeight: 120 }}>
+            {metrics.map((metric) => {
+              const val = Number(row[metric.field]) || 0;
+              const h = Math.max(6, Math.round((Math.abs(val) / max) * 100));
+              const active = selectedMonth === row.month && selectedMetric === metric.key;
+              return (
+                <button
+                  key={metric.key}
+                  type="button"
+                  title={`${row.month} ${metric.label}: ${formatPhp(val)}`}
+                  onClick={() => onItemClick?.({ month: row.month, metric: metric.key })}
+                  style={{
+                    border: active ? "2px solid var(--accent)" : "none",
+                    borderRadius: 6,
+                    padding: 0,
+                    width: 16,
+                    height: h,
+                    background: metric.color,
+                    cursor: "pointer",
+                    opacity: active ? 1 : 0.85,
+                  }}
+                  aria-pressed={active}
+                />
+              );
+            })}
+          </div>
+          <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 6 }}>{row.month.slice(5)}</div>
+        </div>
+      ))}
     </div>
   );
 }
