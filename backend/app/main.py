@@ -34,7 +34,7 @@ from app.api.routes import (
 )
 from app.core.config import settings
 from app.core.paths import uploads_root
-from app.db import get_db
+from app.db import apply_runtime_schema_fixes, get_db
 from app.services.route_estimate import PreciseDistanceUnavailable
 
 logging.basicConfig(
@@ -67,6 +67,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup() -> None:
     uploads_root()
+    apply_runtime_schema_fixes()
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])

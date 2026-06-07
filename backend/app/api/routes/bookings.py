@@ -60,34 +60,37 @@ def _sync_bookings_approved_from_verified_payments(db: Session, customer_id: int
     Uses raw SQL so we never load Booking ORM rows while status text is still a legacy ENUM name
     (e.g. PENDING_APPROVAL) — that would raise LookupError before startup normalization runs.
     """
-    extra = ""
-    params: dict = {}
-    if customer_id is not None:
-        extra = " AND b.customer_id = :cid"
-        params["cid"] = customer_id
-    # Accept both normalized and legacy pending labels in WHERE
-    stmt = text(
-        """
-        UPDATE bookings b
-        INNER JOIN (
-            SELECT booking_id, MAX(id) AS mid
-            FROM payments
-            WHERE status = 'verified'
-            GROUP BY booking_id
-        ) v ON v.booking_id = b.id
-        INNER JOIN payments p ON p.id = v.mid
-        SET
-            b.status = 'payment_verified',
-            b.approved_at = COALESCE(b.approved_at, p.reviewed_at, p.paid_at),
-            b.approved_by_id = COALESCE(b.approved_by_id, p.reviewed_by_id)
-        WHERE b.status IN ('pending_approval', 'PENDING_APPROVAL', 'payment_verification')
-        """
-        + extra
-    )
-    r = db.execute(stmt, params)
-    rc = getattr(r, "rowcount", None)
-    if rc is not None and rc > 0:
-        db.commit()
+    try:
+        extra = ""
+        params: dict = {}
+        if customer_id is not None:
+            extra = " AND b.customer_id = :cid"
+            params["cid"] = customer_id
+        # Accept both normalized and legacy pending labels in WHERE
+        stmt = text(
+            """
+            UPDATE bookings b
+            INNER JOIN (
+                SELECT booking_id, MAX(id) AS mid
+                FROM payments
+                WHERE status = 'verified'
+                GROUP BY booking_id
+            ) v ON v.booking_id = b.id
+            INNER JOIN payments p ON p.id = v.mid
+            SET
+                b.status = 'payment_verified',
+                b.approved_at = COALESCE(b.approved_at, p.reviewed_at, p.paid_at),
+                b.approved_by_id = COALESCE(b.approved_by_id, p.reviewed_by_id)
+            WHERE b.status IN ('pending_approval', 'PENDING_APPROVAL', 'payment_verification')
+            """
+            + extra
+        )
+        r = db.execute(stmt, params)
+        rc = getattr(r, "rowcount", None)
+        if rc is not None and rc > 0:
+            db.commit()
+    except Exception:
+        db.rollback()
 
 
 def _parse_iso_date(value: object) -> date | None:
