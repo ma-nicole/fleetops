@@ -9,6 +9,7 @@ import { WorkflowApi, type Booking } from "@/lib/workflowApi";
 import { formatPhp } from "@/lib/appLocale";
 import BookingCargoWeightDisplay from "@/components/BookingCargoWeightDisplay";
 import BookingDocumentsReview from "@/components/BookingDocumentsReview";
+import BookingTollReviewPanel from "@/components/BookingTollReviewPanel";
 import PreDeliveryVerificationChecklist from "@/components/PreDeliveryVerificationChecklist";
 
 function OrderDetailsInner() {
@@ -148,6 +149,11 @@ function OrderDetailsInner() {
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
         <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Documents</h2>
         <BookingDocumentsReview booking={booking} />
+      </div>
+
+      <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>
+        <h2 style={{ color: "#1A1A1A", marginBottom: "1rem" }}>Toll estimate</h2>
+        <BookingTollReviewPanel booking={booking} compact onUpdated={(u) => setBooking((b) => (b ? { ...b, ...u } : b))} />
       </div>
 
       <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px" }}>

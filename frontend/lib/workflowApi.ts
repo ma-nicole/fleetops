@@ -112,6 +112,13 @@ export type Booking = {
   cargo_restricted_reasons?: string | null;
   cargo_type_validated_by_id?: number | null;
   cargo_type_validated_at?: string | null;
+  estimated_toll_budget_php?: number | null;
+  toll_matrix_matched?: boolean;
+  toll_estimate_message?: string | null;
+  vehicle_class_used?: string | null;
+  toll_entry_point?: string | null;
+  toll_exit_point?: string | null;
+  toll_effective_date?: string | null;
 };
 
 export type GoodsDeclarationAdminRow = {
@@ -711,6 +718,10 @@ export const WorkflowApi = {
     terms_agreed: boolean;
     cargo_declaration: File;
     terms_agreement: File;
+    toll_entry_point?: string;
+    toll_exit_point?: string;
+    vehicle_class?: string;
+    distance_km_override?: number;
   }) => {
     const fd = new FormData();
     fd.append("pickup_location", payload.pickup_location);
@@ -720,6 +731,12 @@ export const WorkflowApi = {
     fd.append("scheduled_time_slot", payload.scheduled_time_slot);
     fd.append("cargo_weight_tons", String(payload.cargo_weight_tons));
     if (payload.cargo_description) fd.append("cargo_description", payload.cargo_description);
+    if (payload.toll_entry_point) fd.append("toll_entry_point", payload.toll_entry_point);
+    if (payload.toll_exit_point) fd.append("toll_exit_point", payload.toll_exit_point);
+    if (payload.vehicle_class) fd.append("vehicle_class", payload.vehicle_class);
+    if (payload.distance_km_override != null && payload.distance_km_override > 0) {
+      fd.append("distance_km_override", String(payload.distance_km_override));
+    }
     fd.append("terms_agreed", payload.terms_agreed ? "true" : "false");
     fd.append("cargo_declaration", payload.cargo_declaration);
     fd.append("terms_agreement", payload.terms_agreement);
@@ -918,6 +935,9 @@ export const WorkflowApi = {
   ) => apiPost(`/trips/${trip_id}/fuel-log`, payload),
   addTollLog: (trip_id: number, payload: { location: string; amount: number; receipt_url?: string }) =>
     apiPost(`/trips/${trip_id}/toll-log`, payload),
+  addAdditionalToll: (trip_id: number, payload: { amount: number; reason: string; receipt_url?: string }) =>
+    apiPost(`/trips/${trip_id}/additional-toll`, payload),
+  additionalTolls: (trip_id: number) => apiGet(`/trips/${trip_id}/additional-tolls`),
   fuelLogs: (trip_id: number) => apiGet(`/trips/${trip_id}/fuel-logs`),
   tollLogs: (trip_id: number) => apiGet(`/trips/${trip_id}/toll-logs`),
   generateReport: (trip_id: number) => apiPost(`/trips/${trip_id}/generate-report`),

@@ -691,6 +691,10 @@ def complete_delivery(
         trip.toll_cost + trip.fuel_cost + trip.labor_cost
     )
 
+    from app.services.toll_computation import finalize_trip_toll_on_completion
+
+    finalize_trip_toll_on_completion(db, trip, booking)
+
     # Mark truck as available
     truck = db.query(Truck).filter(Truck.id == trip.truck_id).first()
     if truck:

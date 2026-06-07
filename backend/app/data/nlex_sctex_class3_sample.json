@@ -1,0 +1,58 @@
+[
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "Karuhatan",
+    "vehicle_class": "Class 3",
+    "toll_fee": 254,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "CDV",
+    "vehicle_class": "Class 3",
+    "toll_fee": 288,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "Tarlac",
+    "vehicle_class": "Class 3",
+    "toll_fee": 2008,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Bocaue",
+    "exit_point": "CDV",
+    "vehicle_class": "Class 3",
+    "toll_fee": 28,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "San Fernando",
+    "exit_point": "San Simon",
+    "vehicle_class": "Class 3",
+    "toll_fee": 146,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "San Fernando",
+    "exit_point": "Mexico",
+    "vehicle_class": "Class 3",
+    "toll_fee": 89,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Tarlac",
+    "exit_point": "San Miguel",
+    "vehicle_class": "Class 3",
+    "toll_fee": 96,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Tarlac",
+    "exit_point": "New Clark City",
+    "vehicle_class": "Class 3",
+    "toll_fee": 447,
+    "effective_date": "2026-01-20"
+  }
+]

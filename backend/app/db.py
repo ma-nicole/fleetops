@@ -165,8 +165,23 @@ def apply_runtime_schema_fixes() -> None:
         for col, ddl_suffix in cargo_type_cols:
             if col not in bk_cols:
                 alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
+        toll_booking_cols = [
+            ("estimated_toll_budget_php", "FLOAT NULL"),
+            ("toll_matrix_matched", "TINYINT(1) NOT NULL DEFAULT 0" if dialect == "mysql" else "BOOLEAN NOT NULL DEFAULT 0"),
+            ("toll_estimate_message", "VARCHAR(500) NULL"),
+            ("vehicle_class_used", "VARCHAR(32) NULL"),
+            ("toll_entry_point", "VARCHAR(255) NULL"),
+            ("toll_exit_point", "VARCHAR(255) NULL"),
+            ("toll_effective_date", "DATE NULL"),
+        ]
+        for col, ddl_suffix in toll_booking_cols:
+            if col not in bk_cols:
+                alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
 
-    if insp.has_table("payments"):
+    if insp.has_table("trucks"):
+        trk_cols = {c["name"] for c in insp.get_columns("trucks")}
+        if "vehicle_class" not in trk_cols:
+            alters.append("ALTER TABLE trucks ADD COLUMN vehicle_class VARCHAR(32) NOT NULL DEFAULT 'Class 3'")
         pay_cols = {c["name"] for c in insp.get_columns("payments")}
         v255 = "VARCHAR(255) NULL"
         v512 = "VARCHAR(512) NULL"
@@ -220,6 +235,14 @@ def apply_runtime_schema_fixes() -> None:
             ("digital_signature_uploaded_at", "DATETIME NULL"),
         ]
         for col, ddl_suffix in trip_additions:
+            if col not in tr_cols:
+                alters.append(f"ALTER TABLE trips ADD COLUMN {col} {ddl_suffix}")
+        for col, ddl_suffix in [
+            ("estimated_toll_budget", "FLOAT NULL"),
+            ("additional_toll_total", "FLOAT NULL"),
+            ("toll_actual_total", "FLOAT NULL"),
+            ("toll_variance", "FLOAT NULL"),
+        ]:
             if col not in tr_cols:
                 alters.append(f"ALTER TABLE trips ADD COLUMN {col} {ddl_suffix}")
 
@@ -564,6 +587,75 @@ def apply_runtime_schema_fixes() -> None:
                         """
                     )
                 )
+
+    # Toll matrix enhancement tables (additive)
+    from app.models.entities import AdditionalTollEntry, HistoricalTollRecord, TollMatrix, TollPlaza, TollPlazaAlias
+
+    for table in (TollMatrix.__table__, AdditionalTollEntry.__table__, HistoricalTollRecord.__table__, TollPlaza.__table__, TollPlazaAlias.__table__):
+        if not insp.has_table(table.name):
+            table.create(bind=engine, checkfirst=True)
+
+    if insp.has_table("toll_matrix"):
+        tm_cols = {c["name"] for c in insp.get_columns("toll_matrix")}
+        tm_alters: list[str] = []
+        date_type = "DATE" if dialect == "mysql" else "DATE"
+        if "entry_point" not in tm_cols:
+            tm_alters.append("ALTER TABLE toll_matrix ADD COLUMN entry_point VARCHAR(255) NULL")
+        if "exit_point" not in tm_cols:
+            tm_alters.append("ALTER TABLE toll_matrix ADD COLUMN exit_point VARCHAR(255) NULL")
+        if "toll_fee" not in tm_cols:
+            tm_alters.append("ALTER TABLE toll_matrix ADD COLUMN toll_fee FLOAT NULL")
+        if "effective_date" not in tm_cols:
+            tm_alters.append(f"ALTER TABLE toll_matrix ADD COLUMN effective_date {date_type} NULL")
+        with engine.begin() as conn:
+            for stmt in tm_alters:
+                conn.execute(text(stmt))
+            if "origin" in tm_cols:
+                conn.execute(
+                    text(
+                        "UPDATE toll_matrix SET entry_point = origin "
+                        "WHERE entry_point IS NULL OR TRIM(entry_point) = ''"
+                    )
+                )
+            if "destination" in tm_cols:
+                conn.execute(
+                    text(
+                        "UPDATE toll_matrix SET exit_point = destination "
+                        "WHERE exit_point IS NULL OR TRIM(exit_point) = ''"
+                    )
+                )
+            if "estimated_toll" in tm_cols:
+                fee_expr = "COALESCE(estimated_toll, 0)"
+                if "rfid_allowance" in tm_cols:
+                    fee_expr += " + COALESCE(rfid_allowance, 0)"
+                if "route_buffer" in tm_cols:
+                    fee_expr += " + COALESCE(route_buffer, 0)"
+                conn.execute(
+                    text(
+                        f"UPDATE toll_matrix SET toll_fee = {fee_expr} "
+                        "WHERE toll_fee IS NULL OR toll_fee = 0"
+                    )
+                )
+            conn.execute(
+                text(
+                    "UPDATE toll_matrix SET effective_date = '2026-01-20' "
+                    "WHERE effective_date IS NULL"
+                )
+            )
+
+    if insp.has_table("historical_toll_records"):
+        hr_cols = {c["name"] for c in insp.get_columns("historical_toll_records")}
+        hr_alters: list[str] = []
+        if "entry_point" not in hr_cols:
+            hr_alters.append("ALTER TABLE historical_toll_records ADD COLUMN entry_point VARCHAR(255) NULL")
+        if "exit_point" not in hr_cols:
+            hr_alters.append("ALTER TABLE historical_toll_records ADD COLUMN exit_point VARCHAR(255) NULL")
+        if "effective_date" not in hr_cols:
+            hr_alters.append(f"ALTER TABLE historical_toll_records ADD COLUMN effective_date DATE NULL")
+        if hr_alters:
+            with engine.begin() as conn:
+                for stmt in hr_alters:
+                    conn.execute(text(stmt))
 
     # Legacy MySQL ENUM on bookings.status often stored Python enum *names* (PENDING_APPROVAL) not values
     # (pending_approval) — that breaks SQLAlchemy's Enum. Normalize on every startup (idempotent).

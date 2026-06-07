@@ -31,6 +31,10 @@ function TripLogsContent() {
 
   const [fuel, setFuel] = useState({ liters: 50, cost: 3000, odometer_km: 0 });
   const [toll, setToll] = useState({ location: "NLEX Toll", amount: 200 });
+  const [additionalToll, setAdditionalToll] = useState({ amount: 0, reason: "", receipt_url: "" });
+  const [additionalTolls, setAdditionalTolls] = useState<
+    { id: number; amount: number; reason: string; recorded_at: string; receipt_url?: string | null }[]
+  >([]);
 
   useEffect(() => {
     WorkflowApi.myTrips()
@@ -40,6 +44,16 @@ function TripLogsContent() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load trips"));
   }, []);
+
+  useEffect(() => {
+    if (!tripId) {
+      setAdditionalTolls([]);
+      return;
+    }
+    WorkflowApi.additionalTolls(tripId)
+      .then((rows) => setAdditionalTolls(Array.isArray(rows) ? rows : []))
+      .catch(() => setAdditionalTolls([]));
+  }, [tripId]);
 
   const trip = useMemo(() => trips.find((t) => t.id === tripId), [trips, tripId]);
 
@@ -62,6 +76,32 @@ function TripLogsContent() {
       setOkMsg(`Toll log added for trip #${tripId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Toll log failed");
+    }
+  };
+
+  const submitAdditionalToll = async () => {
+    if (!tripId) return;
+    if (additionalToll.amount <= 0) {
+      setError("Additional toll amount must be greater than 0.");
+      return;
+    }
+    if (!additionalToll.reason.trim()) {
+      setError("Reason is required for additional toll entries.");
+      return;
+    }
+    setError(null);
+    try {
+      await WorkflowApi.addAdditionalToll(tripId, {
+        amount: additionalToll.amount,
+        reason: additionalToll.reason.trim(),
+        receipt_url: additionalToll.receipt_url.trim() || undefined,
+      });
+      setOkMsg(`Additional toll expense recorded for trip #${tripId}`);
+      setAdditionalToll({ amount: 0, reason: "", receipt_url: "" });
+      const rows = await WorkflowApi.additionalTolls(tripId);
+      setAdditionalTolls(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Additional toll entry failed");
     }
   };
 
@@ -161,6 +201,47 @@ function TripLogsContent() {
             />
             <button onClick={submitToll} style={btn("#7C3AED")}>Save toll log</button>
           </div>
+        </section>
+
+        <section style={card}>
+          <h3 style={{ marginTop: 0 }}>Additional toll expense</h3>
+          <p style={{ color: "#6B7280", marginTop: 0, fontSize: "0.9rem" }}>
+            Record unexpected tolls during transit (e.g. emergency rerouting, extra NLEX gate). Only the assigned driver may submit entries.
+          </p>
+          <Field
+            label="Amount (₱)"
+            value={additionalToll.amount}
+            onChange={(v) => setAdditionalToll((p) => ({ ...p, amount: v }))}
+          />
+          <label style={{ display: "grid", gap: 4, marginBottom: 8 }}>
+            <span>Reason</span>
+            <input
+              value={additionalToll.reason}
+              onChange={(e) => setAdditionalToll((p) => ({ ...p, reason: e.target.value }))}
+              placeholder="e.g. NLEX additional toll, emergency rerouting"
+              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4, marginBottom: 8 }}>
+            <span>Photo proof URL (optional)</span>
+            <input
+              value={additionalToll.receipt_url}
+              onChange={(e) => setAdditionalToll((p) => ({ ...p, receipt_url: e.target.value }))}
+              placeholder="https://…"
+              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+            />
+          </label>
+          <button onClick={submitAdditionalToll} style={btn("#9333EA")}>Save additional toll</button>
+          {additionalTolls.length > 0 && (
+            <ul style={{ marginTop: "1rem", paddingLeft: "1.25rem", color: "#374151" }}>
+              {additionalTolls.map((e) => (
+                <li key={e.id}>
+                  ₱{e.amount} — {e.reason}
+                  {e.recorded_at ? ` (${new Date(e.recorded_at).toLocaleString()})` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section style={card}>

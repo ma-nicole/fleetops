@@ -180,6 +180,8 @@ def _profit_line_one_truck(
     tons: float,
     knobs: FreightPricingKnobsLike,
     truck_index: int,
+    *,
+    toll_per_trip: float | None = None,
 ) -> dict[str, float | int]:
     """One truck on this route: net profit = cargo gross + fuel + driver + helper + toll (all additive)."""
     w = float(tons)
@@ -199,7 +201,7 @@ def _profit_line_one_truck(
     h_r = float(HELPER_FREIGHT_SHARE_RATE)
     driver_amt = gross * d_r
     helper_amt = gross * h_r
-    toll = float(knobs.toll_fees_php_per_trip)
+    toll = float(toll_per_trip if toll_per_trip is not None else knobs.toll_fees_php_per_trip)
 
     additives = fuel_cost + driver_amt + helper_amt + toll
     net_profit = gross + additives
@@ -219,7 +221,14 @@ def _profit_line_one_truck(
     }
 
 
-def customer_freight_pricing(km: float, total_weight_tons: float, knobs: FreightPricingKnobsLike) -> dict:
+def customer_freight_pricing(
+    km: float,
+    total_weight_tons: float,
+    knobs: FreightPricingKnobsLike,
+    *,
+    toll_budget_per_truck: float | None = None,
+    toll_estimate_meta: dict | None = None,
+) -> dict:
     """Multi-truck profit model: split cargo into ≤42 t loads; run the additive formula per truck; sum totals.
 
     Net profit (per truck) = (tons×650) + (km/4×fuel) + (gross×10%) + (gross×4.62%) + toll.
@@ -239,7 +248,7 @@ def customer_freight_pricing(km: float, total_weight_tons: float, knobs: Freight
 
     truck_lines: list[dict[str, float | int]] = []
     for i, tons in enumerate(loads, start=1):
-        truck_lines.append(_profit_line_one_truck(km_eff, tons, knobs, i))
+        truck_lines.append(_profit_line_one_truck(km_eff, tons, knobs, i, toll_per_trip=toll_budget_per_truck))
 
     def sum_float(key: str) -> float:
         return round(sum(float(row[key]) for row in truck_lines), 2)
@@ -259,7 +268,7 @@ def customer_freight_pricing(km: float, total_weight_tons: float, knobs: Freight
     h_pct = round(float(HELPER_FREIGHT_SHARE_RATE) * 100, 4)
     cargo_rate = float(CARGO_RATE_PHP_PER_TON)
 
-    return {
+    result = {
         "distance_km": round(km_eff, 2),
         "weight_tons": round(w_booking, 4),
         "total_trucks": total_trucks,
@@ -278,3 +287,6 @@ def customer_freight_pricing(km: float, total_weight_tons: float, knobs: Freight
         "helper_freight_share_pct": h_pct,
         "truck_loads": truck_lines,
     }
+    if toll_estimate_meta is not None:
+        result["toll_estimate"] = toll_estimate_meta
+    return result

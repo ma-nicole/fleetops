@@ -28,6 +28,8 @@ from app.api.routes import (
     ratings,
     reports,
     schedule,
+    toll_matrix,
+    toll_plazas,
     workflow,
 )
 from app.core.config import settings
@@ -122,6 +124,9 @@ app.include_router(driver.router, prefix="/api", dependencies=_api_deps)
 app.include_router(helper_ops.router, prefix="/api", dependencies=_api_deps)
 app.include_router(manager.router, prefix="/api", dependencies=_api_deps)
 app.include_router(admin.router, prefix="/api", dependencies=_api_deps)
+app.include_router(toll_matrix.router, prefix="/api", dependencies=_api_deps)
+app.include_router(toll_plazas.router, prefix="/api", dependencies=_api_deps)
+app.include_router(toll_plazas.public_router, prefix="/api", dependencies=_api_deps)
 app.include_router(admin_analytics.router, prefix="/api", dependencies=_api_deps)
 app.include_router(ratings.router, prefix="/api", dependencies=_api_deps)
 app.include_router(reports.router, prefix="/api", dependencies=_api_deps)

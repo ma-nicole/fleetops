@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.db import get_db
 from app.models.entities import (
+    AdditionalTollEntry,
     Booking,
     BookingStatus,
     CompletionReport,
@@ -18,6 +19,7 @@ from app.models.entities import (
     User,
     UserRole,
 )
+from app.schemas.toll_matrix import AdditionalTollCreate, AdditionalTollRead
 from app.schemas.trip_logs import (
     CompletionReportRead,
     FuelLogCreate,
@@ -118,6 +120,54 @@ def list_toll_logs(
         raise HTTPException(status_code=404, detail="Trip not found")
     _ensure_owner(trip, user)
     return db.query(TollLog).filter(TollLog.trip_id == trip_id).order_by(TollLog.recorded_at.desc()).all()
+
+
+# ------------- Additional toll entries (driver surcharges) -------------
+
+@router.post("/{trip_id}/additional-toll", response_model=AdditionalTollRead)
+def add_additional_toll(
+    trip_id: int,
+    payload: AdditionalTollCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DRIVER)),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    if trip.driver_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the assigned driver may add additional toll entries.")
+    if trip.status in {TripStatus.COMPLETED, TripStatus.CANCELLED}:
+        raise HTTPException(status_code=400, detail="Cannot add additional toll after trip completion.")
+
+    entry = AdditionalTollEntry(
+        trip_id=trip.id,
+        driver_id=user.id,
+        amount=payload.amount,
+        reason=payload.reason,
+        receipt_url=payload.receipt_url,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
+@router.get("/{trip_id}/additional-tolls", response_model=list[AdditionalTollRead])
+def list_additional_tolls(
+    trip_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    trip = db.query(Trip).filter(Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    _ensure_owner(trip, user)
+    return (
+        db.query(AdditionalTollEntry)
+        .filter(AdditionalTollEntry.trip_id == trip_id)
+        .order_by(AdditionalTollEntry.recorded_at.desc())
+        .all()
+    )
 
 
 # ------------- Completion report -------------

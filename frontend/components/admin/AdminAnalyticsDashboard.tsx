@@ -18,6 +18,7 @@ import {
   ShipmentAnalyticsInteractive,
 } from "@/components/admin/InteractiveAnalyticsSections";
 import { ComparativeAnalyticsBlock, ExecutiveOverviewSection, PercentageBreakdown } from "@/components/admin/BiAnalyticsComponents";
+import TollAnalyticsSection from "@/components/admin/TollAnalyticsSection";
 import ManagerRoleAnalyticsTabs from "@/components/admin/ManagerRoleAnalyticsTabs";
 import PageHeader from "@/components/ui/PageHeader";
 import ErrorState from "@/components/ui/ErrorState";
@@ -37,7 +38,8 @@ type CategoryTab =
   | "drivers"
   | "routes"
   | "financial"
-  | "clients";
+  | "clients"
+  | "tolls";
 
 const CATEGORY_TABS: { id: CategoryTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -48,6 +50,7 @@ const CATEGORY_TABS: { id: CategoryTab; label: string }[] = [
   { id: "routes", label: "Routes" },
   { id: "financial", label: "Financial" },
   { id: "clients", label: "Clients" },
+  { id: "tolls", label: "Tolls" },
 ];
 
 function isEmpty(mod: unknown): mod is { empty: true; message: string } {
@@ -67,6 +70,7 @@ const ANALYTICS_SECTION_ID: Record<Exclude<CategoryTab, "all">, string> = {
   routes: "analytics-routes",
   financial: "analytics-financial",
   clients: "analytics-clients",
+  tolls: "analytics-tolls",
 };
 
 function handleCategoryTab(tab: CategoryTab, setCategory: (tab: CategoryTab) => void) {
@@ -453,6 +457,12 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                   <StatisticsTable stats={data.clients.statistics} />
                 </>
               )}
+            </SectionCard>
+          )}
+
+          {show("tolls") && data.toll_analytics && (
+            <SectionCard title="8. Toll Analytics" sectionId="analytics-tolls">
+              <TollAnalyticsSection data={data.toll_analytics} />
             </SectionCard>
           )}
         </>

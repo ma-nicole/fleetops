@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Optional
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -16,6 +17,10 @@ class BookingCreate(BaseModel):
     scheduled_time_slot: str
     cargo_weight_tons: float
     cargo_description: str | None = None
+    toll_entry_point: str | None = None
+    toll_exit_point: str | None = None
+    vehicle_class: str | None = None
+    distance_km_override: float | None = None
 
     @field_validator("cargo_weight_tons")
     @classmethod
@@ -46,6 +51,15 @@ class BookingCreate(BaseModel):
         if v < date.today():
             raise ValueError("Scheduled date cannot be in the past.")
         return v
+
+    @field_validator("distance_km_override")
+    @classmethod
+    def validate_distance_override(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        if v <= 0 or v > 5000:
+            raise ValueError("Distance override must be between 0.1 and 5000 km")
+        return round(float(v), 2)
 
     @model_validator(mode="after")
     def validate_route_points(self):
@@ -111,6 +125,13 @@ class BookingRead(BaseModel):
     cargo_restricted_reasons: str | None = None
     cargo_type_validated_by_id: int | None = None
     cargo_type_validated_at: datetime | None = None
+    estimated_toll_budget_php: float | None = None
+    toll_matrix_matched: bool = False
+    toll_estimate_message: str | None = None
+    vehicle_class_used: str | None = None
+    toll_entry_point: str | None = None
+    toll_exit_point: str | None = None
+    toll_effective_date: Optional[date] = None
 
     class Config:
         from_attributes = True

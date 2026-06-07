@@ -24,6 +24,7 @@ from app.schemas.booking import (
     PreDeliveryChecklistValidate,
 )
 from app.schemas.cargo_type import BookingCargoTypeValidate, CargoTypeScreeningRead
+from app.schemas.toll_plaza import AdminBookingTollOverride
 from app.services.pre_delivery_verification import build_pre_delivery_checklist
 from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
 from app.services.dispatcher_booking_assignment import filter_bookings_for_dispatcher
@@ -36,7 +37,7 @@ from app.constants.fleet_capacity import cargo_exceeds_fleet
 from app.services.booking_freight_knobs import resolve_booking_freight_knobs
 from app.services.booking_capacity import get_available_truck_count
 from app.services.booking_schedule import availability_for_date, available_trucks_by_slot_for_date
-from app.services.route_estimate import estimate_road_distance_km, customer_freight_pricing
+from app.services.route_distance_resolution import resolve_quote_distance_km
 from app.constants.fleet_capacity import trucks_required_for_cargo
 from app.models.entities import TruckSlotHold, TruckSlotHoldStatus
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
@@ -89,16 +90,44 @@ def _sync_bookings_approved_from_verified_payments(db: Session, customer_id: int
         db.commit()
 
 
+def _parse_iso_date(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
 def _create_booking_record(db: Session, user: User, payload: BookingCreate) -> Booking:
     """Shared booking creation logic (JSON or multipart customer submit)."""
-    est = estimate_road_distance_km(
+    has_manual_toll = bool(payload.toll_entry_point and payload.toll_exit_point)
+    dist = resolve_quote_distance_km(
         payload.pickup_location,
         payload.dropoff_location,
         settings,
+        distance_km_override=payload.distance_km_override,
+        allow_unverified_with_manual_toll=has_manual_toll,
     )
-    km = est.distance_km
+    km = dist.distance_km
     knobs = resolve_booking_freight_knobs(db, settings)
-    pricing = customer_freight_pricing(km, payload.cargo_weight_tons, knobs)
+    from app.services.booking_pricing import pricing_with_toll_matrix
+    from app.services.toll_matrix import DEFAULT_VEHICLE_CLASS
+
+    pricing, toll_meta = pricing_with_toll_matrix(
+        db,
+        pickup_location=payload.pickup_location,
+        dropoff_location=payload.dropoff_location,
+        cargo_weight_tons=payload.cargo_weight_tons,
+        distance_km=km,
+        settings=settings,
+        as_of_date=payload.scheduled_date,
+        vehicle_class=(payload.vehicle_class or DEFAULT_VEHICLE_CLASS),
+        manual_entry=payload.toll_entry_point,
+        manual_exit=payload.toll_exit_point,
+    )
 
     if cargo_exceeds_fleet(payload.cargo_weight_tons):
         raise HTTPException(
@@ -145,6 +174,13 @@ def _create_booking_record(db: Session, user: User, payload: BookingCreate) -> B
         required_truck_count=required_trucks,
         cargo_description=payload.cargo_description,
         estimated_cost=pricing["quoted_total"],
+        estimated_toll_budget_php=toll_meta.get("toll_budget_per_truck"),
+        toll_matrix_matched=bool(toll_meta.get("matched")),
+        toll_estimate_message=toll_meta.get("message"),
+        vehicle_class_used=toll_meta.get("vehicle_class"),
+        toll_entry_point=toll_meta.get("entry_point"),
+        toll_exit_point=toll_meta.get("exit_point"),
+        toll_effective_date=_parse_iso_date(toll_meta.get("effective_date")) if toll_meta.get("matched") else None,
         status=BookingStatus.PAYMENT_VERIFICATION,
     )
     db.add(booking)
@@ -234,6 +270,10 @@ async def create_booking_with_documents(
     scheduled_time_slot: str = Form(...),
     cargo_weight_tons: float = Form(...),
     cargo_description: str | None = Form(default=None),
+    toll_entry_point: str | None = Form(default=None),
+    toll_exit_point: str | None = Form(default=None),
+    vehicle_class: str | None = Form(default=None),
+    distance_km_override: float | None = Form(default=None),
     terms_agreed: str = Form(...),
     cargo_declaration: UploadFile = File(...),
     terms_agreement: UploadFile = File(...),
@@ -251,6 +291,10 @@ async def create_booking_with_documents(
             scheduled_time_slot=scheduled_time_slot,
             cargo_weight_tons=cargo_weight_tons,
             cargo_description=cargo_description,
+            toll_entry_point=(toll_entry_point or None),
+            toll_exit_point=(toll_exit_point or None),
+            vehicle_class=(vehicle_class or None),
+            distance_km_override=distance_km_override,
         )
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -667,3 +711,53 @@ def booking_tracking_details(
         ]
 
     return payload
+
+
+@router.put("/{booking_id}/admin/toll-estimate", response_model=BookingRead)
+def admin_override_booking_toll(
+    booking_id: int,
+    payload: AdminBookingTollOverride,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.DISPATCHER)),
+):
+    """Manual toll plaza + optional distance override — toll fee from Toll Matrix only."""
+    from app.services.booking_pricing import pricing_with_toll_matrix
+    from app.services.toll_matrix import DEFAULT_VEHICLE_CLASS
+
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+
+    has_manual_toll = bool(payload.toll_entry_point and payload.toll_exit_point)
+    dist = resolve_quote_distance_km(
+        booking.pickup_location,
+        booking.dropoff_location,
+        settings,
+        distance_km_override=payload.distance_km_override,
+        allow_unverified_with_manual_toll=has_manual_toll,
+    )
+    pricing, toll_meta = pricing_with_toll_matrix(
+        db,
+        pickup_location=booking.pickup_location,
+        dropoff_location=booking.dropoff_location,
+        cargo_weight_tons=float(booking.cargo_weight_tons or 0),
+        distance_km=dist.distance_km,
+        settings=settings,
+        as_of_date=booking.scheduled_date,
+        vehicle_class=payload.vehicle_class or DEFAULT_VEHICLE_CLASS,
+        manual_entry=payload.toll_entry_point,
+        manual_exit=payload.toll_exit_point,
+    )
+
+    booking.estimated_cost = pricing["quoted_total"]
+    booking.estimated_toll_budget_php = toll_meta.get("toll_budget_per_truck")
+    booking.toll_matrix_matched = bool(toll_meta.get("matched"))
+    booking.toll_estimate_message = toll_meta.get("message")
+    booking.vehicle_class_used = toll_meta.get("vehicle_class")
+    booking.toll_entry_point = toll_meta.get("entry_point") or payload.toll_entry_point
+    booking.toll_exit_point = toll_meta.get("exit_point") or payload.toll_exit_point
+    booking.toll_effective_date = _parse_iso_date(toll_meta.get("effective_date")) if toll_meta.get("matched") else None
+
+    db.commit()
+    db.refresh(booking)
+    return booking

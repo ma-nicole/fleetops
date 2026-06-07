@@ -76,6 +76,19 @@ type RouteQuoteApiResponse = {
   dropoff_resolution: string;
   pricing_tier: string;
   routing_method: string;
+  toll_matrix_matched?: boolean;
+  toll_estimate_message?: string | null;
+  toll_entry_point?: string | null;
+  toll_exit_point?: string | null;
+  toll_effective_date?: string | null;
+  estimated_toll_budget_per_truck?: number | null;
+  estimated_toll_budget_total?: number | null;
+  toll_plaza_options?: string[];
+  suggested_toll_entry_point?: string | null;
+  suggested_toll_exit_point?: string | null;
+  distance_confirmed?: boolean;
+  distance_warning?: string | null;
+  quote_status?: string | null;
 };
 
 /** Line items mirrored from backend / browser fallback breakdown. */
@@ -213,6 +226,25 @@ export default function CostCalculator({
   const [slotsFetchError, setSlotsFetchError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [routeQuoteMeta, setRouteQuoteMeta] = useState<QuoteGeoMeta | null>(null);
+  const [tollEstimateMeta, setTollEstimateMeta] = useState<{
+    matched: boolean;
+    message: string | null;
+    entryPoint: string | null;
+    exitPoint: string | null;
+    effectiveDate: string | null;
+    budgetPerTruck: number | null;
+    budgetTotal: number | null;
+    plazaOptions: string[];
+    suggestedEntry: string | null;
+    suggestedExit: string | null;
+  } | null>(null);
+  const [manualTollEntry, setManualTollEntry] = useState("");
+  const [manualTollExit, setManualTollExit] = useState("");
+  const [manualVehicleClass, setManualVehicleClass] = useState("Class 3");
+  const [manualDistanceKm, setManualDistanceKm] = useState("");
+  const [distanceConfirmed, setDistanceConfirmed] = useState(true);
+  const [distanceWarning, setDistanceWarning] = useState<string | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState<string | null>(null);
   const [freightLines, setFreightLines] = useState<FreightLineDetail | null>(null);
   const [cargoDeclaration, setCargoDeclaration] = useState<File | null>(null);
   const [termsAgreement, setTermsAgreement] = useState<File | null>(null);
@@ -324,6 +356,7 @@ export default function CostCalculator({
     if (!hasEnoughSites) {
       setCost(null);
       setRouteQuoteMeta(null);
+      setTollEstimateMeta(null);
       setFreightLines(null);
       setLoading(false);
       return;
@@ -336,6 +369,7 @@ export default function CostCalculator({
     if (!pickupId || !dropoffId || pickupId === dropoffId || p.length < 3 || d.length < 3 || p.toLowerCase() === d.toLowerCase()) {
       setCost(null);
       setRouteQuoteMeta(null);
+      setTollEstimateMeta(null);
       setFreightLines(null);
       setLoading(false);
       return;
@@ -356,6 +390,12 @@ export default function CostCalculator({
               pickup_location: pickup,
               dropoff_location: dropoff,
               weight_tons: effW,
+              toll_entry_point: manualTollEntry.trim() || undefined,
+              toll_exit_point: manualTollExit.trim() || undefined,
+              vehicle_class: manualVehicleClass.trim() || undefined,
+              distance_km_override: manualDistanceKm.trim()
+                ? Number(manualDistanceKm)
+                : undefined,
             }),
             signal: ac.signal,
           });
@@ -382,6 +422,21 @@ export default function CostCalculator({
             pricing_tier: data.pricing_tier,
             routing_method: data.routing_method,
           });
+          setTollEstimateMeta({
+            matched: Boolean(data.toll_matrix_matched),
+            message: data.toll_estimate_message ?? null,
+            entryPoint: data.toll_entry_point ?? null,
+            exitPoint: data.toll_exit_point ?? null,
+            effectiveDate: data.toll_effective_date ?? null,
+            budgetPerTruck: data.estimated_toll_budget_per_truck ?? null,
+            budgetTotal: data.estimated_toll_budget_total ?? null,
+            plazaOptions: data.toll_plaza_options ?? [],
+            suggestedEntry: data.suggested_toll_entry_point ?? null,
+            suggestedExit: data.suggested_toll_exit_point ?? null,
+          });
+          setDistanceConfirmed(data.distance_confirmed !== false);
+          setDistanceWarning(data.distance_warning ?? null);
+          setQuoteStatus(data.quote_status ?? null);
           setFreightLines(freightLinesFromPayload(data));
           onQuotedBreakdown?.({
             cargo_gross_php: live.cargo_gross_php,
@@ -394,6 +449,7 @@ export default function CostCalculator({
           if (e instanceof DOMException && e.name === "AbortError") return;
           setCost(null);
           setRouteQuoteMeta(null);
+          setTollEstimateMeta(null);
           setFreightLines(null);
           if (e instanceof ApiError) {
             setMessage(e.message);
@@ -413,7 +469,7 @@ export default function CostCalculator({
       ac.abort();
       window.clearTimeout(timer);
     };
-  }, [pickup, dropoff, weight, onQuotedBreakdown, hasEnoughSites, pickupId, dropoffId]);
+  }, [pickup, dropoff, weight, onQuotedBreakdown, hasEnoughSites, pickupId, dropoffId, manualTollEntry, manualTollExit, manualVehicleClass, manualDistanceKm]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -505,6 +561,10 @@ export default function CostCalculator({
         terms_agreed: termsAccepted,
         cargo_declaration: cargoDeclaration!,
         terms_agreement: termsAgreement!,
+        toll_entry_point: manualTollEntry.trim() || undefined,
+        toll_exit_point: manualTollExit.trim() || undefined,
+        vehicle_class: manualVehicleClass.trim() || undefined,
+        distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
       });
 
       router.push(`/booking/payment?bookingId=${data.id}`);
@@ -531,7 +591,8 @@ export default function CostCalculator({
     !slotsLoading &&
     !!cargoDeclaration &&
     !!termsAgreement &&
-    termsAccepted;
+    termsAccepted &&
+    distanceConfirmed;
   const requiredTrucks = Math.max(1, requiredTrucksFromApi || Math.ceil((parseFloat(weight) || 1) / 42));
   const selectedAvailableTrucks = pickedSlot ? (slotAvailableTrucks[pickedSlot] ?? 0) : 0;
 
@@ -666,6 +727,9 @@ export default function CostCalculator({
           >
             <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--text-secondary)" }}>
               <strong style={{ color: "var(--text-primary)" }}>Road distance: {cost.distance_km} km</strong>
+              {quoteStatus && quoteStatus !== "Confirmed" && (
+                <span style={{ color: "#b45309", fontWeight: 600 }}> · {quoteStatus}</span>
+              )}
               {" — "}
               <strong style={{ color: "var(--text-primary)" }}>{cost.total_trucks} truck(s)</strong>
               {cost.total_trucks > 1 ? " (42 t max per truck)" : ""}
@@ -697,6 +761,25 @@ export default function CostCalculator({
                 Sign in with the API running to get routed road kilometers and pricing (no browser-only shortcut).
               </p>
             ) : null}
+            {distanceWarning && (
+              <p role="alert" style={{ margin: 0, fontSize: "0.85rem", color: "#b45309", fontWeight: 600 }}>
+                {distanceWarning}
+              </p>
+            )}
+            {!distanceConfirmed && (
+              <label style={{ display: "grid", gap: 4, fontSize: "0.85rem", maxWidth: "16rem" }}>
+                <span>Confirm estimated distance (km)</span>
+                <input
+                  type="number"
+                  min={1}
+                  step={0.1}
+                  value={manualDistanceKm}
+                  onChange={(e) => setManualDistanceKm(e.target.value)}
+                  placeholder="e.g. 95"
+                  style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                />
+              </label>
+            )}
             {freightLines ? (
               <>
                 <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
@@ -731,6 +814,94 @@ export default function CostCalculator({
                     {formatPhp(freightLines.helper_share_php)}
                   </li>
                   <li>Toll (per truck per trip) → {formatPhp(freightLines.toll_fees_php)}</li>
+                  {tollEstimateMeta && (
+                    <li style={{ listStyle: "none", marginTop: "0.5rem" }}>
+                      <div
+                        style={{
+                          padding: "0.65rem 0.85rem",
+                          borderRadius: 8,
+                          background: tollEstimateMeta.matched ? "rgba(124, 58, 237, 0.08)" : "rgba(251, 191, 36, 0.12)",
+                          border: `1px solid ${tollEstimateMeta.matched ? "rgba(124, 58, 237, 0.25)" : "rgba(251, 191, 36, 0.35)"}`,
+                        }}
+                      >
+                        {tollEstimateMeta.matched ? (
+                          <>
+                            <strong>Estimated Toll Budget</strong>
+                            {tollEstimateMeta.budgetPerTruck != null && (
+                              <span> — {formatPhp(tollEstimateMeta.budgetPerTruck)} per truck</span>
+                            )}
+                            {tollEstimateMeta.budgetTotal != null && freightLines.total_trucks > 1 && (
+                              <span> ({formatPhp(tollEstimateMeta.budgetTotal)} total)</span>
+                            )}
+                            {tollEstimateMeta.entryPoint && tollEstimateMeta.exitPoint && (
+                              <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                                {tollEstimateMeta.entryPoint} → {tollEstimateMeta.exitPoint}
+                                {tollEstimateMeta.effectiveDate ? ` (effective ${tollEstimateMeta.effectiveDate.slice(0, 10)})` : ""}
+                              </div>
+                            )}
+                            <div style={{ fontSize: "0.85rem", color: "#6B7280", marginTop: "0.25rem" }}>
+                              NLEX-SCTEX toll matrix fee (descriptive lookup, not live gate detection), included in quoted total.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <strong>Toll estimate</strong>
+                            <div style={{ fontSize: "0.9rem", marginTop: "0.25rem" }}>
+                              {tollEstimateMeta.message ||
+                                "No toll plaza match found. Please select entry and exit toll manually."}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      {!tollEstimateMeta.matched && tollEstimateMeta.plazaOptions.length > 0 && (
+                        <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.5rem" }}>
+                          <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
+                            <span>Entry toll plaza (manual)</span>
+                            <select
+                              value={manualTollEntry}
+                              onChange={(e) => setManualTollEntry(e.target.value)}
+                              style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                            >
+                              <option value="">— select entry plaza —</option>
+                              {tollEstimateMeta.plazaOptions.map((p) => (
+                                <option key={`e-${p}`} value={p}>
+                                  {p}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
+                            <span>Exit toll plaza (manual)</span>
+                            <select
+                              value={manualTollExit}
+                              onChange={(e) => setManualTollExit(e.target.value)}
+                              style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                            >
+                              <option value="">— select exit plaza —</option>
+                              {tollEstimateMeta.plazaOptions.map((p) => (
+                                <option key={`x-${p}`} value={p}>
+                                  {p}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {(tollEstimateMeta.suggestedEntry || tollEstimateMeta.suggestedExit) && (
+                            <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280" }}>
+                              Suggested: {tollEstimateMeta.suggestedEntry || "?"} → {tollEstimateMeta.suggestedExit || "?"}
+                            </p>
+                          )}
+                          <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
+                            <span>Vehicle class</span>
+                            <input
+                              value={manualVehicleClass}
+                              onChange={(e) => setManualVehicleClass(e.target.value)}
+                              style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </li>
+                  )}
                   <li>
                     <strong>Model:</strong> net/truck = cargo gross + fuel + driver + helper + toll (additive).
                   </li>

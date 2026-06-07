@@ -1230,6 +1230,7 @@ def build_admin_analytics(
         build_executive_overview,
         build_section_percentages,
     )
+    from app.services.toll_analytics import build_toll_analytics
 
     payload["executive_overview"] = build_executive_overview(
         ctx,
@@ -1245,4 +1246,5 @@ def build_admin_analytics(
         "expenses": build_section_percentages(expenses, "expenses"),
         "financial": build_section_percentages(payload["financial"], "financial") if payload.get("financial") else None,
     }
+    payload["toll_analytics"] = build_toll_analytics(db)
     return payload

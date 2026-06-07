@@ -48,6 +48,10 @@ class TripRead(BaseModel):
     route_path: str
     distance_km: float
     toll_cost: float
+    estimated_toll_budget: float | None = None
+    additional_toll_total: float | None = None
+    toll_actual_total: float | None = None
+    toll_variance: float | None = None
     fuel_cost: float
     labor_cost: float
     driver_allowance_php: float = 0

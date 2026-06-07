@@ -491,6 +491,41 @@ export type AdminAnalyticsPayload = {
     expenses?: PercentageItem[] | null;
     financial?: PercentageItem[] | null;
   } | null;
+  toll_analytics?: AdminAnalyticsEmpty | {
+    summary: {
+      record_count: number;
+      estimated_toll_total_php: number;
+      actual_toll_total_php: number;
+      toll_variance_total_php: number;
+    };
+    data_sufficiency?: {
+      limited_data: boolean;
+      single_record: boolean;
+      messages: string[];
+    };
+    statistics: StatisticsSummary | null;
+    most_expensive_routes: { route: string; actual_toll_php: number }[];
+    route_trends: {
+      month: string;
+      estimated_toll_php: number;
+      actual_toll_php: number;
+      variance_php: number;
+      trip_count: number;
+    }[];
+    drilldown: {
+      trip_id: number;
+      booking_id: number;
+      route: string;
+      entry_point?: string;
+      exit_point?: string;
+      vehicle_class: string;
+      effective_date?: string | null;
+      estimated_toll: number;
+      actual_toll: number;
+      variance: number;
+      completed_at: string | null;
+    }[];
+  };
 };
 
 export type AdminAnalyticsQuery = {

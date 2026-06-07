@@ -216,6 +216,7 @@ class Truck(Base):
     fuel_efficiency_kmpl: Mapped[float] = mapped_column(Float, default=4.0)
     odometer_km: Mapped[float] = mapped_column(Float, default=0)
     age_years: Mapped[float] = mapped_column(Float, default=1.0)
+    vehicle_class: Mapped[str] = mapped_column(String(32), default="Class 3")
     last_maintenance_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
@@ -285,6 +286,13 @@ class Booking(Base):
     route_id: Mapped[int | None] = mapped_column(ForeignKey("routes.id"), nullable=True)
 
     estimated_cost: Mapped[float] = mapped_column(Float, default=0)
+    estimated_toll_budget_php: Mapped[float | None] = mapped_column(Float, nullable=True)
+    toll_matrix_matched: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    toll_estimate_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    vehicle_class_used: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    toll_entry_point: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    toll_exit_point: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    toll_effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     actual_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[BookingStatus] = mapped_column(
         SAEnum(
@@ -478,6 +486,10 @@ class Trip(Base):
     route_path: Mapped[str] = mapped_column(Text, default="")
     distance_km: Mapped[float] = mapped_column(Float, default=0)
     toll_cost: Mapped[float] = mapped_column(Float, default=0)
+    estimated_toll_budget: Mapped[float | None] = mapped_column(Float, nullable=True)
+    additional_toll_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    toll_actual_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    toll_variance: Mapped[float | None] = mapped_column(Float, nullable=True)
     fuel_cost: Mapped[float] = mapped_column(Float, default=0)
     labor_cost: Mapped[float] = mapped_column(Float, default=0)
     driver_allowance_php: Mapped[float] = mapped_column(Float, default=0)
@@ -933,4 +945,93 @@ class DriverTripNotification(Base):
     route_summary: Mapped[str] = mapped_column(String(512), default="")
     required_action: Mapped[str] = mapped_column(String(512), default="")
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TollPlazaStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class TollPlaza(Base):
+    """Canonical NLEX-SCTEX toll plaza name with admin-managed aliases."""
+
+    __tablename__ = "toll_plazas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    canonical_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(16), default=TollPlazaStatus.ACTIVE.value, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    aliases: Mapped[list["TollPlazaAlias"]] = relationship(
+        "TollPlazaAlias", back_populates="plaza", cascade="all, delete-orphan"
+    )
+
+
+class TollPlazaAlias(Base):
+    """Alternate labels that map customer/route text to a canonical toll plaza."""
+
+    __tablename__ = "toll_plaza_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plaza_id: Mapped[int] = mapped_column(ForeignKey("toll_plazas.id"), nullable=False, index=True)
+    alias: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    plaza: Mapped["TollPlaza"] = relationship("TollPlaza", back_populates="aliases")
+
+
+class TollMatrixStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class TollMatrix(Base):
+    """NLEX-SCTEX style descriptive toll matrix: entry plaza → exit plaza by vehicle class."""
+
+    __tablename__ = "toll_matrix"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    entry_point: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    exit_point: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    vehicle_class: Mapped[str] = mapped_column(String(32), nullable=False, default="Class 3", index=True)
+    toll_fee: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    effective_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), default=TollMatrixStatus.ACTIVE.value, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AdditionalTollEntry(Base):
+    """Driver-reported toll surcharges during transit (reroute, extra gates, etc.)."""
+
+    __tablename__ = "additional_toll_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    driver_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    receipt_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class HistoricalTollRecord(Base):
+    """Completed-trip toll snapshot for analytics and future estimation."""
+
+    __tablename__ = "historical_toll_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trip_id: Mapped[int] = mapped_column(ForeignKey("trips.id"), nullable=False, index=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    route_label: Mapped[str] = mapped_column(String(512), default="")
+    entry_point: Mapped[str] = mapped_column(String(255), default="")
+    exit_point: Mapped[str] = mapped_column(String(255), default="")
+    origin: Mapped[str] = mapped_column(String(255), default="")
+    destination: Mapped[str] = mapped_column(String(255), default="")
+    vehicle_class: Mapped[str] = mapped_column(String(32), default="Class 3")
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    estimated_toll: Mapped[float] = mapped_column(Float, default=0)
+    actual_toll: Mapped[float] = mapped_column(Float, default=0)
+    toll_variance: Mapped[float] = mapped_column(Float, default=0)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

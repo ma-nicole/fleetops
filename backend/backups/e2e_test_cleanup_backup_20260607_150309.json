@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-06-07T15:03:09.548548+00:00",
+  "booking_ids": [
+    27
+  ],
+  "trip_ids": [
+    16
+  ],
+  "bookings": [
+    {
+      "id": 27,
+      "pickup_location": "Warehouse San Fernando Pampanga",
+      "dropoff_location": "San Simon Exit Luzon",
+      "status": "completed"
+    }
+  ],
+  "trips": [
+    {
+      "id": 16,
+      "booking_id": 27,
+      "status": "COMPLETED"
+    }
+  ]
+}

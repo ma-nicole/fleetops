@@ -1045,6 +1045,7 @@ def assign_batch(
     route_path_json = json.dumps(route_ctx["path"])
     trip_fuel_cost = float(route_ctx["fuel_cost"])
     trip_toll_cost = float(route_ctx["toll_cost"])
+    estimated_toll_budget = booking.estimated_toll_budget_php
     selected_route_option_id = route_ctx.get("selected_route_option_id")
     driver_allowance, helper_allowance = resolve_trip_crew_allowances(db)
     for item in rows:
@@ -1058,6 +1059,7 @@ def assign_batch(
             route_path=route_path_json,
             distance_km=distance,
             toll_cost=trip_toll_cost,
+            estimated_toll_budget=estimated_toll_budget,
             fuel_cost=trip_fuel_cost,
             labor_cost=80.0,
             driver_allowance_php=driver_allowance,
@@ -1214,6 +1216,7 @@ def assign_trip(
         route_path=json.dumps(path_list),
         distance_km=float(distance),
         toll_cost=toll_cost,
+        estimated_toll_budget=booking.estimated_toll_budget_php,
         fuel_cost=fuel_cost,
         labor_cost=float(payload.labor_cost or 80),
         driver_allowance_php=driver_allowance,
@@ -1267,13 +1270,14 @@ def assign_trip(
         )
         send_email_notification(to_email=customer.email, subject=subject, html_body=html_body)
 
+    route_label = f"{booking.pickup_location} → {booking.dropoff_location}"
     return {
         "trip_id": trip.id,
         "booking_id": booking.id,
         "truck_id": truck.id,
         "driver_id": driver.id,
         "helper_id": helper.id if helper else None,
-        "route": route,
+        "route": route_label,
     }
 
 
