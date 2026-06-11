@@ -1,15 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import DispatcherRoleAnalyticsTabs from "@/components/dispatcher/DispatcherRoleAnalyticsTabs";
 import PageHeader from "@/components/ui/PageHeader";
 import ErrorState from "@/components/ui/ErrorState";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import { SkeletonDashboard } from "@/components/Skeleton";
-import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
-import { AnalyticsApi, type AdminAnalyticsPayload } from "@/lib/analyticsApi";
+import {
+  AnalyticsApi,
+  analyticsLoadErrorMessage,
+  logAnalyticsLoadError,
+  type AdminAnalyticsPayload,
+} from "@/lib/analyticsApi";
+import { ApiError } from "@/lib/api";
 
 export default function DispatcherAnalyticsDashboard() {
+  const router = useRouter();
+  const loadSeqRef = useRef(0);
   const [data, setData] = useState<AdminAnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +29,7 @@ export default function DispatcherAnalyticsDashboard() {
   const [shipmentStatus, setShipmentStatus] = useState("");
 
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     if (dateFrom && dateTo && dateFrom > dateTo) {
@@ -37,13 +46,22 @@ export default function DispatcherAnalyticsDashboard() {
         route: route || undefined,
         shipment_status: shipmentStatus || undefined,
       });
+      if (seq !== loadSeqRef.current) return;
       setData(payload);
     } catch (e) {
-      setError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+      if (seq !== loadSeqRef.current) return;
+      logAnalyticsLoadError(e);
+      if (e instanceof ApiError && e.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+      setError(analyticsLoadErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
-  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus]);
+  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus, router]);
 
   useEffect(() => {
     void load();

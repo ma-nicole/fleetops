@@ -3,7 +3,13 @@
  * (paper §3.2.8 + §3.2.9). Each function pairs with a backend route registered
  * under `/api/analytics`.
  */
-import { apiGet, apiPost } from "./api";
+import { apiGet, apiPost, ApiError, parseApiDetail } from "./api";
+import {
+  ERROR_ANALYTICS_PERMISSION,
+  ERROR_ANALYTICS_SERVICE,
+  ERROR_ANALYTICS_SESSION,
+  ERROR_LOAD_DATA,
+} from "./loadingMessages";
 
 export type TripCostPredictRequest = {
   distance_km: number;
@@ -536,6 +542,52 @@ export type AdminAnalyticsQuery = {
   route?: string;
   shipment_status?: string;
 };
+
+export function isAnalyticsModuleEmpty(mod: unknown): boolean {
+  return !!mod && typeof mod === "object" && "empty" in mod && (mod as { empty?: boolean }).empty === true;
+}
+
+/** True when every operational module in the payload is empty or absent. */
+export function isAnalyticsPayloadEmpty(payload: AdminAnalyticsPayload, includeFinancial = true): boolean {
+  const modules: unknown[] = [
+    payload.shipments,
+    payload.expenses,
+    payload.fleet,
+    payload.drivers,
+    payload.routes,
+    payload.toll_analytics,
+  ];
+  if (includeFinancial) {
+    modules.push(payload.financial, payload.clients);
+  }
+  return modules.every((m) => m == null || isAnalyticsModuleEmpty(m));
+}
+
+export function analyticsLoadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const detail = parseApiDetail(error.body);
+    if (error.status === 401) {
+      if (detail && detail.toLowerCase().includes("invalid credentials")) return detail;
+      return ERROR_ANALYTICS_SESSION;
+    }
+    if (error.status === 403) {
+      return detail ?? ERROR_ANALYTICS_PERMISSION;
+    }
+    if (error.status >= 500 || error.status === 404) {
+      return detail ?? ERROR_ANALYTICS_SERVICE;
+    }
+    if (detail) return detail;
+  }
+  return error instanceof Error ? error.message : ERROR_LOAD_DATA;
+}
+
+export function logAnalyticsLoadError(error: unknown): void {
+  if (error instanceof ApiError) {
+    console.error("[Analytics Center] API error", error.status, error.body);
+    return;
+  }
+  console.error("[Analytics Center] load failed", error);
+}
 
 export const AnalyticsApi = {
   predictTripCost: (req: TripCostPredictRequest) =>

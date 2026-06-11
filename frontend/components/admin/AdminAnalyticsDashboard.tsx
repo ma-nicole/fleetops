@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   EmptyChart,
   SectionCard,
@@ -24,11 +25,19 @@ import PageHeader from "@/components/ui/PageHeader";
 import ErrorState from "@/components/ui/ErrorState";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import { SkeletonChart, SkeletonDashboard } from "@/components/Skeleton";
-import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
+import { EMPTY_ANALYTICS } from "@/lib/loadingMessages";
 import { formatPhp } from "@/lib/appLocale";
 import { scrollToSectionById } from "@/lib/scrollToSection";
 import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
-import { AnalyticsApi, type AdminAnalyticsPayload } from "@/lib/analyticsApi";
+import {
+  AnalyticsApi,
+  analyticsLoadErrorMessage,
+  isAnalyticsModuleEmpty,
+  isAnalyticsPayloadEmpty,
+  logAnalyticsLoadError,
+  type AdminAnalyticsPayload,
+} from "@/lib/analyticsApi";
+import { ApiError } from "@/lib/api";
 
 type CategoryTab =
   | "all"
@@ -54,7 +63,7 @@ const CATEGORY_TABS: { id: CategoryTab; label: string }[] = [
 ];
 
 function isEmpty(mod: unknown): mod is { empty: true; message: string } {
-  return !!mod && typeof mod === "object" && "empty" in mod && (mod as { empty?: boolean }).empty === true;
+  return isAnalyticsModuleEmpty(mod);
 }
 
 function statVal(v: string | number | null | undefined): string | number {
@@ -96,6 +105,8 @@ function metricNote(
 }
 
 export default function AdminAnalyticsDashboard({ showFinancial = true }: { showFinancial?: boolean }) {
+  const router = useRouter();
+  const loadSeqRef = useRef(0);
   const [data, setData] = useState<AdminAnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +119,7 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
   const [shipmentStatus, setShipmentStatus] = useState("");
 
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     if (dateFrom && dateTo && dateFrom > dateTo) {
@@ -124,13 +136,22 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
         route: route || undefined,
         shipment_status: shipmentStatus || undefined,
       });
+      if (seq !== loadSeqRef.current) return;
       setData(payload);
     } catch (e) {
-      setError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+      if (seq !== loadSeqRef.current) return;
+      logAnalyticsLoadError(e);
+      if (e instanceof ApiError && e.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
+      setError(analyticsLoadErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
-  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus]);
+  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus, router]);
 
   useEffect(() => {
     void load();
@@ -245,6 +266,12 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
 
       {data && !loading && !error && (
         <>
+          {isAnalyticsPayloadEmpty(data, showFinancial) && (
+            <div className="alert-banner" role="status">
+              <p style={{ margin: 0 }}>{EMPTY_ANALYTICS}</p>
+            </div>
+          )}
+
           {data.validation && !data.validation.valid && (
             <div className="alert-banner alert-banner--warning" role="alert">
               <strong>Analytics validation warning:</strong> Some computed totals do not match source

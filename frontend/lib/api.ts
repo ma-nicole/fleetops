@@ -4,7 +4,13 @@ function normalizeApiBase(raw: string): string {
   /** Same-origin proxy (see next.config.mjs); avoids direct cross-origin fetch in local dev. */
   if (!trimmed) return "/api-proxy";
   /** Same-origin proxy path from Next.js `rewrites` (see next.config.mjs). */
-  if (trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("/")) {
+    /** `/api-proxy/api` double-prefixes to `/api/api/...` and returns 404 from FastAPI. */
+    if (trimmed === "/api-proxy/api" || trimmed.endsWith("/api-proxy/api")) {
+      return "/api-proxy";
+    }
+    return trimmed;
+  }
   if (/\/api(\/|$)/.test(trimmed)) return trimmed;
   return `${trimmed}/api`;
 }
@@ -64,9 +70,41 @@ export class ApiError extends Error {
   }
 }
 
-/** User-facing text; keeps raw `body` on ApiError for debugging. */
+/** Parse FastAPI `{ "detail": "..." }` (or validation error list) from response text. */
+export function parseApiDetail(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    const data = JSON.parse(trimmed) as { detail?: unknown };
+    const detail = data.detail;
+    if (typeof detail === "string" && detail.trim()) {
+      return detail.trim();
+    }
+    if (Array.isArray(detail)) {
+      const parts = detail
+        .map((item) => {
+          if (!item || typeof item !== "object") return null;
+          const msg = (item as { msg?: unknown }).msg;
+          return typeof msg === "string" && msg.trim() ? msg.trim() : null;
+        })
+        .filter(Boolean);
+      if (parts.length) return parts.join(" ");
+    }
+  } catch {
+    /* non-JSON body */
+  }
+  return null;
+}
+
+const SESSION_EXPIRED = "Your session expired. Please sign in again.";
+
+/** User-facing text; prefers backend `detail`, keeps raw `body` on ApiError for debugging. */
 function messageFromErrorResponse(status: number, text: string): string {
-  void text;
+  const detail = parseApiDetail(text);
+  if (detail) return detail;
+  if (status === 401) {
+    return SESSION_EXPIRED;
+  }
   if (status === 403) {
     return "You are not authorized to access this record.";
   }
@@ -79,8 +117,14 @@ function messageFromErrorResponse(status: number, text: string): string {
   return "Unable to load data.";
 }
 
-async function handle<T>(response: Response): Promise<T> {
-  if (response.status === 401 || response.status === 423) {
+type HandleOptions = {
+  /** Drop stored JWT when an authenticated request is rejected (401/423). */
+  clearAuthOnFailure?: boolean;
+};
+
+async function handle<T>(response: Response, options: HandleOptions = {}): Promise<T> {
+  const clearAuth = options.clearAuthOnFailure ?? false;
+  if (clearAuth && (response.status === 401 || response.status === 423)) {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("token");
       window.localStorage.removeItem("authToken");
@@ -96,12 +140,17 @@ async function handle<T>(response: Response): Promise<T> {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = buildHeaders(init);
+  const hadAuth = Boolean(
+    (headers as Record<string, string>).Authorization ||
+      (init?.headers as Record<string, string> | undefined)?.Authorization,
+  );
   const response = await fetch(apiFullUrl(path), {
     ...init,
-    headers: buildHeaders(init),
+    headers,
     cache: "no-store",
   });
-  return handle<T>(response);
+  return handle<T>(response, { clearAuthOnFailure: hadAuth });
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
@@ -125,7 +174,7 @@ export async function apiPostMultipart<T>(path: string, formData: FormData): Pro
     body: formData,
     cache: "no-store",
   });
-  return handle<T>(response);
+  return handle<T>(response, { clearAuthOnFailure: Boolean(token) });
 }
 
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
@@ -163,7 +212,8 @@ export async function apiLogin(email: string, password: string): Promise<LoginRe
     body: new URLSearchParams({ username: email, password }),
     cache: "no-store",
   });
-  return handle<LoginResponse>(response);
+  /** Never clear an existing token on failed credential check. */
+  return handle<LoginResponse>(response, { clearAuthOnFailure: false });
 }
 
 export async function apiForgotPassword(email: string): Promise<ForgotPasswordResponse> {

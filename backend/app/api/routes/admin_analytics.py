@@ -1,6 +1,7 @@
 """Admin analytics center — real DB records only."""
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +15,7 @@ from app.services.admin_analytics import AnalyticsFilters, build_admin_analytics
 from app.services.ai_interpretation import generate_chart_interpretation, generate_expense_interpretation
 
 router = APIRouter(prefix="/admin/analytics", tags=["admin-analytics"])
+logger = logging.getLogger(__name__)
 
 
 class ExpenseInterpretationCategory(BaseModel):
@@ -98,24 +100,30 @@ def admin_analytics_dashboard(
     """Company-wide analytics for admin/manager; operational subset for dispatcher."""
     filters = _parse_filters(date_from, date_to, driver_id, truck_id, route, shipment_status)
 
-    if user.role == UserRole.DISPATCHER:
+    try:
+        if user.role == UserRole.DISPATCHER:
+            return build_admin_analytics(
+                db,
+                filters=filters,
+                include_financial=False,
+                include_clients=False,
+                viewer=user,
+            )
+
+        if user.role not in {UserRole.ADMIN, UserRole.MANAGER}:
+            raise HTTPException(status_code=403, detail="Analytics access not permitted for this role.")
+
         return build_admin_analytics(
             db,
             filters=filters,
-            include_financial=False,
-            include_clients=False,
-            viewer=user,
+            include_financial=True,
+            include_clients=True,
         )
-
-    if user.role not in {UserRole.ADMIN, UserRole.MANAGER}:
-        raise HTTPException(status_code=403, detail="Analytics access not permitted for this role.")
-
-    return build_admin_analytics(
-        db,
-        filters=filters,
-        include_financial=True,
-        include_clients=True,
-    )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Admin analytics dashboard build failed")
+        raise HTTPException(status_code=500, detail="Analytics service error") from exc
 
 
 @router.get("/operational")
