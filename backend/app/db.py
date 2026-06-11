@@ -352,16 +352,14 @@ def apply_runtime_schema_fixes() -> None:
                 )
 
             if insp.has_table("users"):
-                if dialect == "mysql":
-                    conn.execute(
-                        text(
-                            "ALTER TABLE users MODIFY COLUMN role "
-                            "ENUM('ADMIN','MANAGER','DISPATCHER','DRIVER','HELPER','CUSTOMER') NOT NULL"
-                        )
-                    )
+                # Normalize any uppercase role values stored by an older migration to lowercase
+                # so they match SQLAlchemy's UserRole enum values ('admin', 'dispatcher', etc.).
+                conn.execute(
+                    text("UPDATE users SET role = LOWER(role) WHERE role != LOWER(role)")
+                )
                 conn.execute(
                     text(
-                        "UPDATE users SET role = 'HELPER' "
+                        "UPDATE users SET role = 'helper' "
                         "WHERE (role = '' OR role IS NULL) AND LOWER(email) LIKE '%helper%'"
                     )
                 )

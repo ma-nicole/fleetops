@@ -96,12 +96,24 @@ async function handle<T>(response: Response): Promise<T> {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiFullUrl(path), {
-    ...init,
-    headers: buildHeaders(init),
-    cache: "no-store",
-  });
-  return handle<T>(response);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(apiFullUrl(path), {
+      ...init,
+      headers: buildHeaders(init),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return await handle<T>(response);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("Request timed out. Please try again.", 408, "");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
