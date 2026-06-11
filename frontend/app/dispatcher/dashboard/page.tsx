@@ -290,7 +290,11 @@ export default function DispatcherDashboard() {
       setData(d);
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+      setLoadError(
+        e instanceof Error && e.message
+          ? e.message
+          : "Unable to load dispatcher dashboard.",
+      );
     } finally {
       setLoading(false);
     }
@@ -305,6 +309,13 @@ export default function DispatcherDashboard() {
   const s = data?.summary;
   const activeTotal = useMemo(() => (s ? activeLegsTotal(s) : 0), [s]);
   const alertCount = data?.alerts?.length ?? 0;
+  const isEmpty =
+    !loading &&
+    !loadError &&
+    data !== null &&
+    !data.active_trips?.length &&
+    !data.waiting_for_assignment?.length &&
+    !data.alerts?.length;
 
   useHashScrollWhenReady(Boolean(data && !loading));
 
@@ -352,6 +363,14 @@ export default function DispatcherDashboard() {
           </div>
         ) : (
         <>
+        {isEmpty && (
+          <p
+            role="status"
+            style={{ margin: "0.5rem 0", fontSize: "0.875rem", color: C.textMuted }}
+          >
+            No dispatcher records available yet.
+          </p>
+        )}
         {/* KPI strip */}
         <div id="dispatch-kpis" className="dispatch-kpi-strip scroll-section" style={{ display: "grid", gap: "0.45rem" }}>
           {s ? (
@@ -365,9 +384,9 @@ export default function DispatcherDashboard() {
               <KpiTile label="Avail drivers" value={s.available_drivers} accentBorder="blue" scrollTargetId="dispatch-resources" />
               <KpiTile label="Alerts" value={alertCount} accentBorder={alertCount > 0 ? "red" : "slate"} warn={alertCount > 0} scrollTargetId="dispatch-alerts" />
             </>
-          ) : (
+          ) : loading ? (
             <SkeletonKpiGrid count={8} />
-          )}
+          ) : null}
         </div>
 
         {/* Main + sidebar */}

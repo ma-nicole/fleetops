@@ -145,12 +145,24 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     (headers as Record<string, string>).Authorization ||
       (init?.headers as Record<string, string> | undefined)?.Authorization,
   );
-  const response = await fetch(apiFullUrl(path), {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
-  return handle<T>(response, { clearAuthOnFailure: hadAuth });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(apiFullUrl(path), {
+      ...init,
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return await handle<T>(response, { clearAuthOnFailure: hadAuth });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("Request timed out. Please try again.", 408, "");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function apiGet<T>(path: string): Promise<T> {

@@ -35,9 +35,7 @@ function tabsForSignedInRole(role: string | null): readonly (typeof TABS)[number
  * admins still see every tab).
  */
 export default function DashboardRoleTabs({ active }: Props) {
-  const [viewerRole, setViewerRole] = useState<string | null>(() =>
-    typeof window !== "undefined" ? getUserRole() : null,
-  );
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = () => setViewerRole(getUserRole());
