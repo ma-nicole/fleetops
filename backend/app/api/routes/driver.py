@@ -23,6 +23,7 @@ from app.models.entities import (
 from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.dispatch_operations_center import _display_status
+from app.services.driver_dashboard_metrics import CrewRole, build_crew_dashboard_metrics
 from app.services.driver_pay_summary import build_driver_pay_summary
 from app.services.crew_assigned_bookings import list_crew_assigned_bookings, redact_trip_payload_for_helper
 from app.services.driver_trip_notifications import (

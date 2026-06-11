@@ -56,7 +56,7 @@ def _empty(message: str = "No data available yet.") -> dict[str, Any]:
 
 def _block(
     *,
-    kpis: list[dict[str, str | number]],
+    kpis: list[dict[str, str | float | int]],
     chart: list[dict] | None = None,
     drilldown: list[dict] | None = None,
     statistics: dict | None = None,
