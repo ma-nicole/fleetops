@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
+import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
 import { customerAssignmentLatestLocation } from "@/lib/customerAssignmentDisplay";
 import { WorkflowApi, type CustomerBookingHistoryRow } from "@/lib/workflowApi";
@@ -276,6 +277,14 @@ export default function BookingHistoryPage() {
                               );
                             })
                           )}
+                          <CustomerDocumentReviewSection
+                            booking={booking}
+                            onUpdated={(updated) => {
+                              setRows((prev) =>
+                                prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+                              );
+                            }}
+                          />
                           <BookingCustomsClearanceSection booking={booking} editable={false} />
                         </div>
                       )}

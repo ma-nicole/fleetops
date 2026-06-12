@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
+import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
 import AsyncDataView from "@/components/ui/AsyncDataView";
@@ -89,6 +90,24 @@ export default function CustomerPortalDashboard() {
     };
     refresh();
     return subscribeSitesChanged(refresh);
+  }, []);
+
+  const paymentByBooking = useMemo(() => {
+    const m = new Map<number, Payment>();
+    for (const p of payments) {
+      const cur = m.get(p.booking_id);
+      if (!cur || p.id > cur.id) m.set(p.booking_id, p);
+    }
+    return m;
+  }, [payments]);
+
+  const refreshShipments = useCallback(async () => {
+    try {
+      const shipRes = await WorkflowApi.customerShipmentTracking();
+      setActiveShipments(shipRes.shipments);
+    } catch (e) {
+      console.error(e);
+    }
   }, []);
 
   const kpis = useMemo(() => {
@@ -241,10 +260,16 @@ export default function CustomerPortalDashboard() {
                             <span style={{ color: "var(--text-secondary)" }}>
                               Payment total <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
                             </span>
-                            <Link href="/modules/customer/booking-history" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
+                            <Link href="/modules/operations/trips" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
                               Details
                             </Link>
                           </div>
+                          <CustomerDocumentReviewSection
+                            booking={order}
+                            payment={paymentByBooking.get(order.id) ?? null}
+                            compact
+                            onUpdated={() => void refreshShipments()}
+                          />
                         </div>
                       );
                     })}

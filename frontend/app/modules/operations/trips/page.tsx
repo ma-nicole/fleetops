@@ -5,6 +5,7 @@ import Link from "next/link";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
+import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { getDashboardPath, getEffectiveRole, type UserRole } from "@/lib/auth";
 import { APP_LOCALE, APP_TIMEZONE, formatPhpWhole } from "@/lib/appLocale";
 import { useRoleGuard } from "@/lib/useRoleGuard";
@@ -479,6 +480,15 @@ export default function TripRecordsPage() {
                             Trip crews and live status (same as Shipment tracking)
                           </div>
                           <CustomerBookingAssignmentsList assignments={b.assignments} dropoffAddress={b.dropoff_location} />
+                          <CustomerDocumentReviewSection
+                            booking={b}
+                            payment={pay ?? null}
+                            onUpdated={(updated) => {
+                              setBookings((prev) =>
+                                prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+                              );
+                            }}
+                          />
                           <BookingCustomsClearanceSection
                             booking={b}
                             onUpdated={(updated) => {

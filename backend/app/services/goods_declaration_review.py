@@ -104,3 +104,14 @@ def goods_declaration_review_label(status: str | None) -> str:
         GoodsDeclarationReviewStatus.RESUBMITTED.value: "Resubmitted",
     }
     return labels.get(status, status.replace("_", " "))
+
+
+def goods_declaration_review_customer_fields(booking: Booking) -> dict[str, str | None]:
+    """Effective review status + label for API payloads (customer and admin)."""
+    status = effective_goods_declaration_review_status(booking)
+    return {
+        "goods_declaration_review_status": status,
+        "goods_declaration_review_status_label": (
+            goods_declaration_review_label(status) if status else None
+        ),
+    }

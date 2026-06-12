@@ -103,6 +103,7 @@ export type Booking = {
   goods_declaration_validated?: boolean;
   cargo_type_validated?: boolean;
   goods_declaration_review_status?: string | null;
+  goods_declaration_review_status_label?: string | null;
   goods_declaration_review_remarks?: string | null;
   goods_declaration_reviewed_at?: string | null;
   goods_declaration_reviewed_by_id?: number | null;

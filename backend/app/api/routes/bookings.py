@@ -51,12 +51,20 @@ from app.services.booking_documents import resolve_booking_document_path, save_b
 from app.services.upload_urls import media_type_for_path
 from app.services.goods_declaration_review import (
     effective_goods_declaration_review_status,
+    goods_declaration_review_customer_fields,
     mark_goods_declaration_pending,
     mark_goods_declaration_resubmitted,
 )
+from app.services.goods_declaration_notifications import notify_reviewers_documents_resubmitted
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
+
+
+def _booking_read_payload(booking: Booking) -> dict:
+    payload = BookingRead.model_validate(booking).model_dump(mode="json")
+    payload.update(goods_declaration_review_customer_fields(booking))
+    return payload
 
 
 def _sync_bookings_approved_from_verified_payments(db: Session, customer_id: int | None) -> None:
@@ -408,7 +416,8 @@ async def resubmit_booking_documents(
     mark_goods_declaration_resubmitted(booking)
     db.commit()
     db.refresh(booking)
-    return booking
+    notify_reviewers_documents_resubmitted(db, booking)
+    return _booking_read_payload(booking)
 
 
 @router.get("/schedule-availability", response_model=BookingScheduleAvailabilityRead)
@@ -492,7 +501,7 @@ def list_bookings(
             if row[0] is not None
         }
         rows = [row for row in rows if int(row.id) in assigned_booking_ids]
-    return rows
+    return [_booking_read_payload(b) for b in rows]
 
 
 @router.get("/{booking_id}", response_model=BookingRead)
@@ -507,7 +516,7 @@ def get_booking(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     _assert_booking_access(db, booking, user)
-    return booking
+    return _booking_read_payload(booking)
 
 
 @router.post("/{booking_id}/cancel")

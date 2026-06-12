@@ -13,6 +13,7 @@ from app.db import get_db
 from app.models.entities import Booking, BookingStatus, TruckSlotHold, TruckSlotHoldStatus, User, UserRole
 from app.schemas.booking import BookingCustomsUpdate, BookingRead
 from app.services.booking_tracking_payload import build_assignments_for_booking
+from app.services.goods_declaration_review import goods_declaration_review_customer_fields
 from app.services.customer_booking_portal import (
     CUSTOMER_ACTIVE_DISPLAY_STATUSES,
     CUSTOMER_HISTORY_DISPLAY_STATUSES,
@@ -49,8 +50,10 @@ def _serialize_booking(db: Session, booking: Booking) -> dict:
     display = resolve_customer_display_status(booking, assignments)
     label = display_status_label(display)
     core = BookingRead.model_validate(booking).model_dump(mode="json")
+    review_fields = goods_declaration_review_customer_fields(booking)
     return {
         **core,
+        **review_fields,
         "assignments": assignments,
         "display_status": display,
         "display_status_label": label,

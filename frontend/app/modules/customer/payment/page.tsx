@@ -1,25 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
+import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { CUSTOMER_PAYMENT_METHODS, formatPaymentMethodLabel } from "@/lib/paymentMethodOptions";
-import { WorkflowApi, type Payment } from "@/lib/workflowApi";
+import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
 import { formatDateTime, formatPhpWhole } from "@/lib/appLocale";
 
 export default function CustomerPaymentPage() {
   useRoleGuard(["customer", "manager", "admin"]);
 
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
-      const p = await WorkflowApi.listPayments();
+      const [p, b] = await Promise.all([WorkflowApi.listPayments(), WorkflowApi.listBookings()]);
       setPayments(p);
+      setBookings(b);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     }
   };
+
+  const bookingById = useMemo(() => new Map(bookings.map((b) => [b.id, b])), [bookings]);
+
+  const actionRequiredBookings = useMemo(() => {
+    const ids = new Set<number>();
+    for (const p of payments) {
+      const booking = bookingById.get(p.booking_id);
+      if (
+        p.status === "rejected" ||
+        ["revision_requested", "rejected"].includes(booking?.goods_declaration_review_status ?? "")
+      ) {
+        ids.add(p.booking_id);
+      }
+    }
+    return [...ids];
+  }, [payments, bookingById]);
 
   useEffect(() => {
     refresh();
@@ -81,7 +101,9 @@ export default function CustomerPaymentPage() {
                 </tr>
               </thead>
               <tbody>
-                {payments.map((p) => (
+                {payments.map((p) => {
+                  const booking = bookingById.get(p.booking_id);
+                  return (
                   <tr key={p.id}>
                     <td style={td}>{p.reference}</td>
                     <td style={td}>#{p.booking_id}</td>
@@ -90,11 +112,50 @@ export default function CustomerPaymentPage() {
                     <td style={{ ...td, fontWeight: 700, color: statusColor(p.status) }}>{formatPaymentStatus(p.status)}</td>
                     <td style={td}>{p.paid_at ? formatDateTime(p.paid_at) : "—"}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
         </section>
+
+        {actionRequiredBookings.length > 0 && (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>Action required</h2>
+            <p style={{ margin: "0 0 1rem", color: "#6B7280", fontSize: "0.9rem" }}>
+              Review decisions and resubmit corrected documents or payment proof when requested.
+            </p>
+            <div style={{ display: "grid", gap: "1rem" }}>
+              {actionRequiredBookings.map((bookingId) => {
+                  const booking = bookingById.get(bookingId);
+                  const payment = payments.find((p) => p.booking_id === bookingId);
+                  if (!booking) return null;
+                  return (
+                    <div
+                      key={`review-${bookingId}`}
+                      style={{
+                        border: "1px solid #E5E7EB",
+                        borderRadius: 10,
+                        padding: "1rem",
+                        background: "#FAFAFA",
+                      }}
+                    >
+                      <p style={{ margin: "0 0 0.5rem", fontWeight: 700 }}>Booking #{bookingId}</p>
+                      <CustomerDocumentReviewSection
+                        booking={booking}
+                        payment={payment ?? null}
+                        onUpdated={(updated) => {
+                          setBookings((prev) =>
+                            prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)),
+                          );
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );

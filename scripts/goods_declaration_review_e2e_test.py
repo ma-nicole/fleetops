@@ -128,6 +128,23 @@ def main() -> int:
             else:
                 ok("4 Request revision")
 
+        r = client.get("/api/customer/shipment-tracking", headers=customer_h)
+        if r.status_code != 200:
+            fail("4b Customer sees revision", f"status={r.status_code}")
+        else:
+            shipments = r.json().get("shipments") or []
+            row = next((s for s in shipments if s.get("id") == bid), None)
+            if not row:
+                r2 = client.get("/api/bookings", headers=customer_h)
+                rows = [x for x in r2.json() if x.get("id") == bid]
+                row = rows[0] if rows else None
+            if not row or row.get("goods_declaration_review_status") != "revision_requested":
+                fail("4b Customer sees revision", f"row={row}")
+            elif row.get("goods_declaration_review_remarks") != "E2E revision test":
+                fail("4b Customer remarks", row.get("goods_declaration_review_remarks"))
+            else:
+                ok("4b Customer sees revision + remarks")
+
         r = client.patch(
             f"/api/admin/goods-declarations/{bid}",
             headers=manager_h,

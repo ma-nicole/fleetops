@@ -50,3 +50,33 @@ export function isGoodsDeclarationReviewFinal(status: string | null | undefined)
   const normalized = (status ?? "").trim().toLowerCase();
   return normalized === "approved" || normalized === "rejected";
 }
+
+export function canCustomerResubmitDocuments(status: string | null | undefined): boolean {
+  return (status ?? "").trim().toLowerCase() === "revision_requested";
+}
+
+/** Customer-facing guidance for document review status (from backend status value). */
+export function customerDocumentReviewGuidance(status: string | null | undefined): string | null {
+  switch ((status ?? "pending").trim().toLowerCase()) {
+    case "revision_requested":
+      return "Revision requested. Please update and resubmit the required documents.";
+    case "rejected":
+      return "Your submission was rejected.";
+    case "resubmitted":
+      return "Your revised documents were submitted and are awaiting review.";
+    case "approved":
+      return "Your documents have been approved.";
+    case "pending":
+      return "Your documents are pending review.";
+    default:
+      return null;
+  }
+}
+
+export function customerDocumentReviewStatusLabel(
+  status: string | null | undefined,
+  backendLabel?: string | null,
+): string {
+  if (backendLabel?.trim()) return backendLabel;
+  return goodsDeclarationReviewLabel(status);
+}

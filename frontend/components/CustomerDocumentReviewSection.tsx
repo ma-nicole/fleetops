@@ -1,0 +1,308 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useState } from "react";
+import { validateBookingDocumentFile } from "@/components/BookingDocumentUploadFields";
+import {
+  canCustomerResubmitDocuments,
+  customerDocumentReviewGuidance,
+  customerDocumentReviewStatusLabel,
+  goodsDeclarationReviewBadgeStyle,
+} from "@/lib/goodsDeclarationReview";
+import type { Booking, Payment } from "@/lib/workflowApi";
+import { WorkflowApi } from "@/lib/workflowApi";
+
+type DocumentReviewFields = Pick<
+  Booking,
+  | "id"
+  | "cargo_declaration_original_filename"
+  | "cargo_declaration_uploaded_at"
+  | "terms_agreement_original_filename"
+  | "terms_agreement_uploaded_at"
+  | "goods_declaration_review_status"
+  | "goods_declaration_review_status_label"
+  | "goods_declaration_review_remarks"
+  | "goods_declaration_reviewed_at"
+>;
+
+function ReviewStatusBadge({
+  status,
+  label,
+}: {
+  status: string | null | undefined;
+  label: string;
+}) {
+  const s = goodsDeclarationReviewBadgeStyle(status);
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "0.3rem 0.6rem",
+        borderRadius: 999,
+        fontSize: "0.78rem",
+        fontWeight: 700,
+        background: s.bg,
+        color: s.color,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PaymentReviewNotice({ payment, bookingId }: { payment: Payment; bookingId: number }) {
+  if (payment.status !== "rejected") return null;
+  return (
+    <div
+      style={{
+        marginTop: "0.75rem",
+        padding: "0.75rem",
+        borderRadius: 8,
+        background: "#FEF2F2",
+        border: "1px solid #FECACA",
+      }}
+    >
+      <p style={{ margin: "0 0 0.35rem", fontWeight: 700, color: "#991B1B", fontSize: "0.88rem" }}>
+        Payment proof rejected
+      </p>
+      <p style={{ margin: 0, fontSize: "0.85rem", color: "#7F1D1D" }}>
+        Your payment proof was rejected. Please upload a clearer image from the payment page.
+      </p>
+      <Link
+        href={`/booking/payment?bookingId=${bookingId}`}
+        style={{
+          display: "inline-block",
+          marginTop: "0.5rem",
+          fontSize: "0.85rem",
+          fontWeight: 600,
+          color: "#B91C1C",
+        }}
+      >
+        Resubmit payment proof
+      </Link>
+    </div>
+  );
+}
+
+export default function CustomerDocumentReviewSection({
+  booking,
+  payment,
+  compact = false,
+  onUpdated,
+}: {
+  booking: DocumentReviewFields;
+  payment?: Payment | null;
+  compact?: boolean;
+  onUpdated?: (updated: Booking) => void;
+}) {
+  const hasDeclaration = !!booking.cargo_declaration_original_filename;
+  if (!hasDeclaration) return null;
+
+  const reviewStatus = booking.goods_declaration_review_status ?? "pending";
+  const statusLabel = customerDocumentReviewStatusLabel(
+    reviewStatus,
+    booking.goods_declaration_review_status_label,
+  );
+  const guidance = customerDocumentReviewGuidance(reviewStatus);
+  const remarks = (booking.goods_declaration_review_remarks ?? "").trim();
+  const canResubmit = canCustomerResubmitDocuments(reviewStatus);
+  const isRejected = reviewStatus === "rejected";
+
+  const [cargoFile, setCargoFile] = useState<File | null>(null);
+  const [termsFile, setTermsFile] = useState<File | null>(null);
+  const [errors, setErrors] = useState<{ cargo?: string; terms?: string; form?: string }>({});
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const submitResubmit = useCallback(async () => {
+    setErrors({});
+    setSuccess(false);
+
+    if (!cargoFile && !termsFile) {
+      setErrors({ form: "Upload at least one revised document (declaration and/or terms)." });
+      return;
+    }
+
+    const nextErrors: typeof errors = {};
+    if (cargoFile) {
+      const err = validateBookingDocumentFile(cargoFile);
+      if (err) nextErrors.cargo = err;
+    }
+    if (termsFile) {
+      const err = validateBookingDocumentFile(termsFile);
+      if (err) nextErrors.terms = err;
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const updated = await WorkflowApi.resubmitBookingDocuments(booking.id, {
+        cargo_declaration: cargoFile ?? undefined,
+        terms_agreement: termsFile ?? undefined,
+      });
+      setSuccess(true);
+      setCargoFile(null);
+      setTermsFile(null);
+      onUpdated?.(updated);
+    } catch (e) {
+      setErrors({ form: e instanceof Error ? e.message : "Upload failed. Please try again." });
+    } finally {
+      setBusy(false);
+    }
+  }, [booking.id, cargoFile, onUpdated, termsFile]);
+
+  const boxStyle: React.CSSProperties = compact
+    ? {
+        marginTop: "0.65rem",
+        padding: "0.65rem 0.75rem",
+        borderRadius: 8,
+        border: "1px solid #E5E7EB",
+        background: "#FAFAFA",
+        fontSize: "0.85rem",
+      }
+    : {
+        marginTop: "1rem",
+        padding: "1rem",
+        borderRadius: 8,
+        border: "1px solid #BFDBFE",
+        background: "rgba(59, 130, 246, 0.04)",
+      };
+
+  return (
+    <div style={boxStyle}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "0.5rem",
+          flexWrap: "wrap",
+          marginBottom: compact ? "0.35rem" : "0.5rem",
+        }}
+      >
+        <h4 style={{ margin: 0, color: "#1E3A8A", fontSize: compact ? "0.85rem" : "1rem" }}>
+          Document review
+        </h4>
+        <ReviewStatusBadge status={reviewStatus} label={statusLabel} />
+      </div>
+
+      {guidance && (
+        <p
+          style={{
+            margin: "0 0 0.35rem",
+            color: reviewStatus === "revision_requested" || isRejected ? "#9A3412" : "#374151",
+            fontSize: compact ? "0.82rem" : "0.88rem",
+            fontWeight: reviewStatus === "revision_requested" || isRejected ? 600 : 400,
+          }}
+        >
+          {guidance}
+        </p>
+      )}
+
+      {remarks && (
+        <p style={{ margin: "0.35rem 0 0", fontSize: compact ? "0.8rem" : "0.85rem", color: "#4B5563" }}>
+          <strong>Reason:</strong> {remarks}
+        </p>
+      )}
+
+      {!compact && !canResubmit && !isRejected && (
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#6B7280" }}>
+          Current files:{" "}
+          {booking.cargo_declaration_original_filename ?? "—"}
+          {booking.terms_agreement_original_filename
+            ? ` · Terms: ${booking.terms_agreement_original_filename}`
+            : ""}
+        </p>
+      )}
+
+      {canResubmit && !compact && (
+        <div style={{ marginTop: "0.85rem", display: "grid", gap: "0.65rem" }}>
+          <p style={{ margin: 0, fontSize: "0.82rem", color: "#374151" }}>
+            Upload revised declaration and/or signed terms (JPEG, PNG, or PDF, max 5MB each).
+          </p>
+          <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.82rem", fontWeight: 600 }}>
+            Revised cargo declaration
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+              disabled={busy}
+              onChange={(e) => {
+                setCargoFile(e.target.files?.[0] ?? null);
+                setErrors((prev) => ({ ...prev, cargo: undefined, form: undefined }));
+              }}
+            />
+            {cargoFile && (
+              <span style={{ fontWeight: 400, color: "#059669" }}>Selected: {cargoFile.name}</span>
+            )}
+            {errors.cargo && (
+              <span style={{ color: "#B91C1C", fontWeight: 400 }}>{errors.cargo}</span>
+            )}
+          </label>
+          <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.82rem", fontWeight: 600 }}>
+            Revised terms &amp; agreement
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+              disabled={busy}
+              onChange={(e) => {
+                setTermsFile(e.target.files?.[0] ?? null);
+                setErrors((prev) => ({ ...prev, terms: undefined, form: undefined }));
+              }}
+            />
+            {termsFile && (
+              <span style={{ fontWeight: 400, color: "#059669" }}>Selected: {termsFile.name}</span>
+            )}
+            {errors.terms && (
+              <span style={{ color: "#B91C1C", fontWeight: 400 }}>{errors.terms}</span>
+            )}
+          </label>
+          {errors.form && (
+            <p role="alert" style={{ margin: 0, color: "#B91C1C", fontSize: "0.82rem" }}>
+              {errors.form}
+            </p>
+          )}
+          {success && (
+            <p role="status" style={{ margin: 0, color: "#047857", fontSize: "0.82rem", fontWeight: 600 }}>
+              Documents submitted. Status is now Resubmitted — our team will review shortly.
+            </p>
+          )}
+          <button
+            type="button"
+            className="button"
+            disabled={busy}
+            onClick={() => void submitResubmit()}
+            style={{ justifySelf: "start" }}
+          >
+            {busy ? "Uploading…" : "Submit revised documents"}
+          </button>
+        </div>
+      )}
+
+      {canResubmit && compact && (
+        <Link
+          href="/modules/operations/trips"
+          style={{
+            display: "inline-block",
+            marginTop: "0.35rem",
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            color: "#B45309",
+          }}
+        >
+          Upload revised documents
+        </Link>
+      )}
+
+      {isRejected && (
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#6B7280" }}>
+          Further document uploads are not available for this booking. Contact support if you need assistance.
+        </p>
+      )}
+
+      {payment && <PaymentReviewNotice payment={payment} bookingId={booking.id} />}
+    </div>
+  );
+}

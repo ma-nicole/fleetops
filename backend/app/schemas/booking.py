@@ -116,6 +116,7 @@ class BookingRead(BaseModel):
     goods_declaration_validated: bool = False
     cargo_type_validated: bool = False
     goods_declaration_review_status: str | None = None
+    goods_declaration_review_status_label: str | None = None
     goods_declaration_review_remarks: str | None = None
     goods_declaration_reviewed_at: datetime | None = None
     goods_declaration_reviewed_by_id: int | None = None

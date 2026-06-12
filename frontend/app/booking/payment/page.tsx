@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import PaymentMethodInstructions from "@/components/PaymentMethodInstructions";
+import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import SubmitButton from "@/components/ui/SubmitButton";
 import ErrorState from "@/components/ui/ErrorState";
@@ -202,6 +203,10 @@ function BookingPaymentInner() {
               <strong>Date:</strong> {String(booking.scheduled_date)}
             </p>
             <p style={{ color: "#FF9800", fontWeight: 700, margin: "1rem 0 0 0" }}>Amount due: {formatPhp(total)}</p>
+            <CustomerDocumentReviewSection
+              booking={booking}
+              onUpdated={(updated) => setBooking(updated)}
+            />
           </section>
 
           <section>
