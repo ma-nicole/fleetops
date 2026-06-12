@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import AdminDocumentViewButton from "@/components/AdminDocumentViewButton";
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
 import { useRoleGuard } from "@/lib/useRoleGuard";
+import { ApiError, parseApiDetail } from "@/lib/api";
+import { getEffectiveRole, ROLE_DASHBOARDS, type UserRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/appLocale";
 import { formatBookingWeightTons } from "@/lib/bookingWeightOptions";
 import {
@@ -12,6 +14,7 @@ import {
   goodsDeclarationReviewLabel,
   type GoodsDeclarationReviewStatus,
 } from "@/lib/goodsDeclarationReview";
+import { ERROR_ANALYTICS_PERMISSION, REMARKS_REQUIRED_REVISION_REJECT } from "@/lib/loadingMessages";
 import { useDocumentPreview } from "@/lib/useDocumentPreview";
 import type { GoodsDeclarationAdminRow } from "@/lib/workflowApi";
 import { WorkflowApi } from "@/lib/workflowApi";
@@ -37,15 +40,54 @@ function ReviewStatusBadge({ status }: { status: string | null }) {
   );
 }
 
+function actionButtonStyle(variant: "revision" | "reject", enabled: boolean): CSSProperties {
+  const base =
+    variant === "revision"
+      ? {
+          border: "1px solid #FDBA74",
+          background: enabled ? "#FFF7ED" : "#F9FAFB",
+          color: enabled ? "#9A3412" : "#9CA3AF",
+        }
+      : {
+          border: "1px solid #FCA5A5",
+          background: enabled ? "#FEF2F2" : "#F9FAFB",
+          color: enabled ? "#991B1B" : "#9CA3AF",
+        };
+  return {
+    padding: "0.45rem 0.75rem",
+    borderRadius: 6,
+    fontWeight: 600,
+    cursor: enabled ? "pointer" : "not-allowed",
+    opacity: enabled ? 1 : 0.72,
+    ...base,
+  };
+}
+
 export default function AdminGoodsDeclarationsPage() {
   useRoleGuard(["admin", "manager"]);
-  const { preview, error, busy, closePreview, openDocument, openInNewTab, clearError } =
-    useDocumentPreview();
+  const {
+    preview,
+    error: previewError,
+    busy: documentPreviewBusy,
+    closePreview,
+    openDocument,
+    openInNewTab,
+    clearError: clearPreviewError,
+  } = useDocumentPreview();
   const [rows, setRows] = useState<GoodsDeclarationAdminRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [busyBookingId, setBusyBookingId] = useState<number | null>(null);
   const [remarksByBooking, setRemarksByBooking] = useState<Record<number, string>>({});
+  const [actionErrorByBooking, setActionErrorByBooking] = useState<Record<number, string>>({});
+
+  const dashboardHref = useMemo(() => {
+    const role = getEffectiveRole();
+    if (role && role in ROLE_DASHBOARDS) {
+      return ROLE_DASHBOARDS[role as UserRole];
+    }
+    return "/admin/dashboard";
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -53,7 +95,11 @@ export default function AdminGoodsDeclarationsPage() {
       const data = await WorkflowApi.listGoodsDeclarations();
       setRows(data);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Failed to load goods declarations.");
+      if (e instanceof ApiError && e.status === 403) {
+        setLoadError(ERROR_ANALYTICS_PERMISSION);
+      } else {
+        setLoadError(e instanceof Error ? e.message : "Failed to load goods declarations.");
+      }
     }
   }, []);
 
@@ -71,8 +117,15 @@ export default function AdminGoodsDeclarationsPage() {
     status: "approved" | "rejected" | "revision_requested",
   ) => {
     const remarks = (remarksByBooking[bookingId] ?? "").trim();
-    if ((status === "rejected" || status === "revision_requested") && !remarks) {
-      window.alert("Remarks are required when rejecting or requesting revision.");
+    const needsRemarks = status === "rejected" || status === "revision_requested";
+
+    setActionErrorByBooking((prev) => {
+      const next = { ...prev };
+      delete next[bookingId];
+      return next;
+    });
+
+    if (needsRemarks && !remarks) {
       return;
     }
 
@@ -91,7 +144,14 @@ export default function AdminGoodsDeclarationsPage() {
         });
       }
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : "Review update failed.");
+      const message =
+        e instanceof ApiError
+          ? parseApiDetail(e.body) ?? e.message
+          : e instanceof Error
+            ? e.message
+            : "Review update failed.";
+      console.error("[Goods declaration review]", bookingId, status, e);
+      setActionErrorByBooking((prev) => ({ ...prev, [bookingId]: message }));
     } finally {
       setBusyBookingId(null);
     }
@@ -101,8 +161,8 @@ export default function AdminGoodsDeclarationsPage() {
     <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gap: "1.2rem" }}>
         <div>
-          <Link href="/admin/dashboard" style={{ color: "#0EA5E9", textDecoration: "none" }}>
-            ← Admin Dashboard
+          <Link href={dashboardHref} style={{ color: "#0EA5E9", textDecoration: "none" }}>
+            ← Dashboard
           </Link>
           <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Declaration of goods review</h1>
           <p style={{ margin: 0, color: "#6B7280", fontSize: "0.95rem" }}>
@@ -166,8 +226,13 @@ export default function AdminGoodsDeclarationsPage() {
                 </tr>
               ) : (
                 filtered.map((row) => {
-                  const busy = busyBookingId === row.booking_id;
-                  const remarks = remarksByBooking[row.booking_id] ?? row.goods_declaration_review_remarks ?? "";
+                  const reviewBusy = busyBookingId === row.booking_id;
+                  const remarks =
+                    remarksByBooking[row.booking_id] ?? row.goods_declaration_review_remarks ?? "";
+                  const remarksReady = remarks.trim().length > 0;
+                  const actionError = actionErrorByBooking[row.booking_id];
+                  const revisionRejectEnabled = remarksReady && !reviewBusy;
+
                   return (
                     <tr key={row.booking_id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
                       <td style={{ padding: "0.75rem" }}>
@@ -193,7 +258,7 @@ export default function AdminGoodsDeclarationsPage() {
                           fileName={row.cargo_declaration_original_filename}
                           staticUrl={row.cargo_declaration_file_url}
                           apiPath={`/bookings/${row.booking_id}/documents/cargo-declaration`}
-                          busy={busy}
+                          busy={documentPreviewBusy}
                           onView={() =>
                             void openDocument({
                               fileName: row.cargo_declaration_original_filename,
@@ -222,59 +287,78 @@ export default function AdminGoodsDeclarationsPage() {
                         )}
                       </td>
                       <td style={{ padding: "0.75rem" }}>
-                        <label style={{ display: "grid", gap: "0.35rem", marginBottom: "0.5rem" }}>
-                          <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151" }}>
+                        <div style={{ display: "grid", gap: "0.35rem", marginBottom: "0.5rem" }}>
+                          <label
+                            htmlFor={`goods-decl-remarks-${row.booking_id}`}
+                            style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151" }}
+                          >
                             Remarks (required for reject / revision)
-                          </span>
+                          </label>
                           <textarea
+                            id={`goods-decl-remarks-${row.booking_id}`}
                             className="input"
                             rows={2}
                             value={remarks}
-                            onChange={(e) =>
-                              setRemarksByBooking((prev) => ({ ...prev, [row.booking_id]: e.target.value }))
-                            }
+                            onChange={(e) => {
+                              setRemarksByBooking((prev) => ({
+                                ...prev,
+                                [row.booking_id]: e.target.value,
+                              }));
+                            }}
                             maxLength={2000}
                             placeholder="Notes to customer or internal team"
+                            disabled={reviewBusy}
                           />
-                        </label>
+                        </div>
+                        {!remarksReady && (
+                          <p
+                            role="status"
+                            style={{
+                              margin: "0 0 0.5rem",
+                              fontSize: "0.78rem",
+                              color: "#6B7280",
+                            }}
+                          >
+                            {REMARKS_REQUIRED_REVISION_REJECT}
+                          </p>
+                        )}
+                        {actionError && (
+                          <p role="alert" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#B91C1C" }}>
+                            {actionError}
+                          </p>
+                        )}
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
                           <button
                             type="button"
                             className="button"
-                            disabled={busy}
+                            disabled={reviewBusy}
                             onClick={() => void submitReview(row.booking_id, "approved")}
                           >
-                            Approve
+                            {reviewBusy ? "Saving…" : "Approve"}
                           </button>
                           <button
                             type="button"
-                            disabled={busy}
+                            disabled={!revisionRejectEnabled}
+                            aria-disabled={!revisionRejectEnabled}
+                            title={
+                              revisionRejectEnabled
+                                ? "Request revision with remarks"
+                                : REMARKS_REQUIRED_REVISION_REJECT
+                            }
                             onClick={() => void submitReview(row.booking_id, "revision_requested")}
-                            style={{
-                              padding: "0.45rem 0.75rem",
-                              borderRadius: 6,
-                              border: "1px solid #FDBA74",
-                              background: "#FFF7ED",
-                              color: "#9A3412",
-                              cursor: busy ? "wait" : "pointer",
-                              fontWeight: 600,
-                            }}
+                            style={actionButtonStyle("revision", revisionRejectEnabled)}
                           >
                             Request revision
                           </button>
                           <button
                             type="button"
-                            disabled={busy}
+                            disabled={!revisionRejectEnabled}
+                            aria-disabled={!revisionRejectEnabled}
+                            title={
+                              revisionRejectEnabled ? "Reject with remarks" : REMARKS_REQUIRED_REVISION_REJECT
+                            }
                             onClick={() => void submitReview(row.booking_id, "rejected")}
-                            style={{
-                              padding: "0.45rem 0.75rem",
-                              borderRadius: 6,
-                              border: "1px solid #FCA5A5",
-                              background: "#FEF2F2",
-                              color: "#991B1B",
-                              cursor: busy ? "wait" : "pointer",
-                              fontWeight: 600,
-                            }}
+                            style={actionButtonStyle("reject", revisionRejectEnabled)}
                           >
                             Reject
                           </button>
@@ -288,7 +372,7 @@ export default function AdminGoodsDeclarationsPage() {
           </table>
         </div>
       </div>
-      {error && (
+      {previewError && (
         <p
           role="alert"
           style={{
@@ -303,10 +387,15 @@ export default function AdminGoodsDeclarationsPage() {
             border: "1px solid #FECACA",
             zIndex: 1200,
             maxWidth: "90vw",
+            pointerEvents: "auto",
           }}
         >
-          {error}{" "}
-          <button type="button" onClick={clearError} style={{ border: "none", background: "transparent", cursor: "pointer" }}>
+          {previewError}{" "}
+          <button
+            type="button"
+            onClick={clearPreviewError}
+            style={{ border: "none", background: "transparent", cursor: "pointer" }}
+          >
             Dismiss
           </button>
         </p>

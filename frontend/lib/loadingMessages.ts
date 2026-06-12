@@ -9,3 +9,5 @@ export const EMPTY_BOOKINGS = "No bookings yet.";
 export const EMPTY_SHIPMENTS = "No shipment records yet.";
 export const EMPTY_ANALYTICS = "No analytics data available yet.";
 export const EMPTY_TRIPS = "No assigned trips yet.";
+export const REMARKS_REQUIRED_REVISION_REJECT =
+  "Remarks are required for request revision or rejection.";
