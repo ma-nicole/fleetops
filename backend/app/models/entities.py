@@ -97,6 +97,7 @@ class GoodsDeclarationReviewStatus(str, Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     REVISION_REQUESTED = "revision_requested"
+    RESUBMITTED = "resubmitted"
 
 
 class CargoTypeCategory(str, Enum):

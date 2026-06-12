@@ -847,6 +847,16 @@ export const WorkflowApi = {
     payload: { status: "approved" | "rejected" | "revision_requested"; remarks?: string | null },
   ) => apiPatch<GoodsDeclarationAdminRow>(`/admin/goods-declarations/${bookingId}`, payload),
 
+  resubmitBookingDocuments: (
+    bookingId: number,
+    payload: { cargo_declaration?: File; terms_agreement?: File },
+  ) => {
+    const fd = new FormData();
+    if (payload.cargo_declaration) fd.append("cargo_declaration", payload.cargo_declaration);
+    if (payload.terms_agreement) fd.append("terms_agreement", payload.terms_agreement);
+    return apiPostMultipart<Booking>(`/bookings/${bookingId}/documents/resubmit`, fd);
+  },
+
   listCargoTypeValidations: () => apiGet<CargoTypeValidationAdminRow[]>("/admin/cargo-type-validations"),
   previewCargoTypeScreening: (bookingId: number, category: string) =>
     apiGet<CargoTypeScreening>(

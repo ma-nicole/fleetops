@@ -11,6 +11,7 @@ from app.models.entities import (
     Booking,
     BookingStatus,
     GeneralOperationalReport,
+    GoodsDeclarationReviewStatus,
     OperationalLog,
     Trip,
     User,
@@ -48,7 +49,11 @@ from app.constants.general_operational_report import GENERAL_OPS_CATEGORY_LABELS
 from app.constants.operational_log import REPORT_TYPE_LABELS
 from app.services.booking_documents import resolve_booking_document_path, save_booking_document
 from app.services.upload_urls import media_type_for_path
-from app.services.goods_declaration_review import mark_goods_declaration_pending
+from app.services.goods_declaration_review import (
+    effective_goods_declaration_review_status,
+    mark_goods_declaration_pending,
+    mark_goods_declaration_resubmitted,
+)
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -355,6 +360,55 @@ def download_terms_agreement(
     path = resolve_booking_document_path(booking.terms_agreement_storage_path)
     fname = booking.terms_agreement_original_filename or path.name
     return FileResponse(path, filename=fname, media_type=media_type_for_path(path))
+
+
+@router.post("/{booking_id}/documents/resubmit", response_model=BookingRead)
+async def resubmit_booking_documents(
+    booking_id: int,
+    cargo_declaration: UploadFile | None = File(None),
+    terms_agreement: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.MANAGER)),
+):
+    """Customer re-uploads revised declaration and/or terms after admin requested revision."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    current = effective_goods_declaration_review_status(booking)
+    if current != GoodsDeclarationReviewStatus.REVISION_REQUESTED.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Document resubmission is only allowed when a revision has been requested.",
+        )
+
+    has_decl = cargo_declaration is not None and bool(cargo_declaration.filename)
+    has_terms = terms_agreement is not None and bool(terms_agreement.filename)
+    if not has_decl and not has_terms:
+        raise HTTPException(status_code=400, detail="Upload at least one revised document.")
+
+    if has_decl and cargo_declaration is not None:
+        decl_name, decl_path, decl_at = await save_booking_document(
+            booking.id, cargo_declaration, prefix="declaration"
+        )
+        booking.cargo_declaration_original_filename = decl_name
+        booking.cargo_declaration_storage_path = decl_path
+        booking.cargo_declaration_uploaded_at = decl_at
+
+    if has_terms and terms_agreement is not None:
+        terms_name, terms_path, terms_at = await save_booking_document(
+            booking.id, terms_agreement, prefix="terms"
+        )
+        booking.terms_agreement_original_filename = terms_name
+        booking.terms_agreement_storage_path = terms_path
+        booking.terms_agreement_uploaded_at = terms_at
+
+    mark_goods_declaration_resubmitted(booking)
+    db.commit()
+    db.refresh(booking)
+    return booking
 
 
 @router.get("/schedule-availability", response_model=BookingScheduleAvailabilityRead)

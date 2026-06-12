@@ -10,8 +10,11 @@ import { getEffectiveRole, ROLE_DASHBOARDS, type UserRole } from "@/lib/auth";
 import { formatDateTime } from "@/lib/appLocale";
 import { formatBookingWeightTons } from "@/lib/bookingWeightOptions";
 import {
+  canPerformGoodsDeclarationReview,
   goodsDeclarationReviewBadgeStyle,
   goodsDeclarationReviewLabel,
+  isGoodsDeclarationReviewFinal,
+  isGoodsDeclarationReviewLocked,
   type GoodsDeclarationReviewStatus,
 } from "@/lib/goodsDeclarationReview";
 import { ERROR_ANALYTICS_PERMISSION, REMARKS_REQUIRED_REVISION_REJECT } from "@/lib/loadingMessages";
@@ -193,6 +196,7 @@ export default function AdminGoodsDeclarationsPage() {
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
               <option value="revision_requested">Revision requested</option>
+              <option value="resubmitted">Resubmitted</option>
             </select>
           </label>
           <button type="button" className="button" onClick={() => void refresh()}>
@@ -227,11 +231,16 @@ export default function AdminGoodsDeclarationsPage() {
               ) : (
                 filtered.map((row) => {
                   const reviewBusy = busyBookingId === row.booking_id;
-                  const remarks =
-                    remarksByBooking[row.booking_id] ?? row.goods_declaration_review_remarks ?? "";
+                  const reviewStatus = row.goods_declaration_review_status ?? "pending";
+                  const canReview = canPerformGoodsDeclarationReview(reviewStatus);
+                  const isLocked = isGoodsDeclarationReviewLocked(reviewStatus);
+                  const isFinal = isGoodsDeclarationReviewFinal(reviewStatus);
+                  const storedRemarks = row.goods_declaration_review_remarks ?? "";
+                  const remarks = remarksByBooking[row.booking_id] ?? storedRemarks;
                   const remarksReady = remarks.trim().length > 0;
                   const actionError = actionErrorByBooking[row.booking_id];
-                  const revisionRejectEnabled = remarksReady && !reviewBusy;
+                  const approveEnabled = canReview && !reviewBusy;
+                  const revisionRejectEnabled = canReview && remarksReady && !reviewBusy;
 
                   return (
                     <tr key={row.booking_id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
@@ -274,10 +283,17 @@ export default function AdminGoodsDeclarationsPage() {
                         )}
                       </td>
                       <td style={{ padding: "0.75rem" }}>
-                        <ReviewStatusBadge status={row.goods_declaration_review_status} />
-                        {row.goods_declaration_review_remarks && (
+                        <ReviewStatusBadge status={reviewStatus} />
+                        {storedRemarks && (
                           <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#4B5563" }}>
-                            {row.goods_declaration_review_remarks}
+                            {isLocked ? (
+                              <>
+                                <span style={{ fontWeight: 600, color: "#9A3412" }}>Revision remarks: </span>
+                                {storedRemarks}
+                              </>
+                            ) : (
+                              storedRemarks
+                            )}
                           </p>
                         )}
                         {row.goods_declaration_reviewed_at && (
@@ -285,8 +301,19 @@ export default function AdminGoodsDeclarationsPage() {
                             Reviewed {formatDateTime(row.goods_declaration_reviewed_at)}
                           </p>
                         )}
+                        {isLocked && (
+                          <p style={{ margin: "0.5rem 0 0", fontSize: "0.78rem", color: "#9A3412" }}>
+                            Waiting for customer to upload revised documents.
+                          </p>
+                        )}
+                        {isFinal && (
+                          <p style={{ margin: "0.5rem 0 0", fontSize: "0.78rem", color: "#6B7280" }}>
+                            Review closed — no further actions.
+                          </p>
+                        )}
                       </td>
                       <td style={{ padding: "0.75rem" }}>
+                        {canReview ? (
                         <div style={{ display: "grid", gap: "0.35rem", marginBottom: "0.5rem" }}>
                           <label
                             htmlFor={`goods-decl-remarks-${row.booking_id}`}
@@ -310,7 +337,8 @@ export default function AdminGoodsDeclarationsPage() {
                             disabled={reviewBusy}
                           />
                         </div>
-                        {!remarksReady && (
+                        ) : null}
+                        {canReview && !remarksReady && (
                           <p
                             role="status"
                             style={{
@@ -327,11 +355,13 @@ export default function AdminGoodsDeclarationsPage() {
                             {actionError}
                           </p>
                         )}
+                        {canReview ? (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
                           <button
                             type="button"
                             className="button"
-                            disabled={reviewBusy}
+                            disabled={!approveEnabled}
+                            aria-disabled={!approveEnabled}
                             onClick={() => void submitReview(row.booking_id, "approved")}
                           >
                             {reviewBusy ? "Saving…" : "Approve"}
@@ -363,6 +393,7 @@ export default function AdminGoodsDeclarationsPage() {
                             Reject
                           </button>
                         </div>
+                        ) : null}
                       </td>
                     </tr>
                   );

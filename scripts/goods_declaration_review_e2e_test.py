@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Goods declaration review E2E (manager/admin compliance)."""
+"""Goods declaration review E2E — revision locking and resubmit cycle."""
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
@@ -12,7 +13,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.db import SessionLocal, apply_runtime_schema_fixes  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.entities import Booking  # noqa: E402
+from app.models.entities import Booking, User  # noqa: E402
 
 PASSED: list[str] = []
 FAILED: list[str] = []
@@ -59,6 +60,11 @@ def main() -> int:
             return 1
         ok("0 Booking with declaration", f"id={booking.id}")
 
+        customer = db.query(User).filter(User.id == booking.customer_id).first()
+        if not customer:
+            fail("0 Customer", f"missing for booking {booking.id}")
+            return 1
+
         dispatcher_h = {"Authorization": f"Bearer {login(client, 'dispatcher@fleetops.com')}"}
         r = client.get("/api/admin/goods-declarations", headers=dispatcher_h)
         if r.status_code != 403:
@@ -67,6 +73,8 @@ def main() -> int:
             ok("1 Dispatcher denied")
 
         manager_h = {"Authorization": f"Bearer {login(client, 'manager@fleetops.com')}"}
+        customer_h = {"Authorization": f"Bearer {login(client, customer.email)}"}
+
         r = client.get("/api/admin/goods-declarations", headers=manager_h)
         if r.status_code != 200:
             fail("2 Manager list", f"status={r.status_code} {r.text[:200]}")
@@ -74,6 +82,28 @@ def main() -> int:
         ok("2 Manager list", f"count={len(r.json())}")
 
         bid = booking.id
+
+        # Reset to pending for a clean cycle
+        r = client.patch(
+            f"/api/admin/goods-declarations/{bid}",
+            headers=manager_h,
+            json={"status": "approved", "remarks": None},
+        )
+        if r.status_code != 200:
+            # May fail if already locked from prior run — force pending in DB
+            booking.goods_declaration_review_status = "pending"
+            booking.goods_declaration_review_remarks = None
+            booking.goods_declaration_validated = False
+            db.commit()
+            db.refresh(booking)
+        else:
+            ok("2b Reset to approved", "for cycle setup")
+
+        booking.goods_declaration_review_status = "pending"
+        booking.goods_declaration_review_remarks = None
+        booking.goods_declaration_validated = False
+        db.commit()
+
         r = client.patch(
             f"/api/admin/goods-declarations/{bid}",
             headers=manager_h,
@@ -101,16 +131,37 @@ def main() -> int:
         r = client.patch(
             f"/api/admin/goods-declarations/{bid}",
             headers=manager_h,
-            json={"status": "rejected", "remarks": "E2E reject test"},
+            json={"status": "rejected", "remarks": "Should be blocked"},
+        )
+        if r.status_code == 200:
+            fail("5 Reject while locked", "expected 400")
+        else:
+            ok("5 Reject while locked", f"status={r.status_code}")
+
+        r = client.patch(
+            f"/api/admin/goods-declarations/{bid}",
+            headers=manager_h,
+            json={"status": "approved", "remarks": None},
+        )
+        if r.status_code == 200:
+            fail("6 Approve while locked", "expected 400")
+        else:
+            ok("6 Approve while locked", f"status={r.status_code}")
+
+        pdf_bytes = b"%PDF-1.4 e2e resubmit\n"
+        r = client.post(
+            f"/api/bookings/{bid}/documents/resubmit",
+            headers=customer_h,
+            files={"cargo_declaration": ("revised-decl.pdf", io.BytesIO(pdf_bytes), "application/pdf")},
         )
         if r.status_code != 200:
-            fail("5 Reject", f"status={r.status_code} {r.text[:200]}")
+            fail("7 Customer resubmit", f"status={r.status_code} {r.text[:300]}")
         else:
             body = r.json()
-            if body.get("goods_declaration_review_status") != "rejected":
-                fail("5 Reject", f"status={body.get('goods_declaration_review_status')}")
+            if body.get("goods_declaration_review_status") != "resubmitted":
+                fail("7 Customer resubmit", f"status={body.get('goods_declaration_review_status')}")
             else:
-                ok("5 Reject", body.get("goods_declaration_review_remarks", ""))
+                ok("7 Customer resubmit", "revision_requested -> resubmitted")
 
         r = client.patch(
             f"/api/admin/goods-declarations/{bid}",
@@ -118,9 +169,23 @@ def main() -> int:
             json={"status": "approved", "remarks": None},
         )
         if r.status_code != 200:
-            fail("6 Approve reset", f"status={r.status_code}")
+            fail("8 Approve after resubmit", f"status={r.status_code} {r.text[:200]}")
         else:
-            ok("6 Approve reset")
+            body = r.json()
+            if body.get("goods_declaration_review_status") != "approved":
+                fail("8 Approve after resubmit", f"status={body.get('goods_declaration_review_status')}")
+            else:
+                ok("8 Approve after resubmit")
+
+        r = client.patch(
+            f"/api/admin/goods-declarations/{bid}",
+            headers=manager_h,
+            json={"status": "rejected", "remarks": "Should be blocked final"},
+        )
+        if r.status_code == 200:
+            fail("9 Reject after approved", "expected 400")
+        else:
+            ok("9 Reject after approved (final)", f"status={r.status_code}")
 
     finally:
         db.close()
