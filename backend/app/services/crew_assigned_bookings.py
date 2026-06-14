@@ -24,7 +24,7 @@ from app.models.entities import (
 )
 from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
 from app.services.delivery_receiving_verification import build_delivery_receiving_status
-from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
+from app.services.booking_road_distance import stored_trip_distance_km
 from app.services.dispatch_operations_center import _display_status
 from app.services.latest_location_display import latest_location_display_for_trip
 
@@ -175,7 +175,7 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
     latest_display = latest_location_display_for_trip(t, bk.dropoff_location if bk else "", ping)
     op_slug = _display_status(t)
 
-    road_km = booking_pickup_dropoff_distance_km(bk) if bk else None
+    road_km = stored_trip_distance_km(t)
 
     ta = (
         db.query(TruckAssignment)

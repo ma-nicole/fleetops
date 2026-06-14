@@ -24,10 +24,10 @@ from app.models.entities import (
     UserRole,
 )
 from app.services.booking_schedule import (
-    booking_interval,
-    interval_for_pickup_window,
+    booking_interval_dashboard,
+    interval_for_pickup_window_dashboard,
     intervals_overlap,
-    trip_interval,
+    trip_interval_dashboard,
 )
 from app.services.latest_location_display import latest_location_display_for_trip
 
@@ -123,13 +123,7 @@ def build_timeline(
         bk = trip.booking
         if bk is None:
             continue
-        try:
-            t0, t1 = trip_interval(db, trip)
-        except (TypeError, ValueError):
-            try:
-                t0, t1 = booking_interval(bk)
-            except (TypeError, ValueError):
-                continue
+        t0, t1 = trip_interval_dashboard(trip, bk)
         if not intervals_overlap(win_start, win_end, t0, t1):
             continue
         clip_start = max(t0, win_start)
@@ -270,12 +264,7 @@ def build_timeline(
         )
         for hold, bk in holds:
             try:
-                t0, t1 = interval_for_pickup_window(
-                    hold.schedule_date,
-                    hold.time_slot,
-                    bk.pickup_location,
-                    bk.dropoff_location,
-                )
+                t0, t1 = interval_for_pickup_window_dashboard(hold.schedule_date, hold.time_slot)
             except (TypeError, ValueError):
                 continue
             if not intervals_overlap(win_start, win_end, t0, t1):

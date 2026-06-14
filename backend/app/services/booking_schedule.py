@@ -66,6 +66,26 @@ def booking_interval(
     )
 
 
+def booking_interval_dashboard(booking: Booking) -> tuple[datetime, datetime]:
+    """Pickup window for read-only dashboards — no geocoding or external routing."""
+    start = _slot_start_on_date(booking.scheduled_date, booking.scheduled_time_slot)
+    end = start + timedelta(hours=MIN_TRIP_DURATION_HOURS)
+    return start, end
+
+
+def trip_interval_dashboard(trip: Trip, booking: Booking) -> tuple[datetime, datetime]:
+    """Timeline intervals without external geocoding — uses stored duration when present."""
+    start = _slot_start_on_date(booking.scheduled_date, booking.scheduled_time_slot)
+    hours = float(trip.duration_hours) if trip.duration_hours and trip.duration_hours > 0 else MIN_TRIP_DURATION_HOURS
+    return start, start + timedelta(hours=hours)
+
+
+def interval_for_pickup_window_dashboard(scheduled_date: date, time_slot: str) -> tuple[datetime, datetime]:
+    """Hold/slot bars on the timeline — fixed minimum duration, no routing lookups."""
+    start = _slot_start_on_date(scheduled_date, time_slot)
+    return start, start + timedelta(hours=MIN_TRIP_DURATION_HOURS)
+
+
 def trip_interval(db: Session, trip: Trip, cfg: Settings | None = None) -> tuple[datetime, datetime]:
     booking = trip.booking or db.query(Booking).filter(Booking.id == trip.booking_id).first()
     if booking is None:

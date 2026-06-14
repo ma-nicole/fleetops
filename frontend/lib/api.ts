@@ -146,7 +146,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       (init?.headers as Record<string, string> | undefined)?.Authorization,
   );
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  // Analytics and operations payloads can be slow on first load (DB + timeline aggregation).
+  const timeoutId = setTimeout(() => controller.abort(), 90_000);
   try {
     const response = await fetch(apiFullUrl(path), {
       ...init,
@@ -158,6 +159,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new ApiError("Request timed out. Please try again.", 408, "");
+    }
+    if (err instanceof TypeError || (err instanceof Error && /failed to fetch|networkerror|load failed/i.test(err.message))) {
+      throw new ApiError(
+        "Cannot connect to the API. Make sure the backend is running (npm run dev from the repo root).",
+        0,
+        "",
+      );
     }
     throw err;
   } finally {

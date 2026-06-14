@@ -88,6 +88,13 @@ def _dispatcher_for(booking_id: int, jobs: dict[int, JobOrder], names: dict[int,
     return "—"
 
 
+def _maybe_forecast(monthly: object, periods: int = 3) -> list[dict[str, float | str]] | None:
+    """Avoid pandas Series truthiness bugs in conditionals."""
+    if monthly is None:
+        return None
+    return _forecast_series(monthly, periods)
+
+
 def _trip_row(trip: Trip, jobs: dict[int, JobOrder], names: dict[int, str], *, extra: dict | None = None) -> dict:
     booking = trip.booking
     ref = _activity_date(booking.scheduled_date if booking else trip.assigned_at)
@@ -255,10 +262,10 @@ def build_dispatcher_role_analytics(
     )
 
     trip_day_series = _monthly_series([(m, float(c)) for m, c in sorted(month_counts.items())], min_points=2)
-    workload_forecast = _forecast_series(trip_day_series, 3) if trip_day_series is not None else None
+    workload_forecast = _maybe_forecast(trip_day_series, 3)
     sched_pred_workload = (
         _empty_predict()
-        if not workload_forecast
+        if workload_forecast is None
         else _block(
             kpis=[{"label": "Next period trips (est.)", "value": workload_forecast[0]["value"]}],
             chart=[{"period": p["period"], "forecast_trips": p["value"]} for p in workload_forecast],
@@ -440,7 +447,10 @@ def build_dispatcher_role_analytics(
         if _status_str(b.status) in {BookingStatus.READY_FOR_ASSIGNMENT.value, BookingStatus.APPROVED.value}
     ]
     for booking in pending_bookings[:5]:
-        rec = recommend_assignment(db, booking.id)
+        try:
+            rec = recommend_assignment(db, booking.id)
+        except Exception:
+            continue
         best = rec.best
         if best:
             alloc_rows.append(
@@ -480,10 +490,10 @@ def build_dispatcher_role_analytics(
         if trip.truck_id and trip.completed_at:
             truck_month[trip.completed_at.strftime("%Y-%m")] += 1
     truck_demand_series = _monthly_series([(m, float(c)) for m, c in sorted(truck_month.items())], min_points=2)
-    truck_demand_forecast = _forecast_series(truck_demand_series, 3) if truck_demand_series else None
+    truck_demand_forecast = _maybe_forecast(truck_demand_series, 3)
     truck_pred_demand = (
         _empty_predict()
-        if not truck_demand_forecast
+        if truck_demand_forecast is None
         else _block(
             kpis=[{"label": "Next period trips (est.)", "value": truck_demand_forecast[0]["value"]}],
             chart=[{"period": p["period"], "forecast_trips": p["value"]} for p in truck_demand_forecast],
@@ -567,10 +577,10 @@ def build_dispatcher_role_analytics(
         if trip.driver_id and trip.completed_at:
             driver_month[trip.completed_at.strftime("%Y-%m")].add(trip.driver_id)
     staffing_series = _monthly_series([(m, float(len(d))) for m, d in sorted(driver_month.items())], min_points=2)
-    staffing_forecast = _forecast_series(staffing_series, 3) if staffing_series else None
+    staffing_forecast = _maybe_forecast(staffing_series, 3)
     driver_pred_staffing = (
         _empty_predict()
-        if not staffing_forecast
+        if staffing_forecast is None
         else _block(
             kpis=[{"label": "Drivers needed (est.)", "value": staffing_forecast[0]["value"]}],
             chart=[{"period": p["period"], "forecast_drivers": p["value"]} for p in staffing_forecast],
@@ -659,10 +669,10 @@ def build_dispatcher_role_analytics(
 
     monthly_del = shipments.get("monthly_deliveries") or []
     del_series = _monthly_series([(m["month"], float(m["count"])) for m in monthly_del], min_points=2)
-    completion_forecast = _forecast_series(del_series, 3) if del_series else None
+    completion_forecast = _maybe_forecast(del_series, 3)
     order_pred_completion = (
         _empty_predict()
-        if not completion_forecast
+        if completion_forecast is None
         else _block(
             kpis=[{"label": "Next period deliveries (est.)", "value": completion_forecast[0]["value"]}],
             chart=[{"period": p["period"], "forecast_deliveries": p["value"]} for p in completion_forecast],
@@ -778,16 +788,16 @@ def build_dispatcher_role_analytics(
         if trip:
             issue_sources.append(_trip_row(trip, jobs, dispatcher_names, extra={"cause": vir.issue_type}))
     issue_series = _monthly_series([(m, float(c)) for m, c in sorted(issue_month.items())], min_points=2)
-    issue_forecast = _forecast_series(issue_series, 3) if issue_series else None
+    issue_forecast = _maybe_forecast(issue_series, 3)
     ops_pred_issues = (
         _empty_predict()
-        if not issue_sources and not issue_forecast
+        if not issue_sources and issue_forecast is None
         else _block(
             kpis=[
                 {"label": "Open issue signals", "value": len(issue_sources)},
                 {
                     "label": "Next period issues (est.)",
-                    "value": issue_forecast[0]["value"] if issue_forecast else "Insufficient data",
+                    "value": issue_forecast[0]["value"] if issue_forecast is not None else "Insufficient data",
                 },
             ],
             chart=(issue_forecast and [{"period": p["period"], "forecast_issues": p["value"]} for p in issue_forecast])

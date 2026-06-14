@@ -21,7 +21,7 @@ from app.models.entities import (
     VehicleIssueReportStatus,
 )
 from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
-from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
+from app.services.booking_road_distance import stored_trip_distance_km
 from app.services.dispatch_operations_center import _display_status
 from app.services.driver_dashboard_metrics import CrewRole, build_crew_dashboard_metrics
 from app.services.driver_pay_summary import build_driver_pay_summary
@@ -377,7 +377,7 @@ def my_trips(
         latest_display = latest_location_display_for_trip(t, bk.dropoff_location if bk else "", latest_ping)
         op_slug = _display_status(t)
         op_label = _operational_status_label(op_slug)
-        road_km = booking_pickup_dropoff_distance_km(bk) if bk else None
+        road_km = stored_trip_distance_km(t)
         out.append(
             {
                 "id": t.id,

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.constants.booking_time_slots import is_allowed_time_slot
 from app.constants.fleet_capacity import trucks_required_for_cargo
-from app.services.booking_schedule import booking_interval
+from app.services.booking_schedule import booking_interval_dashboard
 from app.services.latest_location_display import latest_location_display_for_trip
 from app.services.dispatcher_booking_assignment import blocked_booking_ids_for_dispatcher, has_dispatcher_booking_scope
 from app.models.entities import (
@@ -379,7 +379,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
                 )
         bk = tr.booking
         if bk is not None and is_allowed_time_slot(bk.scheduled_time_slot):
-            _, win_end = booking_interval(bk)
+            _, win_end = booking_interval_dashboard(bk)
             if win_end < now and _display_status(tr) in ("assigned", "for_pickup"):
                 alerts.append(
                     {
