@@ -3,7 +3,7 @@
 import createPlotlyComponent from "react-plotly.js/factory";
 import Plotly from "plotly.js-dist-min";
 import { useCallback, useMemo } from "react";
-import type { PlotMouseEvent } from "plotly.js";
+import type { Config, Data, PlotDatum, PlotMouseEvent } from "plotly.js";
 import type { ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import type { PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
 
@@ -171,7 +171,8 @@ export default function PlotlyAnalyticsChartInner({
       const idx = point.pointNumber ?? 0;
       const item = items[idx];
       if (!item) return;
-      const label = String(item[labelKey] ?? point.label ?? point.x ?? "");
+      const plotPoint = point as PlotDatum & { label?: string | number };
+      const label = String(item[labelKey] ?? plotPoint.label ?? plotPoint.x ?? "");
       onItemClick({ label, raw: item as Record<string, string | number> });
     },
     [items, labelKey, onItemClick],
@@ -182,9 +183,9 @@ export default function PlotlyAnalyticsChartInner({
   return (
     <div className="plotly-analytics-chart">
       <Plot
-        data={data}
+        data={data as Data[]}
         layout={layout}
-        config={config}
+        config={config as Partial<Config>}
         style={{ width: "100%", height: "100%" }}
         useResizeHandler
         onClick={handleClick}

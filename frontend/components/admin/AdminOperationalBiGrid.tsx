@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { BiChartWidget } from "@/components/admin/BiChartWidget";
 import { EmptyChart } from "@/components/admin/AnalyticsCharts";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
-import { isAnalyticsModuleEmpty } from "@/lib/analyticsApi";
+import { isPopulatedAnalyticsModule } from "@/lib/analyticsApi";
 
 type WidgetSpec = {
   id: string;
@@ -39,7 +39,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
     widgets.push({ id, title, block, comparative });
   };
 
-  if (category === "revenue" && data.financial && !isAnalyticsModuleEmpty(data.financial)) {
+  if (category === "revenue" && isPopulatedAnalyticsModule(data.financial)) {
     const fin = data.financial;
     add(
       "revenue-tracking",
@@ -90,7 +90,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
   }
 
   if (category === "operations") {
-    if (data.shipments && !isAnalyticsModuleEmpty(data.shipments)) {
+    if (isPopulatedAnalyticsModule(data.shipments)) {
       const ship = data.shipments;
       add(
         "shipment-status",
@@ -111,7 +111,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         comp?.deliveries,
       );
     }
-    if (data.drivers && !isAnalyticsModuleEmpty(data.drivers)) {
+    if (isPopulatedAnalyticsModule(data.drivers)) {
       const drivers = data.drivers;
       add(
         "driver-performance",
@@ -134,7 +134,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
   }
 
   if (category === "fleet") {
-    if (data.fleet && !isAnalyticsModuleEmpty(data.fleet)) {
+    if (isPopulatedAnalyticsModule(data.fleet)) {
       const fleet = data.fleet;
       add(
         "fleet-utilization",
@@ -149,7 +149,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         ),
       );
     }
-    if (data.expenses && !isAnalyticsModuleEmpty(data.expenses) && data.expenses.fuel_by_truck?.length) {
+    if (isPopulatedAnalyticsModule(data.expenses) && data.expenses.fuel_by_truck?.length) {
       add(
         "fuel-by-truck",
         "Fuel Expense by Truck",
@@ -161,7 +161,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
     }
   }
 
-  if (category === "expenses" && data.expenses && !isAnalyticsModuleEmpty(data.expenses)) {
+  if (category === "expenses" && isPopulatedAnalyticsModule(data.expenses)) {
     const exp = data.expenses;
     add(
       "expense-breakdown",
@@ -185,7 +185,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
   }
 
   if (category === "routes") {
-    if (data.routes && !isAnalyticsModuleEmpty(data.routes)) {
+    if (isPopulatedAnalyticsModule(data.routes)) {
       const routes = data.routes;
       add(
         "route-performance",
@@ -211,7 +211,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         ),
       );
     }
-    if (data.toll_analytics && !isAnalyticsModuleEmpty(data.toll_analytics)) {
+    if (isPopulatedAnalyticsModule(data.toll_analytics)) {
       const tolls = data.toll_analytics;
       add(
         "toll-routes",
@@ -239,7 +239,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
     }
   }
 
-  if (category === "customers" && data.clients && !isAnalyticsModuleEmpty(data.clients)) {
+  if (category === "customers" && isPopulatedAnalyticsModule(data.clients)) {
     const clients = data.clients;
     add(
       "client-bookings",

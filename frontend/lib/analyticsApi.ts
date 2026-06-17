@@ -562,6 +562,13 @@ export function isAnalyticsModuleEmpty(mod: unknown): boolean {
   return !!mod && typeof mod === "object" && "empty" in mod && (mod as { empty?: boolean }).empty === true;
 }
 
+/** Narrows `AdminAnalyticsEmpty | T` to `T` after a truthy, non-empty check. */
+export function isPopulatedAnalyticsModule<M>(
+  mod: AdminAnalyticsEmpty | M | null | undefined,
+): mod is M {
+  return mod != null && !isAnalyticsModuleEmpty(mod);
+}
+
 /** True when every operational module in the payload is empty or absent. */
 export function isAnalyticsPayloadEmpty(payload: AdminAnalyticsPayload, includeFinancial = true): boolean {
   const modules: unknown[] = [
