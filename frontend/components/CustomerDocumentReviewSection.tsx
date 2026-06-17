@@ -9,6 +9,7 @@ import {
   customerDocumentReviewStatusLabel,
   goodsDeclarationReviewBadgeStyle,
 } from "@/lib/goodsDeclarationReview";
+import { customerBookingPaymentPath } from "@/lib/customerPaymentNavigation";
 import type { Booking, Payment } from "@/lib/workflowApi";
 import { WorkflowApi } from "@/lib/workflowApi";
 
@@ -69,7 +70,7 @@ function PaymentReviewNotice({ payment, bookingId }: { payment: Payment; booking
         Your payment proof was rejected. Please upload a clearer image from the payment page.
       </p>
       <Link
-        href={`/booking/payment?bookingId=${bookingId}`}
+        href={customerBookingPaymentPath(bookingId)}
         style={{
           display: "inline-block",
           marginTop: "0.5rem",

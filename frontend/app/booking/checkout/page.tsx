@@ -2,6 +2,7 @@
 
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import BookingService from "@/lib/bookingService";
+import { customerBookingPaymentPath, isApiBookingId } from "@/lib/customerPaymentNavigation";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
@@ -116,7 +117,11 @@ export default function CheckoutPage() {
         localStorage.setItem("bookingData", JSON.stringify(booking));
       }
 
-      router.push("/booking/payment");
+      if (isApiBookingId(booking.id)) {
+        router.push(customerBookingPaymentPath(booking.id));
+      } else {
+        router.push("/booking/payment");
+      }
     }
   };
 

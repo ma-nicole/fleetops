@@ -78,7 +78,7 @@ export default function AdminCargoTypeValidationPage() {
   useRoleGuard(["admin", "manager"]);
   const [rows, setRows] = useState<CargoTypeValidationAdminRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("pending");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
@@ -119,6 +119,7 @@ export default function AdminCargoTypeValidationPage() {
                 : [],
               cargo_type_validated_at: updated.cargo_type_validated_at ?? null,
               cargo_type_validated_by_id: updated.cargo_type_validated_by_id ?? null,
+              cargo_description: updated.cargo_description ?? row.cargo_description,
             }
           : row,
       ),
@@ -152,6 +153,9 @@ export default function AdminCargoTypeValidationPage() {
           <button type="button" className="button" onClick={() => void refresh()}>
             Refresh
           </button>
+          <span style={{ fontSize: "0.85rem", color: "#6B7280" }}>
+            {rows.length} loaded · {filtered.length} shown
+          </span>
         </div>
 
         {loadError && (
@@ -175,13 +179,21 @@ export default function AdminCargoTypeValidationPage() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ padding: "1.25rem", color: "#6B7280", textAlign: "center" }}>
-                    No bookings match this filter.
+                    {rows.length === 0
+                      ? "No bookings ready for cargo validation yet. Complete payment verification and goods declaration approval first — those queues are separate."
+                      : "No bookings match this filter."}
                   </td>
                 </tr>
               ) : (
                 filtered.map((row) => (
                   <Fragment key={row.booking_id}>
-                    <tr style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
+                    <tr
+                      style={{
+                        borderBottom: "1px solid #F3F4F6",
+                        verticalAlign: "top",
+                        background: row.dispatch_integrity_warning ? "#FEF2F2" : undefined,
+                      }}
+                    >
                       <td style={{ padding: "0.75rem" }}>
                         <strong>#{row.booking_id}</strong>
                         <div style={{ color: "#6B7280", fontSize: "0.8rem", marginTop: 4 }}>
@@ -189,6 +201,24 @@ export default function AdminCargoTypeValidationPage() {
                           <br />
                           {row.status.replace(/_/g, " ")}
                         </div>
+                        {row.dispatch_integrity_warning ? (
+                          <div style={{ fontSize: "0.78rem", color: "#B91C1C", marginTop: 4, fontWeight: 700 }}>
+                            Active trip assigned — validate cargo for Booking #{row.booking_id} (trips{" "}
+                            {row.active_trip_ids?.map((id) => `#${id}`).join(", ")})
+                          </div>
+                        ) : (row.active_trip_ids?.length ?? 0) > 0 ? (
+                          <div style={{ fontSize: "0.78rem", color: "#B45309", marginTop: 4, fontWeight: 600 }}>
+                            Active trips: {row.active_trip_ids!.map((id) => `#${id}`).join(", ")}
+                          </div>
+                        ) : row.ready_for_dispatch_assignment ? (
+                          <div style={{ fontSize: "0.78rem", color: "#047857", marginTop: 4, fontWeight: 600 }}>
+                            Ready for dispatch
+                          </div>
+                        ) : (row.dispatch_blockers?.length ?? 0) > 0 ? (
+                          <div style={{ fontSize: "0.78rem", color: "#B45309", marginTop: 4 }}>
+                            {row.dispatch_blockers!.join(" · ")}
+                          </div>
+                        ) : null}
                       </td>
                       <td style={{ padding: "0.75rem", maxWidth: 280 }}>
                         <div>{row.cargo_description || "—"}</div>

@@ -25,6 +25,8 @@ from app.models.entities import (
 from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
 from app.services.delivery_receiving_verification import build_delivery_receiving_status
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
+from app.services.demo_booking_filter import is_demo_placeholder_booking
+from app.services.pre_delivery_verification import build_pre_delivery_checklist, pre_delivery_block_detail
 from app.services.dispatch_operations_center import _display_status
 from app.services.latest_location_display import latest_location_display_for_trip
 
@@ -239,6 +241,9 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
         "trip_status": trip_status_val,
     }
 
+    pre_delivery_checklist = build_pre_delivery_checklist(db, bk) if bk else None
+    pre_delivery_block = pre_delivery_block_detail(db, bk) if bk else None
+
     return {
         "trip_id": t.id,
         "booking_id": t.booking_id,
@@ -282,6 +287,9 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
         "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         "pod_notes": t.pod_notes,
         "delivery_receiving": build_delivery_receiving_status(t),
+        "pre_delivery_checklist": pre_delivery_checklist,
+        "pre_delivery_ready": bool(pre_delivery_checklist and pre_delivery_checklist.get("ready_for_delivery")),
+        "pre_delivery_block_message": pre_delivery_block["message"] if pre_delivery_block else None,
         "timeline_events": timeline,
         "location_updates": [
             {
@@ -407,6 +415,8 @@ def redact_crew_booking_row_for_helper(row: dict[str, Any]) -> dict[str, Any]:
         "location_updates": row.get("location_updates") or [],
         "status_updates": row.get("status_updates") or [],
         "proof_photo_urls": row.get("proof_photo_urls") or [],
+        "pre_delivery_ready": row.get("pre_delivery_ready"),
+        "pre_delivery_block_message": row.get("pre_delivery_block_message"),
         "booking": _redact_booking_for_helper(row.get("booking")),
     }
 
@@ -456,6 +466,11 @@ def list_crew_assigned_bookings(db: Session, user: User) -> list[dict[str, Any]]
     else:
         return []
     trips = q.order_by(Trip.id.desc()).limit(100).all()
+    trips = [
+        t
+        for t in trips
+        if t.booking is None or not is_demo_placeholder_booking(t.booking.pickup_location, t.booking.dropoff_location)
+    ]
     b_ids = [t.booking_id for t in trips]
     paid_map = paid_verified_amount_by_booking_ids(db, b_ids)
     rows = [serialize_crew_booking_row(db, t, paid_map) for t in trips]

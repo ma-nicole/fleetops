@@ -36,6 +36,11 @@ from app.services.cargo_type_classification import (
     cargo_type_category_label,
     parse_cargo_restricted_reasons,
 )
+from app.services.cargo_type_validation_queue import (
+    cargo_type_validation_queue_query,
+    cargo_validation_status_chain,
+)
+from app.services.dispatch_assignment_readiness import dispatch_assignment_readiness
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -481,8 +486,9 @@ def review_goods_declaration(
     return _serialize_goods_declaration_row(booking)
 
 
-def _serialize_cargo_type_validation_row(booking: Booking) -> dict:
+def _serialize_cargo_type_validation_row(db: Session, booking: Booking) -> dict:
     st = booking.status.value if hasattr(booking.status, "value") else str(booking.status)
+    readiness = dispatch_assignment_readiness(db, booking)
     return {
         "booking_id": booking.id,
         "customer_id": booking.customer_id,
@@ -501,7 +507,20 @@ def _serialize_cargo_type_validation_row(booking: Booking) -> dict:
             booking.cargo_type_validated_at.isoformat() if booking.cargo_type_validated_at else None
         ),
         "cargo_type_validated_by_id": booking.cargo_type_validated_by_id,
+        "active_trip_ids": readiness["active_trip_ids"],
+        "ready_for_dispatch_assignment": readiness["ready"],
+        "dispatch_blockers": readiness["blockers"],
+        "dispatch_integrity_warning": readiness["dispatch_integrity_warning"],
+        "payment_verified": readiness["payment_verified"],
+        "goods_declaration_approved": readiness["goods_declaration_approved"],
     }
+
+
+def _cargo_validation_sort_key(row: dict) -> tuple:
+    """Active trips without cargo validation first — prevents admin/dispatch ID drift."""
+    warning = 0 if row.get("dispatch_integrity_warning") else 1
+    pending = 0 if not row.get("cargo_type_validated") else 1
+    return (warning, pending, -int(row["booking_id"]))
 
 
 @router.get("/cargo-type-validations")
@@ -509,14 +528,26 @@ def list_cargo_type_validations(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
 ):
-    rows = (
-        db.query(Booking)
-        .filter(Booking.cargo_description.isnot(None))
-        .filter(Booking.cargo_description != "")
-        .order_by(Booking.updated_at.desc(), Booking.id.desc())
-        .all()
-    )
-    return [_serialize_cargo_type_validation_row(b) for b in rows]
+    # Heal booking.status lag when payment is already verified (legacy rows).
+    from app.api.routes.bookings import _sync_bookings_approved_from_verified_payments
+
+    _sync_bookings_approved_from_verified_payments(db, None)
+    rows = cargo_type_validation_queue_query(db).all()
+    serialized = [_serialize_cargo_type_validation_row(db, b) for b in rows]
+    serialized.sort(key=_cargo_validation_sort_key)
+    return serialized
+
+
+@router.get("/cargo-type-validations/{booking_id}/status-chain")
+def cargo_type_validation_status_chain(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return cargo_validation_status_chain(db, booking)
 
 
 @router.get("/dispatchers")

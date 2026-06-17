@@ -269,6 +269,9 @@ export type CrewAssignedBookingRow = {
   completed_at: string | null;
   pod_notes: string | null;
   delivery_receiving?: DeliveryReceivingStatus;
+  pre_delivery_checklist?: PreDeliveryChecklist;
+  pre_delivery_ready?: boolean;
+  pre_delivery_block_message?: string | null;
   timeline_events: CrewTimelineEvent[];
   location_updates: Array<{
     id: number;
@@ -869,6 +872,7 @@ export const WorkflowApi = {
       validated: boolean;
       cargo_type_category?: string | null;
       cargo_type_admin_notes?: string | null;
+      cargo_description?: string | null;
     },
   ) => apiPatch<Booking>(`/bookings/${bookingId}/cargo-type/validate`, payload),
 

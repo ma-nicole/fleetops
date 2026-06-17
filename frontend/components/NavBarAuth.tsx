@@ -15,7 +15,7 @@ const BOOKING_FLOW_KEYS = [
 
 export default function NavBarAuth() {
   const router = useRouter();
-  const { isLoggedIn } = useAuthStatus();
+  const { isLoggedIn, isReady } = useAuthStatus();
 
   const handleSignOut = () => {
     if (typeof window !== "undefined") {
@@ -25,8 +25,8 @@ export default function NavBarAuth() {
     router.push("/sign-in");
   };
 
-  if (isLoggedIn === null) {
-    // First hydration tick — render nothing rather than flashing the wrong CTA.
+  if (!isReady) {
+    // Session still restoring — avoid flashing the wrong CTA.
     return <span aria-hidden="true" style={{ minHeight: 44, display: "inline-block" }} />;
   }
 

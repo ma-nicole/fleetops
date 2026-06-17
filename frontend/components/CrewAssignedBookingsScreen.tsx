@@ -2,9 +2,9 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
-import { apiFullUrl } from "@/lib/api";
+import { apiFullUrl, ApiError } from "@/lib/api";
 import { WorkflowApi, type CrewAssignedBookingRow } from "@/lib/workflowApi";
 import CrewSchedulingPlotPanel, { schedulingPlotFromCrewRow } from "@/components/CrewSchedulingPlotPanel";
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
@@ -79,11 +79,14 @@ function truckPlateLine(r: CrewAssignedBookingRow): string {
   return model ? `${tk.code} (${model})` : tk.code;
 }
 
-function workflowPhase(r: CrewAssignedBookingRow): Phase {
+function workflowPhase(r: CrewAssignedBookingRow, variant: "driver" | "helper" = "driver"): Phase {
+  const hp = (r.helper_progress_status || "").toLowerCase();
+  if (variant === "helper" && PHASES.includes(hp as Phase)) {
+    return hp as Phase;
+  }
   const op = (r.operational_status || "").toLowerCase();
   if (op === "assigned") return "for_pickup";
   if (PHASES.includes(op as Phase)) return op as Phase;
-  const hp = (r.helper_progress_status || "").toLowerCase();
   if (PHASES.includes(hp as Phase)) return hp as Phase;
   return "for_pickup";
 }
@@ -96,8 +99,13 @@ function nextPhase(s: Phase): Phase | null {
   return null;
 }
 
-function progressNeedsWarning(r: CrewAssignedBookingRow): boolean {
-  const slug = operationalSlug(r);
+function clearFileInput(ref: React.RefObject<HTMLInputElement | null>) {
+  const el = ref.current;
+  if (el) el.value = "";
+}
+
+function progressNeedsWarning(r: CrewAssignedBookingRow, variant: "driver" | "helper" = "driver"): boolean {
+  const slug = variant === "helper" ? workflowPhase(r, "helper") : operationalSlug(r);
   return slug === "en_route" && r.location_updates_submitted < r.required_location_updates;
 }
 
@@ -162,6 +170,8 @@ export default function CrewAssignedBookingsScreen({
   const [remarks, setRemarks] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [deliveryReady, setDeliveryReady] = useState(false);
+  const milestonePhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const locationPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -174,8 +184,10 @@ export default function CrewAssignedBookingsScreen({
         if (!prev) return null;
         return list.find((x) => x.trip_id === prev.trip_id) ?? null;
       });
+      return list;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
+      return [];
     }
   }, [variant]);
 
@@ -188,7 +200,7 @@ export default function CrewAssignedBookingsScreen({
 
   const submitStatus = async () => {
     if (!detail || variant !== "helper") return;
-    const current = workflowPhase(detail);
+    const current = workflowPhase(detail, "helper");
     const allowed = nextPhase(current);
     if (!allowed) {
       setMsg("Trip is already completed.");
@@ -214,18 +226,25 @@ export default function CrewAssignedBookingsScreen({
     }
     setBusy(true);
     setMsg(null);
+    const tripId = detail.trip_id;
     try {
       const fd = new FormData();
       fd.append("status", phase);
       fd.append("location_name", "");
       if (photo) fd.append("photo", photo);
-      await WorkflowApi.helperSubmitProgress(detail.trip_id, fd);
+      await WorkflowApi.helperSubmitProgress(tripId, fd);
       setMsg("Update saved.");
       setPhoto(null);
-      setDetail(null);
-      await load();
+      clearFileInput(milestonePhotoInputRef);
+      const list = await load();
+      const updated = list.find((x) => x.trip_id === tripId) ?? null;
+      setDetail(updated);
+      if (updated) {
+        const next = workflowPhase(updated, "helper");
+        setPhase(nextPhase(next) ?? next);
+      }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Update failed");
+      setMsg(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Update failed");
     } finally {
       setBusy(false);
     }
@@ -239,19 +258,27 @@ export default function CrewAssignedBookingsScreen({
     }
     setBusy(true);
     setMsg(null);
+    const tripId = detail.trip_id;
     try {
       const fd = new FormData();
       fd.append("location_name", locationName.trim());
       fd.append("remarks", remarks.trim());
       if (locationPhoto) fd.append("photo", locationPhoto);
-      await WorkflowApi.helperSubmitLocation(detail.trip_id, fd);
+      await WorkflowApi.helperSubmitLocation(tripId, fd);
       setMsg("Location update saved.");
       setLocationPhoto(null);
+      clearFileInput(locationPhotoInputRef);
       setLocationName("");
       setRemarks("");
-      await load();
+      const list = await load();
+      const updated = list.find((x) => x.trip_id === tripId) ?? null;
+      setDetail(updated);
+      if (updated) {
+        const next = workflowPhase(updated, "helper");
+        setPhase(nextPhase(next) ?? next);
+      }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Location update failed");
+      setMsg(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Location update failed");
     } finally {
       setBusy(false);
     }
@@ -259,11 +286,13 @@ export default function CrewAssignedBookingsScreen({
 
   const openDetail = (r: CrewAssignedBookingRow) => {
     setDetail(r);
-    const current = workflowPhase(r);
+    const current = workflowPhase(r, variant);
     const allowed = nextPhase(current);
     setPhase(allowed ?? current);
     setPhoto(null);
     setLocationPhoto(null);
+    clearFileInput(milestonePhotoInputRef);
+    clearFileInput(locationPhotoInputRef);
     setLocationName("");
     setRemarks("");
     setMsg(null);
@@ -310,6 +339,36 @@ export default function CrewAssignedBookingsScreen({
 
       {error ? <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>{error}</div> : null}
       {msg ? <div style={{ background: "#ECFDF5", color: "#047857", padding: 12, borderRadius: 8 }}>{msg}</div> : null}
+      {detail?.pre_delivery_block_message ? (
+        <div
+          role="status"
+          style={{
+            background: "#FEF3C7",
+            color: "#92400E",
+            padding: 12,
+            borderRadius: 8,
+            lineHeight: 1.45,
+            fontSize: "0.9rem",
+          }}
+        >
+          {detail.pre_delivery_block_message}
+        </div>
+      ) : null}
+      {!detail && rows.some((r) => r.pre_delivery_block_message) ? (
+        <div
+          role="status"
+          style={{
+            background: "#FEF3C7",
+            color: "#92400E",
+            padding: 12,
+            borderRadius: 8,
+            lineHeight: 1.45,
+            fontSize: "0.9rem",
+          }}
+        >
+          {rows.find((r) => r.pre_delivery_block_message)?.pre_delivery_block_message}
+        </div>
+      ) : null}
 
       {showSummaryTiles ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
@@ -364,7 +423,7 @@ export default function CrewAssignedBookingsScreen({
                   const custLine = bk
                     ? [bk.customer_name || "—", bk.customer_company_name].filter(Boolean).join(" · ")
                     : "—";
-                  const warn = progressNeedsWarning(r);
+                  const warn = progressNeedsWarning(r, variant);
                   return (
                     <tr key={r.trip_id}>
                       {!isHelper ? <td style={{ ...td, fontWeight: 700 }}>#{r.trip_id}</td> : null}
@@ -544,8 +603,8 @@ export default function CrewAssignedBookingsScreen({
                             fontWeight: 700,
                             padding: "0.1rem 0.4rem",
                             borderRadius: 6,
-                            background: progressNeedsWarning(detail) ? "#FEF3C7" : "#ECFDF5",
-                            color: progressNeedsWarning(detail) ? "#92400E" : "#065F46",
+                            background: progressNeedsWarning(detail, "helper") ? "#FEF3C7" : "#ECFDF5",
+                            color: progressNeedsWarning(detail, "helper") ? "#92400E" : "#065F46",
                           }}
                         >
                           {detail.location_updates_submitted}/{detail.required_location_updates}
@@ -901,7 +960,7 @@ export default function CrewAssignedBookingsScreen({
               <>
                 <hr style={divider} />
                 {(() => {
-                  const current = workflowPhase(detail);
+                  const current = workflowPhase(detail, "helper");
                   const allowed = nextPhase(current);
                   const needsLocationOnly = current === "en_route" && detail.location_updates_submitted < detail.required_location_updates;
                   const effectivePhase = needsLocationOnly ? "en_route" : phase;
@@ -935,7 +994,7 @@ export default function CrewAssignedBookingsScreen({
                         <span style={{ fontSize: "0.85rem", color: "#555" }}>Milestone</span>
                         <select
                           className="select"
-                          value={effectivePhase}
+                          value={effectivePhase ?? "for_pickup"}
                           onChange={(e) => setPhase(e.target.value as Phase)}
                         >
                           {PHASES.map((p) => {
@@ -959,17 +1018,27 @@ export default function CrewAssignedBookingsScreen({
                           </p>
                           <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                             <span style={{ fontSize: "0.85rem", color: "#555" }}>Location name (required)</span>
-                            <input className="input" value={locationName} onChange={(e) => setLocationName(e.target.value)} />
+                            <input
+                              className="input"
+                              value={locationName ?? ""}
+                              onChange={(e) => setLocationName(e.target.value)}
+                            />
                           </label>
                           <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                             <span style={{ fontSize: "0.85rem", color: "#555" }}>Remarks (optional)</span>
-                            <input className="input" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+                            <input
+                              className="input"
+                              value={remarks ?? ""}
+                              onChange={(e) => setRemarks(e.target.value)}
+                            />
                           </label>
                           <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                             <span style={{ fontSize: "0.85rem", color: "#555" }}>Photo (optional)</span>
                             <input
+                              ref={locationPhotoInputRef}
+                              key={`location-photo-${detail.trip_id}`}
                               type="file"
-                              accept=".jpg,.jpeg,.png,.img,image/jpeg,image/png"
+                              accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                               onChange={(e) => setLocationPhoto(e.target.files?.[0] ?? null)}
                             />
                           </label>
@@ -988,8 +1057,10 @@ export default function CrewAssignedBookingsScreen({
                             Milestone photo (.jpg, .png) {PHOTO_REQUIRED.has(effectivePhase) ? "(required)" : "(optional)"}
                           </span>
                           <input
+                            ref={milestonePhotoInputRef}
+                            key={`milestone-photo-${detail.trip_id}`}
                             type="file"
-                            accept=".jpg,.jpeg,.png,.img,image/jpeg,image/png"
+                            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
                             onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
                           />
                         </label>

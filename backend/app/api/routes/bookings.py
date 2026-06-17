@@ -126,6 +126,7 @@ def _create_booking_record(db: Session, user: User, payload: BookingCreate) -> B
         settings,
         distance_km_override=payload.distance_km_override,
         allow_unverified_with_manual_toll=has_manual_toll,
+        allow_unverified=True,
     )
     km = dist.distance_km
     knobs = resolve_booking_freight_knobs(db, settings)
@@ -621,6 +622,7 @@ def validate_booking_cargo_type(
             category=payload.cargo_type_category if payload.cargo_type_category is not None else booking.cargo_type_category,
             reviewer=reviewer,
             admin_notes=payload.cargo_type_admin_notes,
+            cargo_description=payload.cargo_description,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

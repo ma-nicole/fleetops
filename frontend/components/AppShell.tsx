@@ -5,16 +5,18 @@ import { useEffect, useRef, useState } from "react";
 import NavBar from "./NavBar";
 import Sidebar from "./Sidebar";
 import DashboardScrollHandler from "./DashboardScrollHandler";
+import LoadingMessage from "./ui/LoadingMessage";
 import { useAnnouncer } from "@/lib/useAnnouncer";
 import { useAuthStatus } from "@/lib/useAuthStatus";
+import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const announcer = useAnnouncer();
   const mainRef = useRef<HTMLElement | null>(null);
-  const { isLoggedIn } = useAuthStatus();
-  const showAuthedChrome = isLoggedIn === true;
+  const { isLoggedIn, isReady } = useAuthStatus();
+  const showAuthedChrome = isReady && isLoggedIn === true;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -72,8 +74,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         tabIndex={-1}
         className={`app-main${sidebarVisible ? " app-main--with-sidebar" : ""}`}
       >
-        <DashboardScrollHandler />
-        {children}
+        {!isReady ? (
+          <LoadingMessage label={LOADING_AUTH_RESTORE} className="auth-restore-loading" />
+        ) : (
+          <>
+            <DashboardScrollHandler />
+            {children}
+          </>
+        )}
       </main>
 
       <div

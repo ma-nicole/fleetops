@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import WorkflowStatusBadge from "@/components/WorkflowStatusBadge";
 import WorkflowTimeline from "@/components/WorkflowTimeline";
+import LoadingMessage from "@/components/ui/LoadingMessage";
 import BookingService, { Booking } from "@/lib/bookingService";
 import { formatDateTime } from "@/lib/appLocale";
+import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 
 export default function BookingStatusPage() {
-  useRoleGuard(["customer"]);
+  const { ready, allowed } = useRoleGuard(["customer"]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState("");
   const [cancelReason, setCancelReason] = useState("");
@@ -22,10 +24,11 @@ export default function BookingStatusPage() {
   };
 
   useEffect(() => {
+    if (!ready || !allowed) return;
     loadBookings();
     const interval = window.setInterval(loadBookings, 4000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [ready, allowed]);
 
   const booking = useMemo(
     () => bookings.find((b) => b.id === selectedBookingId) || null,
@@ -49,6 +52,16 @@ export default function BookingStatusPage() {
     { id: "delivery", label: "Out for Delivery", completed: booking ? ["completed"].includes(booking.status) : false, current: booking?.status === "out_for_delivery" },
     { id: "completed", label: "Completed", completed: booking?.status === "completed", current: false },
   ];
+
+  if (!ready) {
+    return (
+      <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
+        <LoadingMessage label={LOADING_AUTH_RESTORE} />
+      </main>
+    );
+  }
+
+  if (!allowed) return null;
 
   return (
     <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>

@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import LoadingMessage from "@/components/ui/LoadingMessage";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
+import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { customerAssignmentLatestLocation } from "@/lib/customerAssignmentDisplay";
 import { WorkflowApi, type CustomerBookingHistoryRow } from "@/lib/workflowApi";
 
 export default function BookingHistoryPage() {
-  useRoleGuard(["customer"]);
+  const { ready, allowed } = useRoleGuard(["customer"]);
 
   const [rows, setRows] = useState<CustomerBookingHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,8 +33,9 @@ export default function BookingHistoryPage() {
   }, []);
 
   useEffect(() => {
+    if (!ready || !allowed) return;
     void load();
-  }, [load]);
+  }, [ready, allowed, load]);
 
   const filteredBookings = useMemo(() => {
     if (filterStatus === "all") return rows;
@@ -68,6 +71,16 @@ export default function BookingHistoryPage() {
       avgCost,
     };
   }, [rows]);
+
+  if (!ready) {
+    return (
+      <div className="container" style={{ paddingTop: "var(--space-3)" }}>
+        <LoadingMessage label={LOADING_AUTH_RESTORE} />
+      </div>
+    );
+  }
+
+  if (!allowed) return null;
 
   return (
     <div className="container" style={{ paddingTop: "var(--space-3)" }}>

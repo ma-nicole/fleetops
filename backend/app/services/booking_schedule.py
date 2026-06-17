@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.constants.booking_time_slots import (
     BOOKING_SLOT_TERMINAL_STATUSES,
     BOOKING_TIME_SLOTS,
+    normalize_time_slot,
 )
 from app.constants.fleet_capacity import (
     DEFAULT_ROAD_SPEED_KMH_FOR_ETA,
@@ -18,7 +19,10 @@ from app.constants.fleet_capacity import (
 )
 from app.core.config import Settings, settings as app_settings
 from app.models.entities import Booking, Trip, TripStatus
-from app.services.route_estimate import estimate_road_distance_km
+from app.services.route_estimate import (
+    PreciseDistanceUnavailable,
+    estimate_road_distance_km_with_fallback,
+)
 from app.services.booking_capacity import fleet_operational_pool_size
 from app.services.demo_booking_filter import is_demo_placeholder_booking
 
@@ -32,8 +36,7 @@ def _slot_start_on_date(booking_date: date, time_slot: str) -> datetime:
 
 def duration_hours_for_route(pickup_location: str, dropoff_location: str, cfg: Settings | None = None) -> float:
     cfg = cfg or app_settings
-    est = estimate_road_distance_km(pickup_location, dropoff_location, cfg)
-    km = est.distance_km
+    km, _, _ = estimate_road_distance_km_with_fallback(pickup_location, dropoff_location, cfg)
     return max(MIN_TRIP_DURATION_HOURS, float(km) / DEFAULT_ROAD_SPEED_KMH_FOR_ETA)
 
 
@@ -53,6 +56,35 @@ def interval_for_pickup_window(
     return start, end
 
 
+def booking_interval_resolved(
+    db: Session,
+    booking: Booking,
+    cfg: Settings | None = None,
+) -> tuple[datetime, datetime]:
+    """Uses dispatcher-selected route duration when a route option is saved."""
+    from app.services.dispatch_route_selection import _parse_path_payload, get_selected_route_option
+
+    cfg = cfg or app_settings
+    if booking.scheduled_date is None or not (booking.scheduled_time_slot or "").strip():
+        now = datetime.utcnow()
+        return now, now + timedelta(hours=MIN_TRIP_DURATION_HOURS)
+    start = _slot_start_on_date(booking.scheduled_date, booking.scheduled_time_slot)
+    selected = get_selected_route_option(db, booking.id)
+    dur: float | None = None
+    if selected is not None:
+        _, meta = _parse_path_payload(selected.path_json)
+        raw_dur = meta.get("duration_hours")
+        if raw_dur is not None:
+            dur = float(raw_dur)
+        if dur is None or dur <= 0:
+            dist = float(selected.distance_km or 0)
+            if dist > 0:
+                dur = max(MIN_TRIP_DURATION_HOURS, dist / DEFAULT_ROAD_SPEED_KMH_FOR_ETA)
+    if dur is None or dur <= 0:
+        dur = duration_hours_for_booking(booking, cfg)
+    return start, start + timedelta(hours=dur)
+
+
 def booking_interval(
     booking: Booking,
     cfg: Settings | None = None,
@@ -64,6 +96,31 @@ def booking_interval(
         booking.dropoff_location,
         cfg,
     )
+
+
+def booking_interval_best_effort(
+    booking: Booking,
+    cfg: Settings | None = None,
+) -> tuple[datetime, datetime]:
+    """Like ``booking_interval`` but falls back to slot start + MIN_TRIP_DURATION when route km is unavailable."""
+    try:
+        return booking_interval(booking, cfg)
+    except PreciseDistanceUnavailable:
+        if booking.scheduled_date is None or not (booking.scheduled_time_slot or "").strip():
+            now = datetime.utcnow()
+            return now, now + timedelta(hours=MIN_TRIP_DURATION_HOURS)
+        start = _slot_start_on_date(booking.scheduled_date, booking.scheduled_time_slot)
+        return start, start + timedelta(hours=MIN_TRIP_DURATION_HOURS)
+
+
+def booking_pickup_window_end_approx(booking: Booking) -> datetime | None:
+    """Fast pickup-window end for dashboards — no geocoding or external routing."""
+    if booking.scheduled_date is None or not (booking.scheduled_time_slot or "").strip():
+        return None
+    if normalize_time_slot(booking.scheduled_time_slot) not in BOOKING_TIME_SLOTS:
+        return None
+    start = _slot_start_on_date(booking.scheduled_date, booking.scheduled_time_slot)
+    return start + timedelta(hours=MIN_TRIP_DURATION_HOURS)
 
 
 def trip_interval(db: Session, trip: Trip, cfg: Settings | None = None) -> tuple[datetime, datetime]:
@@ -248,7 +305,7 @@ def truck_free_for_booking(
     exclude_trip_id: int | None = None,
 ) -> bool:
     cfg = cfg or app_settings
-    ns, ne = booking_interval(booking, cfg)
+    ns, ne = booking_interval_resolved(db, booking, cfg)
     trips = db.query(Trip).filter(Trip.truck_id == truck_id, ~Trip.status.in_(_TERMINAL_TRIP)).all()
     for tr in trips:
         if exclude_trip_id is not None and tr.id == exclude_trip_id:
@@ -267,7 +324,7 @@ def driver_free_for_booking(
     exclude_trip_id: int | None = None,
 ) -> bool:
     cfg = cfg or app_settings
-    ns, ne = booking_interval(booking, cfg)
+    ns, ne = booking_interval_resolved(db, booking, cfg)
     trips = db.query(Trip).filter(Trip.driver_id == driver_id, ~Trip.status.in_(_TERMINAL_TRIP)).all()
     for tr in trips:
         if exclude_trip_id is not None and tr.id == exclude_trip_id:
@@ -286,7 +343,7 @@ def helper_free_for_booking(
     exclude_trip_id: int | None = None,
 ) -> bool:
     cfg = cfg or app_settings
-    ns, ne = booking_interval(booking, cfg)
+    ns, ne = booking_interval_resolved(db, booking, cfg)
     trips = db.query(Trip).filter(Trip.helper_id == helper_id, ~Trip.status.in_(_TERMINAL_TRIP)).all()
     for tr in trips:
         if exclude_trip_id is not None and tr.id == exclude_trip_id:

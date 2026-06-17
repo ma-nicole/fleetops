@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -52,6 +53,10 @@ from app.services.booking_schedule import (
     intervals_overlap,
     truck_free_for_booking,
 )
+from app.services.dispatch_assignment_readiness import (
+    BookingNotReadyForDispatchError,
+    assert_booking_ready_for_dispatch_assignment,
+)
 from app.services.dispatch_operations_center import build_operations_center_payload
 from app.services.dispatch_trip_logs import build_trip_logs_payload
 from app.services.dispatch_trip_monitoring_board import build_trip_monitoring_board_payload
@@ -66,7 +71,9 @@ from app.services.trip_crew_allowances import resolve_trip_crew_allowances
 from app.services.dispatch_route_selection import (
     generate_route_options_for_booking,
     list_booking_route_options,
+    map_verification_warning_for_booking,
     resolve_dispatch_route,
+    save_manual_route_option,
     select_route_option,
 )
 from app.services.driver_trip_notifications import (
@@ -74,11 +81,12 @@ from app.services.driver_trip_notifications import (
     notify_drivers_booking_route_updated,
 )
 from app.schemas.trip_shoulder_cost import TripShoulderCostCreate
-from app.schemas.dispatch_route import DispatchRouteSelectRequest
+from app.schemas.dispatch_route import DispatchManualRouteRequest, DispatchRouteSelectRequest
 from app.services.latest_location_display import latest_location_display_for_trip
 
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
+logger = logging.getLogger(__name__)
 
 OPERATIONAL_LOG_UPLOAD_DIR = uploads_subdir("operational_logs")
 OPERATIONAL_LOG_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".img"}
@@ -318,7 +326,15 @@ def dispatch_operations_center(
     user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
     """Dispatcher control center: live counts, boards, queues, and rule-based alerts (no mock analytics)."""
-    return build_operations_center_payload(db, viewer=user)
+    try:
+        return build_operations_center_payload(db, viewer=user)
+    except Exception:
+        logger.exception(
+            "dispatch operations-center failed user_id=%s role=%s",
+            user.id,
+            user.role.value if user.role else None,
+        )
+        raise
 
 
 @router.get("/trip-logs")
@@ -923,6 +939,7 @@ def booking_route_options(
         "dropoff_location": booking.dropoff_location,
         "selected_route_option_id": selected["id"] if selected else None,
         "options": options,
+        "map_verification_warning": map_verification_warning_for_booking(booking),
     }
 
 
@@ -936,7 +953,7 @@ def generate_booking_route_options(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     assert_dispatcher_booking_access(db, user, booking.id)
-    generate_route_options_for_booking(db, booking)
+    options, map_warning = generate_route_options_for_booking(db, booking)
     db.commit()
     options = list_booking_route_options(db, booking.id)
     selected = next((o for o in options if o["is_selected"]), None)
@@ -945,6 +962,7 @@ def generate_booking_route_options(
         "generated": len(options),
         "selected_route_option_id": selected["id"] if selected else None,
         "options": options,
+        "map_verification_warning": map_warning or map_verification_warning_for_booking(booking),
     }
 
 
@@ -970,6 +988,39 @@ def select_booking_route_option(
         "booking_id": booking.id,
         "selected_route_option_id": payload.route_option_id,
         "options": options,
+        "map_verification_warning": map_verification_warning_for_booking(booking),
+    }
+
+
+@router.post("/booking/{booking_id}/route-options/manual")
+def save_booking_manual_route(
+    booking_id: int,
+    payload: DispatchManualRouteRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    assert_dispatcher_booking_access(db, user, booking.id)
+    save_manual_route_option(
+        db,
+        booking,
+        route_name=payload.route_name,
+        distance_km=payload.distance_km,
+        duration_hours=payload.duration_hours,
+        toll_cost_php=payload.toll_cost_php,
+        notes=payload.notes,
+    )
+    notify_drivers_booking_route_updated(db, booking.id)
+    db.commit()
+    options = list_booking_route_options(db, booking.id)
+    selected = next((o for o in options if o["is_selected"]), None)
+    return {
+        "booking_id": booking.id,
+        "selected_route_option_id": selected["id"] if selected else None,
+        "options": options,
+        "map_verification_warning": map_verification_warning_for_booking(booking),
     }
 
 
@@ -991,6 +1042,11 @@ def assign_batch(
         BookingStatus.APPROVED,
     }:
         raise HTTPException(status_code=400, detail=f"Booking status {booking.status} is not ready for assignment.")
+
+    try:
+        assert_booking_ready_for_dispatch_assignment(db, booking)
+    except BookingNotReadyForDispatchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     required = int(booking.required_truck_count or trucks_required_for_cargo(booking.cargo_weight_tons))
     rows = payload.assignments or []
@@ -1126,6 +1182,11 @@ def assign_trip(
             status_code=400,
             detail=f"Booking status {booking.status} is not ready for dispatcher assignment.",
         )
+
+    try:
+        assert_booking_ready_for_dispatch_assignment(db, booking)
+    except BookingNotReadyForDispatchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     need = trucks_required_for_cargo(booking.cargo_weight_tons)
     active = (

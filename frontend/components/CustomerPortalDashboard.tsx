@@ -9,7 +9,8 @@ import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSe
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
 import AsyncDataView from "@/components/ui/AsyncDataView";
-import { EMPTY_BOOKINGS, EMPTY_SHIPMENTS, ERROR_LOAD_DATA } from "@/lib/loadingMessages";
+import LoadingMessage from "@/components/ui/LoadingMessage";
+import { EMPTY_BOOKINGS, EMPTY_SHIPMENTS, ERROR_LOAD_DATA, LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/appLocale";
 import {
   MIN_BOOKING_SITES,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/customerSites";
 import { WorkflowApi, type CustomerBookingRow, type Payment } from "@/lib/workflowApi";
 import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
+import { useRoleGuard } from "@/lib/useRoleGuard";
 
 
 function formatShortDate(iso: string): string {
@@ -37,6 +39,7 @@ function formatShortDate(iso: string): string {
 }
 
 export default function CustomerPortalDashboard() {
+  const { ready, allowed } = useRoleGuard(["customer"]);
   const [activeShipments, setActiveShipments] = useState<CustomerBookingRow[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
@@ -52,6 +55,7 @@ export default function CustomerPortalDashboard() {
   const [newSitePostal, setNewSitePostal] = useState("");
   const [siteFormError, setSiteFormError] = useState<string | null>(null);
   useEffect(() => {
+    if (!ready || !allowed) return;
     let cancelled = false;
     (async () => {
       try {
@@ -75,9 +79,10 @@ export default function CustomerPortalDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [ready, allowed]);
 
   useEffect(() => {
+    if (!ready || !allowed) return;
     let cancelled = false;
     const refresh = () => {
       loadCustomerSites()
@@ -90,7 +95,7 @@ export default function CustomerPortalDashboard() {
     };
     refresh();
     return subscribeSitesChanged(refresh);
-  }, []);
+  }, [ready, allowed]);
 
   const paymentByBooking = useMemo(() => {
     const m = new Map<number, Payment>();
@@ -173,7 +178,17 @@ export default function CustomerPortalDashboard() {
     [payments],
   );
 
-  useHashScrollWhenReady(!loading && !error);
+  useHashScrollWhenReady(ready && allowed && !loading && !error);
+
+  if (!ready) {
+    return (
+      <main className="dashboard-standard-main">
+        <LoadingMessage label={LOADING_AUTH_RESTORE} />
+      </main>
+    );
+  }
+
+  if (!allowed) return null;
 
   return (
     <main className="dashboard-standard-main">

@@ -4,7 +4,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.config import Settings
-from app.services.route_estimate import PreciseDistanceUnavailable, estimate_road_distance_km
+from app.services.route_estimate import (
+    MAP_LOCATION_VERIFY_WARNING,
+    PreciseDistanceUnavailable,
+    estimate_road_distance_km,
+    heuristic_fallback_km,
+)
 
 DISTANCE_UNVERIFIED_WARNING = (
     "Distance could not be verified. Please confirm estimated distance manually."
@@ -32,8 +37,9 @@ def resolve_quote_distance_km(
     *,
     distance_km_override: float | None = None,
     allow_unverified_with_manual_toll: bool = False,
+    allow_unverified: bool = False,
 ) -> DistanceResolution:
-    """Resolve route distance for pricing. Never silently substitutes a default km."""
+    """Resolve route distance for pricing. Uses heuristic fallback when allow_unverified is set."""
     if distance_km_override is not None and float(distance_km_override) > 0:
         km = round(float(distance_km_override), 2)
         return DistanceResolution(
@@ -60,15 +66,16 @@ def resolve_quote_distance_km(
             routing_method=est.routing_method,
         )
     except PreciseDistanceUnavailable:
-        if not allow_unverified_with_manual_toll:
-            raise
-        return DistanceResolution(
-            distance_km=0.0,
-            distance_confirmed=False,
-            distance_warning=DISTANCE_UNVERIFIED_WARNING,
-            quote_status=QUOTE_STATUS_PENDING,
-            pickup_resolution="unavailable",
-            dropoff_resolution="unavailable",
-            pricing_tier="distance_unverified",
-            routing_method="distance_unverified",
-        )
+        if allow_unverified or allow_unverified_with_manual_toll:
+            km = heuristic_fallback_km(pickup, dropoff)
+            return DistanceResolution(
+                distance_km=km,
+                distance_confirmed=False,
+                distance_warning=MAP_LOCATION_VERIFY_WARNING,
+                quote_status=QUOTE_STATUS_PENDING,
+                pickup_resolution="unavailable",
+                dropoff_resolution="unavailable",
+                pricing_tier="distance_unverified",
+                routing_method="heuristic_fallback",
+            )
+        raise

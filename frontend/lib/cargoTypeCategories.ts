@@ -50,4 +50,8 @@ export type CargoTypeValidationAdminRow = {
   cargo_restricted_reasons: string[];
   cargo_type_validated_at: string | null;
   cargo_type_validated_by_id: number | null;
+  active_trip_ids?: number[];
+  ready_for_dispatch_assignment?: boolean;
+  dispatch_blockers?: string[];
+  dispatch_integrity_warning?: boolean;
 };

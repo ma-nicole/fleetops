@@ -11,6 +11,8 @@ function normalizeApiBase(raw: string): string {
     }
     return trimmed;
   }
+  /** Misconfigured direct URL (`http://127.0.0.1:8000/api/proxy`) — use Next rewrite path instead. */
+  if (/\/api\/proxy\/?$/i.test(trimmed)) return "/api-proxy";
   if (/\/api(\/|$)/.test(trimmed)) return trimmed;
   return `${trimmed}/api`;
 }
@@ -98,18 +100,30 @@ export function parseApiDetail(text: string): string | null {
 
 const SESSION_EXPIRED = "Your session expired. Please sign in again.";
 
+const MAP_VERIFY_WARNING =
+  "Map location could not be verified. You may continue using manual route details.";
+
 /** User-facing text; prefers backend `detail`, keeps raw `body` on ApiError for debugging. */
-function messageFromErrorResponse(status: number, text: string): string {
+function messageFromErrorResponse(status: number, text: string, hadAuth = false): string {
   const detail = parseApiDetail(text);
-  if (detail) return detail;
+  if (detail) {
+    if (/could not place pickup and dropoff on the map/i.test(detail)) {
+      return MAP_VERIFY_WARNING;
+    }
+    return detail;
+  }
   if (status === 401) {
-    return SESSION_EXPIRED;
+    return hadAuth ? SESSION_EXPIRED : "Authentication required. Please sign in.";
   }
   if (status === 403) {
     return "You are not authorized to access this record.";
   }
   if (status === 404) {
     return "Unable to load data.";
+  }
+  if (status === 400) {
+    const trimmed = text.trim();
+    return trimmed || "The server rejected this request.";
   }
   if (status >= 500) {
     return "Something went wrong. Please try again.";
@@ -120,10 +134,13 @@ function messageFromErrorResponse(status: number, text: string): string {
 type HandleOptions = {
   /** Drop stored JWT when an authenticated request is rejected (401/423). */
   clearAuthOnFailure?: boolean;
+  /** Request included Authorization — refines 401 copy (session expired vs not signed in). */
+  hadAuth?: boolean;
 };
 
 async function handle<T>(response: Response, options: HandleOptions = {}): Promise<T> {
   const clearAuth = options.clearAuthOnFailure ?? false;
+  const hadAuth = options.hadAuth ?? false;
   if (clearAuth && (response.status === 401 || response.status === 423)) {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("token");
@@ -132,7 +149,7 @@ async function handle<T>(response: Response, options: HandleOptions = {}): Promi
   }
   if (!response.ok) {
     const text = await response.text();
-    const message = messageFromErrorResponse(response.status, text);
+    const message = messageFromErrorResponse(response.status, text, hadAuth);
     throw new ApiError(message, response.status, text);
   }
   if (response.status === 204) return undefined as unknown as T;
@@ -154,8 +171,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       cache: "no-store",
       signal: controller.signal,
     });
-    return await handle<T>(response, { clearAuthOnFailure: hadAuth });
+    return await handle<T>(response, { clearAuthOnFailure: hadAuth, hadAuth });
   } catch (err) {
+    if (err instanceof ApiError) throw err;
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new ApiError("Request timed out. Please try again.", 408, "");
     }
@@ -186,7 +204,7 @@ export async function apiPostMultipart<T>(path: string, formData: FormData): Pro
     body: formData,
     cache: "no-store",
   });
-  return handle<T>(response, { clearAuthOnFailure: Boolean(token) });
+  return handle<T>(response, { clearAuthOnFailure: Boolean(token), hadAuth: Boolean(token) });
 }
 
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {

@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
+import LoadingMessage from "@/components/ui/LoadingMessage";
 import { CUSTOMER_PAYMENT_METHODS, formatPaymentMethodLabel } from "@/lib/paymentMethodOptions";
+import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
 import { formatDateTime, formatPhpWhole } from "@/lib/appLocale";
 
 export default function CustomerPaymentPage() {
-  useRoleGuard(["customer", "manager", "admin"]);
+  const { ready, allowed } = useRoleGuard(["customer", "manager", "admin"]);
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -42,8 +44,9 @@ export default function CustomerPaymentPage() {
   }, [payments, bookingById]);
 
   useEffect(() => {
-    refresh();
-  }, []);
+    if (!ready || !allowed) return;
+    void refresh();
+  }, [ready, allowed]);
 
   const card: React.CSSProperties = {
     background: "white",
@@ -51,6 +54,16 @@ export default function CustomerPaymentPage() {
     borderRadius: 12,
     padding: 18,
   };
+
+  if (!ready) {
+    return (
+      <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
+        <LoadingMessage label={LOADING_AUTH_RESTORE} />
+      </main>
+    );
+  }
+
+  if (!allowed) return null;
 
   return (
     <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>

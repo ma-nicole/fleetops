@@ -1,6 +1,6 @@
 import { apiGet, apiPatch, apiPost, apiPostMultipart } from "./api";
 import type { ShoulderCostEntry, TripCostLedgerResponse } from "./tripShoulderCosts";
-import type { DispatchRouteOptionsResponse } from "./dispatchRoute";
+import type { DispatchManualRoutePayload, DispatchRouteOptionsResponse } from "./dispatchRoute";
 
 export type DispatcherDashboardTrip = {
   id: number;
@@ -66,6 +66,17 @@ export type OperationsActiveTripRow = {
   scheduled_window: string;
   last_updated: string | null;
   eta?: string | null;
+  map_available?: boolean;
+  distance_km_fallback?: number | null;
+};
+
+export type OperationsAddressWarning = {
+  booking_id: number;
+  trip_id?: number;
+  code: string;
+  message: string;
+  pickup?: string | null;
+  dropoff?: string | null;
 };
 
 export type OperationsWaitingBooking = {
@@ -77,6 +88,10 @@ export type OperationsWaitingBooking = {
   scheduled_date: string;
   scheduled_time_slot: string;
   payment_verified_at: string | null;
+  map_available?: boolean;
+  cargo_type_validated?: boolean;
+  ready_for_dispatch_assignment?: boolean;
+  dispatch_blockers?: string[];
 };
 
 export type OperationsResources = {
@@ -109,6 +124,7 @@ export type OperationsCenterResponse = {
   resources: OperationsResources;
   recent_location_updates: OperationsLocationUpdate[];
   alerts: OperationsAlert[];
+  address_warnings?: OperationsAddressWarning[];
 };
 
 export type TripLogTimelineEntry = {
@@ -194,4 +210,7 @@ export const DispatchApi = {
     apiPatch<DispatchRouteOptionsResponse>(`/dispatch/booking/${bookingId}/route-options/select`, {
       route_option_id: routeOptionId,
     }),
+
+  saveManualBookingRoute: (bookingId: number, payload: DispatchManualRoutePayload) =>
+    apiPost<DispatchRouteOptionsResponse>(`/dispatch/booking/${bookingId}/route-options/manual`, payload),
 };

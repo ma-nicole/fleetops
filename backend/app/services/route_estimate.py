@@ -64,6 +64,33 @@ def _heuristic_km(pickup: str, dropoff: str) -> float:
     return min(140, max(8, round(raw * 10) / 10))
 
 
+def heuristic_fallback_km(pickup: str, dropoff: str) -> float:
+    """Non-blocking distance estimate when geocoding / routing is unavailable."""
+    return _heuristic_km(pickup, dropoff)
+
+
+MAP_LOCATION_VERIFY_WARNING = (
+    "Map location could not be verified. You may continue using manual route details."
+)
+
+
+def estimate_road_distance_km_with_fallback(
+    pickup: str,
+    dropoff: str,
+    settings: Settings,
+    *,
+    manual_km: float | None = None,
+) -> tuple[float, bool, str | None]:
+    """Returns (distance_km, verified, warning). Never raises."""
+    if manual_km is not None and float(manual_km) > 0:
+        return round(float(manual_km), 2), True, None
+    try:
+        est = estimate_road_distance_km(pickup, dropoff, settings)
+        return float(est.distance_km), True, None
+    except PreciseDistanceUnavailable:
+        return heuristic_fallback_km(pickup, dropoff), False, MAP_LOCATION_VERIFY_WARNING
+
+
 def estimate_road_distance_km(
     pickup: str,
     dropoff: str,

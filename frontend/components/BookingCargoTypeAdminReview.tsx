@@ -40,6 +40,7 @@ export default function BookingCargoTypeAdminReview({
 }) {
   const [category, setCategory] = useState(booking.cargo_type_category ?? "");
   const [adminNotes, setAdminNotes] = useState(booking.cargo_type_admin_notes ?? "");
+  const [cargoDescription, setCargoDescription] = useState(booking.cargo_description ?? "");
   const [screening, setScreening] = useState<CargoTypeScreening | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,10 +69,17 @@ export default function BookingCargoTypeAdminReview({
       setBusy(true);
       setError(null);
       try {
+        const desc = cargoDescription.trim();
+        if (validated && desc.length < 3) {
+          setError("Enter a cargo description (at least 3 characters) before verifying.");
+          setBusy(false);
+          return;
+        }
         const updated = await WorkflowApi.validateBookingCargoType(booking.id, {
           validated,
           cargo_type_category: category || null,
           cargo_type_admin_notes: adminNotes.trim() || null,
+          cargo_description: desc || null,
         });
         onValidated?.(updated);
       } catch (e) {
@@ -80,7 +88,7 @@ export default function BookingCargoTypeAdminReview({
         setBusy(false);
       }
     },
-    [adminNotes, booking.id, category, onValidated],
+    [adminNotes, booking.id, cargoDescription, category, onValidated],
   );
 
   const activeReasons =
@@ -92,10 +100,25 @@ export default function BookingCargoTypeAdminReview({
       <p style={{ margin: 0, fontWeight: 600, color: "#374151" }}>
         Cargo type classification {booking.cargo_type_validated ? "· verified" : "· pending review"}
       </p>
-      {booking.cargo_description && (
+      {booking.cargo_description ? (
         <p style={{ margin: 0, color: "#4B5563" }}>
           <strong>Customer description:</strong> {booking.cargo_description}
         </p>
+      ) : (
+        <label style={{ display: "grid", gap: "0.25rem" }}>
+          <span style={{ fontWeight: 600 }}>Cargo description</span>
+          <span style={{ fontSize: "0.78rem", color: "#92400E" }}>
+            Customer did not provide a description — enter one before verifying.
+          </span>
+          <textarea
+            className="input"
+            rows={2}
+            value={cargoDescription}
+            onChange={(e) => setCargoDescription(e.target.value)}
+            maxLength={500}
+            placeholder="e.g. Palletized electronics, sealed cartons"
+          />
+        </label>
       )}
       <label style={{ display: "grid", gap: "0.25rem" }}>
         <span style={{ fontWeight: 600 }}>Cargo type category</span>

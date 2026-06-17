@@ -53,6 +53,11 @@ from app.services.dispatcher_booking_assignment import (
     auto_assign_dispatcher_on_dispatch_action,
     filter_bookings_for_dispatcher,
 )
+from app.services.dispatch_assignment_readiness import (
+    BookingNotReadyForDispatchError,
+    assert_booking_ready_for_dispatch_assignment,
+    dispatch_assignment_readiness,
+)
 from app.services.upload_urls import media_type_for_path
 from app.core.paths import uploads_root
 from app.schemas.analytics import CostPredictionRequest
@@ -221,7 +226,12 @@ def get_assignable_bookings_for_dispatch(
         .all()
     )
     open_rows = [b for b in rows if _booking_open_for_dispatch(db, b)]
-    return filter_bookings_for_dispatcher(db, user, open_rows)
+    ready_rows = []
+    for b in open_rows:
+        readiness = dispatch_assignment_readiness(db, b)
+        if readiness["ready"]:
+            ready_rows.append(b)
+    return filter_bookings_for_dispatcher(db, user, ready_rows)
 
 
 @router.post("/booking/{booking_id}/approve", response_model=BookingRead)
@@ -293,6 +303,11 @@ def create_job_from_booking(
             status_code=400,
             detail=f"Booking must be approved to create job. Current status: {booking.status}"
         )
+
+    try:
+        assert_booking_ready_for_dispatch_assignment(db, booking)
+    except BookingNotReadyForDispatchError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Find available truck and driver
     truck = find_available_truck(db, booking.scheduled_date, booking)

@@ -82,16 +82,26 @@ def apply_cargo_type_validation(
     category: str | None,
     reviewer: User,
     admin_notes: str | None = None,
+    cargo_description: str | None = None,
 ) -> dict:
     normalized_category = (category or "").strip().lower() or None
     if normalized_category and normalized_category not in CARGO_TYPE_CATEGORIES:
         raise ValueError("Invalid cargo type category.")
 
+    if cargo_description is not None:
+        desc_override = cargo_description.strip()
+        if desc_override:
+            booking.cargo_description = desc_override
+
     desc = (booking.cargo_description or "").strip()
     if validated and not normalized_category:
         raise ValueError("Cargo type category is required before validation.")
     if validated and len(desc) < 3:
-        raise ValueError("Cargo description is required before cargo type validation.")
+        if normalized_category:
+            booking.cargo_description = cargo_type_category_label(normalized_category)
+            desc = booking.cargo_description.strip()
+        if len(desc) < 3:
+            raise ValueError("Cargo description is required before cargo type validation.")
 
     if normalized_category is not None:
         booking.cargo_type_category = normalized_category

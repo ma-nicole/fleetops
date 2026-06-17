@@ -9,6 +9,7 @@ import { BOOKING_TIME_SLOTS } from "@/lib/bookingSlots";
 import { routeUsesGeocodedPinsBoth, type BookingPricingBreakdown } from "@/lib/bookingRouteEstimate";
 import { validateCustomerSiteAddress } from "@/lib/formValidation";
 import { MIN_BOOKING_SITES, loadCustomerSites, subscribeSitesChanged, type CustomerSite } from "@/lib/customerSites";
+import { customerBookingPaymentPath } from "@/lib/customerPaymentNavigation";
 import { WorkflowApi } from "@/lib/workflowApi";
 import BookingCargoWeightField, { isValidBookingWeightTons, bookingWeightValidationMessage } from "@/components/BookingCargoWeightField";
 import BookingDocumentUploadFields, { validateBookingDocumentFile } from "@/components/BookingDocumentUploadFields";
@@ -567,7 +568,7 @@ export default function CostCalculator({
         distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
       });
 
-      router.push(`/booking/payment?bookingId=${data.id}`);
+      router.push(customerBookingPaymentPath(data.id));
     } catch (error) {
       const err = error as Error;
       setMessage(` Error: ${err.message}`);

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import logging
 from pathlib import Path
 from secrets import token_hex
 
@@ -32,6 +32,7 @@ from app.services.pre_delivery_verification import is_delivery_progression_step,
 from app.services.trip_status_sync import sync_trip_and_booking_status
 
 router = APIRouter(prefix="/helper", tags=["helper"])
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = uploads_subdir("helper_proofs")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".img"}
@@ -125,6 +126,14 @@ async def helper_update_status(
         raise HTTPException(status_code=400, detail="Trip already completed. No more updates allowed.")
     next_step = STATUS_FLOW[min(STATUS_INDEX[current] + 1, len(STATUS_FLOW) - 1)]
     if step != next_step:
+        logger.warning(
+            "helper status out of sequence trip_id=%s helper_id=%s current=%s requested=%s expected=%s",
+            trip_id,
+            user.id,
+            current,
+            step,
+            next_step,
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Only next status is allowed: {next_step}",
@@ -207,6 +216,12 @@ async def helper_location_update(
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found for this helper")
     if (trip.helper_progress_status or "").strip().lower() != "en_route":
+        logger.warning(
+            "helper location rejected trip_id=%s helper_id=%s progress=%s",
+            trip_id,
+            user.id,
+            trip.helper_progress_status,
+        )
         raise HTTPException(status_code=400, detail="Location updates are allowed only while status is en_route.")
     if not location_name.strip():
         raise HTTPException(status_code=400, detail="location_name is required")

@@ -87,6 +87,9 @@ export async function reconcileRoleFromServer(): Promise<UserRole | null> {
     window.dispatchEvent(new CustomEvent(AUTH_CHANGE_EVENT));
     return r;
   } catch {
+    if (typeof window !== "undefined" && !isAuthenticated()) {
+      clearAuth();
+    }
     return null;
   }
 }

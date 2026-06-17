@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getDashboardPath, type UserRole } from "@/lib/auth";
 import { CustomerDataFlowService } from "@/lib/customerDataFlowService";
+import { customerBookingPaymentPath, isApiBookingId } from "@/lib/customerPaymentNavigation";
 import { useAuthStatus } from "@/lib/useAuthStatus";
 
 export default function OrderConfirmationPage() {
@@ -18,6 +19,10 @@ export default function OrderConfirmationPage() {
     const result = CustomerDataFlowService.confirmCurrentBooking();
     if (!result.ok) {
       setError(result.message);
+      return;
+    }
+    if (booking && isApiBookingId(booking.id)) {
+      router.push(customerBookingPaymentPath(booking.id));
       return;
     }
     router.push("/payment");

@@ -3,7 +3,9 @@
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import PhoneInputRow from "@/components/PhoneInputRow";
+import LoadingMessage from "@/components/ui/LoadingMessage";
 import { apiChangePassword, apiGetMe, apiUpdateCustomerProfile, type MeUser } from "@/lib/api";
+import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
 import {
@@ -18,7 +20,7 @@ type FieldKey = "full_name" | "phone" | "company_name";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
 export default function CustomerProfilePage() {
-  useRoleGuard(["customer"]);
+  const { ready, allowed } = useRoleGuard(["customer"]);
 
   const [me, setMe] = useState<MeUser | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -51,6 +53,7 @@ export default function CustomerProfilePage() {
   }, []);
 
   useEffect(() => {
+    if (!ready || !allowed) return;
     let cancelled = false;
     setLoadingMe(true);
     setLoadError(null);
@@ -69,7 +72,7 @@ export default function CustomerProfilePage() {
     return () => {
       cancelled = true;
     };
-  }, [applyMeToForm]);
+  }, [ready, allowed, applyMeToForm]);
 
   const gridCols = {
     display: "grid",
@@ -173,6 +176,16 @@ export default function CustomerProfilePage() {
 
   const email = me?.email ?? "";
   const emailLooksValid = isValidEmail(email);
+
+  if (!ready) {
+    return (
+      <div className="container" style={{ paddingTop: "var(--space-3)" }}>
+        <LoadingMessage label={LOADING_AUTH_RESTORE} />
+      </div>
+    );
+  }
+
+  if (!allowed) return null;
 
   return (
     <div className="container" style={{ paddingTop: "var(--space-3)" }}>

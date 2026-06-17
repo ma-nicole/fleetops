@@ -17,6 +17,17 @@ class BookingCargoTypeValidate(BaseModel):
     validated: bool = True
     cargo_type_category: str | None = None
     cargo_type_admin_notes: str | None = None
+    cargo_description: str | None = None
+
+    @field_validator("cargo_description")
+    @classmethod
+    def validate_cargo_description(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        t = v.strip()
+        if len(t) > 500:
+            raise ValueError("Cargo description must be at most 500 characters")
+        return t or None
 
     @field_validator("cargo_type_category")
     @classmethod

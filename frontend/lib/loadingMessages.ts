@@ -1,5 +1,6 @@
 /** Standard copy for loading, slow-loading, and error states. */
 export const LOADING_DEFAULT = "Loading…";
+export const LOADING_AUTH_RESTORE = "Restoring your session…";
 export const LOADING_SLOW = "Still loading, please wait…";
 export const ERROR_LOAD_DATA = "Unable to load data. Please try again.";
 export const ERROR_ANALYTICS_SERVICE = "Analytics service encountered an error.";

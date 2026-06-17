@@ -12,6 +12,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "concurrently": "^9.2.1",
     "countries-list": "^3.3.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
@@ -25,6 +26,7 @@
     "@types/react-dom": "19.0.2",
     "eslint": "9.17.0",
     "eslint-config-next": "^16.2.7",
-    "typescript": "5.7.2"
+    "typescript": "5.7.2",
+    "wait-on": "^9.0.10"
   }
 }

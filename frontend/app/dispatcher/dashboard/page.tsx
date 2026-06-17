@@ -13,6 +13,8 @@ import { scrollToSectionById } from "@/lib/scrollToSection";
 import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
 import { formatTimeShort } from "@/lib/appLocale";
 import { DispatchApi, type OperationsActiveTripRow, type OperationsCenterResponse } from "@/lib/dispatchApi";
+import { ApiError } from "@/lib/api";
+import { useAuthStatus } from "@/lib/useAuthStatus";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -280,31 +282,42 @@ const td: React.CSSProperties = {
 };
 
 export default function DispatcherDashboard() {
+  const { isLoggedIn } = useAuthStatus();
   const [data, setData] = useState<OperationsCenterResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (isLoggedIn !== true) {
+      if (isLoggedIn === false) {
+        setLoadError("Authentication required. Please sign in.");
+        setLoading(false);
+      }
+      return;
+    }
     try {
       const d = await DispatchApi.operationsCenter();
       setData(d);
       setLoadError(null);
     } catch (e) {
-      setLoadError(
-        e instanceof Error && e.message
+      const message =
+        e instanceof ApiError
           ? e.message
-          : "Unable to load dispatcher dashboard.",
-      );
+          : e instanceof Error && e.message
+            ? e.message
+            : "Unable to load dispatcher dashboard.";
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
+    if (isLoggedIn !== true) return;
     void load();
     const id = setInterval(() => void load(), 45_000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, isLoggedIn]);
 
   const s = data?.summary;
   const activeTotal = useMemo(() => (s ? activeLegsTotal(s) : 0), [s]);
@@ -354,6 +367,34 @@ export default function DispatcherDashboard() {
         </nav>
 
         {loadError ? <ErrorState message={loadError} onRetry={() => void load()} compact /> : null}
+
+        {data?.address_warnings && data.address_warnings.length > 0 ? (
+          <div
+            role="alert"
+            style={{
+              marginBottom: "1rem",
+              padding: "0.85rem 1rem",
+              borderRadius: 10,
+              border: "1px solid #FCD34D",
+              background: "#FFFBEB",
+              color: "#92400E",
+              fontSize: "0.875rem",
+            }}
+          >
+            <strong>Address warnings ({data.address_warnings.length})</strong>
+            <p style={{ margin: "0.35rem 0 0.5rem" }}>
+              These bookings use incomplete addresses and are omitted from map routing. Other data loads normally.
+            </p>
+            <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+              {data.address_warnings.slice(0, 8).map((w) => (
+                <li key={`${w.booking_id}-${w.trip_id ?? "q"}`}>
+                  Booking #{w.booking_id}
+                  {w.trip_id ? ` · trip #${w.trip_id}` : ""}: {w.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {loading && !data ? (
           <div style={{ display: "grid", gap: "0.75rem" }} aria-busy="true">
@@ -527,7 +568,7 @@ export default function DispatcherDashboard() {
             alignItems: "stretch",
           }}
         >
-          <Panel title="Waiting for assignment" subtitle="Verified / ready — no legs yet." dense sectionId="dispatch-waiting">
+          <Panel title="Waiting for assignment" subtitle="Payment, declaration, and cargo verified — ready to dispatch." dense sectionId="dispatch-waiting">
             {!data?.waiting_for_assignment?.length ? (
               <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>Queue clear.</p>
             ) : (

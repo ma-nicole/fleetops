@@ -3,15 +3,21 @@
 import { type ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+import LoadingMessage from "@/components/ui/LoadingMessage";
 import { AUTH_CHANGE_EVENT, getDashboardPath, getEffectiveRole, isAuthenticated } from "@/lib/auth";
+import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
+import { useAuthStatus } from "@/lib/useAuthStatus";
 
 /**
  * Customer-only booking funnel. Staff accounts are redirected to their dashboard.
  */
 export default function BookingLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { isReady, isLoggedIn } = useAuthStatus();
 
   useEffect(() => {
+    if (!isReady) return;
+
     function guard() {
       if (typeof window === "undefined") return;
 
@@ -34,7 +40,11 @@ export default function BookingLayout({ children }: { children: ReactNode }) {
     guard();
     window.addEventListener(AUTH_CHANGE_EVENT, guard);
     return () => window.removeEventListener(AUTH_CHANGE_EVENT, guard);
-  }, [router]);
+  }, [isReady, isLoggedIn, router]);
+
+  if (!isReady) {
+    return <LoadingMessage label={LOADING_AUTH_RESTORE} />;
+  }
 
   return children;
 }

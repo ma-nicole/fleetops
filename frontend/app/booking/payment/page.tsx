@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import PaymentMethodInstructions from "@/components/PaymentMethodInstructions";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import SubmitButton from "@/components/ui/SubmitButton";
 import ErrorState from "@/components/ui/ErrorState";
-import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
+import { ApiError } from "@/lib/api";
+import { ERROR_LOAD_DATA, LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { formatPhp } from "@/lib/appLocale";
 import {
   CUSTOMER_PAYMENT_METHODS,
+  formatPaymentMethodLabel,
   paymentMethodRequiresProof,
   type CustomerPaymentMethod,
 } from "@/lib/paymentMethodOptions";
@@ -21,15 +23,32 @@ import {
   gcashAllowedForAmount,
 } from "@/lib/paymentLimits";
 import { useRoleGuard } from "@/lib/useRoleGuard";
-import { WorkflowApi, type Booking } from "@/lib/workflowApi";
+import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
+
+function formatPaymentStatus(status: Payment["status"]): string {
+  switch (status) {
+    case "for_verification":
+      return "for verification";
+    case "verified":
+      return "verified";
+    case "rejected":
+      return "rejected";
+    case "refunded":
+      return "refunded";
+    default:
+      return status;
+  }
+}
 
 function BookingPaymentInner() {
-  useRoleGuard(["customer"]);
+  const { ready, allowed } = useRoleGuard(["customer"]);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const bookingIdRaw = searchParams.get("bookingId");
+  const bookingIdRaw =
+    searchParams.get("bookingId") ?? searchParams.get("booking_id") ?? searchParams.get("id");
 
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [existingPayments, setExistingPayments] = useState<Payment[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [method, setMethod] = useState<CustomerPaymentMethod>("gcash");
@@ -41,32 +60,50 @@ function BookingPaymentInner() {
 
   const bookingId = bookingIdRaw ? Number.parseInt(bookingIdRaw, 10) : NaN;
 
+  const latestPayment = useMemo(() => {
+    if (!existingPayments.length) return null;
+    return [...existingPayments].sort((a, b) => b.id - a.id)[0];
+  }, [existingPayments]);
+
+  const canSubmitPayment = !latestPayment || latestPayment.status === "rejected";
+
   const loadBooking = useCallback(async () => {
-    if (!Number.isFinite(bookingId)) {
-      setLoadError("Missing booking.");
+    if (!Number.isFinite(bookingId) || bookingId <= 0) {
+      setLoadError("Booking not found.");
       setPageLoading(false);
       return;
     }
     setPageLoading(true);
     try {
-      const b = await WorkflowApi.getBooking(bookingId);
+      const [b, pays] = await Promise.all([
+        WorkflowApi.getBooking(bookingId),
+        WorkflowApi.bookingPayments(bookingId).catch(() => [] as Payment[]),
+      ]);
       setBooking(b);
+      setExistingPayments(pays);
       setLoadError(null);
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+      setBooking(null);
+      setExistingPayments([]);
+      if (e instanceof ApiError && e.status === 404) {
+        setLoadError("Booking not found.");
+      } else {
+        setLoadError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
+      }
     } finally {
       setPageLoading(false);
     }
   }, [bookingId]);
 
   useEffect(() => {
+    if (!ready || !allowed) return;
     void loadBooking();
-  }, [loadBooking]);
+  }, [ready, allowed, loadBooking]);
 
   const total = booking?.estimated_cost ?? 0;
   const gcashBlocked = gcashAmountExceedsLimit(total);
   const requiresProof = paymentMethodRequiresProof(method);
-  const canSubmit = requiresProof ? !!selectedFile : true;
+  const canSubmit = canSubmitPayment && (requiresProof ? !!selectedFile : true);
 
   useEffect(() => {
     if (gcashBlocked && method === "gcash") {
@@ -126,6 +163,8 @@ function BookingPaymentInner() {
     try {
       await WorkflowApi.submitPaymentProof(bookingId, method, selectedFile);
       setUploadSuccess(true);
+      const pays = await WorkflowApi.bookingPayments(bookingId).catch(() => [] as Payment[]);
+      setExistingPayments(pays);
       setTimeout(() => {
         router.push("/modules/customer/payment");
       }, 1200);
@@ -136,10 +175,20 @@ function BookingPaymentInner() {
     }
   };
 
-  if (!Number.isFinite(bookingId)) {
+  if (!ready) {
     return (
       <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto" }}>
-        <p style={{ color: "#991B1B" }}>Invalid payment link.</p>
+        <LoadingMessage label={LOADING_AUTH_RESTORE} />
+      </div>
+    );
+  }
+
+  if (!allowed) return null;
+
+  if (!Number.isFinite(bookingId) || bookingId <= 0) {
+    return (
+      <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto" }}>
+        <p style={{ color: "#991B1B" }}>Booking not found.</p>
         <Link href="/booking" style={{ color: "#FF9800", fontWeight: 600 }}>
           ← Back to booking
         </Link>
@@ -158,7 +207,11 @@ function BookingPaymentInner() {
   if (loadError || !booking) {
     return (
       <div style={{ padding: "var(--page-main-padding)", maxWidth: 560, margin: "0 auto", display: "grid", gap: "1rem" }}>
-        <ErrorState message={loadError ?? ERROR_LOAD_DATA} onRetry={() => void loadBooking()} />
+        {loadError === "Booking not found." ? (
+          <p style={{ margin: 0, color: "#991B1B", fontWeight: 600 }}>Booking not found.</p>
+        ) : (
+          <ErrorState message={loadError ?? ERROR_LOAD_DATA} onRetry={() => void loadBooking()} />
+        )}
         <Link href="/booking" style={{ color: "#FF9800", fontWeight: 600 }}>
           ← Back to booking
         </Link>
@@ -274,6 +327,12 @@ function BookingPaymentInner() {
                   ? "Upload proof of payment"
                   : "Confirm payment request"}
             </h3>
+            {!canSubmitPayment && latestPayment ? (
+              <p style={{ color: "#047857", fontSize: "0.9rem", marginBottom: "1rem", fontWeight: 600 }}>
+                Payment already submitted ({formatPaymentStatus(latestPayment.status)}). You can submit again only if
+                admin rejects the proof.
+              </p>
+            ) : null}
             {requiresProof ? (
               <p style={{ color: "#666666", fontSize: "0.9rem", marginBottom: "1rem" }}>
                 {method === "gcash"
@@ -335,7 +394,7 @@ function BookingPaymentInner() {
                 type="file"
                 accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
                 onChange={handleFileSelect}
-                disabled={isUploading || uploadSuccess}
+                disabled={isUploading || uploadSuccess || !canSubmitPayment}
                 style={{ display: "none" }}
                 id="file-upload"
               />
@@ -379,7 +438,7 @@ function BookingPaymentInner() {
                     ? "Submit proof"
                     : "Confirm COD request"
               }
-              disabled={!canSubmit || uploadSuccess}
+              disabled={!canSubmit || uploadSuccess || !canSubmitPayment}
               style={{
                 width: "100%",
                 padding: "0.75rem",
@@ -396,6 +455,22 @@ function BookingPaymentInner() {
         <aside style={{ position: "sticky", top: "2rem", alignSelf: "start" }}>
           <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
             <h3 style={{ color: "#1A1A1A", marginTop: 0 }}>Status</h3>
+            {latestPayment ? (
+              <div style={{ marginBottom: "0.85rem", fontSize: "0.88rem", color: "#374151", display: "grid", gap: "0.35rem" }}>
+                <p style={{ margin: 0 }}>
+                  <strong>Payment reference:</strong> {latestPayment.reference}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Method:</strong> {formatPaymentMethodLabel(latestPayment.method)}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Amount:</strong> {formatPhp(latestPayment.amount)}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>Status:</strong> {formatPaymentStatus(latestPayment.status)}
+                </p>
+              </div>
+            ) : null}
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.9rem" }}>
               {method === "gcash" ? (
                 <>

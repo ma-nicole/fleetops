@@ -212,7 +212,8 @@ function DispatcherJobAssignmentsInner() {
         <header>
           <h1 style={{ margin: 0 }}>Job Assignment</h1>
           <p style={{ color: "#6B7280", marginTop: 4 }}>
-            Shows bookings with <strong>verified payment</strong> that still need truck / driver / helper assignment.
+            Shows bookings with <strong>verified payment, approved declaration, and cargo type validated</strong> that still
+            need truck / driver / helper assignment.
             Capacity rules (four 42 t trucks, overlap by route duration) also apply to customer booking windows.
           </p>
         </header>
@@ -238,8 +239,8 @@ function DispatcherJobAssignmentsInner() {
               lineHeight: 1.5,
             }}
           >
-            <strong>No verified-payment bookings waiting for assignment.</strong> Customers must complete payment proof and an
-            admin/manager must <strong>verify</strong> it. Approve the booking if it is still pending, then return here.
+            <strong>No bookings ready for assignment.</strong> Customers must complete payment proof, goods declaration
+            approval, and admin cargo type validation for the same booking ID before dispatch.
           </div>
         ) : null}
 
@@ -301,6 +302,8 @@ function DispatcherJobAssignmentsInner() {
 
           {selected ? (
             <p style={{ color: "#4B5563", fontSize: 14, marginTop: 10, lineHeight: 1.5 }}>
+              <strong>Booking ID:</strong> #{selected.id} (same ID across payment, declaration, cargo, and trips)
+              <br />
               <strong>Pickup:</strong> {selected.pickup_location}
               <br />
               <strong>Dropoff:</strong> {selected.dropoff_location}

@@ -41,6 +41,7 @@ logging.basicConfig(
     level=logging.INFO if settings.app_env.strip().lower() == "production" else logging.DEBUG,
     format="ts=%(asctime)s level=%(levelname)s logger=%(name)s msg=%(message)s",
 )
+logger = logging.getLogger(__name__)
 
 
 def require_db(db=Depends(get_db)) -> None:
@@ -51,7 +52,13 @@ app = FastAPI(title=settings.app_name)
 
 
 @app.exception_handler(PreciseDistanceUnavailable)
-async def precise_distance_unavailable_handler(_request: Request, exc: PreciseDistanceUnavailable) -> JSONResponse:
+async def precise_distance_unavailable_handler(request: Request, exc: PreciseDistanceUnavailable) -> JSONResponse:
+    logger.warning(
+        "PreciseDistanceUnavailable path=%s method=%s detail=%s",
+        request.url.path,
+        request.method,
+        exc.detail,
+    )
     return JSONResponse(status_code=400, content={"detail": exc.detail})
 
 

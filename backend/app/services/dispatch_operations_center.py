@@ -8,9 +8,10 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.constants.booking_time_slots import is_allowed_time_slot
 from app.constants.fleet_capacity import trucks_required_for_cargo
-from app.services.booking_schedule import booking_interval
+from app.services.booking_schedule import booking_pickup_window_end_approx
+from app.services.dispatch_assignment_readiness import dispatch_assignment_readiness
+from app.services.route_estimate import MAP_LOCATION_VERIFY_WARNING
 from app.services.latest_location_display import latest_location_display_for_trip
 from app.services.dispatcher_booking_assignment import blocked_booking_ids_for_dispatcher, has_dispatcher_booking_scope
 from app.models.entities import (
@@ -53,6 +54,33 @@ def _norm(s: str | None) -> str:
     return (s or "").strip().lower()
 
 
+def _booking_address_warning(booking: Booking | None) -> dict[str, Any] | None:
+    """Lightweight address quality check — no external geocoding calls."""
+    if booking is None:
+        return None
+    pickup = (booking.pickup_location or "").strip()
+    dropoff = (booking.dropoff_location or "").strip()
+    if not pickup or not dropoff:
+        return {
+            "booking_id": booking.id,
+            "code": "missing_address",
+            "message": "Booking missing pickup or dropoff details.",
+            "pickup": pickup or None,
+            "dropoff": dropoff or None,
+        }
+    vague_pickup = "," not in pickup and len(pickup.split()) <= 2
+    vague_dropoff = "," not in dropoff and len(dropoff.split()) <= 2
+    if vague_pickup or vague_dropoff or len(pickup) < 12 or len(dropoff) < 12:
+        return {
+            "booking_id": booking.id,
+            "code": "address_not_geocodable",
+            "message": MAP_LOCATION_VERIFY_WARNING,
+            "pickup": pickup,
+            "dropoff": dropoff,
+        }
+    return None
+
+
 def _operational_bucket(trip: Trip) -> str:
     """Bucket for summary counts: assigned | for_pickup | picked_up | en_route | dropped_off."""
     st = trip.status
@@ -78,15 +106,11 @@ def _display_status(trip: Trip) -> str:
         return hp
     if trip.status == TripStatus.ASSIGNED:
         return "assigned"
-    if trip.status == TripStatus.ACCEPTED:
-        return "for_pickup"
-    if trip.status == TripStatus.LOADING:
-        return "picked_up"
-    if trip.status == TripStatus.IN_DELIVERY:
-        return "en_route"
-    if trip.status == TripStatus.DEPARTED:
-        return "en_route"
-    return trip.status.value
+    if trip.status in TERMINAL_TRIP:
+        st = trip.status
+        return st.value if hasattr(st, "value") else str(st)
+    # No helper milestone on record — do not infer en_route from driver trip.status alone.
+    return "for_pickup"
 
 
 def _off_duty(avail: str | None) -> bool:
@@ -185,6 +209,8 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
                 verified_at_by[p.booking_id] = p.reviewed_at or p.paid_at or p.created_at
 
     waiting_for_assignment: list[dict[str, Any]] = []
+    address_warnings: list[dict[str, Any]] = []
+    seen_warn_bookings: set[int] = set()
     waiting_count = 0
     for bk in wait_rows:
         if blocked and bk.id in blocked:
@@ -192,8 +218,12 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
         need = int(bk.required_truck_count or trucks_required_for_cargo(float(bk.cargo_weight_tons or 0)))
         active_legs = active_by.get(bk.id, 0)
         if active_legs == 0 and need > 0:
+            readiness = dispatch_assignment_readiness(db, bk)
+            if not readiness["ready"]:
+                continue
             waiting_count += 1
             pv = verified_at_by.get(bk.id)
+            w_warn = _booking_address_warning(bk)
             waiting_for_assignment.append(
                 {
                     "booking_id": bk.id,
@@ -201,11 +231,18 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
                     "required_trucks": need,
                     "pickup_location": (bk.pickup_location or "").strip() or "—",
                     "dropoff_location": (bk.dropoff_location or "").strip() or "—",
-                    "scheduled_date": bk.scheduled_date.isoformat(),
+                    "scheduled_date": bk.scheduled_date.isoformat() if bk.scheduled_date else None,
                     "scheduled_time_slot": bk.scheduled_time_slot,
                     "payment_verified_at": _iso(pv),
+                    "map_available": w_warn is None,
+                    "cargo_type_validated": readiness["cargo_type_validated"],
+                    "ready_for_dispatch_assignment": readiness["ready"],
+                    "dispatch_blockers": readiness["blockers"],
                 }
             )
+            if w_warn and bk.id not in seen_warn_bookings:
+                seen_warn_bookings.add(bk.id)
+                address_warnings.append(w_warn)
 
     trucks_b, drivers_b, helpers_b = _busy_resource_ids(db)
 
@@ -297,6 +334,10 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
     active_trips_board: list[dict[str, Any]] = []
     for tr in board_trips:
         bk = tr.booking
+        addr_warn = _booking_address_warning(bk)
+        if addr_warn and bk and bk.id not in seen_warn_bookings:
+            seen_warn_bookings.add(bk.id)
+            address_warnings.append({**addr_warn, "trip_id": tr.id})
         loc_tuple = latest_loc.get(tr.id)
         raw_ping = (loc_tuple[0] if loc_tuple else None) or getattr(tr, "latest_location", None)
         if raw_ping == "—":
@@ -324,9 +365,15 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
                 "current_status": disp,
                 "badge_status": badge_status,
                 "latest_location": loc_name,
-                "scheduled_window": f"{bk.scheduled_date.isoformat()} · {bk.scheduled_time_slot or '—'}",
+                "scheduled_window": (
+                    f"{bk.scheduled_date.isoformat()} · {bk.scheduled_time_slot or '—'}"
+                    if bk.scheduled_date
+                    else (bk.scheduled_time_slot or "—")
+                ),
                 "last_updated": _iso(last_upd),
                 "eta": eta_iso,
+                "map_available": addr_warn is None,
+                "distance_km_fallback": float(tr.distance_km or 0) if tr.distance_km else None,
             }
         )
 
@@ -378,9 +425,23 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
                     }
                 )
         bk = tr.booking
-        if bk is not None and is_allowed_time_slot(bk.scheduled_time_slot):
-            _, win_end = booking_interval(bk)
-            if win_end < now and _display_status(tr) in ("assigned", "for_pickup"):
+        if bk is not None:
+            readiness = dispatch_assignment_readiness(db, bk)
+            if not readiness["ready"]:
+                alerts.append(
+                    {
+                        "severity": "high",
+                        "code": "booking_not_fully_verified",
+                        "message": (
+                            f"Trip #{tr.id} references Booking #{bk.id} which is not fully verified "
+                            f"({'; '.join(readiness['blockers'])}). Validate the same booking ID in Compliance."
+                        ),
+                        "trip_id": tr.id,
+                        "booking_id": bk.id,
+                    }
+                )
+            win_end = booking_pickup_window_end_approx(bk)
+            if win_end is not None and win_end < now and _display_status(tr) in ("assigned", "for_pickup"):
                 alerts.append(
                     {
                         "severity": "medium",
@@ -509,4 +570,5 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
         "resources": resources,
         "recent_location_updates": recent_updates,
         "alerts": alerts[:80],
+        "address_warnings": address_warnings,
     }

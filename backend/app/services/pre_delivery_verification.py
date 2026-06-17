@@ -26,6 +26,13 @@ def _service_type_label(service_type: ServiceType | str | None) -> str:
     return "Fixed route" if val == ServiceType.FIXED.value else "Customized route"
 
 
+def _service_type_ok(service_type: ServiceType | str | None) -> bool:
+    if service_type is None:
+        return False
+    val = service_type.value if hasattr(service_type, "value") else str(service_type)
+    return val.strip().lower() in (ServiceType.FIXED.value, ServiceType.CUSTOMIZED.value)
+
+
 def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
     verified_payment = (
         db.query(Payment)
@@ -40,7 +47,8 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
     has_terms_agreed = booking.terms_agreed_at is not None
     cargo_desc = (booking.cargo_description or "").strip()
     weight_ok = 0.1 <= float(booking.cargo_weight_tons or 0) <= MAX_BOOKING_WEIGHT_TONS
-    service_ok = booking.service_type in (ServiceType.FIXED, ServiceType.CUSTOMIZED)
+    service_ok = _service_type_ok(booking.service_type)
+    cargo_type_admin_verified = bool(booking.cargo_type_validated)
 
     decl_approved = (
         has_declaration_file
@@ -48,8 +56,9 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
     )
 
     restricted_reasons = parse_cargo_restricted_reasons(booking.cargo_restricted_reasons)
+    cargo_desc_display = cargo_desc or cargo_type_category_label(booking.cargo_type_category) or "—"
     cargo_type_detail_validated = (
-        f"{_service_type_label(booking.service_type)} · {cargo_desc[:80]} · "
+        f"{_service_type_label(booking.service_type)} · {cargo_desc_display[:80]} · "
         f"{cargo_type_category_label(booking.cargo_type_category)}."
     )
     if booking.cargo_restricted_flag and restricted_reasons:
@@ -85,10 +94,10 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
         {
             "key": "cargo_type",
             "label": "Cargo type validation",
-            "passed": service_ok and len(cargo_desc) >= 3 and weight_ok and bool(booking.cargo_type_validated),
+            "passed": service_ok and weight_ok and cargo_type_admin_verified,
             "detail": (
                 cargo_type_detail_validated
-                if service_ok and len(cargo_desc) >= 3 and weight_ok and booking.cargo_type_validated
+                if service_ok and weight_ok and cargo_type_admin_verified
                 else (
                     (
                         f"Admin/dispatcher must validate cargo type. "
@@ -96,11 +105,11 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
                         if booking.cargo_type_category
                         else "Admin/dispatcher must validate cargo type and description."
                     )
-                    if service_ok and len(cargo_desc) >= 3 and weight_ok
+                    if service_ok and weight_ok
                     else (
-                        "Cargo description (min 3 characters) and valid weight (0.1–"
-                        f"{int(MAX_BOOKING_WEIGHT_TONS)} t) required."
-                        if not (service_ok and len(cargo_desc) >= 3 and weight_ok)
+                        "Valid service type and cargo weight (0.1–"
+                        f"{int(MAX_BOOKING_WEIGHT_TONS)} t) required before cargo type validation."
+                        if not (service_ok and weight_ok)
                         else "Cargo type validation pending."
                     )
                 )
@@ -128,12 +137,19 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
 
 
 def pre_delivery_block_detail(db: Session, booking: Booking) -> dict | None:
-    checklist = build_pre_delivery_checklist(db, booking)
+    """Evaluate checklist using a fresh booking row (avoids stale relationship state)."""
+    fresh = db.query(Booking).filter(Booking.id == booking.id).first()
+    if fresh is None:
+        return None
+    checklist = build_pre_delivery_checklist(db, fresh)
     if checklist["all_passed"]:
         return None
     failed = [item for item in checklist["items"] if not item["passed"]]
     labels = ", ".join(item["label"] for item in failed)
     return {
-        "message": f"Pre-delivery verification incomplete ({labels}). Delivery progression is blocked.",
+        "message": (
+            f"Pre-delivery verification incomplete for Booking #{fresh.id} ({labels}). "
+            "Delivery progression is blocked."
+        ),
         "checklist": checklist,
     }
