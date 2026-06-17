@@ -1,0 +1,19 @@
+# FleetOps — Hostinger document root (public_html)
+# Prevents 403 on empty directory listing and blocks direct access to backend source.
+
+Options -Indexes +FollowSymLinks
+DirectoryIndex index.php index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Deny web access to API source, git metadata, and env files
+  RewriteRule ^backend(/|$) - [F,L]
+  RewriteRule ^\.git - [F,L]
+  RewriteRule ^\.env - [F,L]
+  RewriteRule ^frontend/\.env - [F,L]
+</IfModule>
+
+# Hostinger Node.js Web Apps inject proxy rules into this file on deploy.
+# Plain Git deploy without Node.js will only serve this static bootstrap until you
+# configure a Node.js Web App or VPS reverse proxy — see HOSTINGER.md.

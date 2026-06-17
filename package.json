@@ -2,12 +2,17 @@
   "name": "fleetops",
   "private": true,
   "description": "Run API + Next.js together for local development",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "setup": "node scripts/pip-install-backend.mjs && npm install --prefix frontend && npm install",
     "install:backend": "node scripts/pip-install-backend.mjs",
     "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "node scripts/run-uvicorn.mjs",
-    "dev:web": "wait-on http://127.0.0.1:8000/health -t 120000 && npm run dev:web-only --prefix frontend"
+    "dev:web": "wait-on http://127.0.0.1:8000/health -t 120000 && npm run dev:web-only --prefix frontend",
+    "build": "npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "npm run start --prefix frontend -- -p ${PORT:-3000}"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
