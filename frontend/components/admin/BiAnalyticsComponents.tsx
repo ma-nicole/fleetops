@@ -53,7 +53,13 @@ export function DrillDownAnalyticsModal({
       setPanelFilters(EMPTY_PANEL_FILTERS);
       setInterpretation(null);
       setAiError(null);
+      return;
     }
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
   }, [open, selection?.label]);
 
   const chartFiltered = useMemo(
@@ -217,6 +223,21 @@ export function DrillDownAnalyticsModal({
                 </select>
               </label>
               <label className="filter-panel__label">
+                Client
+                <select
+                  className="input"
+                  value={panelFilters.clientId}
+                  onChange={(e) => setPanelFilters((f) => ({ ...f, clientId: e.target.value }))}
+                >
+                  <option value="">All clients</option>
+                  {(filterOptions?.clients ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-panel__label">
                 Status
                 <select
                   className="input"
@@ -240,7 +261,7 @@ export function DrillDownAnalyticsModal({
           <section className="bi-drilldown-section">
             <h3 className="bi-drilldown-section__title">Section 4 — AI Interpretation</h3>
             <button type="button" className="quick-action-btn" onClick={() => void explainChart()} disabled={aiLoading}>
-              {aiLoading ? "Generating…" : "Explain This Chart"}
+              {aiLoading ? "Generating…" : "Explain this Chart with AI"}
             </button>
             {aiError ? <p className="bi-drilldown-empty">{aiError}</p> : null}
             {interpretation ? (

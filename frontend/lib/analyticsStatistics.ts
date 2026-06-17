@@ -81,6 +81,7 @@ export type PanelFilters = {
   route: string;
   driverId: string;
   truckId: string;
+  clientId: string;
   status: string;
 };
 
@@ -90,6 +91,7 @@ export const EMPTY_PANEL_FILTERS: PanelFilters = {
   route: "",
   driverId: "",
   truckId: "",
+  clientId: "",
   status: "",
 };
 
@@ -99,6 +101,7 @@ export function applyPanelFilters(
   filterOptions?: {
     drivers?: { id: number; name: string }[];
     trucks?: { id: number; code: string }[];
+    clients?: { id: number; name: string }[];
   },
 ): Record<string, unknown>[] {
   return rows.filter((row) => {
@@ -127,6 +130,12 @@ export function applyPanelFilters(
       const code = truck?.code ?? "";
       const rowTruck = String(row.truck ?? row.truck_code ?? "");
       if (rowTruck !== code && String(row.truck_id ?? "") !== filters.truckId) return false;
+    }
+    if (filters.clientId) {
+      const client = filterOptions?.clients?.find((c) => String(c.id) === filters.clientId);
+      const name = client?.name ?? "";
+      const rowClient = String(row.customer ?? row.client_name ?? "");
+      if (rowClient !== name && String(row.customer_id ?? "") !== filters.clientId) return false;
     }
     return true;
   });

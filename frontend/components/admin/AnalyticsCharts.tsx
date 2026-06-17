@@ -399,26 +399,152 @@ export function DrilldownTable({
   rows: Record<string, unknown>[];
 }) {
   if (rows.length === 0) return <EmptyChart />;
+
   return (
-    <div className="data-table-wrap">
-      <table className="data-table">
+    <div className="drilldown-table-wrap">
+      <table className="drilldown-table">
         <thead>
           <tr>
-            {columns.map((c) => (
-              <th key={c.key}>{c.label}</th>
-            ))}
+            {columns.map((c) => {
+              const kind = drilldownColumnKind(c.key);
+              return (
+                <th key={c.key} className={drilldownColumnClass(kind)} scope="col">
+                  {c.label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {rows.slice(0, 50).map((row, idx) => (
             <tr key={idx}>
-              {columns.map((c) => (
-                <td key={c.key}>{row[c.key] != null ? String(row[c.key]) : "—"}</td>
-              ))}
+              {columns.map((c) => {
+                const kind = drilldownColumnKind(c.key);
+                const raw = row[c.key];
+                const text = formatDrilldownCell(c.key, raw);
+                const title = drilldownCellTitle(kind, text);
+                return (
+                  <td key={c.key} className={drilldownColumnClass(kind)} title={title}>
+                    <span className="drilldown-table__cell">{text}</span>
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+export type DrilldownColumnKind =
+  | "booking-id"
+  | "trip-id"
+  | "driver"
+  | "truck"
+  | "customer"
+  | "route"
+  | "date"
+  | "status"
+  | "amount"
+  | "reference-id"
+  | "id"
+  | "text";
+
+const NUMERIC_KEYS = new Set([
+  "amount_php",
+  "cost_php",
+  "revenue_php",
+  "fuel_php",
+  "total_cost_php",
+  "actual_toll_php",
+  "profit_php",
+  "expense_php",
+  "total",
+  "count",
+  "completed",
+  "deliveries",
+  "trip_count",
+  "liters",
+  "risk_score",
+  "value",
+  "estimated_toll",
+  "actual_toll",
+  "variance",
+]);
+
+export function drilldownColumnKind(key: string): DrilldownColumnKind {
+  const k = key.toLowerCase();
+  if (k === "booking_id") return "booking-id";
+  if (k === "trip_id") return "trip-id";
+  if (k === "reference_id" || k === "ref_id" || k === "reference" || k === "source_id") return "reference-id";
+  if (k === "driver" || k === "driver_name") return "driver";
+  if (k === "truck" || k === "truck_code" || k === "truck_id") return "truck";
+  if (k.includes("client") || k === "customer") return "customer";
+  if (k === "route" || k.endsWith("_route")) return "route";
+  if (k.includes("date") || k === "month" || k.endsWith("_at") || k === "scheduled_month" || k === "completed_at") {
+    return "date";
+  }
+  if (k.includes("status") || k === "category" || k === "source_type" || k === "record_type" || k === "vehicle_class") {
+    return "status";
+  }
+  if (
+    NUMERIC_KEYS.has(k) ||
+    k.includes("amount") ||
+    k.includes("_php") ||
+    k.includes("cost") ||
+    k.includes("revenue") ||
+    k.includes("profit") ||
+    k.includes("fuel") ||
+    k.includes("toll") ||
+    k.includes("expense")
+  ) {
+    return "amount";
+  }
+  if (k === "id" || k.endsWith("_id")) return "id";
+  return "text";
+}
+
+export function drilldownColumnClass(kind: DrilldownColumnKind): string {
+  return `drilldown-table__col drilldown-table__col--${kind}`;
+}
+
+function drilldownCellTitle(kind: DrilldownColumnKind, text: string): string | undefined {
+  if (!text || text === "—") return undefined;
+  if (kind === "route") return text;
+  return text;
+}
+
+export function formatDrilldownCell(key: string, value: unknown): string {
+  if (value == null || value === "") return "—";
+  const kind = drilldownColumnKind(key);
+  if (kind === "amount") {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return String(value);
+    const k = key.toLowerCase();
+    if (
+      k.includes("php") ||
+      k.includes("amount") ||
+      k.includes("cost") ||
+      k.includes("toll") ||
+      k.includes("expense") ||
+      k.includes("revenue") ||
+      k.includes("profit") ||
+      k.includes("fuel")
+    ) {
+      return formatPhp(n);
+    }
+    if (Number.isInteger(n)) return n.toLocaleString();
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  if (kind === "date") {
+    const text = String(value);
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+    if (/^\d{4}-\d{2}$/.test(text)) return text;
+    return text;
+  }
+  if (kind === "status") {
+    return String(value).replace(/_/g, " ");
+  }
+  return String(value);
 }

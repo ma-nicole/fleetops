@@ -1,125 +1,56 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { InteractiveFeaturePanel } from "@/components/admin/InteractiveFeaturePanel";
-import { SectionCard } from "@/components/admin/AnalyticsCharts";
+import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
 import type { DriverRoleAnalyticsPayload } from "@/lib/analyticsApi";
 
-type PillarKey = keyof DriverRoleAnalyticsPayload;
-
-const PILLAR_TABS: { id: PillarKey; label: string }[] = [
-  { id: "trip_execution", label: "Trip Execution" },
-  { id: "route_navigation", label: "Route Navigation" },
-  { id: "delivery_reporting", label: "Delivery Reporting" },
-  { id: "vehicle_monitoring", label: "Vehicle Monitoring" },
-  { id: "trip_status", label: "Trip Status" },
-];
-
-const FEATURE_LABELS: Record<PillarKey, { descriptive: Record<string, string>; predictive: Record<string, string> }> = {
+const FEATURE_LABELS: Record<string, Record<string, string>> = {
   trip_execution: {
-    descriptive: {
-      trip_logs: "Trip logs",
-      completed_deliveries: "Completed delivery records",
-      travel_time_reports: "Travel time reports",
-    },
-    predictive: {
-      trip_duration_prediction: "Trip duration prediction",
-      fuel_usage_prediction: "Fuel usage prediction",
-    },
+    trip_logs: "Trip Logs",
+    completed_deliveries: "Completed Deliveries",
+    travel_time_reports: "Travel Time Reports",
+    trip_duration_prediction: "Trip Duration Prediction",
+    fuel_usage_prediction: "Fuel Usage Prediction",
   },
   route_navigation: {
-    descriptive: {
-      route_history: "Route history",
-      distance_records: "Distance records",
-      past_delivery_routes: "Past delivery routes",
-    },
-    predictive: {
-      optimal_route_prediction: "Optimal route prediction",
-      travel_time_estimation: "Travel time estimation",
-    },
+    route_history: "Route History",
+    distance_records: "Distance Records",
+    past_delivery_routes: "Past Delivery Routes",
+    optimal_route_prediction: "Optimal Route Prediction",
+    travel_time_estimation: "Travel Time Estimation",
   },
   delivery_reporting: {
-    descriptive: {
-      delivery_confirmation_logs: "Delivery confirmation logs",
-      shipment_records: "Shipment records",
-    },
-    predictive: {
-      completion_time_prediction: "Delivery completion time prediction",
-    },
+    delivery_confirmation_logs: "Delivery Confirmation Logs",
+    shipment_records: "Shipment Records",
+    completion_time_prediction: "Completion Time Prediction",
   },
   vehicle_monitoring: {
-    descriptive: {
-      vehicle_usage_logs: "Vehicle usage logs",
-      maintenance_records: "Maintenance records",
-    },
-    predictive: {
-      maintenance_need_prediction: "Maintenance need prediction",
-      breakdown_risk_prediction: "Breakdown risk prediction",
-    },
+    vehicle_usage_logs: "Vehicle Usage Logs",
+    maintenance_records: "Maintenance Records",
+    maintenance_need_prediction: "Maintenance Need Prediction",
+    breakdown_risk_prediction: "Breakdown Risk Prediction",
   },
   trip_status: {
-    descriptive: {
-      trip_progress_updates: "Trip progress updates",
-      delay_records: "Delay records",
-    },
-    predictive: {
-      delay_likelihood_prediction: "Delay likelihood prediction",
-    },
+    trip_progress_updates: "Trip Progress Updates",
+    delay_records: "Delay Records",
+    delay_likelihood_prediction: "Delay Likelihood Prediction",
   },
 };
 
+const CATEGORY_TABS: AnalyticsCategoryTab[] = [
+  { id: "trips", label: "Trips", include: [{ pillar: "trip_execution" }] },
+  { id: "routes", label: "Routes", include: [{ pillar: "route_navigation" }] },
+  { id: "vehicle", label: "Vehicle", include: [{ pillar: "vehicle_monitoring" }] },
+  { id: "delivery", label: "Delivery", include: [{ pillar: "delivery_reporting" }] },
+  { id: "delays", label: "Delays", include: [{ pillar: "trip_status" }] },
+];
+
 export default function DriverRoleAnalyticsTabs({ data }: { data: DriverRoleAnalyticsPayload }) {
-  const [pillar, setPillar] = useState<PillarKey>("trip_execution");
-
-  const labels = FEATURE_LABELS[pillar];
-  const pillarData = data[pillar];
-
-  const descriptiveEntries = useMemo(
-    () => Object.entries(labels.descriptive).map(([key, title]) => [key, title, pillarData.descriptive[key]] as const),
-    [labels.descriptive, pillarData.descriptive],
-  );
-  const predictiveEntries = useMemo(
-    () => Object.entries(labels.predictive).map(([key, title]) => [key, title, pillarData.predictive[key]] as const),
-    [labels.predictive, pillarData.predictive],
-  );
-
   return (
-    <SectionCard title="Driver Analytics" sectionId="driver-role-analytics">
-      <p style={{ margin: "0 0 1rem", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-        Your trip execution, routes, deliveries, vehicle usage, and status history — all from your assigned trips
-        only.
-      </p>
-      <div className="tab-pills" style={{ marginBottom: "1.25rem" }}>
-        {PILLAR_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setPillar(tab.id)}
-            className={`tab-pill${pillar === tab.id ? " tab-pill--active" : ""}`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gap: "1.5rem" }}>
-        <section>
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem" }}>Descriptive analytics</h3>
-          <div style={{ display: "grid", gap: "1rem" }}>
-            {descriptiveEntries.map(([key, title, block]) => (
-              <InteractiveFeaturePanel key={key} title={title} block={block} />
-            ))}
-          </div>
-        </section>
-        <section>
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem" }}>Predictive analytics</h3>
-          <div style={{ display: "grid", gap: "1rem" }}>
-            {predictiveEntries.map(([key, title, block]) => (
-              <InteractiveFeaturePanel key={key} title={title} block={block} />
-            ))}
-          </div>
-        </section>
-      </div>
-    </SectionCard>
+    <RoleAnalyticsGrid
+      dashboardTitle="Driver Analytics"
+      categoryTabs={CATEGORY_TABS}
+      featureLabels={FEATURE_LABELS}
+      data={data}
+    />
   );
 }

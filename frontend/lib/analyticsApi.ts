@@ -314,6 +314,13 @@ export type DriverRoleAnalyticsPayload = {
   trip_status: RoleAnalyticsPillar;
 };
 
+export type CustomerRoleAnalyticsPayload = {
+  account_management: RoleAnalyticsPillar;
+  service_selection: RoleAnalyticsPillar;
+  booking_management: RoleAnalyticsPillar;
+  shipment_tracking: RoleAnalyticsPillar;
+};
+
 export type DriverAnalyticsPayload = {
   generated_at: string;
   filters_applied: Record<string, string | number | null>;
@@ -323,6 +330,12 @@ export type DriverAnalyticsPayload = {
     shipment_statuses: string[];
   };
   driver_role_analytics: DriverRoleAnalyticsPayload;
+};
+
+export type CustomerAnalyticsPayload = {
+  generated_at: string;
+  filters_applied: Record<string, string | number | null>;
+  customer_role_analytics: CustomerRoleAnalyticsPayload;
 };
 
 export type DriverAnalyticsQuery = {
@@ -416,6 +429,7 @@ export type AdminAnalyticsPayload = {
   filter_options: {
     drivers: { id: number; name: string }[];
     trucks: { id: number; code: string }[];
+    clients?: { id: number; name: string }[];
     routes: string[];
     shipment_statuses: string[];
   };
@@ -424,6 +438,7 @@ export type AdminAnalyticsPayload = {
     statistics: StatisticsSummary | null;
     status_distribution: { status: string; count: number }[];
     monthly_deliveries: { month: string; count: number }[];
+    jobs_over_time?: { month: string; count: number }[];
     drilldown: Record<string, unknown>[];
   };
   expenses: AdminAnalyticsEmpty | {
@@ -639,6 +654,16 @@ export const AnalyticsApi = {
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
     const qs = params.toString();
     return apiGet<DriverAnalyticsPayload>(`/driver/analytics${qs ? `?${qs}` : ""}`);
+  },
+  customerAnalytics: (query: DriverAnalyticsQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.date_from) params.set("date_from", query.date_from);
+    if (query.date_to) params.set("date_to", query.date_to);
+    if (query.truck_id != null) params.set("truck_id", String(query.truck_id));
+    if (query.route) params.set("route", query.route);
+    if (query.shipment_status) params.set("shipment_status", query.shipment_status);
+    const qs = params.toString();
+    return apiGet<CustomerAnalyticsPayload>(`/customer/analytics${qs ? `?${qs}` : ""}`);
   },
   expenseInterpretation: (req: ExpenseInterpretationRequest) =>
     apiPost<ExpenseInterpretationResponse>("/admin/analytics/expense-interpretation", req),

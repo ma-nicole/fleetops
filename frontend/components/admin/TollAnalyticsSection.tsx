@@ -1,6 +1,6 @@
 "use client";
 
-import { EmptyChart, StatGrid, StatisticsTable } from "@/components/admin/AnalyticsCharts";
+import { DrilldownTable, EmptyChart, StatGrid, StatisticsTable } from "@/components/admin/AnalyticsCharts";
 import { formatPhp } from "@/lib/appLocale";
 import type { AdminAnalyticsEmpty, AdminAnalyticsPayload } from "@/lib/analyticsApi";
 
@@ -111,32 +111,17 @@ export default function TollAnalyticsSection({ data }: { data: TollAnalytics }) 
       {drilldown.length > 0 && (
         <div style={{ marginTop: "1.25rem" }}>
           <h4 style={{ margin: "0 0 0.75rem" }}>Recent completed trips</h4>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #E5E7EB", textAlign: "left" }}>
-                  <th style={{ padding: "0.5rem" }}>Trip</th>
-                  <th style={{ padding: "0.5rem" }}>Route</th>
-                  <th style={{ padding: "0.5rem" }}>Class</th>
-                  <th style={{ padding: "0.5rem" }}>Estimated</th>
-                  <th style={{ padding: "0.5rem" }}>Actual</th>
-                  <th style={{ padding: "0.5rem" }}>Variance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {drilldown.slice(0, 20).map((r) => (
-                  <tr key={`${r.trip_id}-${r.completed_at}`} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                    <td style={{ padding: "0.5rem" }}>#{r.trip_id}</td>
-                    <td style={{ padding: "0.5rem" }}>{r.route}</td>
-                    <td style={{ padding: "0.5rem" }}>{r.vehicle_class}</td>
-                    <td style={{ padding: "0.5rem" }}>{formatPhp(r.estimated_toll)}</td>
-                    <td style={{ padding: "0.5rem" }}>{formatPhp(r.actual_toll)}</td>
-                    <td style={{ padding: "0.5rem" }}>{formatPhp(r.variance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DrilldownTable
+            columns={[
+              { key: "trip_id", label: "Trip" },
+              { key: "route", label: "Route" },
+              { key: "vehicle_class", label: "Class" },
+              { key: "estimated_toll", label: "Estimated" },
+              { key: "actual_toll", label: "Actual" },
+              { key: "variance", label: "Variance" },
+            ]}
+            rows={drilldown.slice(0, 20) as unknown as Record<string, unknown>[]}
+          />
         </div>
       )}
     </>

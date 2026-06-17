@@ -18,7 +18,7 @@ From project root:
 
 ```bash
 chmod +x ./scripts/phase3_1_smoke_check.sh
-BASE_URL="https://yourdomain.com" ./scripts/phase3_1_smoke_check.sh
+BASE_URL="https://fleetopsapp.xyz" ./scripts/phase3_1_smoke_check.sh
 ```
 
 ## Optional deep-check variables
@@ -26,8 +26,8 @@ BASE_URL="https://yourdomain.com" ./scripts/phase3_1_smoke_check.sh
 Use these when your paths/tokens differ:
 
 ```bash
-BASE_URL="https://yourdomain.com" \
-API_BASE_URL="https://yourdomain.com/api" \
+BASE_URL="https://fleetopsapp.xyz" \
+API_BASE_URL="https://fleetopsapp.xyz/api" \
 BACKEND_DIRECT_URL="http://127.0.0.1:8000" \
 BACKEND_ENV_FILE="/opt/fleetopt/backend/.env" \
 FRONTEND_ENV_FILE="/opt/fleetopt/frontend/.env.local" \

@@ -4,7 +4,7 @@
 # HINDI gagana ang script na ito sa Hostinger Shared Hosting (walang Docker).
 #
 # Bago tumakbo, i-export ang iyong tunay na domain/paths, hal.:
-#   export DOMAIN=https://fleetops.mo-domain.com
+#   export DOMAIN=https://fleetopsapp.xyz
 #   export MYSQL_ROOT_PASSWORD=...
 # o i-edit ang mga default sa ibaba.
 #
@@ -20,7 +20,7 @@ command -v docker >/dev/null 2>&1 || {
 }
 
 # --- Domain & DB (PALITAN SA PRODUCTION) ---
-DOMAIN="${DOMAIN:-https://yourdomain.com}"
+DOMAIN="${DOMAIN:-https://fleetopsapp.xyz}"
 DOMAIN="${DOMAIN%/}"
 NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-${DOMAIN}/api}"
 FRONTEND_URL="${FRONTEND_URL:-${DOMAIN}}"
@@ -141,7 +141,7 @@ upstream frontend {
 
 server {
     listen 80;
-    server_name yourdomain.com www.yourdomain.com;
+    server_name fleetopsapp.xyz www.fleetopsapp.xyz;
     client_max_body_size 15M; # Backend max validated upload is 12MB
 
     location /api/ {
@@ -178,6 +178,6 @@ echo "Sunod:"
 echo "  1. Nginx reverse proxy: /api → 127.0.0.1:8000, /uploads → 127.0.0.1:8000/uploads, / → 127.0.0.1:3000"
 echo "  2. Nginx template written to /tmp/fleetopt-nginx.conf"
 echo "  3. SSL (Let's Encrypt sa VPS o Hostinger panel)"
-echo "  4. Palitan ang lahat ng yourdomain placeholder at mga DB password via env exports"
+echo "  4. Kung iba ang domain, i-export ang DOMAIN/FRONTEND_URL bago tumakbo; palitan ang mga DB password"
 echo "  5. Check probes: curl http://127.0.0.1:8000/health && curl http://127.0.0.1:8000/ready"
 echo "  Logs: docker logs -f $BACKEND_CONTAINER | $FRONTEND_CONTAINER | $MYSQL_CONTAINER"

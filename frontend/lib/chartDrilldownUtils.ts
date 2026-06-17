@@ -152,11 +152,35 @@ export function inferChartMeta(
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
     };
   }
+  if (keys.includes("client_name") && keys.includes("revenue_php")) {
+    return {
+      kind: "bar",
+      labelKey: "client_name",
+      valueKey: "revenue_php",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "client_name"),
+    };
+  }
+  if (keys.includes("category") && keys.includes("amount_php")) {
+    return {
+      kind: "bar",
+      labelKey: "category",
+      valueKey: "amount_php",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "category"),
+    };
+  }
   if (keys.includes("truck_code") && keys.includes("trip_count")) {
     return {
       kind: "bar",
       labelKey: "truck_code",
       valueKey: "trip_count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "truck_code"),
+    };
+  }
+  if (keys.includes("truck_code") && keys.includes("fuel_php")) {
+    return {
+      kind: "bar",
+      labelKey: "truck_code",
+      valueKey: "fuel_php",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "truck_code"),
     };
   }

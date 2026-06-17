@@ -1,90 +1,108 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { InteractiveFeaturePanel } from "@/components/admin/InteractiveFeaturePanel";
-import { SectionCard } from "@/components/admin/AnalyticsCharts";
+import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
 import type { AdminAnalyticsPayload, ManagerRoleAnalyticsPayload } from "@/lib/analyticsApi";
 
-type PillarKey = keyof ManagerRoleAnalyticsPayload;
-
-const PILLAR_TABS: { id: PillarKey; label: string }[] = [
-  { id: "planning", label: "Planning" },
-  { id: "organizing", label: "Organizing" },
-  { id: "execution", label: "Execution" },
-  { id: "controlling", label: "Controlling" },
-  { id: "performance_monitoring", label: "Performance Monitoring" },
-  { id: "risk_management", label: "Risk Management" },
-];
-
-const FEATURE_LABELS: Record<PillarKey, { descriptive: Record<string, string>; predictive: Record<string, string> }> = {
+const FEATURE_LABELS: Record<string, Record<string, string>> = {
   planning: {
-    descriptive: {
-      historical_trip_costs: "Historical trip costs",
-      fuel_consumption: "Fuel consumption reports",
-      fleet_usage: "Fleet usage summaries",
-    },
-    predictive: {
-      cost_forecasting: "Cost forecasting",
-      fuel_prediction: "Fuel consumption prediction",
-      fleet_demand_forecasting: "Fleet demand forecasting",
-    },
+    historical_trip_costs: "Historical Trip Costs",
+    fuel_consumption: "Fuel Consumption Reports",
+    fleet_usage: "Fleet Usage Summaries",
+    cost_forecasting: "Cost Forecasting",
+    fuel_prediction: "Fuel Consumption Prediction",
+    fleet_demand_forecasting: "Fleet Demand Forecasting",
   },
   organizing: {
-    descriptive: {
-      driver_assignments: "Driver assignment records",
-      truck_utilization: "Truck utilization reports",
-      route_histories: "Route histories",
-    },
-    predictive: {
-      fleet_allocation: "Optimal fleet allocation prediction",
-      workforce_demand: "Workforce demand forecasting",
-    },
+    driver_assignments: "Driver Assignment Records",
+    truck_utilization: "Truck Utilization Reports",
+    route_histories: "Route Histories",
+    fleet_allocation: "Optimal Fleet Allocation",
+    workforce_demand: "Workforce Demand Forecasting",
   },
   execution: {
-    descriptive: {
-      active_trips: "Active trip monitoring",
-      delivery_status: "Delivery status dashboards",
-      operational_logs: "Operational logs",
-    },
-    predictive: {
-      delay_prediction: "Delay prediction",
-      route_efficiency: "Route efficiency prediction",
-    },
+    active_trips: "Active Trip Monitoring",
+    delivery_status: "Delivery Status Dashboard",
+    operational_logs: "Operational Logs",
+    delay_prediction: "Delay Prediction",
+    route_efficiency: "Route Efficiency Prediction",
   },
   controlling: {
-    descriptive: {
-      performance_reports: "Performance reports",
-      maintenance_records: "Maintenance records",
-      operational_costs: "Operational cost summaries",
-    },
-    predictive: {
-      maintenance_risk: "Maintenance risk prediction",
-      cost_overrun: "Cost overrun prediction",
-    },
+    performance_reports: "Performance Reports",
+    maintenance_records: "Maintenance Records",
+    operational_costs: "Operational Cost Summaries",
+    maintenance_risk: "Maintenance Risk Prediction",
+    cost_overrun: "Cost Overrun Prediction",
   },
   performance_monitoring: {
-    descriptive: {
-      delivery_success: "Delivery success rate reports",
-      fuel_efficiency: "Fuel efficiency analysis",
-      maintenance_frequency: "Maintenance frequency reports",
-    },
-    predictive: {
-      fleet_performance_trend: "Fleet performance trend prediction",
-      efficiency_improvement: "Efficiency improvement forecasting",
-    },
+    delivery_success: "Delivery Success Rate",
+    fuel_efficiency: "Fuel Efficiency Analysis",
+    maintenance_frequency: "Maintenance Frequency",
+    fleet_performance_trend: "Fleet Performance Trend",
+    efficiency_improvement: "Efficiency Improvement Forecast",
   },
   risk_management: {
-    descriptive: {
-      maintenance_issue_logs: "Maintenance issue logs",
-      breakdown_reports: "Breakdown reports",
-      cost_fluctuation: "Cost fluctuation analysis",
-    },
-    predictive: {
-      maintenance_failure: "Maintenance failure prediction",
-      operational_disruption: "Operational disruption prediction",
-    },
+    maintenance_issue_logs: "Maintenance Issue Logs",
+    breakdown_reports: "Breakdown Reports",
+    cost_fluctuation: "Cost Fluctuation Analysis",
+    maintenance_failure: "Maintenance Failure Prediction",
+    operational_disruption: "Operational Disruption Prediction",
   },
 };
+
+const CATEGORY_TABS: AnalyticsCategoryTab[] = [
+  {
+    id: "revenue",
+    label: "Revenue",
+    include: [
+      { pillar: "planning", features: ["cost_forecasting"] },
+      { pillar: "controlling", features: ["cost_overrun"] },
+      { pillar: "risk_management", features: ["cost_fluctuation"] },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    include: [
+      { pillar: "execution" },
+      { pillar: "organizing", features: ["driver_assignments", "workforce_demand"] },
+      { pillar: "controlling", features: ["performance_reports"] },
+      { pillar: "performance_monitoring", features: ["delivery_success", "efficiency_improvement"] },
+      { pillar: "risk_management", features: ["operational_disruption"] },
+    ],
+  },
+  {
+    id: "fleet",
+    label: "Fleet",
+    include: [
+      { pillar: "planning", features: ["fleet_usage", "fuel_prediction", "fleet_demand_forecasting"] },
+      { pillar: "organizing", features: ["truck_utilization", "fleet_allocation"] },
+      { pillar: "controlling", features: ["maintenance_records", "maintenance_risk"] },
+      { pillar: "performance_monitoring", features: ["fuel_efficiency", "maintenance_frequency", "fleet_performance_trend"] },
+      { pillar: "risk_management", features: ["maintenance_issue_logs", "breakdown_reports", "maintenance_failure"] },
+    ],
+  },
+  {
+    id: "expenses",
+    label: "Expenses",
+    include: [
+      { pillar: "planning", features: ["historical_trip_costs", "fuel_consumption"] },
+      { pillar: "controlling", features: ["operational_costs"] },
+    ],
+  },
+  {
+    id: "routes",
+    label: "Routes",
+    include: [
+      { pillar: "organizing", features: ["route_histories"] },
+      { pillar: "execution", features: ["delay_prediction", "route_efficiency"] },
+    ],
+  },
+  {
+    id: "customers",
+    label: "Customers",
+    include: [],
+  },
+];
 
 export default function ManagerRoleAnalyticsTabs({
   data,
@@ -93,57 +111,13 @@ export default function ManagerRoleAnalyticsTabs({
   data: ManagerRoleAnalyticsPayload;
   filterOptions?: AdminAnalyticsPayload["filter_options"];
 }) {
-  const [pillar, setPillar] = useState<PillarKey>("planning");
-
-  const labels = FEATURE_LABELS[pillar];
-  const pillarData = data[pillar];
-
-  const descriptiveEntries = useMemo(
-    () => Object.entries(labels.descriptive).map(([key, title]) => [key, title, pillarData.descriptive[key]] as const),
-    [labels.descriptive, pillarData.descriptive],
-  );
-  const predictiveEntries = useMemo(
-    () => Object.entries(labels.predictive).map(([key, title]) => [key, title, pillarData.predictive[key]] as const),
-    [labels.predictive, pillarData.predictive],
-  );
-
   return (
-    <SectionCard title="Manager Analytics (Table 10)" sectionId="manager-role-analytics">
-      <p style={{ margin: "0 0 1rem", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-        Descriptive and predictive analytics by management function — all figures trace to live bookings, trips,
-        fuel logs, and operational records.
-      </p>
-      <div className="tab-pills" style={{ marginBottom: "1.25rem" }}>
-        {PILLAR_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setPillar(tab.id)}
-            className={`tab-pill${pillar === tab.id ? " tab-pill--active" : ""}`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gap: "1.5rem" }}>
-        <section>
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem" }}>Descriptive analytics</h3>
-          <div style={{ display: "grid", gap: "1rem" }}>
-            {descriptiveEntries.map(([key, title, block]) => (
-              <InteractiveFeaturePanel key={key} title={title} block={block} filterOptions={filterOptions} />
-            ))}
-          </div>
-        </section>
-        <section>
-          <h3 style={{ margin: "0 0 1rem", fontSize: "1rem" }}>Predictive analytics</h3>
-          <div style={{ display: "grid", gap: "1rem" }}>
-            {predictiveEntries.map(([key, title, block]) => (
-              <InteractiveFeaturePanel key={key} title={title} block={block} filterOptions={filterOptions} />
-            ))}
-          </div>
-        </section>
-      </div>
-    </SectionCard>
+    <RoleAnalyticsGrid
+      dashboardTitle="Manager Analytics"
+      categoryTabs={CATEGORY_TABS}
+      featureLabels={FEATURE_LABELS}
+      data={data}
+      filterOptions={filterOptions}
+    />
   );
 }

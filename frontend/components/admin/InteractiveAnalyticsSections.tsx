@@ -15,7 +15,7 @@ import {
   PercentageBreakdown,
   type DrillDownModalContext,
 } from "@/components/admin/BiAnalyticsComponents";
-import type { AdminAnalyticsPayload, ComparativeMetric } from "@/lib/analyticsApi";
+import { AnalyticsApi, type AdminAnalyticsPayload, type ComparativeMetric } from "@/lib/analyticsApi";
 import {
   filterDrilldownRows,
   formatStatusLabel,
@@ -192,11 +192,18 @@ export function ShipmentAnalyticsInteractive({
         columns={[
           { key: "booking_id", label: "Booking ID" },
           { key: "trip_id", label: "Trip ID" },
+          { key: "date", label: "Date" },
+          { key: "customer", label: "Customer" },
           { key: "route", label: "Route" },
           { key: "truck", label: "Truck" },
           { key: "driver", label: "Driver" },
           { key: "helper", label: "Helper" },
           { key: "delivery_status", label: "Status" },
+          { key: "revenue_php", label: "Revenue" },
+          { key: "expense_php", label: "Expense" },
+          { key: "toll_php", label: "Toll" },
+          { key: "fuel_php", label: "Fuel" },
+          { key: "profit_php", label: "Profit" },
           { key: "delivery_date", label: "Delivery date" },
           { key: "delay_reason", label: "Delay reason" },
         ]}
@@ -565,17 +572,402 @@ export function FinancialAnalyticsInteractive({
         columns={[
           { key: "record_type", label: "Type" },
           { key: "category_label", label: "Category" },
+          { key: "date", label: "Date" },
           { key: "amount_php", label: "Amount (₱)" },
           { key: "booking_id", label: "Booking" },
           { key: "trip_id", label: "Trip" },
           { key: "payment_id", label: "Payment" },
           { key: "reference", label: "Reference" },
+          { key: "customer", label: "Customer" },
           { key: "client_name", label: "Client" },
           { key: "route", label: "Route" },
+          { key: "driver", label: "Driver" },
+          { key: "truck", label: "Truck" },
+          { key: "status", label: "Status" },
+          { key: "revenue_php", label: "Revenue" },
+          { key: "expense_php", label: "Expense" },
+          { key: "toll_php", label: "Toll" },
+          { key: "fuel_php", label: "Fuel" },
+          { key: "profit_php", label: "Profit" },
           { key: "expense_date", label: "Expense date" },
           { key: "paid_at", label: "Paid at" },
           { key: "truck_code", label: "Truck" },
           { key: "label", label: "Description" },
+        ]}
+      />
+    </>
+  );
+}
+
+function useChartInterpretation(
+  sectionTitle: string,
+  chartType: string,
+  chartItems: Array<Record<string, string | number>>,
+  selectionLabel: string,
+) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [text, setText] = useState<string | null>(null);
+
+  const explain = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await AnalyticsApi.chartInterpretation({
+        section_title: sectionTitle,
+        selection_label: selectionLabel,
+        chart_type: chartType,
+        items: chartItems,
+        record_count: chartItems.length,
+      });
+      setText(res.interpretation);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Interpretation unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { loading, error, text, explain };
+}
+
+function JobsGranularityControls({
+  granularity,
+  setGranularity,
+}: {
+  granularity: "monthly" | "quarterly" | "yearly";
+  setGranularity: (v: "monthly" | "quarterly" | "yearly") => void;
+}) {
+  return (
+    <div className="tab-pills" style={{ marginBottom: "0.5rem" }}>
+      {(["monthly", "quarterly", "yearly"] as const).map((g) => (
+        <button
+          key={g}
+          type="button"
+          className={`tab-pill${granularity === g ? " tab-pill--active" : ""}`}
+          onClick={() => setGranularity(g)}
+        >
+          {g.charAt(0).toUpperCase() + g.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function RevenueTrackingInteractive({
+  trend,
+  drilldown,
+  comparative,
+  filterOptions,
+}: {
+  trend: { month: string; revenue_php: number }[];
+  drilldown: Record<string, unknown>[];
+  comparative?: ComparativeMetric | null;
+  filterOptions?: FilterOptions;
+}) {
+  const rows = drilldown;
+  const { selection, modalOpen, setModalOpen, modalContext, openDrill } = useBiDrillModal(rows);
+  const chartItems = trend.map((x) => ({ month: x.month, value: x.revenue_php }));
+  const ai = useChartInterpretation("Revenue Tracking", "line", chartItems, "Monthly Revenue");
+  const [showCompare, setShowCompare] = useState(false);
+
+  return (
+    <>
+      <BiDrillHint />
+      <LineChartVisual
+        items={chartItems}
+        xKey="month"
+        yKey="value"
+        onItemClick={(payload) =>
+          openDrill(
+            {
+              label: payload.label,
+              displayLabel: `Revenue Tracking • ${formatMonthLabel(payload.label)}`,
+              fieldKeys: ["month"],
+              monthKey: payload.label,
+              recordType: "revenue",
+            },
+            {
+              sectionTitle: "Revenue Tracking",
+              chartType: "line",
+              chartItems,
+              valueField: "value",
+            },
+          )
+        }
+        selectedLabel={selection?.label ?? null}
+      />
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <button type="button" className="quick-action-btn" onClick={() => void ai.explain()} disabled={ai.loading}>
+          {ai.loading ? "Generating…" : "Explain this Chart with AI"}
+        </button>
+        <button type="button" className="quick-action-btn" onClick={() => setShowCompare((v) => !v)}>
+          Compare Revenue YoY
+        </button>
+      </div>
+      {ai.error ? <p className="bi-drilldown-empty">{ai.error}</p> : null}
+      {ai.text ? <p className="bi-drilldown-interpretation" style={{ marginTop: "0.5rem" }}>{ai.text}</p> : null}
+      {showCompare ? <ComparativeAnalyticsBlock title="Revenue YoY comparison" metric={comparative} defaultGranularity="yearly" /> : null}
+      <BiModalShell
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        selection={selection}
+        allRows={rows}
+        filterOptions={filterOptions}
+        context={modalContext}
+        columns={[
+          { key: "booking_id", label: "Booking ID" },
+          { key: "trip_id", label: "Trip ID" },
+          { key: "date", label: "Date" },
+          { key: "customer", label: "Customer" },
+          { key: "route", label: "Route" },
+          { key: "driver", label: "Driver" },
+          { key: "truck", label: "Truck" },
+          { key: "status", label: "Status" },
+          { key: "revenue_php", label: "Revenue" },
+          { key: "expense_php", label: "Expense" },
+          { key: "toll_php", label: "Toll" },
+          { key: "fuel_php", label: "Fuel" },
+          { key: "profit_php", label: "Profit" },
+        ]}
+      />
+    </>
+  );
+}
+
+export function RevenueExpenseHistoricalInteractive({
+  trend,
+  drilldown,
+  comparative,
+  filterOptions,
+}: {
+  trend: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
+  drilldown: Record<string, unknown>[];
+  comparative?: ComparativeMetric | null;
+  filterOptions?: FilterOptions;
+}) {
+  const rows = drilldown;
+  const { selection, modalOpen, setModalOpen, modalContext, openDrill } = useBiDrillModal(rows);
+  const [showCompare, setShowCompare] = useState(false);
+  const ai = useChartInterpretation(
+    "Revenue vs Expense Historical",
+    "line",
+    trend.map((x) => ({ month: x.month, revenue_php: x.revenue_php, expense_php: x.expense_php })),
+    "Revenue vs Expense",
+  );
+  const chartItems = trend.map((x) => ({ month: x.month, value: x.revenue_php - x.expense_php }));
+
+  return (
+    <>
+      <BiDrillHint />
+      <FinancialTrendChart
+        items={trend}
+        onItemClick={({ month }) =>
+          openDrill(
+            { label: month, displayLabel: `Revenue vs Expense • ${formatMonthLabel(month)}`, fieldKeys: ["month"], monthKey: month },
+            { sectionTitle: "Revenue vs Expense Historical", chartType: "line", chartItems, valueField: "value" },
+          )
+        }
+      />
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <button type="button" className="quick-action-btn" onClick={() => void ai.explain()} disabled={ai.loading}>
+          {ai.loading ? "Generating…" : "Explain this Chart with AI"}
+        </button>
+        <button type="button" className="quick-action-btn" onClick={() => setShowCompare((v) => !v)}>
+          Compare Expense YoY
+        </button>
+      </div>
+      {ai.error ? <p className="bi-drilldown-empty">{ai.error}</p> : null}
+      {ai.text ? <p className="bi-drilldown-interpretation" style={{ marginTop: "0.5rem" }}>{ai.text}</p> : null}
+      {showCompare ? <ComparativeAnalyticsBlock title="Expense YoY comparison" metric={comparative} defaultGranularity="yearly" /> : null}
+      <BiModalShell
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        selection={selection}
+        allRows={rows}
+        filterOptions={filterOptions}
+        context={modalContext}
+        columns={[
+          { key: "booking_id", label: "Booking ID" },
+          { key: "trip_id", label: "Trip ID" },
+          { key: "date", label: "Date" },
+          { key: "customer", label: "Customer" },
+          { key: "route", label: "Route" },
+          { key: "driver", label: "Driver" },
+          { key: "truck", label: "Truck" },
+          { key: "status", label: "Status" },
+          { key: "revenue_php", label: "Revenue" },
+          { key: "expense_php", label: "Expense" },
+          { key: "toll_php", label: "Toll" },
+          { key: "fuel_php", label: "Fuel" },
+          { key: "profit_php", label: "Profit" },
+        ]}
+      />
+    </>
+  );
+}
+
+export function ProfitMarginHistoricalInteractive({
+  trend,
+  drilldown,
+  comparative,
+  filterOptions,
+}: {
+  trend: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
+  drilldown: Record<string, unknown>[];
+  comparative?: ComparativeMetric | null;
+  filterOptions?: FilterOptions;
+}) {
+  const rows = drilldown;
+  const [showCompare, setShowCompare] = useState(false);
+  const marginTrend = trend.map((x) => ({
+    month: x.month,
+    value: x.revenue_php > 0 ? Number((((x.profit_php / x.revenue_php) * 100).toFixed(2))) : 0,
+  }));
+  const { selection, modalOpen, setModalOpen, modalContext, openDrill } = useBiDrillModal(rows);
+  const ai = useChartInterpretation("Profit & Margin Historical", "line", marginTrend, "Profit Margin");
+
+  return (
+    <>
+      <BiDrillHint />
+      <LineChartVisual
+        items={marginTrend}
+        xKey="month"
+        yKey="value"
+        onItemClick={(payload) =>
+          openDrill(
+            {
+              label: payload.label,
+              displayLabel: `Profit & Margin • ${formatMonthLabel(payload.label)}`,
+              fieldKeys: ["month"],
+              monthKey: payload.label,
+            },
+            { sectionTitle: "Profit & Margin Historical", chartType: "line", chartItems: marginTrend, valueField: "value" },
+          )
+        }
+        selectedLabel={selection?.label ?? null}
+      />
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <button type="button" className="quick-action-btn" onClick={() => void ai.explain()} disabled={ai.loading}>
+          {ai.loading ? "Generating…" : "Explain this Chart with AI"}
+        </button>
+        <button type="button" className="quick-action-btn" onClick={() => setShowCompare((v) => !v)}>
+          Compare Profit Margin YoY
+        </button>
+      </div>
+      {ai.error ? <p className="bi-drilldown-empty">{ai.error}</p> : null}
+      {ai.text ? <p className="bi-drilldown-interpretation" style={{ marginTop: "0.5rem" }}>{ai.text}</p> : null}
+      {showCompare ? <ComparativeAnalyticsBlock title="Profit Margin YoY comparison" metric={comparative} defaultGranularity="yearly" /> : null}
+      <BiModalShell
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        selection={selection}
+        allRows={rows}
+        filterOptions={filterOptions}
+        context={modalContext}
+        columns={[
+          { key: "booking_id", label: "Booking ID" },
+          { key: "trip_id", label: "Trip ID" },
+          { key: "date", label: "Date" },
+          { key: "customer", label: "Customer" },
+          { key: "route", label: "Route" },
+          { key: "driver", label: "Driver" },
+          { key: "truck", label: "Truck" },
+          { key: "status", label: "Status" },
+          { key: "revenue_php", label: "Revenue" },
+          { key: "expense_php", label: "Expense" },
+          { key: "profit_php", label: "Profit" },
+        ]}
+      />
+    </>
+  );
+}
+
+export function JobsTripsOverTimeInteractive({
+  jobs,
+  drilldown,
+  comparative,
+  filterOptions,
+}: {
+  jobs: { month: string; count: number }[];
+  drilldown: Record<string, unknown>[];
+  comparative?: ComparativeMetric | null;
+  filterOptions?: FilterOptions;
+}) {
+  const rows = drilldown;
+  const [granularity, setGranularity] = useState<"monthly" | "quarterly" | "yearly">("monthly");
+  const [showCompare, setShowCompare] = useState(false);
+  const { selection, modalOpen, setModalOpen, modalContext, openDrill } = useBiDrillModal(rows);
+
+  const rolled = useMemo(() => {
+    if (granularity === "monthly") return jobs;
+    const buckets = new Map<string, number>();
+    for (const row of jobs) {
+      const [yy, mm] = row.month.split("-");
+      const key =
+        granularity === "yearly"
+          ? yy
+          : `${yy}-Q${Math.floor((Math.max(1, Number(mm)) - 1) / 3) + 1}`;
+      buckets.set(key, (buckets.get(key) ?? 0) + row.count);
+    }
+    return [...buckets.entries()].map(([month, count]) => ({ month, count }));
+  }, [jobs, granularity]);
+
+  const ai = useChartInterpretation("Jobs / Trips Over Time", "bar", rolled.map((x) => ({ ...x, value: x.count })), "Jobs Over Time");
+
+  return (
+    <>
+      <BiDrillHint />
+      <JobsGranularityControls granularity={granularity} setGranularity={setGranularity} />
+      <LineChartVisual
+        items={rolled.map((x) => ({ ...x, value: x.count }))}
+        xKey="month"
+        yKey="value"
+        onItemClick={(payload) =>
+          openDrill(
+            {
+              label: payload.label,
+              displayLabel: `Jobs / Trips Over Time • ${payload.label}`,
+              fieldKeys: ["scheduled_month", "month"],
+              monthKey: granularity === "monthly" ? payload.label : undefined,
+            },
+            {
+              sectionTitle: "Jobs / Trips Over Time",
+              chartType: "line",
+              chartItems: rolled.map((x) => ({ month: x.month, value: x.count })),
+              valueField: "value",
+            },
+          )
+        }
+        selectedLabel={selection?.label ?? null}
+      />
+      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+        <button type="button" className="quick-action-btn" onClick={() => void ai.explain()} disabled={ai.loading}>
+          {ai.loading ? "Generating…" : "Explain this Chart with AI"}
+        </button>
+        <button type="button" className="quick-action-btn" onClick={() => setShowCompare((v) => !v)}>
+          Compare Jobs YoY
+        </button>
+      </div>
+      {ai.error ? <p className="bi-drilldown-empty">{ai.error}</p> : null}
+      {ai.text ? <p className="bi-drilldown-interpretation" style={{ marginTop: "0.5rem" }}>{ai.text}</p> : null}
+      {showCompare ? <ComparativeAnalyticsBlock title="Jobs YoY comparison" metric={comparative} defaultGranularity="yearly" /> : null}
+      <BiModalShell
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        selection={selection}
+        allRows={rows}
+        filterOptions={filterOptions}
+        context={modalContext}
+        columns={[
+          { key: "booking_id", label: "Booking ID" },
+          { key: "trip_id", label: "Trip ID" },
+          { key: "date", label: "Date" },
+          { key: "customer", label: "Customer" },
+          { key: "route", label: "Route" },
+          { key: "driver", label: "Driver" },
+          { key: "truck", label: "Truck" },
+          { key: "status", label: "Status" },
         ]}
       />
     </>

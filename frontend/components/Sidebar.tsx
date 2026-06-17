@@ -184,6 +184,7 @@ const menuModules: MenuModule[] = [
     items: [
       { label: "Bookings - Current", href: "/modules/operations/trips", roles: ["customer"] },
       { label: "Bookings - History", href: "/modules/customer/booking-history", roles: ["customer"] },
+      { label: "Analytics - Insights", href: "/customer/analytics", roles: ["customer"] },
       { label: "Support - Feedback", href: "/modules/customer/support", roles: ["customer"] },
     ],
   },

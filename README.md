@@ -433,7 +433,7 @@ Ang FleetOpt ay **FastAPI + Next.js + MySQL**. Para sa ganitong kombinasyon, ang
 
 | Route | Mga script |
 |--------|-------------|
-| **Docker** ( pinakamadalí kung VPS may Docker na ) | `chmod +x deploy-docker-hostinger.sh && DOMAIN=https://YOURDOMAIN ./deploy-docker-hostinger.sh` |
+| **Docker** ( pinakamadalí kung VPS may Docker na ) | `chmod +x deploy-docker-hostinger.sh && DOMAIN=https://fleetopsapp.xyz ./deploy-docker-hostinger.sh` |
 | **Walang Docker** (Python virtualenv + `npm build` + Nginx/systemd templates ) | `chmod +x deploy-hostinger.sh && ./deploy-hostinger.sh` |
 
 Hindi mismo sa dokumentasyong ito ang **Shared Web Hosting lamang**: karaniwan hindi kumpleto ang long-running Node + Python API at MySQL tulad ng itinayo dito maliban kung Dedicated/VPS-tier.

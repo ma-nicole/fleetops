@@ -313,8 +313,14 @@ def _payment_in_filters(pay: Payment, booking: Booking | None, trip: Trip | None
 def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     rows: list[dict] = []
     monthly: dict[str, int] = defaultdict(int)
+    monthly_jobs: dict[str, int] = defaultdict(int)
     status_counts: dict[str, int] = defaultdict(int)
     delivery_hours: list[float] = []
+    customer_name_by_id = {c.id: (c.full_name or c.email) for c in ctx["customers"]}
+    verified_revenue_by_booking: dict[int, float] = defaultdict(float)
+    for pay in ctx["payments"]:
+        if pay.status == PaymentStatus.VERIFIED:
+            verified_revenue_by_booking[pay.booking_id] += float(pay.amount or 0)
 
     for booking in ctx["bookings"]:
         trip = _primary_trip(ctx, booking.id)
@@ -325,6 +331,8 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
             continue
         status_counts[cat] += 1
         month = _activity_month(booking.scheduled_date)
+        if month:
+            monthly_jobs[month] += 1
         if cat == "delivered" and month:
             monthly[month] += 1
         if trip:
@@ -336,18 +344,30 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
             delivery_date = trip.completed_at.date().isoformat()
         elif cat == "delivered" and booking.scheduled_date:
             delivery_date = booking.scheduled_date.isoformat()
+        fuel_php = _trip_fuel(trip, ctx["fuel_by_trip"]) if trip else 0.0
+        toll_php = _trip_toll(trip, ctx["toll_by_trip"]) if trip else 0.0
+        expense_php = _trip_direct_cost(trip, ctx) if trip else 0.0
+        revenue_php = float(verified_revenue_by_booking.get(booking.id, 0.0))
         rows.append(
             {
                 "booking_id": booking.id,
                 "trip_id": trip.id if trip else None,
+                "date": delivery_date or (booking.scheduled_date.isoformat() if booking.scheduled_date else None),
+                "customer": customer_name_by_id.get(booking.customer_id),
                 "driver": trip.driver.full_name if trip and trip.driver else None,
                 "helper": trip.helper.full_name if trip and trip.helper else None,
                 "truck": trip.truck.code if trip and trip.truck else None,
                 "route": _route_key(booking.pickup_location, booking.dropoff_location),
+                "status": _status_str(booking.status),
                 "delivery_status": cat,
                 "delivery_date": delivery_date,
                 "scheduled_month": month,
                 "delay_reason": _trip_delay_reason(trip, ctx["delay_logs"]) if trip else None,
+                "revenue_php": round(revenue_php, 2),
+                "expense_php": round(expense_php, 2),
+                "fuel_php": round(float(fuel_php), 2),
+                "toll_php": round(float(toll_php), 2),
+                "profit_php": round(revenue_php - expense_php, 2),
             }
         )
 
@@ -380,6 +400,7 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
             {"status": k, "count": v} for k, v in sorted(status_counts.items(), key=lambda x: -x[1])
         ],
         "monthly_deliveries": [{"month": m, "count": c} for m, c in sorted(monthly.items())][-12:],
+        "jobs_over_time": [{"month": m, "count": c} for m, c in sorted(monthly_jobs.items())][-12:],
         "drilldown": rows,
     }
 
@@ -397,6 +418,14 @@ def _append_expense_record(
     truck_id: int | None = None,
     truck_code: str | None = None,
     label: str | None = None,
+    customer: str | None = None,
+    route: str | None = None,
+    driver: str | None = None,
+    status: str | None = None,
+    fuel_php: float | None = None,
+    toll_php: float | None = None,
+    revenue_php: float | None = None,
+    profit_php: float | None = None,
 ) -> None:
     if expense_date is None or amount_php <= 0:
         return
@@ -412,6 +441,14 @@ def _append_expense_record(
             "truck_id": truck_id,
             "truck_code": truck_code,
             "label": label,
+            "customer": customer,
+            "route": route,
+            "driver": driver,
+            "status": status,
+            "fuel_php": round(float(fuel_php or 0), 2),
+            "toll_php": round(float(toll_php or 0), 2),
+            "revenue_php": round(float(revenue_php or 0), 2),
+            "profit_php": round(float(profit_php or 0), 2),
         }
     )
 
@@ -423,6 +460,11 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
     filtered_trip_ids = {t.id for t in filtered_trips if t.status != TripStatus.CANCELLED}
     trip_by_id = {t.id: t for t in ctx["trips"]}
     truck_map = {t.id: t.code for t in ctx["trucks"]}
+    customer_name_by_id = {c.id: (c.full_name or c.email) for c in ctx["customers"]}
+    verified_revenue_by_booking: dict[int, float] = defaultdict(float)
+    for pay in ctx["payments"]:
+        if pay.status == PaymentStatus.VERIFIED:
+            verified_revenue_by_booking[pay.booking_id] += float(pay.amount or 0)
 
     fuel_logged_trip_ids: set[int] = set()
     for fl in ctx["fuel_logs"]:
@@ -448,6 +490,14 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
             truck_id=fl.truck_id,
             truck_code=truck_map.get(fl.truck_id),
             label=f"Fuel log #{fl.id}",
+            customer=customer_name_by_id.get(trip.booking.customer_id) if trip and trip.booking else None,
+            route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip and trip.booking else None,
+            driver=trip.driver.full_name if trip and trip.driver else None,
+            status=_status_str(trip.booking.status) if trip and trip.booking else None,
+            fuel_php=amt,
+            toll_php=0.0,
+            revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) if trip else 0.0,
+            profit_php=(verified_revenue_by_booking.get(trip.booking_id, 0.0) - amt) if trip else 0.0,
         )
 
     toll_logged_trip_ids: set[int] = set()
@@ -474,6 +524,14 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
             truck_id=trip.truck_id,
             truck_code=truck_map.get(trip.truck_id) if trip.truck_id else None,
             label=tl.location or f"Toll log #{tl.id}",
+            customer=customer_name_by_id.get(trip.booking.customer_id) if trip and trip.booking else None,
+            route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip and trip.booking else None,
+            driver=trip.driver.full_name if trip and trip.driver else None,
+            status=_status_str(trip.booking.status) if trip and trip.booking else None,
+            fuel_php=0.0,
+            toll_php=amt,
+            revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) if trip else 0.0,
+            profit_php=(verified_revenue_by_booking.get(trip.booking_id, 0.0) - amt) if trip else 0.0,
         )
 
     for trip in filtered_trips:
@@ -499,6 +557,14 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
                     truck_id=trip.truck_id,
                     truck_code=truck_code,
                     label=f"Trip #{trip.id} fuel",
+                    customer=customer_name_by_id.get(trip.booking.customer_id) if trip.booking else None,
+                    route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip.booking else None,
+                    driver=trip.driver.full_name if trip.driver else None,
+                    status=_status_str(trip.booking.status) if trip.booking else None,
+                    fuel_php=fuel,
+                    toll_php=0.0,
+                    revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0),
+                    profit_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) - fuel,
                 )
 
         if trip.id not in toll_logged_trip_ids:
@@ -516,6 +582,14 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
                     truck_id=trip.truck_id,
                     truck_code=truck_code,
                     label=f"Trip #{trip.id} toll",
+                    customer=customer_name_by_id.get(trip.booking.customer_id) if trip.booking else None,
+                    route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip.booking else None,
+                    driver=trip.driver.full_name if trip.driver else None,
+                    status=_status_str(trip.booking.status) if trip.booking else None,
+                    fuel_php=0.0,
+                    toll_php=toll,
+                    revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0),
+                    profit_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) - toll,
                 )
 
         da = float(getattr(trip, "driver_allowance_php", 0) or 0)
@@ -532,6 +606,12 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
                 truck_id=trip.truck_id,
                 truck_code=truck_code,
                 label=f"Trip #{trip.id} driver allowance",
+                customer=customer_name_by_id.get(trip.booking.customer_id) if trip.booking else None,
+                route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip.booking else None,
+                driver=trip.driver.full_name if trip.driver else None,
+                status=_status_str(trip.booking.status) if trip.booking else None,
+                revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0),
+                profit_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) - da,
             )
 
         ha = float(getattr(trip, "helper_allowance_php", 0) or 0)
@@ -548,6 +628,12 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
                 truck_id=trip.truck_id,
                 truck_code=truck_code,
                 label=f"Trip #{trip.id} helper allowance",
+                customer=customer_name_by_id.get(trip.booking.customer_id) if trip.booking else None,
+                route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip.booking else None,
+                driver=trip.driver.full_name if trip.driver else None,
+                status=_status_str(trip.booking.status) if trip.booking else None,
+                revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0),
+                profit_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) - ha,
             )
 
         maint = float(trip.maintenance_cost or 0)
@@ -564,6 +650,12 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
                 truck_id=trip.truck_id,
                 truck_code=truck_code,
                 label=f"Trip #{trip.id} maintenance",
+                customer=customer_name_by_id.get(trip.booking.customer_id) if trip.booking else None,
+                route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip.booking else None,
+                driver=trip.driver.full_name if trip.driver else None,
+                status=_status_str(trip.booking.status) if trip.booking else None,
+                revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0),
+                profit_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) - maint,
             )
 
     for row in ctx["shoulder"]:
@@ -594,6 +686,12 @@ def _collect_expense_records(ctx: dict, f: AnalyticsFilters) -> list[dict[str, A
             booking_id=row.booking_id,
             truck_code=truck_map.get(trip.truck_id) if trip and trip.truck_id else None,
             label=row.notes or f"Shoulder {cat} #{row.id}",
+            customer=customer_name_by_id.get(trip.booking.customer_id) if trip and trip.booking else None,
+            route=_route_key(trip.booking.pickup_location, trip.booking.dropoff_location) if trip and trip.booking else None,
+            driver=trip.driver.full_name if trip and trip.driver else None,
+            status=_status_str(trip.booking.status) if trip and trip.booking else None,
+            revenue_php=verified_revenue_by_booking.get(trip.booking_id, 0.0) if trip else 0.0,
+            profit_php=(verified_revenue_by_booking.get(trip.booking_id, 0.0) - amt) if trip else 0.0,
         )
 
     for rec in ctx["maintenance"]:
@@ -1015,6 +1113,10 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     }
     drilldown: list[dict[str, Any]] = []
     for pay, booking, trip in revenue_rows:
+        fuel_php = _trip_fuel(trip, ctx["fuel_by_trip"]) if trip else 0.0
+        toll_php = _trip_toll(trip, ctx["toll_by_trip"]) if trip else 0.0
+        expense_php = _trip_direct_cost(trip, ctx) if trip else 0.0
+        amount_php = round(float(pay.amount or 0), 2)
         paid_at = pay.paid_at or pay.created_at
         month = _activity_month(paid_at)
         drilldown.append(
@@ -1025,10 +1127,20 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
                 "payment_id": pay.id,
                 "booking_id": pay.booking_id,
                 "trip_id": trip.id if trip else None,
+                "date": paid_at.isoformat() if paid_at else None,
                 "reference": pay.reference or None,
-                "amount_php": round(float(pay.amount or 0), 2),
+                "amount_php": amount_php,
+                "revenue_php": amount_php,
+                "expense_php": round(expense_php, 2),
+                "fuel_php": round(float(fuel_php), 2),
+                "toll_php": round(float(toll_php), 2),
+                "profit_php": round(amount_php - expense_php, 2),
                 "route": _route_key(booking.pickup_location, booking.dropoff_location),
                 "client_name": customer_map.get(pay.customer_id),
+                "customer": customer_map.get(pay.customer_id),
+                "driver": trip.driver.full_name if trip and trip.driver else None,
+                "truck": trip.truck.code if trip and trip.truck else None,
+                "status": _status_str(booking.status),
                 "paid_at": paid_at.isoformat() if paid_at else None,
             }
         )
@@ -1043,10 +1155,21 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
                     "category_label": category_labels.get(str(rec.get("category")), rec.get("category")),
                     "month": month,
                     "expense_date": expense_date,
+                    "date": expense_date,
                     "amount_php": rec.get("amount_php"),
+                    "revenue_php": rec.get("revenue_php"),
+                    "expense_php": rec.get("amount_php"),
+                    "fuel_php": rec.get("fuel_php"),
+                    "toll_php": rec.get("toll_php"),
+                    "profit_php": rec.get("profit_php"),
                     "source_type": rec.get("source_type"),
                     "trip_id": rec.get("trip_id"),
                     "booking_id": rec.get("booking_id"),
+                    "customer": rec.get("customer"),
+                    "route": rec.get("route"),
+                    "driver": rec.get("driver"),
+                    "truck": rec.get("truck_code"),
+                    "status": rec.get("status"),
                     "truck_code": rec.get("truck_code"),
                     "label": rec.get("label"),
                 }
@@ -1155,6 +1278,7 @@ def build_admin_analytics(
     filter_options = {
         "drivers": [{"id": d.id, "name": d.full_name} for d in ctx["drivers"]],
         "trucks": [{"id": t.id, "code": t.code} for t in ctx["trucks"]],
+        "clients": [{"id": c.id, "name": (c.full_name or c.email)} for c in ctx["customers"]],
         "routes": sorted({_route_key(b.pickup_location, b.dropoff_location) for b in ctx["bookings"]}),
         "shipment_statuses": ["delivered", "delayed", "cancelled", "in_transit", "pending"],
     }

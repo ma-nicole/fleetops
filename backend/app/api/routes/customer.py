@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.routes.bookings import _sync_bookings_approved_from_verified_payments
@@ -24,6 +24,8 @@ from app.services.customer_booking_portal import (
     repair_stale_payment_rejection,
     resolve_customer_display_status,
 )
+from app.services.admin_analytics import AnalyticsFilters
+from app.services.customer_role_analytics import build_customer_role_analytics
 
 router = APIRouter(prefix="/customer", tags=["customer"])
 
@@ -163,3 +165,36 @@ def customer_update_booking_customs(
     db.commit()
     db.refresh(booking)
     return BookingRead.model_validate(booking).model_dump(mode="json")
+
+
+@router.get("/analytics")
+def customer_analytics(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    truck_id: int | None = Query(default=None),
+    route: str | None = Query(default=None),
+    shipment_status: str | None = Query(default=None),
+):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+
+    filters = AnalyticsFilters(
+        date_from=date_from,
+        date_to=date_to,
+        truck_id=truck_id,
+        route=route.strip() if route else None,
+        shipment_status=shipment_status.strip().lower() if shipment_status else None,
+    )
+    return {
+        "generated_at": datetime.utcnow().isoformat(),
+        "filters_applied": {
+            "date_from": filters.date_from.isoformat() if filters.date_from else None,
+            "date_to": filters.date_to.isoformat() if filters.date_to else None,
+            "truck_id": filters.truck_id,
+            "route": filters.route,
+            "shipment_status": filters.shipment_status,
+        },
+        "customer_role_analytics": build_customer_role_analytics(db, filters, customer=user),
+    }

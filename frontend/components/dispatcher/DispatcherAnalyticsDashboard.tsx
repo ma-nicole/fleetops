@@ -68,11 +68,11 @@ export default function DispatcherAnalyticsDashboard() {
   }, [load]);
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-5)" }}>
+    <div className="bi-analytics-page">
       <PageHeader
         eyebrow="Dispatch Intelligence"
         title="Dispatcher Analytics"
-        subtitle="Trip scheduling, route coordination, assignments, and order monitoring from live operational records."
+        subtitle="Executive BI dashboard — trip scheduling, routes, assignments, and order monitoring."
       />
 
       <section id="dispatcher-analytics-filters" className="filter-panel scroll-section">

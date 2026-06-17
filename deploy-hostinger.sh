@@ -9,8 +9,9 @@ echo "╔═══════════════════════�
 echo "║  FleetOpt Deployment Script (Hostinger)   ║"
 echo "╚════════════════════════════════════════════╝"
 
-# Configuration
-PROJECT_NAME="fleetopt"
+FLEETOPS_DOMAIN=fleetopsapp.xyz
+FLEETOPS_URL=https://fleetopsapp.xyz
+
 BACKEND_PORT=8000
 FRONTEND_PORT=3000
 BACKEND_DIR="./backend"
@@ -64,8 +65,8 @@ if [ ! -f ".env" ]; then
 APP_ENV=production
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
 DATABASE_URL=mysql+pymysql://fleetopt:fleetopt@localhost:3306/fleetopt
-FRONTEND_URL=https://yourdomain.com
-CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+FRONTEND_URL=https://${FLEETOPS_DOMAIN}
+CORS_ORIGINS=https://${FLEETOPS_DOMAIN},https://www.${FLEETOPS_DOMAIN}
 UPLOADS_ROOT=/var/lib/fleetopt/uploads
 RESEND_API_KEY=
 TWILIO_ACCOUNT_SID=
@@ -105,7 +106,7 @@ npm install
 if [ ! -f ".env.local" ]; then
   log_info "Creating .env.local file..."
   cat > .env.local << EOF
-NEXT_PUBLIC_API_URL=https://yourdomain.com/api
+NEXT_PUBLIC_API_URL=https://${FLEETOPS_DOMAIN}/api
 BACKEND_ORIGIN=http://127.0.0.1:8000
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 EOF
@@ -185,7 +186,7 @@ upstream frontend {
 
 server {
     listen 80;
-    server_name yourdomain.com www.yourdomain.com;
+    server_name fleetopsapp.xyz www.fleetopsapp.xyz;
     client_max_body_size 15M; # Backend max validated upload is 12MB
 
     # Redirect HTTP to HTTPS (after SSL setup)
@@ -221,7 +222,7 @@ server {
 # HTTPS configuration (uncomment after getting SSL certificate)
 # server {
 #     listen 443 ssl http2;
-#     server_name yourdomain.com www.yourdomain.com;
+#     server_name fleetopsapp.xyz www.fleetopsapp.xyz;
 #     client_max_body_size 15M; # Backend max validated upload is 12MB
 #     
 #     ssl_certificate /path/to/certificate.crt;
@@ -260,7 +261,7 @@ EOF
 log_warn "Nginx configuration template created at /tmp/fleetopt-nginx.conf"
 log_warn "Copy to: sudo cp /tmp/fleetopt-nginx.conf /etc/nginx/sites-available/fleetopt"
 log_warn "Enable: sudo ln -s /etc/nginx/sites-available/fleetopt /etc/nginx/sites-enabled/"
-log_warn "Update yourdomain.com in the config, then: sudo nginx -t && sudo systemctl restart nginx"
+log_warn "Nginx config uses ${FLEETOPS_DOMAIN}; verify then: sudo nginx -t && sudo systemctl restart nginx"
 
 # 7. Final instructions
 echo ""
@@ -291,5 +292,5 @@ echo ""
 echo "6. Verify deployment:"
 echo "   - Backend health: curl http://localhost:8000/health"
 echo "   - Backend readiness: curl http://localhost:8000/ready"
-echo "   - Frontend: http://yourdomain.com"
+echo "   - Frontend: ${FLEETOPS_URL}"
 echo ""

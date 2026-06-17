@@ -3,9 +3,9 @@ set -u
 
 # FleetOpt Phase 3.1 post-deploy smoke checks
 # Usage:
-#   BASE_URL="https://yourdomain.com" ./scripts/phase3_1_smoke_check.sh
+#   BASE_URL="https://fleetopsapp.xyz" ./scripts/phase3_1_smoke_check.sh
 # Optional:
-#   API_BASE_URL="https://yourdomain.com/api"
+#   API_BASE_URL="https://fleetopsapp.xyz/api"
 #   BACKEND_DIRECT_URL="http://127.0.0.1:8000"
 #   BACKEND_ENV_FILE="/opt/fleetopt/backend/.env"
 #   FRONTEND_ENV_FILE="/opt/fleetopt/frontend/.env.local"
@@ -24,7 +24,7 @@ PAYMENT_PROOF_ID="${PAYMENT_PROOF_ID:-1}"
 MIN_EXPECTED_UPLOAD_MB=12
 
 if [[ -z "$BASE_URL" ]]; then
-  echo "Usage: BASE_URL=\"https://yourdomain.com\" $0"
+  echo "Usage: BASE_URL=\"https://fleetopsapp.xyz\" $0"
   exit 2
 fi
 
