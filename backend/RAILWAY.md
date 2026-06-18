@@ -14,8 +14,10 @@ Railway project
 |---------|--------|
 | Root Directory | `backend` |
 | Builder | Dockerfile |
-| Start Command | *(leave empty — Dockerfile runs `start.sh`)* |
-| Public domain port | Use Railway `PORT` variable after deploy (default `8000`) |
+| **Start Command** | **MUST BE EMPTY** — delete any `uvicorn ... --port $PORT` override |
+| Public domain port | Railway `PORT` variable (usually `8080` or `8000`) |
+
+**If logs show** `Invalid value for '--port': '$PORT'` → Railway is using a custom Start Command without shell expansion. Clear it under **Settings → Deploy → Custom Start Command**.
 
 ## Environment variables
 

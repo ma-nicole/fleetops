@@ -8,10 +8,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
-COPY start.sh ./start.sh
-RUN sed -i 's/\r$//' start.sh && chmod +x start.sh
+COPY run_server.py ./run_server.py
 
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["/bin/sh", "./start.sh"]
+CMD ["python", "run_server.py"]
