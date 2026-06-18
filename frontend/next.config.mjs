@@ -1,7 +1,12 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import nextEnv from "@next/env";
 
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = path.resolve(configDir, "..");
 
 const isProd = process.env.NODE_ENV === "production";
 const requiredProdVars = ["NEXT_PUBLIC_API_URL", "BACKEND_ORIGIN"];
@@ -25,8 +30,9 @@ const backendOrigin = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: monorepoRoot,
   turbopack: {
-    root: process.cwd(),
+    root: monorepoRoot,
   },
   async rewrites() {
     const origin = backendOrigin.replace(/\/+$/, "");
