@@ -13,11 +13,24 @@ Railway project
 | Setting | Value |
 |---------|--------|
 | Root Directory | `backend` |
-| Builder | Dockerfile |
-| **Start Command** | **MUST BE EMPTY** — delete any `uvicorn ... --port $PORT` override |
-| Public domain port | Railway `PORT` variable (usually `8080` or `8000`) |
+| Builder | **Dockerfile** (see [`railway.toml`](railway.toml)) |
+| **Start Command** | **EMPTY** in UI — config file sets `python run_server.py` |
+| Public domain port | Match Railway **Variables → PORT** (often `8080`) |
 
-**If logs show** `Invalid value for '--port': '$PORT'` → Railway is using a custom Start Command without shell expansion. Clear it under **Settings → Deploy → Custom Start Command**.
+### Still seeing `'$PORT' is not a valid integer`?
+
+Railway is running `uvicorn ... --port $PORT` instead of our Dockerfile. Fix **all**:
+
+1. **Settings → Deploy → Custom Start Command** → delete all text → Save
+2. **Variables** → delete `PORT` if its value is literally `$PORT`; Railway injects `PORT` automatically
+3. **Settings → Build** → Builder = **Dockerfile**
+4. **Redeploy** from latest GitHub commit (not just Restart)
+
+Good logs look like:
+```
+Running database migrations...
+Starting uvicorn on port 8080...
+```
 
 ## Environment variables
 
@@ -26,7 +39,7 @@ Railway project
 3. Set `SECRET_KEY` to a 32+ character random string
 4. For `DATABASE_URL`, prefer **Add Reference** → **MySQL** → `MYSQL_URL`
 
-Save triggers a redeploy. Migrations run automatically on container start via `start.sh`.
+Save triggers a redeploy. Migrations run automatically on container start via `run_server.py`.
 
 ## Verify
 
@@ -52,4 +65,5 @@ Redeploy Vercel after saving env vars.
 | `ValidationError` on `SECRET_KEY` / `FRONTEND_URL` | Set all vars in `railway.env.example` |
 | `No module named 'app'` | Root Directory must be `backend` |
 | `/health` OK, `/ready` fails | Check `DATABASE_URL` uses internal `mysql.railway.internal` URL |
+| `'$PORT' is not a valid integer` | Clear Custom Start Command; remove bad `PORT` variable; use Dockerfile + `railway.toml` |
 | Login works locally but not on Vercel | Redeploy Vercel; confirm `NEXT_PUBLIC_API_URL` ends with `/api` |
