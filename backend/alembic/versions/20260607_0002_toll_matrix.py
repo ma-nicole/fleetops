@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "20260607_0002_toll_matrix"
-down_revision = "20260606_0001_initial_schema"
+down_revision = "20260606_0001"
 branch_labels = None
 depends_on = None
 
