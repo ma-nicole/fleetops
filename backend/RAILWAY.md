@@ -46,6 +46,7 @@ Redeploy Vercel after saving env vars.
 
 | Log / symptom | Fix |
 |---------------|-----|
+| Console says **container is not running (exited)** | Open **Deployments → View Logs** (not Console). Fix env vars below, then redeploy. |
 | `ValidationError` on `SECRET_KEY` / `FRONTEND_URL` | Set all vars in `railway.env.example` |
 | `No module named 'app'` | Root Directory must be `backend` |
 | `/health` OK, `/ready` fails | Check `DATABASE_URL` uses internal `mysql.railway.internal` URL |
