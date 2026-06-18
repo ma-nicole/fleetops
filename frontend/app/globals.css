@@ -2738,6 +2738,65 @@ html {
   color: var(--text-secondary);
 }
 
+.bi-indicator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.bi-indicator-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+  padding: 0.55rem 0.65rem;
+  min-width: 0;
+}
+
+.bi-indicator-card__label {
+  margin: 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.bi-indicator-card__value {
+  margin: 0.3rem 0 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.bi-indicator-card__note {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.bi-metric-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+}
+
+.bi-interpretation-block {
+  border-top: 1px dashed var(--border);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.bi-interpretation-block__title {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
 /* Drill-down modal tables — readable columns, scroll inside container only */
 .drilldown-table-wrap {
   width: 100%;
@@ -2965,6 +3024,43 @@ html {
   line-height: 1.3;
 }
 
+.bi-chart-widget__meta {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.bi-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.bi-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.3rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.bi-badge--type {
+  background: #eef2ff;
+  color: #3730a3;
+  border-color: #c7d2fe;
+}
+
+.bi-badge--method {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
 .bi-chart-widget__hint {
   margin: 0;
   font-size: 0.72rem;
@@ -2995,6 +3091,28 @@ html {
   padding: 0.25rem 0.15rem 0;
   min-height: 250px;
   overflow: hidden;
+}
+
+.bi-risk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.7rem;
+  padding: 0.4rem 0 0.1rem;
+}
+
+.bi-risk-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  color: #475569;
+}
+
+.bi-risk-legend__swatch {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
 .plotly-analytics-chart {

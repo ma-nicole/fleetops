@@ -41,7 +41,7 @@ Frontend (Next.js 15.1.2)          Backend (FastAPI 0.115.6)        Data Layer (
                                    │  ├─ Forecasting
                                    │  ├─ Email Notifications
                                    │  └─ Analytics
-                                   └─ Cloud SQL Connector
+                                   └─ DB Connector
 ```
 
 ---
@@ -183,7 +183,7 @@ After running `python seed_db.py`:
   # Generate with:
   python -c "import secrets; print(secrets.token_urlsafe(32))"
   ```
-- Use managed database services (Cloud SQL, RDS)
+- Use a secure MySQL instance with restricted access
 - Enable HTTPS/SSL
 - Set appropriate CORS origins
 - Use secrets management (AWS Secrets Manager, etc.)
@@ -240,7 +240,7 @@ FLEETOPS/
 │   │   ├── models/entities.py        # SQLAlchemy ORM
 │   │   ├── schemas/                  # Pydantic validation
 │   │   └── core/
-│   │       ├── config.py             # Configuration (Cloud SQL support)
+│   │       ├── config.py             # Configuration
 │   │       └── security.py           # Auth & RBAC
 │   ├── tests/test_integration.py     # Integration test suite
 │   ├── requirements.txt
@@ -252,8 +252,6 @@ FLEETOPS/
 ├── 📖 QUICKSTART.md                 # 5-minute setup guide
 ├── 📖 SYSTEM_OVERVIEW.md            # Complete system architecture
 ├── 📖 UAT_TESTING_GUIDE.md          # Comprehensive test procedures
-├── deploy-docker-hostinger.sh      # Hostinger VPS: Docker stack
-├── deploy-hostinger.sh             # Hostinger VPS: systemd + Nginx templates
 ├── 📖 API_REFERENCE.md              # Complete API documentation
 ├── 📖 PRODUCTION_DEPLOYMENT_CHECKLIST.md # Pre-production checklist
 └── README.md                         # This file
@@ -295,16 +293,14 @@ CLERK_WEBHOOK_SECRET=whsec_...
 # 5. Backend will auto-connect with DATABASE_URL in .env
 ```
 
-### Production: Google Cloud SQL
+### Production-like local run
 ```env
-USE_CLOUD_SQL=true
-GCP_PROJECT_ID=your-project-id
-CLOUD_SQL_INSTANCE=project:region:instance
-CLOUD_SQL_DB_USER=fleetopt
-CLOUD_SQL_DB_PASSWORD=your-password
+APP_ENV=production
+DATABASE_URL=mysql+pymysql://fleetopt:fleetopt@localhost:3306/fleetopt
+FRONTEND_URL=http://localhost:3000
 ```
 
-**Setup:** I-set ang `DATABASE_URL` / Cloud SQL flags sa `backend/.env`.
+**Setup:** set values directly in `backend/.env`.
 
 ---
 
@@ -416,38 +412,14 @@ pytest tests/test_integration.py -v
 
 ---
 
-## 🚀 Deployment
+## 🚀 Running Locally
 
-### Option 1: Google Cloud (Recommended for Scale)
-- Cloud SQL for PostgreSQL
-- Cloud Run for serverless backend
-- Firebase Hosting for frontend
-- Automated scaling
-- Global CDN
+FleetOps now targets local/self-managed runtime only.
 
-**Setup Time:** 2-3 hours
-
-### Option 2: Hostinger VPS (matching this stack)
-
-Ang FleetOpt ay **FastAPI + Next.js + MySQL**. Para sa ganitong kombinasyon, ang angkop na Hostinger tier ay **`KVM VPS`** (Ubuntu, SSH, puedeng mag-install ng Docker/Nginx/Systemd).
-
-| Route | Mga script |
-|--------|-------------|
-| **Docker** ( pinakamadalí kung VPS may Docker na ) | `chmod +x deploy-docker-hostinger.sh && DOMAIN=https://fleetopsapp.xyz ./deploy-docker-hostinger.sh` |
-| **Walang Docker** (Python virtualenv + `npm build` + Nginx/systemd templates ) | `chmod +x deploy-hostinger.sh && ./deploy-hostinger.sh` |
-
-Hindi mismo sa dokumentasyong ito ang **Shared Web Hosting lamang**: karaniwan hindi kumpleto ang long-running Node + Python API at MySQL tulad ng itinayo dito maliban kung Dedicated/VPS-tier.
-
-Mga requirements: Ubuntu 22.04+ (hinahangaan), Nginx bilang reverse proxy (`/api` → backend port, `/` → frontend), TLS (Let’s Encrypt o SSL sa Hostinger panel).
-
-**Setup Time:** Mga 1–2 oras kapag VPS handa na ang Docker/Linux.
-
-### Option 3: Docker Swarm / Kubernetes (Enterprise)
-- Full container orchestration
-- Multi-region support
-- Advanced load balancing
-
-**Reference:** Standard cloud runbooks (Helm, Terraform) — wala sa repo ang buong Swarm/K8s manifest.
+- Use `npm run setup` once at repo root.
+- Use `npm run dev` to run backend + frontend together.
+- Backend only: `cd backend && python -m uvicorn app.main:app --reload --port 8000`
+- Frontend only: `cd frontend && npm run dev`
 
 ---
 
@@ -459,7 +431,7 @@ Before going live, complete:
 - [ ] Database backups configured
 - [ ] Email service configured (Resend)
 - [ ] Clerk authentication verified
-- [ ] Cloud SQL connectivity tested
+- [ ] Database connectivity tested
 - [ ] SSL/TLS certificates installed
 - [ ] Monitoring & alerting configured
 - [ ] Disaster recovery tested
@@ -476,7 +448,6 @@ Before going live, complete:
 | [QUICKSTART.md](./QUICKSTART.md) | 5-minute setup for local development |
 | [SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md) | Complete architecture & features |
 | [UAT_TESTING_GUIDE.md](./UAT_TESTING_GUIDE.md) | 50+ test cases with procedures |
-| `deploy-docker-hostinger.sh`, `deploy-hostinger.sh` | Hostinger VPS: Docker stack o systemd + Nginx templates |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Complete endpoint documentation |
 | [PRODUCTION_DEPLOYMENT_CHECKLIST.md](./PRODUCTION_DEPLOYMENT_CHECKLIST.md) | Pre-production validation |
 
@@ -577,8 +548,8 @@ Proprietary - FleetOpts Fleet Management System
 1. **Get Started:** [QUICKSTART.md](./QUICKSTART.md)
 2. **Understand System:** [SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md)
 3. **Run UAT:** [UAT_TESTING_GUIDE.md](./UAT_TESTING_GUIDE.md)
-4. **Deploy (Hostinger VPS):** `deploy-docker-hostinger.sh` o `deploy-hostinger.sh`
-5. **Go Live:** [PRODUCTION_DEPLOYMENT_CHECKLIST.md](./PRODUCTION_DEPLOYMENT_CHECKLIST.md)
+4. **Validate locally:** run backend + frontend and smoke test key workflows
+5. **Go Live checklist:** [PRODUCTION_DEPLOYMENT_CHECKLIST.md](./PRODUCTION_DEPLOYMENT_CHECKLIST.md)
 
 ---
 

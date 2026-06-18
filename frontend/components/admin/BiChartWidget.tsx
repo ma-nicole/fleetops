@@ -8,7 +8,7 @@ import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBloc
 import { AnalyticsApi } from "@/lib/analyticsApi";
 import { computeRowStatistics } from "@/lib/analyticsStatistics";
 import { compareFromChartSeries, findComparative, type PeriodComparisonResult } from "@/lib/periodComparison";
-import { formatStatusLabel, inferChartMeta, type ChartSelection } from "@/lib/chartDrilldownUtils";
+import { formatStatusLabel, inferChartMeta, type ChartSelection, type InferredChartMeta } from "@/lib/chartDrilldownUtils";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -104,12 +104,20 @@ export function BiChartWidget({
   filterOptions,
   comparative,
   widgetId,
+  analyticsType = "Descriptive",
+  analyticsMethod = "Comparative aggregation",
+  riskLegend,
+  preferredChartKind,
 }: {
   title: string;
   block: RoleAnalyticsFeatureBlock;
   filterOptions?: AdminAnalyticsPayload["filter_options"];
   comparative?: ComparativeMetric | null;
   widgetId?: string;
+  analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
+  analyticsMethod?: string;
+  riskLegend?: Array<{ label: string; color: string }>;
+  preferredChartKind?: "bar" | "line" | "pie";
 }) {
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -126,35 +134,45 @@ export function BiChartWidget({
   }, [block, drilldown, empty]);
 
   const meta = useMemo(() => inferChartMeta(chart, drilldown), [chart, drilldown]);
+  const resolvedMeta = useMemo<InferredChartMeta | null>(() => {
+    if (!meta) return null;
+    if (!preferredChartKind) return meta;
+    return { ...meta, kind: preferredChartKind };
+  }, [meta, preferredChartKind]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);
   const stats = empty
     ? null
-    : block.statistics ?? computeRowStatistics(drilldown, meta?.valueKey ? [meta.valueKey] : undefined);
-  const legendLabel = meta?.valueKey?.replace(/_/g, " ") ?? "Value";
+    : block.statistics ?? computeRowStatistics(drilldown, resolvedMeta?.valueKey ? [resolvedMeta.valueKey] : undefined);
+  const legendLabel = resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
 
   const quarterCompare = useMemo(() => {
     if (comparative?.comparisons?.quarterly?.length) {
       return findComparative(comparative.comparisons.quarterly, "quarter");
     }
-    if (meta?.monthFromX && meta.valueKey) {
-      return compareFromChartSeries(chart, meta.valueKey, meta.xKey ?? "month", "quarter");
+    if (resolvedMeta?.monthFromX && resolvedMeta.valueKey) {
+      return compareFromChartSeries(chart, resolvedMeta.valueKey, resolvedMeta.xKey ?? "month", "quarter");
     }
     return null;
-  }, [chart, comparative, meta]);
+  }, [chart, comparative, resolvedMeta]);
 
   const yoyCompare = useMemo(() => {
     if (comparative?.comparisons?.yearly?.length) {
       return findComparative(comparative.comparisons.yearly, "year");
     }
-    if (meta?.monthFromX && meta.valueKey) {
-      return compareFromChartSeries(chart, meta.valueKey, meta.xKey ?? "month", "year");
+    if (resolvedMeta?.monthFromX && resolvedMeta.valueKey) {
+      return compareFromChartSeries(chart, resolvedMeta.valueKey, resolvedMeta.xKey ?? "month", "year");
     }
     return null;
-  }, [chart, comparative, meta]);
+  }, [chart, comparative, resolvedMeta]);
 
   const openDrill = (payload: ChartClickPayload) => {
-    setSelection(meta ? buildSelection(meta, payload) : { label: payload.label, displayLabel: payload.label, fieldKeys: [] });
+    setSelection(resolvedMeta ? buildSelection(resolvedMeta, payload) : { label: payload.label, displayLabel: payload.label, fieldKeys: [] });
+    setModalOpen(true);
+  };
+
+  const openDetails = () => {
+    setSelection({ label: title, displayLabel: `${title} · Full details`, fieldKeys: [] });
     setModalOpen(true);
   };
 
@@ -164,11 +182,11 @@ export function BiChartWidget({
       await AnalyticsApi.chartInterpretation({
         section_title: title,
         selection_label: title,
-        chart_type: meta?.kind ?? "bar",
+        chart_type: resolvedMeta?.kind ?? "bar",
         items: items.map((item) => ({
-          label: String(item[meta?.labelKey ?? "label"] ?? ""),
+          label: String(item[resolvedMeta?.labelKey ?? "label"] ?? ""),
           count: item.count != null ? Number(item.count) : undefined,
-          value: item[meta?.valueKey ?? "value"] != null ? Number(item[meta?.valueKey ?? "value"]) : undefined,
+          value: item[resolvedMeta?.valueKey ?? "value"] != null ? Number(item[resolvedMeta?.valueKey ?? "value"]) : undefined,
         })),
         record_count: drilldown.length,
         statistics: stats ?? undefined,
@@ -191,12 +209,27 @@ export function BiChartWidget({
   }
 
   const chartVisual =
-    meta && items.length ? (
+    resolvedMeta && items.length ? (
       <PlotlyAnalyticsChart
-        kind={meta.kind === "pie" ? "pie" : meta.kind === "line" ? "line" : "bar"}
+        kind={
+          resolvedMeta.kind === "pie"
+            ? "pie"
+            : resolvedMeta.kind === "line"
+              ? "line"
+              : resolvedMeta.kind === "area"
+                ? "area"
+                : resolvedMeta.kind === "stackedBar"
+                  ? "stackedBar"
+                  : resolvedMeta.kind === "combo"
+                    ? "combo"
+                    : "bar"
+        }
         items={items.slice(0, 24)}
-        labelKey={meta.kind === "line" && meta.xKey ? meta.xKey : meta.labelKey}
-        valueKey={meta.kind === "line" && meta.yKey ? meta.yKey : meta.valueKey}
+        labelKey={resolvedMeta.xKey ?? resolvedMeta.labelKey}
+        valueKey={resolvedMeta.yKey ?? resolvedMeta.valueKey}
+        seriesKeys={resolvedMeta.seriesKeys}
+        secondarySeriesKey={resolvedMeta.secondarySeriesKey}
+        xAxisLabel={(resolvedMeta.xKey ?? resolvedMeta.labelKey).replace(/_/g, " ")}
         yAxisLabel={legendLabel}
         legendLabel={legendLabel}
         onItemClick={openDrill}
@@ -208,6 +241,7 @@ export function BiChartWidget({
         items={synthesizeChartFromDrilldown(drilldown).slice(0, 24) as Array<Record<string, string | number>>}
         labelKey="status"
         valueKey="count"
+        xAxisLabel="Status"
         yAxisLabel="Count"
         legendLabel="Records"
         onItemClick={openDrill}
@@ -221,6 +255,10 @@ export function BiChartWidget({
     <article className="bi-chart-widget" data-widget-id={widgetId}>
       <header className="bi-chart-widget__header">
         <h3 className="bi-chart-widget__title">{title}</h3>
+        <div className="bi-badge-row">
+          <span className="bi-badge bi-badge--type">{analyticsType}</span>
+          <span className="bi-badge bi-badge--method">{analyticsMethod}</span>
+        </div>
         <p className="bi-chart-widget__hint">
           <span className="bi-chart-widget__hint-icon" aria-hidden>
             ⚡
@@ -230,6 +268,16 @@ export function BiChartWidget({
       </header>
 
       <div className="bi-chart-widget__chart">{chartVisual}</div>
+      {riskLegend?.length ? (
+        <div className="bi-risk-legend" role="note" aria-label="Risk legend">
+          {riskLegend.map((r) => (
+            <span key={r.label} className="bi-risk-legend__item">
+              <span className="bi-risk-legend__swatch" style={{ backgroundColor: r.color }} aria-hidden />
+              {r.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <CompactStatistics stats={stats} />
 
       {compareMode === "quarter" && quarterCompare ? <ComparisonBanner result={quarterCompare} /> : null}
@@ -244,6 +292,9 @@ export function BiChartWidget({
       <footer className="bi-chart-widget__actions">
         <button type="button" className="bi-chart-widget__btn bi-chart-widget__btn--ai" onClick={() => void explainChart()} disabled={aiLoading}>
           {aiLoading ? "Generating…" : "Explain this Chart with AI"}
+        </button>
+        <button type="button" className="bi-chart-widget__btn" onClick={openDetails}>
+          Open Details
         </button>
         <button
           type="button"
@@ -270,9 +321,13 @@ export function BiChartWidget({
         filterOptions={filterOptions}
         context={{
           sectionTitle: title,
-          chartType: meta?.kind ?? "bar",
+          chartType: resolvedMeta?.kind ?? "bar",
           chartItems: items,
-          valueField: meta?.valueKey,
+          valueField: resolvedMeta?.valueKey,
+          analyticsType,
+          analyticsMethod,
+          xAxisLabel: resolvedMeta?.labelKey?.replace(/_/g, " "),
+          yAxisLabel: legendLabel,
         }}
       />
     </article>

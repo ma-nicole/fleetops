@@ -78,6 +78,11 @@ function round2(n: number): number {
 export type PanelFilters = {
   dateFrom: string;
   dateTo: string;
+  year: string;
+  quarter: string;
+  month: string;
+  week: string;
+  day: string;
   route: string;
   driverId: string;
   truckId: string;
@@ -88,6 +93,11 @@ export type PanelFilters = {
 export const EMPTY_PANEL_FILTERS: PanelFilters = {
   dateFrom: "",
   dateTo: "",
+  year: "",
+  quarter: "",
+  month: "",
+  week: "",
+  day: "",
   route: "",
   driverId: "",
   truckId: "",
@@ -104,16 +114,49 @@ export function applyPanelFilters(
     clients?: { id: number; name: string }[];
   },
 ): Record<string, unknown>[] {
+  const toIsoWeek = (dateIso: string): string => {
+    const d = new Date(`${dateIso}T00:00:00Z`);
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+  };
+
+  const dateParts = (row: Record<string, unknown>): {
+    dateIso?: string;
+    year?: string;
+    quarter?: string;
+    month?: string;
+    week?: string;
+    day?: string;
+  } => {
+    const dateFields = ["delivery_date", "expense_date", "paid_at", "date", "scheduled_date", "completed_at"];
+    const rawDate = dateFields.map((f) => row[f]).find((v) => v != null);
+    if (!rawDate) return {};
+    const dateIso = String(rawDate).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return {};
+    const year = dateIso.slice(0, 4);
+    const month = dateIso.slice(0, 7);
+    const monthNum = Number(dateIso.slice(5, 7));
+    const quarter = `${year}-Q${Math.ceil(monthNum / 3)}`;
+    const week = toIsoWeek(dateIso);
+    return { dateIso, year, quarter, month, week, day: dateIso };
+  };
+
   return rows.filter((row) => {
-    const dateFields = ["delivery_date", "expense_date", "paid_at", "date", "scheduled_date"];
+    const parts = dateParts(row);
     if (filters.dateFrom || filters.dateTo) {
-      const rawDate = dateFields.map((f) => row[f]).find((v) => v != null);
-      if (rawDate) {
-        const d = String(rawDate).slice(0, 10);
-        if (filters.dateFrom && d < filters.dateFrom) return false;
-        if (filters.dateTo && d > filters.dateTo) return false;
+      if (parts.dateIso) {
+        if (filters.dateFrom && parts.dateIso < filters.dateFrom) return false;
+        if (filters.dateTo && parts.dateIso > filters.dateTo) return false;
       }
     }
+    if (filters.year && (!parts.year || parts.year !== filters.year)) return false;
+    if (filters.quarter && (!parts.quarter || parts.quarter !== filters.quarter)) return false;
+    if (filters.month && (!parts.month || parts.month !== filters.month)) return false;
+    if (filters.week && (!parts.week || parts.week !== filters.week)) return false;
+    if (filters.day && (!parts.day || parts.day !== filters.day)) return false;
     if (filters.route && String(row.route ?? "") !== filters.route) return false;
     if (filters.status) {
       const st = String(row.delivery_status ?? row.status ?? "").toLowerCase();

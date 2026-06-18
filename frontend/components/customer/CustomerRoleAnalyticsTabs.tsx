@@ -5,30 +5,29 @@ import type { CustomerRoleAnalyticsPayload } from "@/lib/analyticsApi";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   account_management: {
-    account_activity: "Account Activity Records",
-    payment_profile: "Payment Profile Reports",
-    profile_summary: "Profile Summary",
+    account_activity_logs: "Account Activity Logs",
+    login_history: "Login History",
+    profile_records: "Profile Records",
     booking_activity_forecast: "Booking Activity Forecasting",
     payment_success_trend: "Payment Success Trend",
   },
   service_selection: {
-    service_preferences: "Service Preference History",
-    cost_estimate_history: "Cost Estimate History",
-    route_interest: "Route Interest Records",
+    service_selection_history: "Service Selection History",
+    truck_preference_records: "Truck Preference Records",
     service_recommendation: "Service Recommendation",
     budget_projection: "Budget Projection",
   },
   booking_management: {
-    booking_status_overview: "Booking Status Overview",
-    payment_history: "Payment History",
-    cancellation_records: "Cancellation Records",
+    booking_records: "Booking Records",
+    booking_history: "Booking History",
+    order_details: "Order Details",
     booking_completion_forecast: "Booking Completion Forecasting",
     cancellation_risk: "Cancellation Risk Prediction",
   },
   shipment_tracking: {
-    shipment_status_timeline: "Shipment Status Timeline",
-    delivery_performance: "Delivery Performance",
-    tracking_updates: "Tracking Updates",
+    payment_records: "Payment Records",
+    transaction_history: "Transaction History",
+    receipts: "Receipts",
     delay_likelihood: "Delay Likelihood Prediction",
     eta_projection: "ETA Projection",
   },
@@ -36,37 +35,26 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
 
 const CATEGORY_TABS: AnalyticsCategoryTab[] = [
   {
-    id: "bookings",
-    label: "Bookings",
+    id: "account-management",
+    label: "Account Management",
     include: [
-      { pillar: "account_management", features: ["account_activity", "booking_activity_forecast"] },
-      { pillar: "service_selection" },
-      {
-        pillar: "booking_management",
-        features: ["booking_status_overview", "cancellation_records", "booking_completion_forecast", "cancellation_risk"],
-      },
+      { pillar: "account_management", features: ["account_activity_logs", "login_history", "profile_records"] },
     ],
   },
   {
-    id: "shipments",
-    label: "Shipments",
-    include: [{ pillar: "shipment_tracking" }],
+    id: "service-selection",
+    label: "Service Selection",
+    include: [{ pillar: "service_selection", features: ["service_selection_history", "truck_preference_records"] }],
   },
   {
-    id: "payments",
-    label: "Payments",
-    include: [
-      { pillar: "account_management", features: ["payment_profile", "payment_success_trend"] },
-      { pillar: "booking_management", features: ["payment_history"] },
-    ],
+    id: "booking-management",
+    label: "Booking Management",
+    include: [{ pillar: "booking_management", features: ["booking_records", "booking_history", "order_details"] }],
   },
   {
-    id: "receipts",
-    label: "Receipts",
-    include: [
-      { pillar: "account_management", features: ["profile_summary"] },
-      { pillar: "shipment_tracking", features: ["tracking_updates"] },
-    ],
+    id: "shipment-tracking",
+    label: "Shipment Tracking",
+    include: [{ pillar: "shipment_tracking", features: ["payment_records", "transaction_history", "receipts"] }],
   },
 ];
 

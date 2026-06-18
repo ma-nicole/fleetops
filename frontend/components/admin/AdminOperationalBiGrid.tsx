@@ -11,6 +11,10 @@ type WidgetSpec = {
   title: string;
   block: RoleAnalyticsFeatureBlock;
   comparative?: ComparativeMetric | null;
+  analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
+  analyticsMethod?: string;
+  riskLegend?: Array<{ label: string; color: string }>;
+  preferredChartKind?: "bar" | "line" | "pie";
 };
 
 function moduleBlock(
@@ -35,8 +39,14 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
   const widgets: WidgetSpec[] = [];
   const comp = data.comparative_analytics;
 
-  const add = (id: string, title: string, block: RoleAnalyticsFeatureBlock, comparative?: ComparativeMetric | null) => {
-    widgets.push({ id, title, block, comparative });
+  const add = (
+    id: string,
+    title: string,
+    block: RoleAnalyticsFeatureBlock,
+    comparative?: ComparativeMetric | null,
+    options?: Pick<WidgetSpec, "analyticsType" | "analyticsMethod" | "riskLegend" | "preferredChartKind">,
+  ) => {
+    widgets.push({ id, title, block, comparative, ...options });
   };
 
   if (category === "revenue" && isPopulatedAnalyticsModule(data.financial)) {
@@ -50,6 +60,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.statistics,
       ),
       comp?.revenue,
+      { analyticsType: "Descriptive", analyticsMethod: "Time-series trend aggregation", preferredChartKind: "line" },
     );
     add(
       "revenue-vs-expense",
@@ -63,6 +74,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.drilldown ?? [],
       ),
       comp?.expenses,
+      { analyticsType: "Diagnostic", analyticsMethod: "Revenue-cost variance analysis", preferredChartKind: "line" },
     );
     add(
       "profit-margin",
@@ -72,6 +84,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.drilldown ?? [],
       ),
       comp?.revenue,
+      { analyticsType: "Diagnostic", analyticsMethod: "Margin trend analysis", preferredChartKind: "line" },
     );
     if (fin.revenue_per_client?.length) {
       add(
@@ -85,6 +98,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           fin.drilldown ?? [],
         ),
         comp?.revenue,
+        { analyticsType: "Descriptive", analyticsMethod: "Category contribution analysis", preferredChartKind: "bar" },
       );
     }
   }
@@ -97,18 +111,33 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         "Shipment Status Distribution",
         moduleBlock(ship.status_distribution, ship.drilldown, ship.statistics),
         comp?.deliveries,
+        {
+          analyticsType: "Descriptive",
+          analyticsMethod: "Status frequency distribution",
+          riskLegend: [
+            { label: "Green · Truck Operational", color: "#059669" },
+            { label: "Yellow · Needs Monitoring", color: "#D97706" },
+            { label: "Orange · Preventive Due", color: "#F97316" },
+            { label: "Red · Immediate Required", color: "#DC2626" },
+            { label: "Blue · Scheduled", color: "#2563EB" },
+            { label: "Gray · Inactive", color: "#6B7280" },
+          ],
+          preferredChartKind: "pie",
+        },
       );
       add(
         "jobs-over-time",
         "Jobs / Trips Over Time",
         moduleBlock(ship.jobs_over_time ?? ship.monthly_deliveries, ship.drilldown, ship.statistics),
         comp?.deliveries,
+        { analyticsType: "Descriptive", analyticsMethod: "Time-series throughput analysis", preferredChartKind: "line" },
       );
       add(
         "monthly-deliveries",
         "Monthly Deliveries",
         moduleBlock(ship.monthly_deliveries, ship.drilldown, ship.statistics),
         comp?.deliveries,
+        { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "line" },
       );
     }
     if (isPopulatedAnalyticsModule(data.drivers)) {
@@ -124,11 +153,15 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           drivers.drilldown,
           drivers.statistics,
         ),
+        undefined,
+        { analyticsType: "Descriptive", analyticsMethod: "Ranking analysis", preferredChartKind: "bar" },
       );
       add(
         "driver-distribution",
         "Driver Delivery Distribution",
         moduleBlock(drivers.distribution, drivers.drilldown, drivers.statistics),
+        undefined,
+        { analyticsType: "Descriptive", analyticsMethod: "Distribution analysis", preferredChartKind: "pie" },
       );
     }
   }
@@ -147,6 +180,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           fleet.drilldown,
           fleet.statistics,
         ),
+        undefined,
+        { analyticsType: "Descriptive", analyticsMethod: "Utilization ratio by asset", preferredChartKind: "bar" },
       );
     }
     if (isPopulatedAnalyticsModule(data.expenses) && data.expenses.fuel_by_truck?.length) {
@@ -157,6 +192,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           data.expenses.fuel_by_truck.map((x) => ({ truck_code: x.truck_code, fuel_php: x.fuel_php })),
           data.expenses.drilldown?.records ?? [],
         ),
+        undefined,
+        { analyticsType: "Diagnostic", analyticsMethod: "Cost concentration by truck", preferredChartKind: "bar" },
       );
     }
   }
@@ -172,6 +209,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         exp.statistics,
       ),
       comp?.expenses,
+      { analyticsType: "Descriptive", analyticsMethod: "Cost share breakdown", preferredChartKind: "pie" },
     );
     add(
       "expense-monthly",
@@ -181,6 +219,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         exp.drilldown?.records ?? [],
       ),
       comp?.expenses,
+      { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "line" },
     );
   }
 
@@ -198,6 +237,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           routes.drilldown,
           routes.statistics,
         ),
+        undefined,
+        { analyticsType: "Descriptive", analyticsMethod: "Route throughput comparison", preferredChartKind: "bar" },
       );
       add(
         "route-cost",
@@ -209,6 +250,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           })),
           routes.drilldown,
         ),
+        undefined,
+        { analyticsType: "Diagnostic", analyticsMethod: "Route cost variance analysis", preferredChartKind: "bar" },
       );
     }
     if (isPopulatedAnalyticsModule(data.toll_analytics)) {
@@ -224,6 +267,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           tolls.drilldown as unknown as Record<string, unknown>[],
           tolls.statistics,
         ),
+        undefined,
+        { analyticsType: "Diagnostic", analyticsMethod: "Route toll outlier ranking", preferredChartKind: "bar" },
       );
       add(
         "toll-trends",
@@ -235,6 +280,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           })),
           tolls.drilldown as unknown as Record<string, unknown>[],
         ),
+        undefined,
+        { analyticsType: "Descriptive", analyticsMethod: "Monthly toll trend analysis", preferredChartKind: "line" },
       );
     }
   }
@@ -245,6 +292,8 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       "client-bookings",
       "Bookings by Client",
       moduleBlock(clients.booking_distribution, clients.drilldown, clients.statistics),
+      undefined,
+      { analyticsType: "Descriptive", analyticsMethod: "Client frequency distribution", preferredChartKind: "bar" },
     );
     add(
       "client-revenue",
@@ -258,6 +307,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         clients.statistics,
       ),
       comp?.revenue,
+      { analyticsType: "Diagnostic", analyticsMethod: "Revenue contribution analysis", preferredChartKind: "bar" },
     );
   }
 
@@ -272,22 +322,56 @@ export function AdminOperationalBiGrid({
   category: AdminCategory;
 }) {
   const widgets = useMemo(() => buildAdminWidgets(data, category), [data, category]);
+  const groupedWidgets = useMemo(() => {
+    const buckets: Record<NonNullable<WidgetSpec["analyticsType"]>, WidgetSpec[]> = {
+      Descriptive: [],
+      Diagnostic: [],
+      Predictive: [],
+      Prescriptive: [],
+    };
+    for (const widget of widgets) {
+      buckets[widget.analyticsType ?? "Descriptive"].push(widget);
+    }
+    return buckets;
+  }, [widgets]);
 
   if (!widgets.length) {
     return <EmptyChart message="No data available yet." />;
   }
 
   return (
-    <div className="bi-chart-grid">
-      {widgets.map((w) => (
-        <BiChartWidget
-          key={w.id}
-          widgetId={w.id}
-          title={w.title}
-          block={w.block}
-          filterOptions={data.filter_options}
-          comparative={w.comparative}
-        />
+    <div className="analytics-structure">
+      {(
+        [
+          ["Descriptive", "Descriptive Analytics"],
+          ["Diagnostic", "Diagnostic Analytics"],
+          ["Predictive", "Predictive Analytics"],
+          ["Prescriptive", "Prescriptive Analytics"],
+        ] as const
+      ).map(([key, title]) => (
+        <section key={key} className="analytics-structure__section">
+          <h3 className="analytics-structure__section-title">{title}</h3>
+          {groupedWidgets[key].length ? (
+            <div className="bi-chart-grid">
+              {groupedWidgets[key].map((w) => (
+                <BiChartWidget
+                  key={w.id}
+                  widgetId={w.id}
+                  title={w.title}
+                  block={w.block}
+                  filterOptions={data.filter_options}
+                  comparative={w.comparative}
+                  analyticsType={w.analyticsType}
+                  analyticsMethod={w.analyticsMethod}
+                  riskLegend={w.riskLegend}
+                  preferredChartKind={w.preferredChartKind}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyChart message={`No ${title.toLowerCase()} widgets in this category.`} />
+          )}
+        </section>
       ))}
     </div>
   );

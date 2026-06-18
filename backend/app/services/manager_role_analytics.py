@@ -62,7 +62,67 @@ def _block(
     statistics: dict | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
-    out: dict[str, Any] = {"kpis": kpis, "chart": chart or [], "drilldown": drilldown or []}
+    drill_rows = drilldown or []
+
+    def _auto_chart(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not rows:
+            return []
+
+        sample = rows[0]
+        keys = list(sample.keys())
+        if not keys:
+            return []
+
+        # 1) Status/category frequency chart.
+        for key in ("status", "category", "severity", "issue_type"):
+            if key in sample:
+                counts: dict[str, int] = defaultdict(int)
+                for r in rows:
+                    counts[str(r.get(key) or "unknown")] += 1
+                return [{key: k, "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])[:12]]
+
+        # 2) Time trend chart using first numeric value by month.
+        time_key = next((k for k in ("month", "date", "delivery_date", "scheduled_date", "period") if k in sample), None)
+        numeric_keys = [k for k in keys if isinstance(sample.get(k), (int, float))]
+        if time_key and numeric_keys:
+            value_key = next((k for k in numeric_keys if any(token in k for token in ("cost", "amount", "hours", "liters", "count"))), numeric_keys[0])
+            buckets: dict[str, float] = defaultdict(float)
+            for r in rows:
+                raw_time = r.get(time_key)
+                if raw_time in (None, "", "—"):
+                    continue
+                t = str(raw_time)[:7] if time_key != "period" else str(raw_time)
+                val = r.get(value_key)
+                if isinstance(val, (int, float)):
+                    buckets[t] += float(val)
+            if buckets:
+                return [{time_key: k, value_key: round(v, 2)} for k, v in sorted(buckets.items())[-12:]]
+
+        # 3) Categorical + numeric aggregation.
+        label_key = next((k for k in keys if isinstance(sample.get(k), str) and k not in {"route", "details"}), None)
+        value_key = next((k for k in keys if isinstance(sample.get(k), (int, float))), None)
+        if label_key and value_key:
+            sums: dict[str, float] = defaultdict(float)
+            for r in rows:
+                label = str(r.get(label_key) or "unknown")
+                val = r.get(value_key)
+                if isinstance(val, (int, float)):
+                    sums[label] += float(val)
+            if sums:
+                return [{label_key: k, value_key: round(v, 2)} for k, v in sorted(sums.items(), key=lambda x: -x[1])[:12]]
+
+        # 4) Final fallback: count by first string key.
+        fallback_label = next((k for k in keys if isinstance(sample.get(k), str)), None)
+        if fallback_label:
+            counts: dict[str, int] = defaultdict(int)
+            for r in rows:
+                counts[str(r.get(fallback_label) or "unknown")] += 1
+            return [{fallback_label: k, "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])[:12]]
+
+        return []
+
+    resolved_chart = chart or _auto_chart(drill_rows)
+    out: dict[str, Any] = {"kpis": kpis, "chart": resolved_chart, "drilldown": drill_rows}
     if statistics:
         out["statistics"] = statistics
     if note:

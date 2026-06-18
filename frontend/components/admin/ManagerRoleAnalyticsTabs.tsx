@@ -16,12 +16,12 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
     driver_assignments: "Driver Assignment Records",
     truck_utilization: "Truck Utilization Reports",
     route_histories: "Route Histories",
-    fleet_allocation: "Optimal Fleet Allocation",
+    fleet_allocation: "Optimal Fleet Allocation Prediction",
     workforce_demand: "Workforce Demand Forecasting",
   },
   execution: {
     active_trips: "Active Trip Monitoring",
-    delivery_status: "Delivery Status Dashboard",
+    delivery_status: "Delivery Status Dashboards",
     operational_logs: "Operational Logs",
     delay_prediction: "Delay Prediction",
     route_efficiency: "Route Efficiency Prediction",
@@ -34,74 +34,28 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
     cost_overrun: "Cost Overrun Prediction",
   },
   performance_monitoring: {
-    delivery_success: "Delivery Success Rate",
+    delivery_success: "Delivery Success Rate Reports",
     fuel_efficiency: "Fuel Efficiency Analysis",
-    maintenance_frequency: "Maintenance Frequency",
-    fleet_performance_trend: "Fleet Performance Trend",
-    efficiency_improvement: "Efficiency Improvement Forecast",
+    maintenance_frequency: "Maintenance Frequency Records",
+    fleet_performance_trend: "Fleet Performance Trend Prediction",
+    efficiency_improvement: "Efficiency Improvement Forecasting",
   },
   risk_management: {
     maintenance_issue_logs: "Maintenance Issue Logs",
     breakdown_reports: "Breakdown Reports",
-    cost_fluctuation: "Cost Fluctuation Analysis",
+    cost_fluctuation: "Cost Fluctuations Analysis",
     maintenance_failure: "Maintenance Failure Prediction",
     operational_disruption: "Operational Disruption Prediction",
   },
 };
 
 const CATEGORY_TABS: AnalyticsCategoryTab[] = [
-  {
-    id: "revenue",
-    label: "Revenue",
-    include: [
-      { pillar: "planning", features: ["cost_forecasting"] },
-      { pillar: "controlling", features: ["cost_overrun"] },
-      { pillar: "risk_management", features: ["cost_fluctuation"] },
-    ],
-  },
-  {
-    id: "operations",
-    label: "Operations",
-    include: [
-      { pillar: "execution" },
-      { pillar: "organizing", features: ["driver_assignments", "workforce_demand"] },
-      { pillar: "controlling", features: ["performance_reports"] },
-      { pillar: "performance_monitoring", features: ["delivery_success", "efficiency_improvement"] },
-      { pillar: "risk_management", features: ["operational_disruption"] },
-    ],
-  },
-  {
-    id: "fleet",
-    label: "Fleet",
-    include: [
-      { pillar: "planning", features: ["fleet_usage", "fuel_prediction", "fleet_demand_forecasting"] },
-      { pillar: "organizing", features: ["truck_utilization", "fleet_allocation"] },
-      { pillar: "controlling", features: ["maintenance_records", "maintenance_risk"] },
-      { pillar: "performance_monitoring", features: ["fuel_efficiency", "maintenance_frequency", "fleet_performance_trend"] },
-      { pillar: "risk_management", features: ["maintenance_issue_logs", "breakdown_reports", "maintenance_failure"] },
-    ],
-  },
-  {
-    id: "expenses",
-    label: "Expenses",
-    include: [
-      { pillar: "planning", features: ["historical_trip_costs", "fuel_consumption"] },
-      { pillar: "controlling", features: ["operational_costs"] },
-    ],
-  },
-  {
-    id: "routes",
-    label: "Routes",
-    include: [
-      { pillar: "organizing", features: ["route_histories"] },
-      { pillar: "execution", features: ["delay_prediction", "route_efficiency"] },
-    ],
-  },
-  {
-    id: "customers",
-    label: "Customers",
-    include: [],
-  },
+  { id: "planning", label: "Planning", include: [{ pillar: "planning" }] },
+  { id: "organizing", label: "Organizing", include: [{ pillar: "organizing" }] },
+  { id: "execution", label: "Execution", include: [{ pillar: "execution" }] },
+  { id: "controlling", label: "Controlling", include: [{ pillar: "controlling" }] },
+  { id: "performance-monitoring", label: "Performance Monitoring", include: [{ pillar: "performance_monitoring" }] },
+  { id: "risk-management", label: "Risk Management", include: [{ pillar: "risk_management" }] },
 ];
 
 export default function ManagerRoleAnalyticsTabs({

@@ -6,7 +6,7 @@ import type { DispatcherRoleAnalyticsPayload } from "@/lib/analyticsApi";
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   trip_scheduling: {
     trip_schedules: "Trip Schedules",
-    dispatch_logs: "Dispatch Logs",
+    dispatch_logs: "Dispatch Log",
     delivery_records: "Delivery Records",
     optimal_scheduling: "Optimal Scheduling Prediction",
     workload_forecasting: "Workload Forecasting",
@@ -19,8 +19,8 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
     traffic_delay_prediction: "Traffic Delay Prediction",
   },
   truck_assignment: {
-    truck_availability: "Truck Availability",
-    vehicle_utilization: "Vehicle Utilization",
+    truck_availability: "Truck Availability Records",
+    vehicle_utilization: "Vehicle Utilization Reports",
     vehicle_allocation: "Vehicle Allocation Prediction",
     truck_demand_forecasting: "Truck Demand Forecasting",
   },
@@ -49,12 +49,12 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
 };
 
 const CATEGORY_TABS: AnalyticsCategoryTab[] = [
-  { id: "scheduling", label: "Scheduling", include: [{ pillar: "trip_scheduling" }] },
-  { id: "routes", label: "Routes", include: [{ pillar: "route_coordination" }] },
-  { id: "trucks", label: "Trucks", include: [{ pillar: "truck_assignment" }] },
-  { id: "drivers", label: "Drivers", include: [{ pillar: "driver_coordination" }] },
-  { id: "orders", label: "Orders", include: [{ pillar: "order_monitoring" }] },
-  { id: "operations", label: "Operations", include: [{ pillar: "operational_support" }] },
+  { id: "trip-scheduling", label: "Trip Scheduling", include: [{ pillar: "trip_scheduling" }] },
+  { id: "route-coordination", label: "Route Coordination", include: [{ pillar: "route_coordination" }] },
+  { id: "truck-assignment", label: "Truck Assignment", include: [{ pillar: "truck_assignment" }] },
+  { id: "driver-coordination", label: "Driver Coordination", include: [{ pillar: "driver_coordination" }] },
+  { id: "order-monitoring", label: "Order Monitoring", include: [{ pillar: "order_monitoring" }] },
+  { id: "operational-support", label: "Operational Support", include: [{ pillar: "operational_support" }] },
 ];
 
 export default function DispatcherRoleAnalyticsTabs({ data }: { data: DispatcherRoleAnalyticsPayload }) {

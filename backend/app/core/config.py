@@ -4,6 +4,16 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalize_mysql_url(url: str) -> str:
+    """Ensure SQLAlchemy can use PyMySQL."""
+    cleaned = url.strip()
+    if cleaned.startswith("mysql+pymysql://"):
+        return cleaned
+    if cleaned.startswith("mysql://"):
+        return f"mysql+pymysql://{cleaned[len('mysql://'):]}"
+    return cleaned
+
+
 class Settings(BaseSettings):
     # Application
     app_name: str = "FleetOpt API"
@@ -72,8 +82,8 @@ class Settings(BaseSettings):
         ),
     )
     geocoding_user_agent: str = Field(
-        default="FleetOpt/1.0 (+https://localhost)",
-        description='HTTP User-Agent sent to Nominatim (must identify your app; include contact URL or email).',
+        default="FleetOpt/1.0 (+http://localhost:3000)",
+        description="HTTP User-Agent sent to Nominatim (must identify your app; include contact URL or email).",
     )
 
     # Road km — Google Directions (closest to Google Maps driving distance) when key available.
@@ -143,6 +153,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     @field_validator("database_url")
@@ -150,12 +161,18 @@ class Settings(BaseSettings):
     def must_be_mysql(cls, v: str) -> str:
         if not v:
             raise ValueError("DATABASE_URL must be set")
-        if v.startswith("sqlite"):
+        normalized = normalize_mysql_url(v)
+        if normalized.startswith("sqlite"):
             raise ValueError(
-                "SQLite is not supported. Use MySQL (XAMPP).\n"
-                "Set DATABASE_URL=mysql+pymysql://root:@localhost:3306/fleetopt in your .env file."
+                "SQLite is not supported. Use MySQL.\n"
+                "Set DATABASE_URL=mysql+pymysql://user:pass@host:3306/fleetopt"
             )
-        return v
+        if normalized.startswith("postgres"):
+            raise ValueError(
+                "PostgreSQL is not supported by this schema. "
+                "Use a MySQL DATABASE_URL."
+            )
+        return normalized
 
     @field_validator("secret_key")
     @classmethod

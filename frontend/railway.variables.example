@@ -1,9 +1,0 @@
-# Paste into Railway → Frontend service → Variables (Raw Editor)
-# Replace API-SERVICE with your backend service name in references below.
-
-NEXT_PUBLIC_API_URL=https://${{API-SERVICE.RAILWAY_PUBLIC_DOMAIN}}/api
-BACKEND_ORIGIN=https://${{API-SERVICE.RAILWAY_PUBLIC_DOMAIN}}
-
-NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER=74.75
-NEXT_PUBLIC_TOLL_FEES_PHP_PER_TRIP=0
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=

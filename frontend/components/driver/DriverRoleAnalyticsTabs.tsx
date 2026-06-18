@@ -37,11 +37,11 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
 };
 
 const CATEGORY_TABS: AnalyticsCategoryTab[] = [
-  { id: "trips", label: "Trips", include: [{ pillar: "trip_execution" }] },
-  { id: "routes", label: "Routes", include: [{ pillar: "route_navigation" }] },
-  { id: "vehicle", label: "Vehicle", include: [{ pillar: "vehicle_monitoring" }] },
-  { id: "delivery", label: "Delivery", include: [{ pillar: "delivery_reporting" }] },
-  { id: "delays", label: "Delays", include: [{ pillar: "trip_status" }] },
+  { id: "trip-execution", label: "Trip Execution", include: [{ pillar: "trip_execution" }] },
+  { id: "route-navigation", label: "Route Navigation", include: [{ pillar: "route_navigation" }] },
+  { id: "vehicle-monitoring", label: "Vehicle Monitoring", include: [{ pillar: "vehicle_monitoring" }] },
+  { id: "delivery-reporting", label: "Delivery Reporting", include: [{ pillar: "delivery_reporting" }] },
+  { id: "trip-updating", label: "Trip Updating", include: [{ pillar: "trip_status" }] },
 ];
 
 export default function DriverRoleAnalyticsTabs({ data }: { data: DriverRoleAnalyticsPayload }) {

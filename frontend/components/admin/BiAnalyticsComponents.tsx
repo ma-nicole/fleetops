@@ -22,9 +22,121 @@ export type DrillDownModalContext = {
   chartType: string;
   chartItems: Array<Record<string, string | number>>;
   valueField?: string;
+  analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
+  analyticsMethod?: string;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
 };
 
 type FilterOptions = AdminAnalyticsPayload["filter_options"];
+
+type DrillIndicator = {
+  label: string;
+  value: string | number;
+  interpretation?: string;
+};
+
+function toMonthName(monthIso: string): string {
+  const [year, month] = monthIso.split("-");
+  if (!year || !month) return monthIso;
+  const date = new Date(`${year}-${month}-01T00:00:00Z`);
+  return `${date.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${year}`;
+}
+
+function computeTimeHierarchyOptions(rows: Record<string, unknown>[]) {
+  const daySet = new Set<string>();
+  const monthSet = new Set<string>();
+  const quarterSet = new Set<string>();
+  const yearSet = new Set<string>();
+  const weekSet = new Set<string>();
+  const dateFields = ["delivery_date", "expense_date", "paid_at", "date", "scheduled_date", "completed_at"];
+
+  const toIsoWeek = (dateIso: string): string => {
+    const d = new Date(`${dateIso}T00:00:00Z`);
+    const day = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - day);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+  };
+
+  for (const row of rows) {
+    const rawDate = dateFields.map((f) => row[f]).find((v) => v != null);
+    if (!rawDate) continue;
+    const iso = String(rawDate).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+    const year = iso.slice(0, 4);
+    const month = iso.slice(0, 7);
+    const monthNum = Number(iso.slice(5, 7));
+    daySet.add(iso);
+    monthSet.add(month);
+    yearSet.add(year);
+    quarterSet.add(`${year}-Q${Math.ceil(monthNum / 3)}`);
+    weekSet.add(toIsoWeek(iso));
+  }
+
+  return {
+    years: [...yearSet].sort(),
+    quarters: [...quarterSet].sort(),
+    months: [...monthSet].sort(),
+    weeks: [...weekSet].sort(),
+    days: [...daySet].sort(),
+  };
+}
+
+function computeGrowthIndicator(rows: Record<string, unknown>[], valueField?: string): string | null {
+  if (!valueField) return null;
+  const dateFields = ["delivery_date", "expense_date", "paid_at", "date", "scheduled_date", "completed_at", "month"];
+  const series: Array<{ date: string; value: number }> = [];
+  for (const row of rows) {
+    const rawDate = dateFields.map((f) => row[f]).find((v) => v != null);
+    const rawValue = row[valueField];
+    if (rawDate == null || rawValue == null) continue;
+    const n = Number(rawValue);
+    if (!Number.isFinite(n)) continue;
+    series.push({ date: String(rawDate).slice(0, 10), value: n });
+  }
+  if (series.length < 2) return null;
+  series.sort((a, b) => a.date.localeCompare(b.date));
+  const first = series[0].value;
+  const last = series[series.length - 1].value;
+  if (first === 0) return null;
+  const pct = ((last - first) / Math.abs(first)) * 100;
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(2)}%`;
+}
+
+function indicatorSummary(
+  stats: ReturnType<typeof computeRowStatistics>,
+  rows: Record<string, unknown>[],
+  context: DrillDownModalContext,
+): DrillIndicator[] {
+  const indicators: DrillIndicator[] = [
+    { label: "Analytics Type", value: context.analyticsType ?? "Descriptive" },
+    { label: "Method", value: context.analyticsMethod ?? "Comparative aggregation" },
+    { label: "Chart Type", value: context.chartType.toUpperCase() },
+    { label: "Total Records", value: rows.length },
+  ];
+  if (context.xAxisLabel) indicators.push({ label: "X-axis", value: context.xAxisLabel });
+  if (context.yAxisLabel) indicators.push({ label: "Y-axis", value: context.yAxisLabel });
+  if (!stats) return indicators;
+
+  indicators.push(
+    { label: "Average", value: stats.average },
+    { label: "Maximum", value: stats.maximum },
+    { label: "Minimum", value: stats.minimum },
+    { label: "Median", value: stats.median },
+    { label: "Standard Deviation", value: stats.standard_deviation ?? "Insufficient data" },
+  );
+  const growth = computeGrowthIndicator(rows, context.valueField);
+  if (growth) {
+    indicators.push({
+      label: "Growth Rate",
+      value: growth,
+      interpretation: "Compares earliest and latest points in the current filtered view.",
+    });
+  }
+  return indicators;
+}
 
 export function DrillDownAnalyticsModal({
   open,
@@ -75,6 +187,11 @@ export function DrillDownAnalyticsModal({
     () => computeRowStatistics(panelFiltered, context.valueField ? [context.valueField] : undefined),
     [panelFiltered, context.valueField],
   );
+  const hierarchy = useMemo(() => computeTimeHierarchyOptions(chartFiltered), [chartFiltered]);
+  const indicators = useMemo(
+    () => indicatorSummary(statistics, panelFiltered, context),
+    [context, panelFiltered, statistics],
+  );
 
   if (!open || !selection) return null;
 
@@ -109,6 +226,28 @@ export function DrillDownAnalyticsModal({
     }
   };
 
+  const exportCsv = () => {
+    if (!panelFiltered.length) return;
+    const header = columns.map((c) => c.label).join(",");
+    const body = panelFiltered.map((row) =>
+      columns
+        .map((c) => {
+          const raw = row[c.key] ?? "";
+          const cell = String(raw).replace(/"/g, "\"\"");
+          return `"${cell}"`;
+        })
+        .join(","),
+    );
+    const csv = [header, ...body].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${context.sectionTitle.replace(/\s+/g, "_").toLowerCase()}_drilldown.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div
       role="dialog"
@@ -133,31 +272,7 @@ export function DrillDownAnalyticsModal({
 
         <div className="bi-drilldown-modal__body">
           <section className="bi-drilldown-section">
-            <h3 className="bi-drilldown-section__title">Section 1 — Descriptive Statistical Analytics</h3>
-            {statistics ? (
-              <StatisticsTable stats={statistics} />
-            ) : (
-              <p className="bi-drilldown-empty">Insufficient numeric data for statistics on this selection.</p>
-            )}
-          </section>
-
-          <section className="bi-drilldown-section">
-            <h3 className="bi-drilldown-section__title">Section 2 — Filtered Dataset</h3>
-            <p className="bi-drilldown-meta">
-              {panelFiltered.length} source record{panelFiltered.length === 1 ? "" : "s"}
-              {panelFiltered.length !== chartFiltered.length
-                ? ` (${chartFiltered.length} from chart selection)`
-                : ""}
-            </p>
-            {panelFiltered.length ? (
-              <DrilldownTable columns={columns} rows={panelFiltered} />
-            ) : (
-              <p className="bi-drilldown-empty">No records found for this selection.</p>
-            )}
-          </section>
-
-          <section className="bi-drilldown-section">
-            <h3 className="bi-drilldown-section__title">Section 3 — Filters</h3>
+            <h3 className="bi-drilldown-section__title">Section 1 — Filters</h3>
             <div className="bi-drilldown-filters">
               <label className="filter-panel__label">
                 Date from
@@ -176,6 +291,105 @@ export function DrillDownAnalyticsModal({
                   value={panelFilters.dateTo}
                   onChange={(e) => setPanelFilters((f) => ({ ...f, dateTo: e.target.value }))}
                 />
+              </label>
+              <label className="filter-panel__label">
+                Year
+                <select
+                  className="input"
+                  value={panelFilters.year}
+                  onChange={(e) =>
+                    setPanelFilters((f) => ({
+                      ...f,
+                      year: e.target.value,
+                      quarter: "",
+                      month: "",
+                      week: "",
+                      day: "",
+                    }))
+                  }
+                >
+                  <option value="">All years</option>
+                  {hierarchy.years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-panel__label">
+                Quarter
+                <select
+                  className="input"
+                  value={panelFilters.quarter}
+                  onChange={(e) =>
+                    setPanelFilters((f) => ({
+                      ...f,
+                      quarter: e.target.value,
+                      month: "",
+                      week: "",
+                      day: "",
+                    }))
+                  }
+                >
+                  <option value="">All quarters</option>
+                  {hierarchy.quarters.map((q) => (
+                    <option key={q} value={q}>
+                      {q}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-panel__label">
+                Month
+                <select
+                  className="input"
+                  value={panelFilters.month}
+                  onChange={(e) =>
+                    setPanelFilters((f) => ({
+                      ...f,
+                      month: e.target.value,
+                      week: "",
+                      day: "",
+                    }))
+                  }
+                >
+                  <option value="">All months</option>
+                  {hierarchy.months.map((m) => (
+                    <option key={m} value={m}>
+                      {toMonthName(m)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-panel__label">
+                Week
+                <select
+                  className="input"
+                  value={panelFilters.week}
+                  onChange={(e) => setPanelFilters((f) => ({ ...f, week: e.target.value, day: "" }))}
+                >
+                  <option value="">All weeks</option>
+                  {hierarchy.weeks.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-panel__label">
+                Day
+                <select
+                  className="input"
+                  value={panelFilters.day}
+                  onChange={(e) => setPanelFilters((f) => ({ ...f, day: e.target.value }))}
+                >
+                  <option value="">All days</option>
+                  {hierarchy.days.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="filter-panel__label">
                 Route
@@ -253,9 +467,67 @@ export function DrillDownAnalyticsModal({
                 </select>
               </label>
             </div>
-            <button type="button" className="quick-action-btn" onClick={() => setPanelFilters(EMPTY_PANEL_FILTERS)}>
-              Reset panel filters
-            </button>
+            <div className="quick-actions">
+              <button type="button" className="quick-action-btn" onClick={() => setPanelFilters(EMPTY_PANEL_FILTERS)}>
+                Reset panel filters
+              </button>
+              <button type="button" className="quick-action-btn" onClick={exportCsv} disabled={!panelFiltered.length}>
+                Export filtered data (CSV)
+              </button>
+            </div>
+          </section>
+
+          <section className="bi-drilldown-section">
+            <h3 className="bi-drilldown-section__title">Section 2 — Data Table</h3>
+            <p className="bi-drilldown-meta">
+              {panelFiltered.length} source record{panelFiltered.length === 1 ? "" : "s"}
+              {panelFiltered.length !== chartFiltered.length
+                ? ` (${chartFiltered.length} from chart selection)`
+                : ""}
+            </p>
+            {panelFiltered.length ? (
+              <DrilldownTable columns={columns} rows={panelFiltered} />
+            ) : (
+              <p className="bi-drilldown-empty">No records found for this selection.</p>
+            )}
+          </section>
+
+          <section className="bi-drilldown-section">
+            <h3 className="bi-drilldown-section__title">Section 3 — Summary / Indicators</h3>
+            <div className="bi-indicator-grid">
+              {indicators.map((item) => (
+                <div key={item.label} className="bi-indicator-card">
+                  <p className="bi-indicator-card__label">{item.label}</p>
+                  <p className="bi-indicator-card__value">{item.value}</p>
+                  {item.interpretation ? (
+                    <p className="bi-indicator-card__note">{item.interpretation}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <div className="bi-metric-table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Metric Name</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {indicators.map((item) => (
+                    <tr key={`${item.label}-row`}>
+                      <td>{item.label}</td>
+                      <td style={{ textAlign: "right", fontWeight: 700 }}>{item.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {statistics ? (
+              <StatisticsTable stats={statistics} />
+            ) : (
+              <p className="bi-drilldown-empty">Insufficient numeric data for statistics on this selection.</p>
+            )}
           </section>
 
           <section className="bi-drilldown-section">
@@ -265,7 +537,10 @@ export function DrillDownAnalyticsModal({
             </button>
             {aiError ? <p className="bi-drilldown-empty">{aiError}</p> : null}
             {interpretation ? (
-              <p className="bi-drilldown-interpretation">{interpretation}</p>
+              <div className="bi-interpretation-block">
+                <h4 className="bi-interpretation-block__title">Interpretation</h4>
+                <p className="bi-drilldown-interpretation">{interpretation}</p>
+              </div>
             ) : !aiLoading && !aiError ? (
               <p className="bi-drilldown-meta">Click the button to generate an interpretation from actual chart values.</p>
             ) : null}

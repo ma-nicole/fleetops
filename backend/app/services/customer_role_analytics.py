@@ -116,6 +116,25 @@ def build_customer_role_analytics(
         chart=[],
         drilldown=profile_rows,
     )
+    login_rows = []
+    for row in account_rows:
+        if row["date"] != "—":
+            login_rows.append({"date": row["date"], "event": "account_activity", "source": "booking"})
+    for row in payment_rows:
+        if row["date"] != "—":
+            login_rows.append({"date": row["date"], "event": "payment_activity", "source": "payment"})
+    login_rows.sort(key=lambda r: r["date"], reverse=True)
+    login_rows = login_rows[:50]
+    account_desc_login_history = (
+        _empty("No data available yet.")
+        if not login_rows
+        else _block(
+            kpis=[{"label": "Recorded access events", "value": len(login_rows)}],
+            chart=[],
+            drilldown=login_rows,
+            note="Proxy login history based on authenticated customer actions (bookings/payments).",
+        )
+    )
 
     monthly_bookings: dict[str, int] = defaultdict(int)
     for b in bookings:
@@ -181,6 +200,27 @@ def build_customer_role_analytics(
             ],
             chart=estimate_rows[:12],
             drilldown=estimate_rows[:50],
+        )
+    )
+    truck_preference_rows = []
+    for b in bookings:
+        truck_preference_rows.append(
+            {
+                "booking_id": b.id,
+                "date": b.created_at.date().isoformat() if b.created_at else "—",
+                "service_type": str(b.service_type.value if hasattr(b.service_type, "value") else b.service_type),
+                "vehicle_class": getattr(b, "vehicle_class_used", None) or getattr(b, "vehicle_class", None) or "—",
+                "route": _route_key(b.pickup_location, b.dropoff_location),
+            }
+        )
+    truck_preference_rows.sort(key=lambda r: r["date"], reverse=True)
+    service_desc_truck_pref = (
+        _empty("No data available yet.")
+        if not truck_preference_rows
+        else _block(
+            kpis=[{"label": "Truck preference records", "value": len(truck_preference_rows)}],
+            chart=[],
+            drilldown=truck_preference_rows[:50],
         )
     )
     service_desc_routes = service_desc_preferences
@@ -321,6 +361,36 @@ def build_customer_role_analytics(
             drilldown=shipment_rows[:50],
         )
     )
+    receipt_rows = [
+        {
+            "payment_id": p["payment_id"],
+            "booking_id": p["booking_id"],
+            "date": p["date"],
+            "amount_php": p["amount_php"],
+            "reference": p["reference"],
+            "status": p["status"],
+        }
+        for p in payment_rows
+    ]
+    track_desc_payment_records = account_desc_payments
+    track_desc_transaction_history = (
+        _empty("No data available yet.")
+        if not payment_rows
+        else _block(
+            kpis=[{"label": "Transactions", "value": len(payment_rows)}],
+            chart=[],
+            drilldown=payment_rows[:50],
+        )
+    )
+    track_desc_receipts = (
+        _empty("No data available yet.")
+        if not receipt_rows
+        else _block(
+            kpis=[{"label": "Receipts", "value": len(receipt_rows)}],
+            chart=[],
+            drilldown=receipt_rows[:50],
+        )
+    )
 
     delay_rows = [r for r in shipment_rows if r["status"] == "delayed"]
     track_pred_delay = (
@@ -349,6 +419,9 @@ def build_customer_role_analytics(
                 "account_activity": account_desc_activity,
                 "payment_profile": account_desc_payments,
                 "profile_summary": account_desc_profile,
+                "account_activity_logs": account_desc_activity,
+                "login_history": account_desc_login_history,
+                "profile_records": account_desc_profile,
             },
             "predictive": {
                 "booking_activity_forecast": account_pred_activity,
@@ -360,6 +433,8 @@ def build_customer_role_analytics(
                 "service_preferences": service_desc_preferences,
                 "cost_estimate_history": service_desc_estimates,
                 "route_interest": service_desc_routes,
+                "service_selection_history": service_desc_preferences,
+                "truck_preference_records": service_desc_truck_pref,
             },
             "predictive": {
                 "service_recommendation": service_pred_route,
@@ -371,6 +446,9 @@ def build_customer_role_analytics(
                 "booking_status_overview": booking_desc_status,
                 "payment_history": booking_desc_payments,
                 "cancellation_records": booking_desc_cancellations,
+                "booking_records": booking_desc_status,
+                "booking_history": account_desc_activity,
+                "order_details": booking_desc_status,
             },
             "predictive": {
                 "booking_completion_forecast": booking_pred_completion,
@@ -382,6 +460,9 @@ def build_customer_role_analytics(
                 "shipment_status_timeline": track_desc_timeline,
                 "delivery_performance": track_desc_performance,
                 "tracking_updates": track_desc_updates,
+                "payment_records": track_desc_payment_records,
+                "transaction_history": track_desc_transaction_history,
+                "receipts": track_desc_receipts,
             },
             "predictive": {
                 "delay_likelihood": track_pred_delay,

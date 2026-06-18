@@ -40,6 +40,9 @@ export default function PlotlyAnalyticsChartInner({
   items,
   labelKey,
   valueKey,
+  seriesKeys,
+  secondarySeriesKey,
+  xAxisLabel,
   yAxisLabel,
   legendLabel,
   onItemClick,
@@ -49,6 +52,9 @@ export default function PlotlyAnalyticsChartInner({
   items: Array<Record<string, string | number>>;
   labelKey: string;
   valueKey: string;
+  seriesKeys?: string[];
+  secondarySeriesKey?: string;
+  xAxisLabel?: string;
   yAxisLabel?: string;
   legendLabel?: string;
   onItemClick?: (payload: ChartClickPayload) => void;
@@ -56,6 +62,19 @@ export default function PlotlyAnalyticsChartInner({
 }) {
   const labels = useMemo(() => items.map((item) => String(item[labelKey] ?? "")), [items, labelKey]);
   const values = useMemo(() => items.map((item) => Number(item[valueKey]) || 0), [items, valueKey]);
+  const colors = useMemo(
+    () => ({
+      revenue: "#2D6A4F",
+      expense: "#E76F51",
+      toll: "#F4A261",
+      maintenance: "#9C6644",
+      allowance: "#6D597A",
+      profit: "#277DA1",
+      estimated: "#7C3AED",
+      actual: "#0EA5E9",
+    }),
+    [],
+  );
 
   const data = useMemo(() => {
     if (kind === "pie") {
@@ -95,6 +114,61 @@ export default function PlotlyAnalyticsChartInner({
       ];
     }
 
+    if (kind === "area") {
+      const keys = (seriesKeys && seriesKeys.length ? seriesKeys : [valueKey]).slice(0, 3);
+      return keys.map((key, idx) => {
+        const name = key.replace(/_/g, " ");
+        const color = idx === 0 ? colors.estimated : idx === 1 ? colors.actual : BAR_COLORS[idx % BAR_COLORS.length];
+        return {
+          type: "scatter" as const,
+          mode: "lines" as const,
+          x: labels,
+          y: items.map((item) => Number(item[key]) || 0),
+          name,
+          fill: idx === 0 ? "tozeroy" : "tonexty",
+          line: { color, width: 2 },
+          hovertemplate: "%{x}<br>%{y:,}<extra></extra>",
+        };
+      });
+    }
+
+    if (kind === "stackedBar") {
+      const keys = (seriesKeys && seriesKeys.length ? seriesKeys : [valueKey]).slice(0, 4);
+      return keys.map((key, idx) => ({
+        type: "bar" as const,
+        x: labels,
+        y: items.map((item) => Number(item[key]) || 0),
+        name: key.replace(/_/g, " "),
+        marker: { color: BAR_COLORS[idx % BAR_COLORS.length] },
+        hovertemplate: "%{x}<br>%{y:,}<extra></extra>",
+      }));
+    }
+
+    if (kind === "combo") {
+      const primary = (seriesKeys && seriesKeys.length ? seriesKeys : [valueKey]).slice(0, 2);
+      const bars = primary.map((key, idx) => ({
+        type: "bar" as const,
+        x: labels,
+        y: items.map((item) => Number(item[key]) || 0),
+        name: key.replace(/_/g, " "),
+        marker: { color: idx === 0 ? colors.revenue : colors.expense },
+        hovertemplate: "%{x}<br>%{y:,}<extra></extra>",
+      }));
+      const lineKey = secondarySeriesKey ?? valueKey;
+      const line = {
+        type: "scatter" as const,
+        mode: "lines+markers" as const,
+        x: labels,
+        y: items.map((item) => Number(item[lineKey]) || 0),
+        name: lineKey.replace(/_/g, " "),
+        yaxis: "y2" as const,
+        line: { color: colors.profit, width: 2.5 },
+        marker: { color: colors.profit, size: 7 },
+        hovertemplate: "%{x}<br>%{y:,}<extra></extra>",
+      };
+      return [...bars, line];
+    }
+
     return [
       {
         type: "bar" as const,
@@ -108,7 +182,7 @@ export default function PlotlyAnalyticsChartInner({
         hovertemplate: "%{x}<br>%{y:,}<extra></extra>",
       },
     ];
-  }, [items, kind, labelKey, labels, legendLabel, selectedLabel, valueKey, values]);
+  }, [colors, items, kind, labelKey, labels, legendLabel, secondarySeriesKey, selectedLabel, seriesKeys, valueKey, values]);
 
   const layout = useMemo(
     () => ({
@@ -118,7 +192,7 @@ export default function PlotlyAnalyticsChartInner({
       paper_bgcolor: "transparent",
       plot_bgcolor: "#f8faf9",
       font: { family: "inherit", size: 11, color: "#4b5563" },
-      showlegend: kind === "pie" ? false : Boolean(legendLabel),
+      showlegend: Boolean(legendLabel),
       legend: {
         orientation: "h" as const,
         y: 1.12,
@@ -135,7 +209,7 @@ export default function PlotlyAnalyticsChartInner({
               gridcolor: "#e2e8f0",
               linecolor: "#cbd5e1",
               tickfont: { size: 10 },
-              title: { text: "", standoff: 8 },
+              title: xAxisLabel ? { text: xAxisLabel, standoff: 8 } : undefined,
             },
       yaxis:
         kind === "pie"
@@ -148,9 +222,20 @@ export default function PlotlyAnalyticsChartInner({
               zerolinecolor: "#e2e8f0",
               tickfont: { size: 10 },
             },
-      bargap: kind === "bar" ? 0.28 : undefined,
+      yaxis2:
+        kind === "combo"
+          ? {
+              overlaying: "y" as const,
+              side: "right" as const,
+              title: { text: "profit php", font: { size: 10 } },
+              tickfont: { size: 10, color: "#334155" },
+              gridcolor: "transparent",
+            }
+          : undefined,
+      bargap: kind === "bar" || kind === "stackedBar" || kind === "combo" ? 0.28 : undefined,
+      barmode: kind === "stackedBar" ? ("stack" as const) : undefined,
     }),
-    [kind, legendLabel, yAxisLabel],
+    [kind, legendLabel, xAxisLabel, yAxisLabel],
   );
 
   const config = useMemo(

@@ -93,11 +93,13 @@ export function inferDrilldownFieldKeys(
 }
 
 export type InferredChartMeta = {
-  kind: "pie" | "line" | "bar";
+  kind: "pie" | "line" | "bar" | "area" | "stackedBar" | "combo";
   labelKey: string;
   valueKey: string;
   xKey?: string;
   yKey?: string;
+  seriesKeys?: string[];
+  secondarySeriesKey?: string;
   fieldKeys: string[];
   monthFromX?: boolean;
 };
@@ -125,6 +127,43 @@ export function inferChartMeta(
       valueKey: "count",
       xKey: "month",
       yKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "month"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("month") && keys.includes("revenue_php") && keys.includes("expense_php") && keys.includes("profit_php")) {
+    return {
+      kind: "combo",
+      labelKey: "month",
+      valueKey: "revenue_php",
+      xKey: "month",
+      yKey: "revenue_php",
+      seriesKeys: ["revenue_php", "expense_php"],
+      secondarySeriesKey: "profit_php",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "month"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("month") && keys.includes("estimated_toll_php") && keys.includes("actual_toll_php")) {
+    return {
+      kind: "area",
+      labelKey: "month",
+      valueKey: "actual_toll_php",
+      xKey: "month",
+      yKey: "actual_toll_php",
+      seriesKeys: ["estimated_toll_php", "actual_toll_php"],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "month"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("month") && keys.includes("fuel") && keys.includes("toll") && keys.includes("maintenance")) {
+    return {
+      kind: "stackedBar",
+      labelKey: "month",
+      valueKey: "total",
+      xKey: "month",
+      yKey: "total",
+      seriesKeys: ["fuel", "toll", "maintenance", "allowance"],
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "month"),
       monthFromX: true,
     };
