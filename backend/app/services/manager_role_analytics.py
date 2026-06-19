@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+import math
 from typing import Any
 
 import pandas as pd
@@ -181,12 +182,45 @@ def _forecast_series(series: pd.Series, periods: int = 3) -> list[dict[str, floa
     except Exception:
         avg = float(series.tail(3).mean())
         prediction = [avg] * periods
-    start = pd.Timestamp(series.index[-1]).to_period("M") + 1 if hasattr(series.index[-1], "strftime") else pd.Timestamp.utcnow().to_period("M") + 1
-    labels = pd.period_range(start=start, periods=periods, freq="M")
-    return [
-        {"period": str(labels[i].strftime("%Y-%m")), "value": round(float(v), 2)}
-        for i, v in enumerate(prediction)
-    ]
+    # Avoid pandas out-of-bounds timestamps from malformed/future month labels.
+    def _parse_month(raw: Any) -> tuple[int, int]:
+        token = str(raw or "").strip()[:7]
+        try:
+            year_s, month_s = token.split("-")
+            year = int(year_s)
+            month = int(month_s)
+            if year >= 1 and 1 <= month <= 12:
+                return year, month
+        except Exception:
+            pass
+        now = datetime.utcnow()
+        return now.year, now.month
+
+    def _add_months(year: int, month: int, delta: int) -> tuple[int, int]:
+        total = (year * 12 + (month - 1)) + delta
+        return total // 12, total % 12 + 1
+
+    def _safe_float(value: Any, fallback: float) -> float:
+        try:
+            number = float(value)
+        except Exception:
+            return round(fallback, 2)
+        if not math.isfinite(number):
+            return round(fallback, 2)
+        return round(number, 2)
+
+    base_year, base_month = _parse_month(series.index[-1] if len(series.index) else None)
+    fallback = float(series.tail(3).mean())
+    points: list[dict[str, float | str]] = []
+    for idx, pred in enumerate(prediction):
+        year, month = _add_months(base_year, base_month, idx + 1)
+        points.append(
+            {
+                "period": f"{year:04d}-{month:02d}",
+                "value": _safe_float(pred, fallback),
+            }
+        )
+    return points
 
 
 def _fuel_liters_rows(ctx: dict, f: AnalyticsFilters, limit: int = 50) -> list[dict]:
