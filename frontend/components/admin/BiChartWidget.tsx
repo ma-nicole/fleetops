@@ -141,9 +141,17 @@ export function BiChartWidget({
   }, [meta, preferredChartKind]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);
-  const stats = empty
-    ? null
-    : block.statistics ?? computeRowStatistics(drilldown, resolvedMeta?.valueKey ? [resolvedMeta.valueKey] : undefined);
+  const stats = useMemo(() => {
+    if (empty) return null;
+    const preferFields = resolvedMeta?.valueKey ? [resolvedMeta.valueKey] : undefined;
+    const blockStats = "statistics" in block ? block.statistics : null;
+    if (blockStats) return blockStats;
+    const chartStats = chart.length
+      ? computeRowStatistics(chart as Record<string, unknown>[], preferFields)
+      : null;
+    if (chartStats) return chartStats;
+    return computeRowStatistics(drilldown, preferFields);
+  }, [block, chart, drilldown, empty, resolvedMeta?.valueKey]);
   const legendLabel = resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
 
   const quarterCompare = useMemo(() => {

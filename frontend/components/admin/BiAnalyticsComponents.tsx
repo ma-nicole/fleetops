@@ -106,7 +106,6 @@ function computeGrowthIndicator(rows: Record<string, unknown>[], valueField?: st
 }
 
 function indicatorSummary(
-  stats: ReturnType<typeof computeRowStatistics>,
   rows: Record<string, unknown>[],
   context: DrillDownModalContext,
 ): DrillIndicator[] {
@@ -118,15 +117,6 @@ function indicatorSummary(
   ];
   if (context.xAxisLabel) indicators.push({ label: "X-axis", value: context.xAxisLabel });
   if (context.yAxisLabel) indicators.push({ label: "Y-axis", value: context.yAxisLabel });
-  if (!stats) return indicators;
-
-  indicators.push(
-    { label: "Average", value: stats.average },
-    { label: "Maximum", value: stats.maximum },
-    { label: "Minimum", value: stats.minimum },
-    { label: "Median", value: stats.median },
-    { label: "Standard Deviation", value: stats.standard_deviation ?? "Insufficient data" },
-  );
   const growth = computeGrowthIndicator(rows, context.valueField);
   if (growth) {
     indicators.push({
@@ -196,8 +186,8 @@ export function DrillDownAnalyticsModal({
   );
   const hierarchy = useMemo(() => computeTimeHierarchyOptions(chartFiltered), [chartFiltered]);
   const indicators = useMemo(
-    () => indicatorSummary(statistics, panelFiltered, context),
-    [context, panelFiltered, statistics],
+    () => indicatorSummary(panelFiltered, context),
+    [context, panelFiltered],
   );
 
   if (!open || !selection) return null;
@@ -530,24 +520,9 @@ export function DrillDownAnalyticsModal({
                 </div>
               ))}
             </div>
-            <div className="bi-metric-table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Metric Name</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {indicators.map((item) => (
-                    <tr key={`${item.label}-row`}>
-                      <td>{item.label}</td>
-                      <td style={{ textAlign: "right", fontWeight: 700 }}>{item.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p className="bi-drilldown-meta" style={{ marginTop: "0.75rem" }}>
+              Numeric statistics
+            </p>
             {statistics ? (
               <StatisticsTable stats={statistics} />
             ) : (

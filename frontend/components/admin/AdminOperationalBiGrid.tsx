@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { BiChartWidget } from "@/components/admin/BiChartWidget";
 import { EmptyChart } from "@/components/admin/AnalyticsCharts";
-import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
+import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock } from "@/lib/analyticsApi";
 import { isPopulatedAnalyticsModule } from "@/lib/analyticsApi";
 
 type WidgetSpec = {
@@ -20,7 +20,6 @@ type WidgetSpec = {
 function moduleBlock(
   chart: Record<string, unknown>[],
   drilldown: Record<string, unknown>[],
-  statistics?: StatisticsSummary | null,
 ): RoleAnalyticsFeatureBlock {
   if (!chart.length && !drilldown.length) {
     return { empty: true, message: "No data available yet." };
@@ -29,7 +28,7 @@ function moduleBlock(
     kpis: [],
     chart,
     drilldown,
-    statistics: statistics ?? null,
+    statistics: null,
   };
 }
 
@@ -57,7 +56,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       moduleBlock(
         fin.revenue_trend.map((x) => ({ month: x.month, revenue_php: x.revenue_php })),
         fin.drilldown ?? [],
-        fin.statistics,
       ),
       comp?.revenue,
       { analyticsType: "Descriptive", analyticsMethod: "Time-series trend aggregation", preferredChartKind: "line" },
@@ -109,7 +107,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       add(
         "shipment-status",
         "Shipment Status Distribution",
-        moduleBlock(ship.status_distribution, ship.drilldown, ship.statistics),
+        moduleBlock(ship.status_distribution, ship.drilldown),
         comp?.deliveries,
         {
           analyticsType: "Descriptive",
@@ -125,17 +123,19 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           preferredChartKind: "pie",
         },
       );
-      add(
-        "jobs-over-time",
-        "Jobs / Trips Over Time",
-        moduleBlock(ship.jobs_over_time ?? ship.monthly_deliveries, ship.drilldown, ship.statistics),
-        comp?.deliveries,
-        { analyticsType: "Descriptive", analyticsMethod: "Time-series throughput analysis", preferredChartKind: "line" },
-      );
+      if (ship.jobs_over_time?.length) {
+        add(
+          "jobs-over-time",
+          "Jobs / Trips Over Time",
+          moduleBlock(ship.jobs_over_time, ship.drilldown),
+          comp?.deliveries,
+          { analyticsType: "Descriptive", analyticsMethod: "Time-series throughput analysis", preferredChartKind: "line" },
+        );
+      }
       add(
         "monthly-deliveries",
         "Monthly Deliveries",
-        moduleBlock(ship.monthly_deliveries, ship.drilldown, ship.statistics),
+        moduleBlock(ship.monthly_deliveries, ship.drilldown),
         comp?.deliveries,
         { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "line" },
       );
@@ -151,7 +151,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
             completed: Number(x.deliveries_completed ?? 0),
           })),
           drivers.drilldown,
-          drivers.statistics,
         ),
         undefined,
         { analyticsType: "Descriptive", analyticsMethod: "Ranking analysis", preferredChartKind: "bar" },
@@ -159,7 +158,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       add(
         "driver-distribution",
         "Driver Delivery Distribution",
-        moduleBlock(drivers.distribution, drivers.drilldown, drivers.statistics),
+        moduleBlock(drivers.distribution, drivers.drilldown),
         undefined,
         { analyticsType: "Descriptive", analyticsMethod: "Distribution analysis", preferredChartKind: "pie" },
       );
@@ -178,7 +177,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
             trip_count: Number(x.trip_count ?? 0),
           })),
           fleet.drilldown,
-          fleet.statistics,
         ),
         undefined,
         { analyticsType: "Descriptive", analyticsMethod: "Utilization ratio by asset", preferredChartKind: "bar" },
@@ -206,7 +204,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       moduleBlock(
         exp.expense_breakdown.map((x) => ({ category: x.label, amount_php: x.amount_php })),
         exp.drilldown?.records ?? [],
-        exp.statistics,
       ),
       comp?.expenses,
       { analyticsType: "Descriptive", analyticsMethod: "Cost share breakdown", preferredChartKind: "pie" },
@@ -235,7 +232,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
             deliveries: Number(x.deliveries ?? 0),
           })),
           routes.drilldown,
-          routes.statistics,
         ),
         undefined,
         { analyticsType: "Descriptive", analyticsMethod: "Route throughput comparison", preferredChartKind: "bar" },
@@ -265,7 +261,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
             actual_toll_php: x.actual_toll_php,
           })),
           tolls.drilldown as unknown as Record<string, unknown>[],
-          tolls.statistics,
         ),
         undefined,
         { analyticsType: "Diagnostic", analyticsMethod: "Route toll outlier ranking", preferredChartKind: "bar" },
@@ -291,7 +286,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
     add(
       "client-bookings",
       "Bookings by Client",
-      moduleBlock(clients.booking_distribution, clients.drilldown, clients.statistics),
+      moduleBlock(clients.booking_distribution, clients.drilldown),
       undefined,
       { analyticsType: "Descriptive", analyticsMethod: "Client frequency distribution", preferredChartKind: "bar" },
     );
@@ -304,7 +299,6 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           revenue_php: x.revenue_php,
         })),
         clients.drilldown,
-        clients.statistics,
       ),
       comp?.revenue,
       { analyticsType: "Diagnostic", analyticsMethod: "Revenue contribution analysis", preferredChartKind: "bar" },
