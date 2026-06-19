@@ -525,7 +525,7 @@ def build_dispatcher_role_analytics(
         if trip.truck_id and trip.completed_at:
             truck_month[trip.completed_at.strftime("%Y-%m")] += 1
     truck_demand_series = _monthly_series([(m, float(c)) for m, c in sorted(truck_month.items())], min_points=2)
-    truck_demand_forecast = _forecast_series(truck_demand_series, 3) if truck_demand_series else None
+    truck_demand_forecast = _forecast_series(truck_demand_series, 3) if truck_demand_series is not None else None
     truck_pred_demand = (
         _empty_predict()
         if not truck_demand_forecast
@@ -612,7 +612,7 @@ def build_dispatcher_role_analytics(
         if trip.driver_id and trip.completed_at:
             driver_month[trip.completed_at.strftime("%Y-%m")].add(trip.driver_id)
     staffing_series = _monthly_series([(m, float(len(d))) for m, d in sorted(driver_month.items())], min_points=2)
-    staffing_forecast = _forecast_series(staffing_series, 3) if staffing_series else None
+    staffing_forecast = _forecast_series(staffing_series, 3) if staffing_series is not None else None
     driver_pred_staffing = (
         _empty_predict()
         if not staffing_forecast
@@ -704,7 +704,7 @@ def build_dispatcher_role_analytics(
 
     monthly_del = shipments.get("monthly_deliveries") or []
     del_series = _monthly_series([(m["month"], float(m["count"])) for m in monthly_del], min_points=2)
-    completion_forecast = _forecast_series(del_series, 3) if del_series else None
+    completion_forecast = _forecast_series(del_series, 3) if del_series is not None else None
     order_pred_completion = (
         _empty_predict()
         if not completion_forecast
@@ -835,7 +835,7 @@ def build_dispatcher_role_analytics(
         if trip:
             issue_sources.append(_trip_row(trip, jobs, dispatcher_names, extra={"cause": vir.issue_type}))
     issue_series = _monthly_series([(m, float(c)) for m, c in sorted(issue_month.items())], min_points=2)
-    issue_forecast = _forecast_series(issue_series, 3) if issue_series else None
+    issue_forecast = _forecast_series(issue_series, 3) if issue_series is not None else None
     ops_pred_issues = (
         _empty_predict()
         if not issue_sources and not issue_forecast
