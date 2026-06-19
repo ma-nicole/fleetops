@@ -78,7 +78,7 @@ export function MentorBarChart({
             const x = 52 + i * (barW + gap);
             const y = chartH - h;
             const label = String(item[labelKey]);
-            const active = selectedLabel?.toLowerCase() === label.toLowerCase();
+            const active = String(selectedLabel ?? "").toLowerCase() === label.toLowerCase();
             const color = BAR_COLORS[i % BAR_COLORS.length];
             return (
               <g key={`${label}-${i}`}>

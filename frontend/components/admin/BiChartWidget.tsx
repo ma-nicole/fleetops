@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import { DrillDownAnalyticsModal } from "@/components/admin/BiAnalyticsComponents";
+import { MentorBarChart } from "@/components/admin/MentorBarChart";
 import { PlotlyAnalyticsChart } from "@/components/admin/PlotlyAnalyticsChart";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
 import { AnalyticsApi } from "@/lib/analyticsApi";
@@ -123,6 +124,7 @@ export function BiChartWidget({
   const [modalOpen, setModalOpen] = useState(false);
   const [compareMode, setCompareMode] = useState<"none" | "quarter" | "yoy">("none");
   const [aiLoading, setAiLoading] = useState(false);
+  const [plotlyFailed, setPlotlyFailed] = useState(false);
 
   const empty = isEmptyBlock(block);
   const drilldown = empty ? [] : ((block.drilldown ?? []) as Record<string, unknown>[]);
@@ -154,6 +156,10 @@ export function BiChartWidget({
   }, [block, chart, drilldown, empty, resolvedMeta?.valueKey]);
   const legendLabel = resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
 
+  useEffect(() => {
+    setPlotlyFailed(false);
+  }, [resolvedMeta?.kind, resolvedMeta?.labelKey, resolvedMeta?.valueKey, items.length, title]);
+
   const quarterCompare = useMemo(() => {
     if (comparative?.comparisons?.quarterly?.length) {
       return findComparative(comparative.comparisons.quarterly, "quarter");
@@ -182,6 +188,22 @@ export function BiChartWidget({
   const openDetails = () => {
     setSelection({ label: title, displayLabel: `${title} · Full details`, fieldKeys: [] });
     setModalOpen(true);
+  };
+
+  const handlePlotlyError = (error: Error) => {
+    if (!plotlyFailed) {
+      const sample = items[0] ?? null;
+      console.error("[BI chart] Plotly render failed, using fallback.", {
+        title,
+        kind: resolvedMeta?.kind ?? "bar",
+        labelKey: resolvedMeta?.xKey ?? resolvedMeta?.labelKey,
+        valueKey: resolvedMeta?.yKey ?? resolvedMeta?.valueKey,
+        itemsCount: items.length,
+        sampleKeys: sample ? Object.keys(sample) : [],
+        error: error.message,
+      });
+    }
+    setPlotlyFailed(true);
   };
 
   const explainChart = async () => {
@@ -217,7 +239,7 @@ export function BiChartWidget({
   }
 
   const chartVisual =
-    resolvedMeta && items.length ? (
+    resolvedMeta && items.length && !plotlyFailed ? (
       <PlotlyAnalyticsChart
         kind={
           resolvedMeta.kind === "pie"
@@ -242,6 +264,17 @@ export function BiChartWidget({
         legendLabel={legendLabel}
         onItemClick={openDrill}
         selectedLabel={selection?.label ?? null}
+        onRenderError={handlePlotlyError}
+      />
+    ) : resolvedMeta && items.length ? (
+      <MentorBarChart
+        items={items.slice(0, 24)}
+        labelKey={resolvedMeta.xKey ?? resolvedMeta.labelKey}
+        valueKey={resolvedMeta.yKey ?? resolvedMeta.valueKey}
+        yAxisLabel={legendLabel}
+        legendLabel={legendLabel}
+        onItemClick={openDrill}
+        selectedLabel={selection?.label ?? null}
       />
     ) : drilldown.length ? (
       <PlotlyAnalyticsChart
@@ -254,6 +287,7 @@ export function BiChartWidget({
         legendLabel="Records"
         onItemClick={openDrill}
         selectedLabel={selection?.label ?? null}
+        onRenderError={handlePlotlyError}
       />
     ) : (
       <EmptyChart message="No data available yet." />

@@ -6,8 +6,8 @@ export type ChartSelection = {
   recordType?: string;
 };
 
-export function normalizeChartKey(value: string): string {
-  return value
+export function normalizeChartKey(value: unknown): string {
+  return String(value ?? "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_")
@@ -27,7 +27,7 @@ export function filterDrilldownRows(
   return rows.filter((row) => {
     if (selection.recordType) {
       const rowType = String(row.record_type ?? row.category ?? "").toLowerCase();
-      if (rowType !== selection.recordType.toLowerCase()) return false;
+      if (rowType !== String(selection.recordType).toLowerCase()) return false;
     }
 
     if (selection.monthKey) {

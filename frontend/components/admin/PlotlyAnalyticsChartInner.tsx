@@ -2,7 +2,7 @@
 
 import createPlotlyComponent from "react-plotly.js/factory";
 import Plotly from "plotly.js-dist-min";
-import { useCallback, useMemo } from "react";
+import { Component, type ErrorInfo, useCallback, useMemo } from "react";
 import type { Config, Data, PlotDatum, PlotMouseEvent } from "plotly.js";
 import type { ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import type { PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
@@ -15,7 +15,27 @@ const ENTERPRISE_LINE = "#277DA1";
 
 function isSelected(label: string, selectedLabel?: string | null): boolean {
   if (!selectedLabel) return false;
-  return label.trim().toLowerCase() === selectedLabel.trim().toLowerCase();
+  return String(label ?? "").trim().toLowerCase() === String(selectedLabel ?? "").trim().toLowerCase();
+}
+
+class PlotlyRenderBoundary extends Component<
+  { children: import("react").ReactNode; onError?: (error: Error, info: ErrorInfo) => void },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    this.props.onError?.(error, info);
+  }
+
+  render(): import("react").ReactNode {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
 }
 
 function barColors(items: Array<Record<string, string | number>>, labelKey: string, selectedLabel?: string | null) {
@@ -47,6 +67,7 @@ export default function PlotlyAnalyticsChartInner({
   legendLabel,
   onItemClick,
   selectedLabel,
+  onRenderError,
 }: {
   kind: PlotlyChartKind;
   items: Array<Record<string, string | number>>;
@@ -59,6 +80,7 @@ export default function PlotlyAnalyticsChartInner({
   legendLabel?: string;
   onItemClick?: (payload: ChartClickPayload) => void;
   selectedLabel?: string | null;
+  onRenderError?: (error: Error) => void;
 }) {
   const labels = useMemo(() => items.map((item) => String(item[labelKey] ?? "")), [items, labelKey]);
   const values = useMemo(() => items.map((item) => Number(item[valueKey]) || 0), [items, valueKey]);
@@ -267,14 +289,16 @@ export default function PlotlyAnalyticsChartInner({
 
   return (
     <div className="plotly-analytics-chart">
-      <Plot
-        data={data as Data[]}
-        layout={layout}
-        config={config as Partial<Config>}
-        style={{ width: "100%", height: "100%" }}
-        useResizeHandler
-        onClick={handleClick}
-      />
+      <PlotlyRenderBoundary onError={(error) => onRenderError?.(error)}>
+        <Plot
+          data={data as Data[]}
+          layout={layout}
+          config={config as Partial<Config>}
+          style={{ width: "100%", height: "100%" }}
+          useResizeHandler
+          onClick={handleClick}
+        />
+      </PlotlyRenderBoundary>
     </div>
   );
 }

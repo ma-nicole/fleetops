@@ -22,6 +22,7 @@ export function PlotlyAnalyticsChart(props: {
   legendLabel?: string;
   onItemClick?: (payload: ChartClickPayload) => void;
   selectedLabel?: string | null;
+  onRenderError?: (error: Error) => void;
 }) {
   return <PlotlyAnalyticsChartInner {...props} />;
 }

@@ -17,7 +17,7 @@ type ChartClickProps = {
 
 function isSelected(label: string, selectedLabel?: string | null): boolean {
   if (!selectedLabel) return false;
-  return label.trim().toLowerCase() === selectedLabel.trim().toLowerCase();
+  return String(label ?? "").trim().toLowerCase() === String(selectedLabel ?? "").trim().toLowerCase();
 }
 
 function clickableButtonStyle(active: boolean): React.CSSProperties {
