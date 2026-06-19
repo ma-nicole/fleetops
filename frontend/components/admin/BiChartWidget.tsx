@@ -1,10 +1,8 @@
 "use client";
 
-import { Component, useMemo, useState, type ErrorInfo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
-import { BiAnalyticsSvgChart } from "@/components/admin/BiAnalyticsSvgChart";
 import { DrillDownAnalyticsModal } from "@/components/admin/BiAnalyticsComponents";
-import type { PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
 import { AnalyticsApi } from "@/lib/analyticsApi";
 import { computeRowStatistics } from "@/lib/analyticsStatistics";
@@ -56,71 +54,134 @@ function buildSelection(meta: ReturnType<typeof inferChartMeta>, payload: ChartC
   return { label, displayLabel, fieldKeys: meta.fieldKeys, monthKey: meta.monthFromX ? label : undefined };
 }
 
-function toPlotlyKind(kind: InferredChartMeta["kind"]): PlotlyChartKind {
-  if (kind === "pie") return "pie";
-  if (kind === "line") return "line";
-  if (kind === "area") return "area";
-  if (kind === "stackedBar") return "stackedBar";
-  if (kind === "combo") return "combo";
-  return "bar";
-}
-
 function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): SynthesizedChart | null {
   return synthesizeChartFromCategoryCounts(drilldown) ?? synthesizeChartFromDrilldownNumeric(drilldown);
 }
 
-function EmergencyInlineBarChart({
+const GUARANTEED_CHART_COLORS = ["#2D6A4F", "#E76F51", "#277DA1", "#F59E0B", "#6366F1", "#DC2626", "#059669", "#7C3AED"];
+
+/** Inline-styled bars — no SVG/CSS-vars dependency; always visible on Vercel. */
+function GuaranteedVisibleChart({
   items,
   labelKey,
   valueKey,
+  onItemClick,
 }: {
   items: Array<Record<string, string | number>>;
   labelKey: string;
   valueKey: string;
+  onItemClick?: (payload: ChartClickPayload) => void;
 }) {
-  if (!items.length) return <EmptyChart message="No chart data available." />;
-  const rows = items.slice(0, 12);
+  const rows = items.slice(0, 24);
+  if (!rows.length) {
+    return (
+      <p style={{ margin: 0, padding: "1rem 0", color: "#64748b", fontSize: "14px" }} role="status">
+        No chart data available.
+      </p>
+    );
+  }
+
   const values = rows.map((row) => Number(row[valueKey]) || 0);
   const max = Math.max(...values, 1);
 
   return (
-    <div className="bi-emergency-chart" role="img" aria-label="Bar chart">
+    <div
+      role="img"
+      aria-label="Analytics bar chart"
+      style={{
+        display: "grid",
+        gap: "10px",
+        width: "100%",
+        minHeight: "180px",
+        padding: "6px 0",
+        boxSizing: "border-box",
+      }}
+    >
       {rows.map((row, i) => {
-        const val = Number(row[valueKey]) || 0;
-        const pct = Math.max(6, Math.round((val / max) * 100));
-        const label = String(row[labelKey] ?? "");
-        return (
-          <div key={`${label}-${i}`} className="bi-emergency-chart__row">
-            <span className="bi-emergency-chart__label">{label}</span>
-            <div className="bi-emergency-chart__track">
-              <div className="bi-emergency-chart__bar" style={{ width: `${pct}%` }} />
+        const val = values[i];
+        const pct = Math.max(10, Math.round((val / max) * 100));
+        const label = String(row[labelKey] ?? `Item ${i + 1}`);
+        const rowBody = (
+          <>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "13px",
+                lineHeight: 1.3,
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: "#0f172a",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </span>
+              <span style={{ fontWeight: 600, color: "#475569", flexShrink: 0 }}>{val.toLocaleString()}</span>
             </div>
-            <span className="bi-emergency-chart__value">{val.toLocaleString()}</span>
-          </div>
+            <div
+              style={{
+                height: "14px",
+                backgroundColor: "#dbe3ea",
+                borderRadius: "7px",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${pct}%`,
+                  height: "14px",
+                  backgroundColor: GUARANTEED_CHART_COLORS[i % GUARANTEED_CHART_COLORS.length],
+                  borderRadius: "7px",
+                }}
+              />
+            </div>
+          </>
+        );
+
+        if (!onItemClick) {
+          return <div key={`${label}-${i}`}>{rowBody}</div>;
+        }
+
+        return (
+          <button
+            key={`${label}-${i}`}
+            type="button"
+            onClick={() => onItemClick({ label, raw: row })}
+            style={{
+              display: "grid",
+              gap: "6px",
+              width: "100%",
+              textAlign: "left",
+              padding: "8px 10px",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              background: "#ffffff",
+              cursor: "pointer",
+              font: "inherit",
+            }}
+          >
+            {rowBody}
+          </button>
         );
       })}
     </div>
   );
 }
 
-class ChartErrorBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
-  { hasError: boolean }
-> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError(): { hasError: boolean } {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error("[BI chart] render failed, using emergency fallback.", error.message, info.componentStack);
-  }
-
-  render(): ReactNode {
-    if (this.state.hasError) return this.props.fallback;
-    return this.props.children;
-  }
+function wrapChartVisual(node: ReactNode, pointCount: number) {
+  return (
+    <div className="bi-chart-visual-root" data-chart-points={pointCount}>
+      {node}
+    </div>
+  );
 }
 
 function CompactStatistics({ stats }: { stats: StatisticsSummary | null }) {
@@ -289,94 +350,57 @@ export function BiChartWidget({
     return null;
   }, [drilldown, items]);
 
-  const renderSvgChart = (
-    kind: PlotlyChartKind,
+  const renderGuaranteedChart = (
     chartItems: Array<Record<string, string | number>>,
     labelKey: string,
     valueKey: string,
-    axisLabel: string,
-  ) => (
-    <div className="bi-chart-visual-root">
-      <BiAnalyticsSvgChart
-        kind={kind}
+  ) =>
+    wrapChartVisual(
+      <GuaranteedVisibleChart
         items={chartItems}
         labelKey={labelKey}
         valueKey={valueKey}
-        yAxisLabel={axisLabel}
-        legendLabel={axisLabel}
         onItemClick={openDrill}
-        selectedLabel={selection?.label ?? null}
-      />
-    </div>
-  );
+      />,
+      chartItems.length,
+    );
 
   const buildChartVisual = () => {
     if (resolvedMeta && items.length) {
-      return renderSvgChart(
-        toPlotlyKind(resolvedMeta.kind),
+      return renderGuaranteedChart(
         items,
         resolvedMeta.xKey ?? resolvedMeta.labelKey,
         resolvedMeta.yKey ?? resolvedMeta.valueKey,
-        legendLabel,
       );
     }
 
     const genericKeys = resolveChartKeys(items);
     if (items.length && genericKeys) {
-      const kind: PlotlyChartKind = preferredChartKind ?? "bar";
-      return renderSvgChart(kind, items, genericKeys.labelKey, genericKeys.valueKey, genericKeys.valueKey.replace(/_/g, " "));
+      return renderGuaranteedChart(items, genericKeys.labelKey, genericKeys.valueKey);
     }
 
     const categorySynth = synthesizeChartFromCategoryCounts(drilldown);
     if (categorySynth?.items.length) {
       const synthItems = chartRows(categorySynth.items).slice(0, 24);
-      return renderSvgChart("bar", synthItems, categorySynth.labelKey, categorySynth.valueKey, "Records");
+      return renderGuaranteedChart(synthItems, categorySynth.labelKey, categorySynth.valueKey);
     }
 
     const numericSynth = synthesizeChartFromDrilldownNumeric(drilldown);
     if (numericSynth?.items.length) {
       const synthItems = chartRows(numericSynth.items).slice(0, 24);
-      return renderSvgChart(
-        "bar",
-        synthItems,
-        numericSynth.labelKey,
-        numericSynth.valueKey,
-        numericSynth.valueKey.replace(/_/g, " "),
-      );
+      return renderGuaranteedChart(synthItems, numericSynth.labelKey, numericSynth.valueKey);
     }
 
     if (emergencyChartData) {
-      return (
-        <div className="bi-chart-visual-root">
-          <EmergencyInlineBarChart
-            items={emergencyChartData.items}
-            labelKey={emergencyChartData.labelKey}
-            valueKey={emergencyChartData.valueKey}
-          />
-        </div>
+      return renderGuaranteedChart(
+        emergencyChartData.items,
+        emergencyChartData.labelKey,
+        emergencyChartData.valueKey,
       );
     }
 
-    return (
-      <div className="bi-chart-visual-root">
-        <EmptyChart message="No chart data available yet." />
-      </div>
-    );
+    return wrapChartVisual(<EmptyChart message="No chart data available yet." />, 0);
   };
-
-  const emergencyFallback = emergencyChartData ? (
-    <div className="bi-chart-visual-root">
-      <EmergencyInlineBarChart
-        items={emergencyChartData.items}
-        labelKey={emergencyChartData.labelKey}
-        valueKey={emergencyChartData.valueKey}
-      />
-    </div>
-  ) : (
-    <div className="bi-chart-visual-root">
-      <EmptyChart message="Chart could not be rendered." />
-    </div>
-  );
 
   if (empty) {
     return (
@@ -405,10 +429,12 @@ export function BiChartWidget({
         </p>
       </header>
 
-      <div className="bi-chart-widget__chart" data-chart-renderer="svg-v4">
-        <ChartErrorBoundary key={`${widgetId ?? title}-${items.length}`} fallback={emergencyFallback}>
-          {buildChartVisual()}
-        </ChartErrorBoundary>
+      <div
+        className="bi-chart-widget__chart"
+        data-chart-renderer="inline-v5"
+        data-chart-items={items.length}
+      >
+        {buildChartVisual()}
       </div>
       {riskLegend?.length ? (
         <div className="bi-risk-legend" role="note" aria-label="Risk legend">
