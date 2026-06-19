@@ -31,6 +31,8 @@ const backendOrigin = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000";
 const nextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: monorepoRoot,
+  // Plotly touches browser APIs — never bundle for server components / SSR.
+  serverExternalPackages: ["plotly.js-dist-min", "react-plotly.js"],
   turbopack: {
     root: monorepoRoot,
   },

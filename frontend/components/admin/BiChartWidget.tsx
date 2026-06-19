@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
+import { PlotlyAnalyticsChart, type PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
 import { DrillDownAnalyticsModal } from "@/components/admin/BiAnalyticsComponents";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
 import { AnalyticsApi } from "@/lib/analyticsApi";
@@ -56,6 +57,15 @@ function buildSelection(meta: ReturnType<typeof inferChartMeta>, payload: ChartC
 
 function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): SynthesizedChart | null {
   return synthesizeChartFromCategoryCounts(drilldown) ?? synthesizeChartFromDrilldownNumeric(drilldown);
+}
+
+function toPlotlyKind(kind: InferredChartMeta["kind"]): PlotlyChartKind {
+  if (kind === "pie") return "pie";
+  if (kind === "line") return "line";
+  if (kind === "area") return "area";
+  if (kind === "stackedBar") return "stackedBar";
+  if (kind === "combo") return "combo";
+  return "bar";
 }
 
 const GUARANTEED_CHART_COLORS = ["#2D6A4F", "#E76F51", "#277DA1", "#F59E0B", "#6366F1", "#DC2626", "#059669", "#7C3AED"];
@@ -249,6 +259,7 @@ export function BiChartWidget({
   const [modalOpen, setModalOpen] = useState(false);
   const [compareMode, setCompareMode] = useState<"none" | "quarter" | "yoy">("none");
   const [aiLoading, setAiLoading] = useState(false);
+  const [plotlyFailed, setPlotlyFailed] = useState(false);
 
   const empty = isEmptyBlock(block);
   const drilldown = empty ? [] : ((block.drilldown ?? []) as Record<string, unknown>[]);
@@ -270,6 +281,11 @@ export function BiChartWidget({
   }, [meta, preferredChartKind]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);
+
+  useEffect(() => {
+    setPlotlyFailed(false);
+  }, [items.length, resolvedMeta?.kind, resolvedMeta?.labelKey, resolvedMeta?.valueKey, title]);
+
   const stats = useMemo(() => {
     if (empty) return null;
     const preferFields = resolvedMeta?.valueKey ? [resolvedMeta.valueKey] : undefined;
@@ -365,30 +381,77 @@ export function BiChartWidget({
       chartItems.length,
     );
 
+  const renderPlotlyChart = (
+    chartItems: Array<Record<string, string | number>>,
+    labelKey: string,
+    valueKey: string,
+    kind: PlotlyChartKind,
+    axisLabel: string,
+  ) =>
+    wrapChartVisual(
+      <PlotlyAnalyticsChart
+        kind={kind}
+        items={chartItems}
+        labelKey={labelKey}
+        valueKey={valueKey}
+        seriesKeys={resolvedMeta?.seriesKeys}
+        secondarySeriesKey={resolvedMeta?.secondarySeriesKey}
+        xAxisLabel={labelKey.replace(/_/g, " ")}
+        yAxisLabel={axisLabel}
+        legendLabel={axisLabel}
+        onItemClick={openDrill}
+        selectedLabel={selection?.label ?? null}
+        onRenderError={() => setPlotlyFailed(true)}
+      />,
+      chartItems.length,
+    );
+
+  const renderChart = (
+    chartItems: Array<Record<string, string | number>>,
+    labelKey: string,
+    valueKey: string,
+    kind: PlotlyChartKind = "bar",
+    axisLabel = valueKey.replace(/_/g, " "),
+  ) => {
+    if (!plotlyFailed) {
+      return renderPlotlyChart(chartItems, labelKey, valueKey, kind, axisLabel);
+    }
+    return renderGuaranteedChart(chartItems, labelKey, valueKey);
+  };
+
   const buildChartVisual = () => {
     if (resolvedMeta && items.length) {
-      return renderGuaranteedChart(
+      return renderChart(
         items,
         resolvedMeta.xKey ?? resolvedMeta.labelKey,
         resolvedMeta.yKey ?? resolvedMeta.valueKey,
+        toPlotlyKind(resolvedMeta.kind),
+        legendLabel,
       );
     }
 
     const genericKeys = resolveChartKeys(items);
     if (items.length && genericKeys) {
-      return renderGuaranteedChart(items, genericKeys.labelKey, genericKeys.valueKey);
+      const kind: PlotlyChartKind = preferredChartKind ?? "bar";
+      return renderChart(items, genericKeys.labelKey, genericKeys.valueKey, kind);
     }
 
     const categorySynth = synthesizeChartFromCategoryCounts(drilldown);
     if (categorySynth?.items.length) {
       const synthItems = chartRows(categorySynth.items).slice(0, 24);
-      return renderGuaranteedChart(synthItems, categorySynth.labelKey, categorySynth.valueKey);
+      return renderChart(synthItems, categorySynth.labelKey, categorySynth.valueKey, "bar", "Records");
     }
 
     const numericSynth = synthesizeChartFromDrilldownNumeric(drilldown);
     if (numericSynth?.items.length) {
       const synthItems = chartRows(numericSynth.items).slice(0, 24);
-      return renderGuaranteedChart(synthItems, numericSynth.labelKey, numericSynth.valueKey);
+      return renderChart(
+        synthItems,
+        numericSynth.labelKey,
+        numericSynth.valueKey,
+        "bar",
+        numericSynth.valueKey.replace(/_/g, " "),
+      );
     }
 
     if (emergencyChartData) {
@@ -431,7 +494,7 @@ export function BiChartWidget({
 
       <div
         className="bi-chart-widget__chart"
-        data-chart-renderer="inline-v5"
+        data-chart-renderer={plotlyFailed ? "fallback-bars" : "plotly-v6"}
         data-chart-items={items.length}
       >
         {buildChartVisual()}

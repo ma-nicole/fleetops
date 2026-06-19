@@ -7,7 +7,11 @@ export type PlotlyChartKind = "bar" | "line" | "pie" | "area" | "stackedBar" | "
 
 const PlotlyAnalyticsChartInner = dynamic(() => import("@/components/admin/PlotlyAnalyticsChartInner"), {
   ssr: false,
-  loading: () => <div className="plotly-analytics-chart plotly-analytics-chart--loading">Loading chart…</div>,
+  loading: () => (
+    <div className="plotly-analytics-chart plotly-analytics-chart--loading" style={{ minHeight: 240 }}>
+      Loading chart…
+    </div>
+  ),
 });
 
 export function PlotlyAnalyticsChart(props: {

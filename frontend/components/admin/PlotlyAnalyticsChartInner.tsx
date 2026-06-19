@@ -1,17 +1,23 @@
 "use client";
 
-import createPlotlyComponent from "react-plotly.js/factory";
-import Plotly from "plotly.js-dist-min";
-import { Component, type ErrorInfo, useCallback, useMemo } from "react";
-import type { Config, Data, PlotDatum, PlotMouseEvent } from "plotly.js";
+import { Component, useCallback, useEffect, useMemo, useState, type ErrorInfo, type ComponentType } from "react";
+import { EmptyChart } from "@/components/admin/AnalyticsCharts";
 import type { ChartClickPayload } from "@/components/admin/AnalyticsCharts";
+import type { Config, Data, Layout, PlotDatum, PlotMouseEvent } from "plotly.js";
 import type { PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
-
-const Plot = createPlotlyComponent(Plotly);
 
 const BAR_COLORS = ["#2D6A4F", "#E76F51", "#277DA1", "#40916C", "#F4A261", "#52B788", "#1B4332", "#6366F1"];
 const ENTERPRISE_GREEN = "#2D6A4F";
 const ENTERPRISE_LINE = "#277DA1";
+
+type PlotComponentProps = {
+  data: Data[];
+  layout: Partial<Layout>;
+  config: Partial<Config>;
+  style: React.CSSProperties;
+  useResizeHandler: boolean;
+  onClick: (event: Readonly<PlotMouseEvent>) => void;
+};
 
 function isSelected(label: string, selectedLabel?: string | null): boolean {
   if (!selectedLabel) return false;
@@ -19,7 +25,11 @@ function isSelected(label: string, selectedLabel?: string | null): boolean {
 }
 
 class PlotlyRenderBoundary extends Component<
-  { children: import("react").ReactNode; onError?: (error: Error, info: ErrorInfo) => void },
+  {
+    children: React.ReactNode;
+    onError?: (error: Error, info: ErrorInfo) => void;
+    fallback: React.ReactNode;
+  },
   { hasError: boolean }
 > {
   state = { hasError: false };
@@ -32,8 +42,8 @@ class PlotlyRenderBoundary extends Component<
     this.props.onError?.(error, info);
   }
 
-  render(): import("react").ReactNode {
-    if (this.state.hasError) return null;
+  render(): React.ReactNode {
+    if (this.state.hasError) return this.props.fallback;
     return this.props.children;
   }
 }
@@ -55,6 +65,7 @@ function barOutline(items: Array<Record<string, string | number>>, labelKey: str
   });
 }
 
+/** Loads Plotly only in the browser — safe for Vercel (no window/document during SSR). */
 export default function PlotlyAnalyticsChartInner({
   kind,
   items,
@@ -82,6 +93,31 @@ export default function PlotlyAnalyticsChartInner({
   selectedLabel?: string | null;
   onRenderError?: (error: Error) => void;
 }) {
+  const [Plot, setPlot] = useState<ComponentType<PlotComponentProps> | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ default: createPlotlyComponent }, { default: Plotly }] = await Promise.all([
+          import("react-plotly.js/factory"),
+          import("plotly.js-dist-min"),
+        ]);
+        if (cancelled) return;
+        setPlot(() => createPlotlyComponent(Plotly) as ComponentType<PlotComponentProps>);
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Failed to load Plotly";
+        setLoadError(message);
+        onRenderError?.(error instanceof Error ? error : new Error(message));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onRenderError]);
+
   const labels = useMemo(() => items.map((item) => String(item[labelKey] ?? "")), [items, labelKey]);
   const values = useMemo(() => items.map((item) => Number(item[valueKey]) || 0), [items, valueKey]);
   const colors = useMemo(
@@ -285,16 +321,31 @@ export default function PlotlyAnalyticsChartInner({
     [items, labelKey, onItemClick],
   );
 
-  if (!items.length) return null;
+  if (!items.length) {
+    return <EmptyChart message="No chart data available." />;
+  }
+
+  if (loadError) {
+    return <EmptyChart message="Chart library failed to load." />;
+  }
+
+  if (!Plot) {
+    return <div className="plotly-analytics-chart plotly-analytics-chart--loading">Loading chart…</div>;
+  }
+
+  const renderFallback = <EmptyChart message="Chart could not be rendered." />;
 
   return (
-    <div className="plotly-analytics-chart">
-      <PlotlyRenderBoundary onError={(error) => onRenderError?.(error)}>
+    <div className="plotly-analytics-chart" style={{ minHeight: 240, width: "100%" }}>
+      <PlotlyRenderBoundary
+        fallback={renderFallback}
+        onError={(error) => onRenderError?.(error)}
+      >
         <Plot
           data={data as Data[]}
           layout={layout}
           config={config as Partial<Config>}
-          style={{ width: "100%", height: "100%" }}
+          style={{ width: "100%", height: 240 }}
           useResizeHandler
           onClick={handleClick}
         />
