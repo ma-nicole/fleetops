@@ -3152,7 +3152,8 @@ html {
 .bi-chart-widget__chart > .bi-line-chart,
 .bi-chart-widget__chart > .bi-hbar-chart,
 .bi-chart-widget__chart > .mentor-chart,
-.bi-chart-widget__chart > .bi-emergency-chart {
+.bi-chart-widget__chart > .bi-emergency-chart,
+.bi-chart-widget__chart .recharts-analytics-chart {
   width: 100%;
   min-height: 140px;
 }
@@ -3392,26 +3393,51 @@ html {
   border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
-.plotly-analytics-chart {
+.recharts-analytics-chart {
   width: 100%;
-  min-height: 240px;
+  min-height: 220px;
+  aspect-ratio: 2.4 / 1;
+  position: relative;
 }
 
-.plotly-analytics-chart .js-plotly-plot .plotly .modebar {
-  top: 4px;
-  right: 4px;
-}
-
-.plotly-analytics-chart .js-plotly-plot .plotly .modebar-btn {
-  color: #64748b;
-}
-
-.plotly-analytics-chart--loading {
+.recharts-analytics-chart--loading {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.recharts-analytics-tooltip {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
   font-size: 0.75rem;
-  color: #64748b;
+  color: #334155;
+}
+
+.recharts-analytics-tooltip__label {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.recharts-analytics-tooltip__row {
+  margin: 0.15rem 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.recharts-analytics-tooltip__swatch {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.bi-chart-widget__chart .recharts-analytics-chart {
+  min-height: 200px;
 }
 
 .bi-chart-widget__actions {

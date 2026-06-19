@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
-import { PlotlyAnalyticsChart, type PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
+import { RechartsAnalyticsChart, type AnalyticsChartKind } from "@/components/admin/RechartsAnalyticsChart";
 import { DrillDownAnalyticsModal } from "@/components/admin/BiAnalyticsComponents";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
 import { AnalyticsApi } from "@/lib/analyticsApi";
@@ -59,131 +59,13 @@ function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): Synthesi
   return synthesizeChartFromCategoryCounts(drilldown) ?? synthesizeChartFromDrilldownNumeric(drilldown);
 }
 
-function toPlotlyKind(kind: InferredChartMeta["kind"]): PlotlyChartKind {
+function toChartKind(kind: InferredChartMeta["kind"]): AnalyticsChartKind {
   if (kind === "pie") return "pie";
   if (kind === "line") return "line";
   if (kind === "area") return "area";
   if (kind === "stackedBar") return "stackedBar";
   if (kind === "combo") return "combo";
   return "bar";
-}
-
-const GUARANTEED_CHART_COLORS = ["#2D6A4F", "#E76F51", "#277DA1", "#F59E0B", "#6366F1", "#DC2626", "#059669", "#7C3AED"];
-
-/** Inline-styled bars — no SVG/CSS-vars dependency; always visible on Vercel. */
-function GuaranteedVisibleChart({
-  items,
-  labelKey,
-  valueKey,
-  onItemClick,
-}: {
-  items: Array<Record<string, string | number>>;
-  labelKey: string;
-  valueKey: string;
-  onItemClick?: (payload: ChartClickPayload) => void;
-}) {
-  const rows = items.slice(0, 24);
-  if (!rows.length) {
-    return (
-      <p style={{ margin: 0, padding: "1rem 0", color: "#64748b", fontSize: "14px" }} role="status">
-        No chart data available.
-      </p>
-    );
-  }
-
-  const values = rows.map((row) => Number(row[valueKey]) || 0);
-  const max = Math.max(...values, 1);
-
-  return (
-    <div
-      role="img"
-      aria-label="Analytics bar chart"
-      style={{
-        display: "grid",
-        gap: "10px",
-        width: "100%",
-        minHeight: "180px",
-        padding: "6px 0",
-        boxSizing: "border-box",
-      }}
-    >
-      {rows.map((row, i) => {
-        const val = values[i];
-        const pct = Math.max(10, Math.round((val / max) * 100));
-        const label = String(row[labelKey] ?? `Item ${i + 1}`);
-        const rowBody = (
-          <>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "13px",
-                lineHeight: 1.3,
-              }}
-            >
-              <span
-                style={{
-                  fontWeight: 700,
-                  color: "#0f172a",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {label}
-              </span>
-              <span style={{ fontWeight: 600, color: "#475569", flexShrink: 0 }}>{val.toLocaleString()}</span>
-            </div>
-            <div
-              style={{
-                height: "14px",
-                backgroundColor: "#dbe3ea",
-                borderRadius: "7px",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  width: `${pct}%`,
-                  height: "14px",
-                  backgroundColor: GUARANTEED_CHART_COLORS[i % GUARANTEED_CHART_COLORS.length],
-                  borderRadius: "7px",
-                }}
-              />
-            </div>
-          </>
-        );
-
-        if (!onItemClick) {
-          return <div key={`${label}-${i}`}>{rowBody}</div>;
-        }
-
-        return (
-          <button
-            key={`${label}-${i}`}
-            type="button"
-            onClick={() => onItemClick({ label, raw: row })}
-            style={{
-              display: "grid",
-              gap: "6px",
-              width: "100%",
-              textAlign: "left",
-              padding: "8px 10px",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              background: "#ffffff",
-              cursor: "pointer",
-              font: "inherit",
-            }}
-          >
-            {rowBody}
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 function wrapChartVisual(node: ReactNode, pointCount: number) {
@@ -244,6 +126,7 @@ export function BiChartWidget({
   analyticsMethod = "Comparative aggregation",
   riskLegend,
   preferredChartKind,
+  loading = false,
 }: {
   title: string;
   block: RoleAnalyticsFeatureBlock;
@@ -254,12 +137,12 @@ export function BiChartWidget({
   analyticsMethod?: string;
   riskLegend?: Array<{ label: string; color: string }>;
   preferredChartKind?: "bar" | "line" | "pie";
+  loading?: boolean;
 }) {
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [compareMode, setCompareMode] = useState<"none" | "quarter" | "yoy">("none");
   const [aiLoading, setAiLoading] = useState(false);
-  const [plotlyFailed, setPlotlyFailed] = useState(false);
 
   const empty = isEmptyBlock(block);
   const drilldown = empty ? [] : ((block.drilldown ?? []) as Record<string, unknown>[]);
@@ -281,10 +164,6 @@ export function BiChartWidget({
   }, [meta, preferredChartKind]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);
-
-  useEffect(() => {
-    setPlotlyFailed(false);
-  }, [items.length, resolvedMeta?.kind, resolvedMeta?.labelKey, resolvedMeta?.valueKey, title]);
 
   const stats = useMemo(() => {
     if (empty) return null;
@@ -350,46 +229,15 @@ export function BiChartWidget({
     }
   };
 
-  const emergencyChartData = useMemo(() => {
-    if (items.length) {
-      const keys = resolveChartKeys(items);
-      if (keys) return { items: items.slice(0, 12), ...keys };
-    }
-    const synthesized = synthesizeFromDrilldown(drilldown);
-    if (synthesized?.items.length) {
-      return {
-        items: chartRows(synthesized.items).slice(0, 12),
-        labelKey: synthesized.labelKey,
-        valueKey: synthesized.valueKey,
-      };
-    }
-    return null;
-  }, [drilldown, items]);
-
-  const renderGuaranteedChart = (
+  const renderChart = (
     chartItems: Array<Record<string, string | number>>,
     labelKey: string,
     valueKey: string,
+    kind: AnalyticsChartKind = "bar",
+    axisLabel = valueKey.replace(/_/g, " "),
   ) =>
     wrapChartVisual(
-      <GuaranteedVisibleChart
-        items={chartItems}
-        labelKey={labelKey}
-        valueKey={valueKey}
-        onItemClick={openDrill}
-      />,
-      chartItems.length,
-    );
-
-  const renderPlotlyChart = (
-    chartItems: Array<Record<string, string | number>>,
-    labelKey: string,
-    valueKey: string,
-    kind: PlotlyChartKind,
-    axisLabel: string,
-  ) =>
-    wrapChartVisual(
-      <PlotlyAnalyticsChart
+      <RechartsAnalyticsChart
         kind={kind}
         items={chartItems}
         labelKey={labelKey}
@@ -401,38 +249,32 @@ export function BiChartWidget({
         legendLabel={axisLabel}
         onItemClick={openDrill}
         selectedLabel={selection?.label ?? null}
-        onRenderError={() => setPlotlyFailed(true)}
+        loading={loading}
       />,
       chartItems.length,
     );
 
-  const renderChart = (
-    chartItems: Array<Record<string, string | number>>,
-    labelKey: string,
-    valueKey: string,
-    kind: PlotlyChartKind = "bar",
-    axisLabel = valueKey.replace(/_/g, " "),
-  ) => {
-    if (!plotlyFailed) {
-      return renderPlotlyChart(chartItems, labelKey, valueKey, kind, axisLabel);
-    }
-    return renderGuaranteedChart(chartItems, labelKey, valueKey);
-  };
-
   const buildChartVisual = () => {
+    if (loading) {
+      return wrapChartVisual(
+        <RechartsAnalyticsChart kind="bar" items={[]} labelKey="label" valueKey="value" loading />,
+        0,
+      );
+    }
+
     if (resolvedMeta && items.length) {
       return renderChart(
         items,
         resolvedMeta.xKey ?? resolvedMeta.labelKey,
         resolvedMeta.yKey ?? resolvedMeta.valueKey,
-        toPlotlyKind(resolvedMeta.kind),
+        toChartKind(resolvedMeta.kind),
         legendLabel,
       );
     }
 
     const genericKeys = resolveChartKeys(items);
     if (items.length && genericKeys) {
-      const kind: PlotlyChartKind = preferredChartKind ?? "bar";
+      const kind: AnalyticsChartKind = preferredChartKind ?? "bar";
       return renderChart(items, genericKeys.labelKey, genericKeys.valueKey, kind);
     }
 
@@ -454,15 +296,7 @@ export function BiChartWidget({
       );
     }
 
-    if (emergencyChartData) {
-      return renderGuaranteedChart(
-        emergencyChartData.items,
-        emergencyChartData.labelKey,
-        emergencyChartData.valueKey,
-      );
-    }
-
-    return wrapChartVisual(<EmptyChart message="No chart data available yet." />, 0);
+    return wrapChartVisual(<EmptyChart message="No data available." />, 0);
   };
 
   if (empty) {
@@ -494,7 +328,7 @@ export function BiChartWidget({
 
       <div
         className="bi-chart-widget__chart"
-        data-chart-renderer={plotlyFailed ? "fallback-bars" : "plotly-v6"}
+        data-chart-renderer="recharts"
         data-chart-items={items.length}
       >
         {buildChartVisual()}

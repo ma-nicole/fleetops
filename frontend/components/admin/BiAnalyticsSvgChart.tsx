@@ -1,20 +1,9 @@
 "use client";
 
-import {
-  BarChartPhp,
-  EmptyChart,
-  LineChartVisual,
-  PieChartVisual,
-  type ChartClickPayload,
-} from "@/components/admin/AnalyticsCharts";
-import { MentorBarChart } from "@/components/admin/MentorBarChart";
-import type { PlotlyChartKind } from "@/components/admin/PlotlyAnalyticsChart";
+import { RechartsAnalyticsChart, type AnalyticsChartKind } from "@/components/admin/RechartsAnalyticsChart";
+import type { ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 
-function isCurrencyField(key: string): boolean {
-  return /php|revenue|expense|profit|amount|cost|toll|fuel|total/i.test(key);
-}
-
-/** Lightweight SVG charts — no Plotly bundle; reliable on Vercel production. */
+/** Recharts-based analytics chart — SSR-safe and reliable on Vercel production. */
 export function BiAnalyticsSvgChart({
   kind,
   items,
@@ -24,8 +13,9 @@ export function BiAnalyticsSvgChart({
   legendLabel,
   onItemClick,
   selectedLabel,
+  loading,
 }: {
-  kind: PlotlyChartKind;
+  kind: AnalyticsChartKind;
   items: Array<Record<string, string | number>>;
   labelKey: string;
   valueKey: string;
@@ -33,69 +23,19 @@ export function BiAnalyticsSvgChart({
   legendLabel?: string;
   onItemClick?: (payload: ChartClickPayload) => void;
   selectedLabel?: string | null;
+  loading?: boolean;
 }) {
-  const rows = items.slice(0, 24);
-  if (!rows.length) return <EmptyChart message="No chart data available." />;
-
-  if (kind === "pie") {
-    if (rows.length <= 8) {
-      return (
-        <MentorBarChart
-          items={rows}
-          labelKey={labelKey}
-          valueKey={valueKey}
-          yAxisLabel={yAxisLabel}
-          legendLabel={legendLabel ?? labelKey.replace(/_/g, " ")}
-          onItemClick={onItemClick}
-          selectedLabel={selectedLabel}
-        />
-      );
-    }
-    return (
-      <PieChartVisual
-        items={rows}
-        labelKey={labelKey}
-        valueKey={valueKey}
-        onItemClick={onItemClick}
-        selectedLabel={selectedLabel}
-      />
-    );
-  }
-
-  if (kind === "line") {
-    return (
-      <LineChartVisual
-        items={rows}
-        xKey={labelKey}
-        yKey={valueKey}
-        onItemClick={onItemClick}
-        selectedLabel={selectedLabel}
-      />
-    );
-  }
-
-  if (kind === "bar" && rows.length <= 6 && isCurrencyField(valueKey)) {
-    return (
-      <BarChartPhp
-        items={rows}
-        labelKey={labelKey}
-        valueKey={valueKey}
-        onItemClick={onItemClick}
-        selectedLabel={selectedLabel}
-      />
-    );
-  }
-
   return (
-    <MentorBarChart
-      items={rows}
+    <RechartsAnalyticsChart
+      kind={kind}
+      items={items.slice(0, 24)}
       labelKey={labelKey}
       valueKey={valueKey}
       yAxisLabel={yAxisLabel}
-      legendLabel={legendLabel}
+      legendLabel={legendLabel ?? labelKey.replace(/_/g, " ")}
       onItemClick={onItemClick}
       selectedLabel={selectedLabel}
-      isCurrency={isCurrencyField(valueKey)}
+      loading={loading}
     />
   );
 }
