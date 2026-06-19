@@ -1,10 +1,13 @@
 from collections.abc import Generator
+import logging
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 from app.models.base import Base
+
+logger = logging.getLogger(__name__)
 
 
 # MySQL-only engine — XAMPP default is root with no password on port 3306.
@@ -23,7 +26,8 @@ def apply_runtime_schema_fixes() -> None:
     """Add columns introduced after initial DB creation (create_all does not ALTER tables)."""
     try:
         insp = inspect(engine)
-    except Exception:
+    except Exception as exc:
+        logger.exception("apply_runtime_schema_fixes: database inspection failed")
         return
     if not insp.has_table("users"):
         return
@@ -601,6 +605,7 @@ def apply_runtime_schema_fixes() -> None:
         TripLocationUpdate,
         TripShoulderCostEntry,
         TruckSlotHold,
+        VehicleIssueReport,
     )
 
     for table in (
@@ -609,6 +614,7 @@ def apply_runtime_schema_fixes() -> None:
         TripLocationUpdate.__table__,
         TripIssue.__table__,
         DriverProfile.__table__,
+        VehicleIssueReport.__table__,
         TripShoulderCostEntry.__table__,
         TollMatrix.__table__,
         AdditionalTollEntry.__table__,
@@ -617,7 +623,10 @@ def apply_runtime_schema_fixes() -> None:
         TollPlazaAlias.__table__,
     ):
         if not insp.has_table(table.name):
-            table.create(bind=engine, checkfirst=True)
+            try:
+                table.create(bind=engine, checkfirst=True)
+            except Exception:
+                logger.exception("apply_runtime_schema_fixes: failed to create table %s", table.name)
 
     # Toll matrix column patches (tables must exist first)
     if insp.has_table("toll_matrix"):

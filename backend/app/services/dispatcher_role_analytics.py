@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models.entities import (
@@ -58,6 +59,10 @@ ACTIVE_TRIP = frozenset(
 )
 
 
+def _table_names(db: Session) -> set[str]:
+    return set(inspect(db.get_bind()).get_table_names())
+
+
 def _safe_operations_center(db: Session, viewer: User | None) -> dict[str, Any]:
     try:
         return build_operations_center_payload(db, viewer)
@@ -77,6 +82,19 @@ def _safe_recommend_assignment(db: Session, booking_id: int):
         return recommend_assignment(db, booking_id)
     except Exception:
         return None
+
+
+def _safe_busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
+    try:
+        return _busy_resource_ids(db)
+    except Exception:
+        return set(), set(), set()
+
+
+def _query_if_table(db: Session, table: str, query_fn):
+    if table not in _table_names(db):
+        return []
+    return query_fn()
 
 
 def _scope_context(ctx: dict, db: Session, viewer: User | None) -> dict:
@@ -195,7 +213,11 @@ def build_dispatcher_role_analytics(
     )
 
     dispatch_log_rows: list[dict] = []
-    for log in db.query(OperationalLog).order_by(OperationalLog.created_at.desc()).limit(100).all():
+    for log in _query_if_table(
+        db,
+        "operational_logs",
+        lambda: db.query(OperationalLog).order_by(OperationalLog.created_at.desc()).limit(100).all(),
+    ):
         if log.trip_id and log.trip_id not in filtered_ids:
             continue
         trip = next((t for t in ctx["trips"] if t.id == log.trip_id), None) if log.trip_id else None
@@ -412,7 +434,7 @@ def build_dispatcher_role_analytics(
     # ------------------------------------------------------------------ #
     # 3. TRUCK ASSIGNMENT
     # ------------------------------------------------------------------ #
-    busy_trucks, busy_drivers, _ = _busy_resource_ids(db)
+    busy_trucks, busy_drivers, _ = _safe_busy_resource_ids(db)
     truck_avail_rows = []
     for truck in ctx["trucks"]:
         is_busy = truck.id in busy_trucks
@@ -734,7 +756,11 @@ def build_dispatcher_role_analytics(
 
     perf_summary = drivers.get("summary") or {}
     op_log_rows: list[dict] = []
-    for rep in db.query(GeneralOperationalReport).order_by(GeneralOperationalReport.created_at.desc()).limit(30).all():
+    for rep in _query_if_table(
+        db,
+        "general_operational_reports",
+        lambda: db.query(GeneralOperationalReport).order_by(GeneralOperationalReport.created_at.desc()).limit(30).all(),
+    ):
         op_log_rows.append(
             {
                 "trip_id": rep.trip_id,
@@ -782,7 +808,11 @@ def build_dispatcher_role_analytics(
 
     issue_month: dict[str, int] = defaultdict(int)
     issue_sources: list[dict] = []
-    for issue in db.query(TripIssue).order_by(TripIssue.created_at.desc()).limit(50).all():
+    for issue in _query_if_table(
+        db,
+        "trip_issues",
+        lambda: db.query(TripIssue).order_by(TripIssue.created_at.desc()).limit(50).all(),
+    ):
         if issue.trip_id not in filtered_ids:
             continue
         trip = next((t for t in ctx["trips"] if t.id == issue.trip_id), None)
@@ -791,7 +821,11 @@ def build_dispatcher_role_analytics(
             issue_month[ref.strftime("%Y-%m")] += 1
         if trip:
             issue_sources.append(_trip_row(trip, jobs, dispatcher_names, extra={"cause": issue.issue_type}))
-    for vir in db.query(VehicleIssueReport).order_by(VehicleIssueReport.created_at.desc()).limit(50).all():
+    for vir in _query_if_table(
+        db,
+        "vehicle_issue_reports",
+        lambda: db.query(VehicleIssueReport).order_by(VehicleIssueReport.created_at.desc()).limit(50).all(),
+    ):
         if vir.trip_id not in filtered_ids:
             continue
         ref = _activity_date(vir.created_at)

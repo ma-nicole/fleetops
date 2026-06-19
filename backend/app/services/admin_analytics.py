@@ -1,6 +1,7 @@
 """Company-wide admin analytics from real DB records only."""
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -29,6 +30,8 @@ from app.models.entities import (
 )
 from app.services.admin_analytics_validation import validate_admin_analytics
 from app.services.analytics_stats import compute_statistics, empty_module
+
+logger = logging.getLogger(__name__)
 
 IN_TRANSIT_BOOKING = frozenset(
     {
@@ -1340,16 +1343,23 @@ def build_admin_analytics(
     if not include_financial and not include_clients:
         from app.services.dispatcher_role_analytics import build_dispatcher_role_analytics
 
-        payload["dispatcher_role_analytics"] = build_dispatcher_role_analytics(
-            db,
-            ctx,
-            filters,
-            viewer=viewer,
-            shipments=shipments,
-            fleet=fleet,
-            drivers=drivers,
-            routes=routes,
-        )
+        try:
+            payload["dispatcher_role_analytics"] = build_dispatcher_role_analytics(
+                db,
+                ctx,
+                filters,
+                viewer=viewer,
+                shipments=shipments,
+                fleet=fleet,
+                drivers=drivers,
+                routes=routes,
+            )
+        except Exception:
+            logger.exception(
+                "dispatcher_role_analytics build failed viewer_id=%s",
+                getattr(viewer, "id", None),
+            )
+            payload["dispatcher_role_analytics"] = None
     else:
         payload["dispatcher_role_analytics"] = None
 
