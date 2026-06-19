@@ -296,19 +296,21 @@ export function BiChartWidget({
     valueKey: string,
     axisLabel: string,
   ) => (
-    <BiAnalyticsSvgChart
-      kind={kind}
-      items={chartItems}
-      labelKey={labelKey}
-      valueKey={valueKey}
-      yAxisLabel={axisLabel}
-      legendLabel={axisLabel}
-      onItemClick={openDrill}
-      selectedLabel={selection?.label ?? null}
-    />
+    <div className="bi-chart-visual-root">
+      <BiAnalyticsSvgChart
+        kind={kind}
+        items={chartItems}
+        labelKey={labelKey}
+        valueKey={valueKey}
+        yAxisLabel={axisLabel}
+        legendLabel={axisLabel}
+        onItemClick={openDrill}
+        selectedLabel={selection?.label ?? null}
+      />
+    </div>
   );
 
-  const chartVisual = useMemo(() => {
+  const buildChartVisual = () => {
     if (resolvedMeta && items.length) {
       return renderSvgChart(
         toPlotlyKind(resolvedMeta.kind),
@@ -345,33 +347,35 @@ export function BiChartWidget({
 
     if (emergencyChartData) {
       return (
-        <EmergencyInlineBarChart
-          items={emergencyChartData.items}
-          labelKey={emergencyChartData.labelKey}
-          valueKey={emergencyChartData.valueKey}
-        />
+        <div className="bi-chart-visual-root">
+          <EmergencyInlineBarChart
+            items={emergencyChartData.items}
+            labelKey={emergencyChartData.labelKey}
+            valueKey={emergencyChartData.valueKey}
+          />
+        </div>
       );
     }
 
-    return <EmptyChart message="No chart data available yet." />;
-  }, [
-    drilldown,
-    emergencyChartData,
-    items,
-    legendLabel,
-    preferredChartKind,
-    resolvedMeta,
-    selection?.label,
-  ]);
+    return (
+      <div className="bi-chart-visual-root">
+        <EmptyChart message="No chart data available yet." />
+      </div>
+    );
+  };
 
   const emergencyFallback = emergencyChartData ? (
-    <EmergencyInlineBarChart
-      items={emergencyChartData.items}
-      labelKey={emergencyChartData.labelKey}
-      valueKey={emergencyChartData.valueKey}
-    />
+    <div className="bi-chart-visual-root">
+      <EmergencyInlineBarChart
+        items={emergencyChartData.items}
+        labelKey={emergencyChartData.labelKey}
+        valueKey={emergencyChartData.valueKey}
+      />
+    </div>
   ) : (
-    <EmptyChart message="Chart could not be rendered." />
+    <div className="bi-chart-visual-root">
+      <EmptyChart message="Chart could not be rendered." />
+    </div>
   );
 
   if (empty) {
@@ -401,8 +405,10 @@ export function BiChartWidget({
         </p>
       </header>
 
-      <div className="bi-chart-widget__chart" data-chart-renderer="svg-v3">
-        <ChartErrorBoundary fallback={emergencyFallback}>{chartVisual}</ChartErrorBoundary>
+      <div className="bi-chart-widget__chart" data-chart-renderer="svg-v4">
+        <ChartErrorBoundary key={`${widgetId ?? title}-${items.length}`} fallback={emergencyFallback}>
+          {buildChartVisual()}
+        </ChartErrorBoundary>
       </div>
       {riskLegend?.length ? (
         <div className="bi-risk-legend" role="note" aria-label="Risk legend">

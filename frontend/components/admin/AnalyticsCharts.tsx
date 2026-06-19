@@ -106,7 +106,7 @@ export function PieChartVisual({
   valueKey: string;
 } & ChartClickProps) {
   const total = items.reduce((s, x) => s + (Number(x[valueKey]) || 0), 0);
-  if (total <= 0) return <EmptyChart />;
+  if (total <= 0) return <EmptyChart message="No chart data available." />;
   let acc = 0;
   const slices = items.map((item, i) => {
     const val = Number(item[valueKey]) || 0;
@@ -115,36 +115,59 @@ export function PieChartVisual({
     acc += pct;
     return { item, pct, start, color: PIE_COLORS[i % PIE_COLORS.length] };
   });
-  const gradient = slices.map((s) => `${s.color} ${s.start}% ${s.start + s.pct}%`).join(", ");
   const interactive = Boolean(onItemClick);
 
+  const polar = (pct: number) => ((pct / 100) * 360 - 90) * (Math.PI / 180);
+  const arcPath = (startPct: number, endPct: number) => {
+    const start = polar(startPct);
+    const end = polar(endPct);
+    const large = endPct - startPct > 50 ? 1 : 0;
+    const x1 = 60 + 52 * Math.cos(start);
+    const y1 = 60 + 52 * Math.sin(start);
+    const x2 = 60 + 52 * Math.cos(end);
+    const y2 = 60 + 52 * Math.sin(end);
+    if (endPct - startPct >= 99.9) {
+      return "M 60 8 A 52 52 0 1 1 59.99 8 Z";
+    }
+    return `M 60 60 L ${x1} ${y1} A 52 52 0 ${large} 1 ${x2} ${y2} Z`;
+  };
+
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
-      <div
-        style={{
-          width: 120,
-          height: 120,
-          borderRadius: "50%",
-          background: `conic-gradient(${gradient})`,
-          flexShrink: 0,
-          boxShadow: "var(--shadow-sm)",
-        }}
-        aria-hidden
-      />
-      <div style={{ display: "grid", gap: "0.35rem", flex: 1, minWidth: 160 }}>
+    <div className="bi-pie-chart">
+      <svg viewBox="0 0 120 120" className="bi-pie-chart__svg" role="img" aria-label="Pie chart">
+        {slices.map((s, i) => {
+          const label = String(s.item[labelKey]);
+          const active = isSelected(label, selectedLabel);
+          return (
+            <path
+              key={`${label}-${i}`}
+              d={arcPath(s.start, s.start + s.pct)}
+              fill={s.color}
+              stroke={active ? "#1B4332" : "#fff"}
+              strokeWidth={active ? 2 : 1}
+              style={{ cursor: interactive ? "pointer" : "default" }}
+              onClick={() =>
+                interactive &&
+                onItemClick?.({ label, raw: s.item as Record<string, string | number> })
+              }
+            />
+          );
+        })}
+      </svg>
+      <div className="bi-pie-chart__legend">
         {slices.map((s) => {
           const label = String(s.item[labelKey]);
           const active = isSelected(label, selectedLabel);
           const content = (
             <>
-              <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, flexShrink: 0 }} />
-              <span style={{ flex: 1, color: "var(--text)" }}>{label}</span>
-              <span style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{s.pct.toFixed(1)}%</span>
+              <span className="bi-pie-chart__swatch" style={{ backgroundColor: s.color }} />
+              <span className="bi-pie-chart__label">{label}</span>
+              <span className="bi-pie-chart__pct">{s.pct.toFixed(1)}%</span>
             </>
           );
           if (!interactive) {
             return (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "var(--font-size-sm)" }}>
+              <div key={label} className="bi-pie-chart__legend-row">
                 {content}
               </div>
             );
@@ -153,8 +176,8 @@ export function PieChartVisual({
             <button
               key={label}
               type="button"
+              className={`bi-pie-chart__legend-btn${active ? " bi-pie-chart__legend-btn--active" : ""}`}
               onClick={() => onItemClick?.({ label, raw: s.item as Record<string, string | number> })}
-              style={clickableButtonStyle(active)}
               aria-pressed={active}
             >
               {content}
@@ -183,7 +206,7 @@ export function LineChartVisual({
   const interactive = Boolean(onItemClick);
 
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", minHeight: 140, paddingTop: 8 }}>
+    <div className="bi-line-chart">
       {items.map((row) => {
         const val = Number(row[yKey]) || 0;
         const h = Math.max(6, Math.round((val / max) * 120));
@@ -192,32 +215,17 @@ export function LineChartVisual({
         const bar = (
           <div
             title={`${xLabel}: ${val}`}
-            style={{
-              height: h,
-              margin: "0 auto",
-              width: "100%",
-              maxWidth: 48,
-              borderRadius: "6px 6px 2px 2px",
-              background: active
-                ? "linear-gradient(180deg, #FDE68A 0%, #D97706 100%)"
-                : "linear-gradient(180deg, #FBBF24 0%, #F59E0B 100%)",
-              boxShadow: active ? "0 0 0 2px var(--accent)" : undefined,
-            }}
+            className={`bi-line-chart__bar${active ? " bi-line-chart__bar--active" : ""}`}
+            style={{ height: h }}
           />
         );
         return (
-          <div key={xLabel} style={{ flex: 1, minWidth: 36, textAlign: "center" }}>
+          <div key={xLabel} className="bi-line-chart__col">
             {interactive ? (
               <button
                 type="button"
+                className="bi-line-chart__btn"
                 onClick={() => onItemClick?.({ label: xLabel, raw: row as Record<string, string | number> })}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  padding: 0,
-                  width: "100%",
-                  cursor: "pointer",
-                }}
                 aria-pressed={active}
               >
                 {bar}
@@ -225,9 +233,7 @@ export function LineChartVisual({
             ) : (
               bar
             )}
-            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 6, wordBreak: "break-all" }}>
-              {xLabel.slice(5)}
-            </div>
+            <div className="bi-line-chart__x-label">{xLabel.length > 7 ? xLabel.slice(5) : xLabel}</div>
           </div>
         );
       })}
@@ -254,7 +260,7 @@ export function BarChartPhp({
   const interactive = Boolean(onItemClick);
 
   return (
-    <div style={{ display: "grid", gap: "0.5rem" }}>
+    <div className="bi-hbar-chart">
       {items.map((item, i) => {
         const val = Number(item[valueKey]) || 0;
         const pct = Math.max(4, Math.round((val / max) * 100));
@@ -262,36 +268,27 @@ export function BarChartPhp({
         const active = isSelected(label, selectedLabel);
         const row = (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--font-size-sm)", marginBottom: 4 }}>
-              <span style={{ fontWeight: 600, color: "var(--text)" }}>{label}</span>
-              <span style={{ color: "var(--text-secondary)" }}>{format(val)}</span>
+            <div className="bi-hbar-chart__head">
+              <span className="bi-hbar-chart__label">{label}</span>
+              <span className="bi-hbar-chart__value">{format(val)}</span>
             </div>
-            <div style={{ height: 8, background: "var(--bg-dark)", borderRadius: 999, overflow: "hidden" }}>
+            <div className="bi-hbar-chart__track">
               <div
-                style={{
-                  width: `${pct}%`,
-                  height: "100%",
-                  background: PIE_COLORS[i % PIE_COLORS.length],
-                  borderRadius: 999,
-                  opacity: active ? 1 : 0.85,
-                }}
+                className={`bi-hbar-chart__fill${active ? " bi-hbar-chart__fill--active" : ""}`}
+                style={{ width: `${pct}%`, backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
               />
             </div>
           </>
         );
         if (!interactive) {
-          return <div key={`${label}-${i}`}>{row}</div>;
+          return <div key={`${label}-${i}`} className="bi-hbar-chart__row">{row}</div>;
         }
         return (
           <button
             key={`${label}-${i}`}
             type="button"
+            className={`bi-hbar-chart__btn${active ? " bi-hbar-chart__btn--active" : ""}`}
             onClick={() => onItemClick?.({ label, raw: item as Record<string, string | number> })}
-            style={{
-              ...clickableButtonStyle(active),
-              display: "block",
-              width: "100%",
-            }}
             aria-pressed={active}
           >
             {row}

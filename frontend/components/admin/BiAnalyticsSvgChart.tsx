@@ -38,6 +38,19 @@ export function BiAnalyticsSvgChart({
   if (!rows.length) return <EmptyChart message="No chart data available." />;
 
   if (kind === "pie") {
+    if (rows.length <= 8) {
+      return (
+        <MentorBarChart
+          items={rows}
+          labelKey={labelKey}
+          valueKey={valueKey}
+          yAxisLabel={yAxisLabel}
+          legendLabel={legendLabel ?? labelKey.replace(/_/g, " ")}
+          onItemClick={onItemClick}
+          selectedLabel={selectedLabel}
+        />
+      );
+    }
     return (
       <PieChartVisual
         items={rows}
