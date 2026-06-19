@@ -5,12 +5,16 @@ from collections import defaultdict
 from typing import Any
 
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect
 
 from app.models.entities import HistoricalTollRecord
 from app.services.analytics_stats import compute_statistics, empty_module
 
 
 def build_toll_analytics(db: Session) -> dict[str, Any]:
+    if "historical_toll_records" not in inspect(db.get_bind()).get_table_names():
+        return empty_module("No historical toll records yet.")
+
     rows = db.query(HistoricalTollRecord).order_by(HistoricalTollRecord.completed_at.desc()).all()
     if not rows:
         return empty_module("No historical toll records yet.")

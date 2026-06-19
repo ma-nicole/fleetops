@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import inspect
 
 from app.models.entities import (
     AttendanceRecord,
@@ -219,7 +220,12 @@ def _load_context(db: Session) -> dict[str, Any]:
 
     fuel_logs = db.query(FuelLog).all()
     toll_logs = db.query(TollLog).all()
-    shoulder = db.query(TripShoulderCostEntry).all()
+    table_names = {t for t in inspect(db.get_bind()).get_table_names()}
+    shoulder = (
+        db.query(TripShoulderCostEntry).all()
+        if "trip_shoulder_cost_entries" in table_names
+        else []
+    )
     maintenance = db.query(MaintenanceRecord).all()
     payments = db.query(Payment).all()
     trucks = db.query(Truck).all()

@@ -40,7 +40,6 @@ const SERIES_COLORS = {
   actual: "#0EA5E9",
 } as const;
 
-const CHART_FONT = { fontSize: 11, fill: "#4b5563", fontFamily: "inherit" };
 const AXIS_TICK = { fontSize: 10, fill: "#64748b" };
 const GRID_STROKE = "#e2e8f0";
 

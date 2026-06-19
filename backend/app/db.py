@@ -182,6 +182,8 @@ def apply_runtime_schema_fixes() -> None:
         trk_cols = {c["name"] for c in insp.get_columns("trucks")}
         if "vehicle_class" not in trk_cols:
             alters.append("ALTER TABLE trucks ADD COLUMN vehicle_class VARCHAR(32) NOT NULL DEFAULT 'Class 3'")
+
+    if insp.has_table("payments"):
         pay_cols = {c["name"] for c in insp.get_columns("payments")}
         v255 = "VARCHAR(255) NULL"
         v512 = "VARCHAR(512) NULL"
@@ -587,9 +589,23 @@ def apply_runtime_schema_fixes() -> None:
                 )
 
     # Toll matrix enhancement tables (additive)
-    from app.models.entities import AdditionalTollEntry, HistoricalTollRecord, TollMatrix, TollPlaza, TollPlazaAlias
+    from app.models.entities import (
+        AdditionalTollEntry,
+        HistoricalTollRecord,
+        TollMatrix,
+        TollPlaza,
+        TollPlazaAlias,
+        TripShoulderCostEntry,
+    )
 
-    for table in (TollMatrix.__table__, AdditionalTollEntry.__table__, HistoricalTollRecord.__table__, TollPlaza.__table__, TollPlazaAlias.__table__):
+    for table in (
+        TripShoulderCostEntry.__table__,
+        TollMatrix.__table__,
+        AdditionalTollEntry.__table__,
+        HistoricalTollRecord.__table__,
+        TollPlaza.__table__,
+        TollPlazaAlias.__table__,
+    ):
         if not insp.has_table(table.name):
             table.create(bind=engine, checkfirst=True)
 
