@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Component, useMemo, useState, type ErrorInfo, type ReactNode } from "react";
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import { BiAnalyticsSvgChart } from "@/components/admin/BiAnalyticsSvgChart";
 import { DrillDownAnalyticsModal } from "@/components/admin/BiAnalyticsComponents";
@@ -9,7 +9,16 @@ import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBloc
 import { AnalyticsApi } from "@/lib/analyticsApi";
 import { computeRowStatistics } from "@/lib/analyticsStatistics";
 import { compareFromChartSeries, findComparative, type PeriodComparisonResult } from "@/lib/periodComparison";
-import { formatStatusLabel, inferChartMeta, type ChartSelection, type InferredChartMeta } from "@/lib/chartDrilldownUtils";
+import {
+  formatStatusLabel,
+  inferChartMeta,
+  resolveChartKeys,
+  synthesizeChartFromCategoryCounts,
+  synthesizeChartFromDrilldownNumeric,
+  type ChartSelection,
+  type InferredChartMeta,
+  type SynthesizedChart,
+} from "@/lib/chartDrilldownUtils";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -47,16 +56,71 @@ function buildSelection(meta: ReturnType<typeof inferChartMeta>, payload: ChartC
   return { label, displayLabel, fieldKeys: meta.fieldKeys, monthKey: meta.monthFromX ? label : undefined };
 }
 
-function synthesizeChartFromDrilldown(drilldown: Record<string, unknown>[]): Record<string, unknown>[] {
-  if (!drilldown.length) return [];
-  const statusField = ["delivery_status", "status", "category"].find((f) => f in drilldown[0]);
-  if (!statusField) return [];
-  const counts: Record<string, number> = {};
-  for (const row of drilldown) {
-    const k = String(row[statusField] ?? "unknown");
-    counts[k] = (counts[k] ?? 0) + 1;
+function toPlotlyKind(kind: InferredChartMeta["kind"]): PlotlyChartKind {
+  if (kind === "pie") return "pie";
+  if (kind === "line") return "line";
+  if (kind === "area") return "area";
+  if (kind === "stackedBar") return "stackedBar";
+  if (kind === "combo") return "combo";
+  return "bar";
+}
+
+function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): SynthesizedChart | null {
+  return synthesizeChartFromCategoryCounts(drilldown) ?? synthesizeChartFromDrilldownNumeric(drilldown);
+}
+
+function EmergencyInlineBarChart({
+  items,
+  labelKey,
+  valueKey,
+}: {
+  items: Array<Record<string, string | number>>;
+  labelKey: string;
+  valueKey: string;
+}) {
+  if (!items.length) return <EmptyChart message="No chart data available." />;
+  const rows = items.slice(0, 12);
+  const values = rows.map((row) => Number(row[valueKey]) || 0);
+  const max = Math.max(...values, 1);
+
+  return (
+    <div className="bi-emergency-chart" role="img" aria-label="Bar chart">
+      {rows.map((row, i) => {
+        const val = Number(row[valueKey]) || 0;
+        const pct = Math.max(6, Math.round((val / max) * 100));
+        const label = String(row[labelKey] ?? "");
+        return (
+          <div key={`${label}-${i}`} className="bi-emergency-chart__row">
+            <span className="bi-emergency-chart__label">{label}</span>
+            <div className="bi-emergency-chart__track">
+              <div className="bi-emergency-chart__bar" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="bi-emergency-chart__value">{val.toLocaleString()}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+class ChartErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
   }
-  return Object.entries(counts).map(([status, count]) => ({ status, count }));
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error("[BI chart] render failed, using emergency fallback.", error.message, info.componentStack);
+  }
+
+  render(): ReactNode {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
 }
 
 function CompactStatistics({ stats }: { stats: StatisticsSummary | null }) {
@@ -130,7 +194,10 @@ export function BiChartWidget({
   const chart = useMemo(() => {
     if (empty) return [];
     let rows = (block.chart ?? []) as Record<string, unknown>[];
-    if (!rows.length && drilldown.length) rows = synthesizeChartFromDrilldown(drilldown);
+    if (!rows.length && drilldown.length) {
+      const synthesized = synthesizeFromDrilldown(drilldown);
+      if (synthesized?.items.length) rows = synthesized.items;
+    }
     return rows;
   }, [block, drilldown, empty]);
 
@@ -206,6 +273,107 @@ export function BiChartWidget({
     }
   };
 
+  const emergencyChartData = useMemo(() => {
+    if (items.length) {
+      const keys = resolveChartKeys(items);
+      if (keys) return { items: items.slice(0, 12), ...keys };
+    }
+    const synthesized = synthesizeFromDrilldown(drilldown);
+    if (synthesized?.items.length) {
+      return {
+        items: chartRows(synthesized.items).slice(0, 12),
+        labelKey: synthesized.labelKey,
+        valueKey: synthesized.valueKey,
+      };
+    }
+    return null;
+  }, [drilldown, items]);
+
+  const renderSvgChart = (
+    kind: PlotlyChartKind,
+    chartItems: Array<Record<string, string | number>>,
+    labelKey: string,
+    valueKey: string,
+    axisLabel: string,
+  ) => (
+    <BiAnalyticsSvgChart
+      kind={kind}
+      items={chartItems}
+      labelKey={labelKey}
+      valueKey={valueKey}
+      yAxisLabel={axisLabel}
+      legendLabel={axisLabel}
+      onItemClick={openDrill}
+      selectedLabel={selection?.label ?? null}
+    />
+  );
+
+  const chartVisual = useMemo(() => {
+    if (resolvedMeta && items.length) {
+      return renderSvgChart(
+        toPlotlyKind(resolvedMeta.kind),
+        items,
+        resolvedMeta.xKey ?? resolvedMeta.labelKey,
+        resolvedMeta.yKey ?? resolvedMeta.valueKey,
+        legendLabel,
+      );
+    }
+
+    const genericKeys = resolveChartKeys(items);
+    if (items.length && genericKeys) {
+      const kind: PlotlyChartKind = preferredChartKind ?? "bar";
+      return renderSvgChart(kind, items, genericKeys.labelKey, genericKeys.valueKey, genericKeys.valueKey.replace(/_/g, " "));
+    }
+
+    const categorySynth = synthesizeChartFromCategoryCounts(drilldown);
+    if (categorySynth?.items.length) {
+      const synthItems = chartRows(categorySynth.items).slice(0, 24);
+      return renderSvgChart("bar", synthItems, categorySynth.labelKey, categorySynth.valueKey, "Records");
+    }
+
+    const numericSynth = synthesizeChartFromDrilldownNumeric(drilldown);
+    if (numericSynth?.items.length) {
+      const synthItems = chartRows(numericSynth.items).slice(0, 24);
+      return renderSvgChart(
+        "bar",
+        synthItems,
+        numericSynth.labelKey,
+        numericSynth.valueKey,
+        numericSynth.valueKey.replace(/_/g, " "),
+      );
+    }
+
+    if (emergencyChartData) {
+      return (
+        <EmergencyInlineBarChart
+          items={emergencyChartData.items}
+          labelKey={emergencyChartData.labelKey}
+          valueKey={emergencyChartData.valueKey}
+        />
+      );
+    }
+
+    return <EmptyChart message="No chart data available yet." />;
+  }, [
+    drilldown,
+    emergencyChartData,
+    items,
+    legendLabel,
+    preferredChartKind,
+    resolvedMeta,
+    selection?.label,
+  ]);
+
+  const emergencyFallback = emergencyChartData ? (
+    <EmergencyInlineBarChart
+      items={emergencyChartData.items}
+      labelKey={emergencyChartData.labelKey}
+      valueKey={emergencyChartData.valueKey}
+    />
+  ) : (
+    <EmptyChart message="Chart could not be rendered." />
+  );
+
   if (empty) {
     return (
       <article className="bi-chart-widget" data-widget-id={widgetId}>
@@ -216,46 +384,6 @@ export function BiChartWidget({
       </article>
     );
   }
-
-  const chartKind: PlotlyChartKind =
-    resolvedMeta?.kind === "pie"
-      ? "pie"
-      : resolvedMeta?.kind === "line"
-        ? "line"
-        : resolvedMeta?.kind === "area"
-          ? "area"
-          : resolvedMeta?.kind === "stackedBar"
-            ? "stackedBar"
-            : resolvedMeta?.kind === "combo"
-              ? "combo"
-              : "bar";
-
-  const chartVisual =
-    resolvedMeta && items.length ? (
-      <BiAnalyticsSvgChart
-        kind={chartKind}
-        items={items}
-        labelKey={resolvedMeta.xKey ?? resolvedMeta.labelKey}
-        valueKey={resolvedMeta.yKey ?? resolvedMeta.valueKey}
-        yAxisLabel={legendLabel}
-        legendLabel={legendLabel}
-        onItemClick={openDrill}
-        selectedLabel={selection?.label ?? null}
-      />
-    ) : drilldown.length ? (
-      <BiAnalyticsSvgChart
-        kind="bar"
-        items={synthesizeChartFromDrilldown(drilldown).slice(0, 24) as Array<Record<string, string | number>>}
-        labelKey="status"
-        valueKey="count"
-        yAxisLabel="Count"
-        legendLabel="Records"
-        onItemClick={openDrill}
-        selectedLabel={selection?.label ?? null}
-      />
-    ) : (
-      <EmptyChart message="No data available yet." />
-    );
 
   return (
     <article className="bi-chart-widget" data-widget-id={widgetId}>
@@ -273,7 +401,9 @@ export function BiChartWidget({
         </p>
       </header>
 
-      <div className="bi-chart-widget__chart">{chartVisual}</div>
+      <div className="bi-chart-widget__chart" data-chart-renderer="svg-v3">
+        <ChartErrorBoundary fallback={emergencyFallback}>{chartVisual}</ChartErrorBoundary>
+      </div>
       {riskLegend?.length ? (
         <div className="bi-risk-legend" role="note" aria-label="Risk legend">
           {riskLegend.map((r) => (

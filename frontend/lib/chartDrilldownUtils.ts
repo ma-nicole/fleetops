@@ -104,6 +104,87 @@ export type InferredChartMeta = {
   monthFromX?: boolean;
 };
 
+export type SynthesizedChart = {
+  items: Record<string, unknown>[];
+  labelKey: string;
+  valueKey: string;
+};
+
+export function isNumericChartValue(value: unknown): boolean {
+  if (typeof value === "number" && Number.isFinite(value)) return true;
+  if (typeof value === "string" && value.trim() !== "" && value !== "—" && !Number.isNaN(Number(value))) {
+    return true;
+  }
+  return false;
+}
+
+function isNumericField(row: Record<string, unknown>, key: string): boolean {
+  return isNumericChartValue(row[key]);
+}
+
+export function resolveChartKeys(
+  items: Array<Record<string, string | number>>,
+): { labelKey: string; valueKey: string } | null {
+  if (!items.length) return null;
+  const row = items[0] as Record<string, unknown>;
+  const keys = Object.keys(row);
+  const labelKey =
+    keys.find((k) => typeof row[k] === "string") ??
+    keys.find((k) => row[k] != null && !isNumericField(row, k)) ??
+    keys[0];
+  const valueKey =
+    keys.find((k) => k !== labelKey && isNumericField(row, k)) ??
+    keys.find((k) => k !== labelKey && (k.endsWith("_php") || k.endsWith("_count") || k === "count")) ??
+    keys.find((k) => k !== labelKey);
+  if (!labelKey || !valueKey) return null;
+  return { labelKey, valueKey };
+}
+
+export function synthesizeChartFromCategoryCounts(
+  drilldown: Record<string, unknown>[],
+): SynthesizedChart | null {
+  if (!drilldown.length) return null;
+  const groupField = ["delivery_status", "status", "category"].find((field) =>
+    drilldown.some((row) => field in row),
+  );
+  if (!groupField) return null;
+  const counts: Record<string, number> = {};
+  for (const row of drilldown) {
+    const label = String(row[groupField] ?? "unknown");
+    counts[label] = (counts[label] ?? 0) + 1;
+  }
+  const labelKey = groupField === "delivery_status" ? "delivery_status" : groupField;
+  return {
+    items: Object.entries(counts).map(([label, count]) => ({ [labelKey]: label, count })),
+    labelKey,
+    valueKey: "count",
+  };
+}
+
+export function synthesizeChartFromDrilldownNumeric(
+  drilldown: Record<string, unknown>[],
+): SynthesizedChart | null {
+  if (!drilldown.length) return null;
+  const groupField = ["month", "record_type", "category", "client_name", "route"].find((field) =>
+    drilldown.some((row) => row[field] != null && String(row[field]).trim() !== ""),
+  );
+  if (!groupField) return null;
+  const valueField = ["revenue_php", "amount_php", "expense_php", "profit_php", "total_cost_php", "count"].find(
+    (field) => drilldown.some((row) => isNumericField(row, field)),
+  );
+  if (!valueField) return null;
+  const sums: Record<string, number> = {};
+  for (const row of drilldown) {
+    const label = String(row[groupField] ?? "unknown");
+    sums[label] = (sums[label] ?? 0) + (Number(row[valueField]) || 0);
+  }
+  return {
+    items: Object.entries(sums).map(([label, value]) => ({ [groupField]: label, [valueField]: value })),
+    labelKey: groupField,
+    valueKey: valueField,
+  };
+}
+
 export function inferChartMeta(
   chart: Record<string, unknown>[],
   drilldown: Record<string, unknown>[],
@@ -127,6 +208,17 @@ export function inferChartMeta(
       valueKey: "count",
       xKey: "month",
       yKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "month"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("month") && keys.includes("revenue_php") && !keys.includes("expense_php")) {
+    return {
+      kind: "line",
+      labelKey: "month",
+      valueKey: "revenue_php",
+      xKey: "month",
+      yKey: "revenue_php",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "month"),
       monthFromX: true,
     };
@@ -234,7 +326,7 @@ export function inferChartMeta(
   }
   if (keys.includes("route")) {
     const valueKey =
-      keys.find((k) => typeof row[k] === "number" && k !== "route") ??
+      keys.find((k) => k !== "route" && isNumericField(row, k)) ??
       keys.find((k) => k.endsWith("_php") || k.endsWith("_score") || k === "count");
     if (valueKey) {
       return {
@@ -270,8 +362,14 @@ export function inferChartMeta(
     };
   }
 
-  const labelKey = keys.find((k) => typeof row[k] === "string") ?? keys[0];
-  const valueKey = keys.find((k) => typeof row[k] === "number" && k !== labelKey) ?? keys[1];
+  const labelKey =
+    keys.find((k) => typeof row[k] === "string") ??
+    keys.find((k) => row[k] != null && !isNumericField(row, k)) ??
+    keys[0];
+  const valueKey =
+    keys.find((k) => k !== labelKey && isNumericField(row, k)) ??
+    keys.find((k) => k !== labelKey && (k.endsWith("_php") || k.endsWith("_count") || k === "count")) ??
+    keys[1];
   if (!labelKey || !valueKey) return null;
   return {
     kind: "bar",

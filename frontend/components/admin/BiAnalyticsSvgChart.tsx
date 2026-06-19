@@ -2,6 +2,7 @@
 
 import {
   BarChartPhp,
+  EmptyChart,
   LineChartVisual,
   PieChartVisual,
   type ChartClickPayload,
@@ -34,7 +35,7 @@ export function BiAnalyticsSvgChart({
   selectedLabel?: string | null;
 }) {
   const rows = items.slice(0, 24);
-  if (!rows.length) return null;
+  if (!rows.length) return <EmptyChart message="No chart data available." />;
 
   if (kind === "pie") {
     return (

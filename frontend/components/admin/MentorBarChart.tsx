@@ -1,7 +1,7 @@
 "use client";
 
+import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import { formatPhp } from "@/lib/appLocale";
-import type { ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 
 const BAR_COLORS = ["#2D6A4F", "#E76F51", "#277DA1", "#40916C", "#F4A261", "#52B788", "#1B4332", "#6366F1"];
 
@@ -41,7 +41,7 @@ export function MentorBarChart({
   selectedLabel?: string | null;
   isCurrency?: boolean;
 }) {
-  if (!items.length) return null;
+  if (!items.length) return <EmptyChart message="No chart data available." />;
 
   const values = items.map((x) => Number(x[valueKey]) || 0);
   const max = Math.max(...values, 1);

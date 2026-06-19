@@ -3134,9 +3134,60 @@ html {
   background: #f8faf9;
   border: 1px solid #e5ebe8;
   border-radius: 8px;
-  padding: 0.25rem 0.15rem 0;
+  padding: 0.75rem 1rem 1rem;
   min-height: 250px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bi-chart-widget__chart > * {
+  width: 100%;
+  min-height: 140px;
+}
+
+.bi-emergency-chart {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.bi-emergency-chart__row {
+  display: grid;
+  grid-template-columns: minmax(72px, 28%) 1fr minmax(56px, auto);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bi-emergency-chart__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #1b4332;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bi-emergency-chart__track {
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bi-emergency-chart__bar {
+  height: 100%;
+  min-width: 6px;
+  background: linear-gradient(90deg, #2d6a4f 0%, #40916c 100%);
+  border-radius: 999px;
+}
+
+.bi-emergency-chart__value {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #475569;
+  text-align: right;
 }
 
 .bi-risk-legend {
