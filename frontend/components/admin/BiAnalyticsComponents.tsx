@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DrilldownTable, StatisticsTable } from "@/components/admin/AnalyticsCharts";
 import { formatPhp } from "@/lib/appLocale";
 import {
@@ -159,6 +159,7 @@ export function DrillDownAnalyticsModal({
   const [interpretation, setInterpretation] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const aiSectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -173,6 +174,12 @@ export function DrillDownAnalyticsModal({
       document.body.style.overflow = prevOverflow;
     };
   }, [open, selection?.label]);
+
+  useEffect(() => {
+    if (interpretation && aiSectionRef.current) {
+      aiSectionRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [interpretation]);
 
   const chartFiltered = useMemo(
     () => filterDrilldownRows(allRows, selection),
@@ -271,7 +278,7 @@ export function DrillDownAnalyticsModal({
         </header>
 
         <div className="bi-drilldown-modal__body">
-          <section className="bi-drilldown-section">
+          <section className="bi-drilldown-section bi-drilldown-section--filters">
             <h3 className="bi-drilldown-section__title">Section 1 — Filters</h3>
             <div className="bi-drilldown-filters">
               <label className="filter-panel__label">
@@ -477,13 +484,15 @@ export function DrillDownAnalyticsModal({
             </div>
           </section>
 
-          <section className="bi-drilldown-section">
+          <section className="bi-drilldown-section bi-drilldown-section--table">
             <h3 className="bi-drilldown-section__title">Section 2 — Data Table</h3>
             <p className="bi-drilldown-meta">
               {panelFiltered.length} source record{panelFiltered.length === 1 ? "" : "s"}
               {panelFiltered.length !== chartFiltered.length
                 ? ` (${chartFiltered.length} from chart selection)`
                 : ""}
+              {" · "}
+              Scroll inside the table to see all columns and rows.
             </p>
             {panelFiltered.length ? (
               <DrilldownTable columns={columns} rows={panelFiltered} />
@@ -492,8 +501,24 @@ export function DrillDownAnalyticsModal({
             )}
           </section>
 
+          <section ref={aiSectionRef} className="bi-drilldown-section bi-drilldown-section--ai">
+            <h3 className="bi-drilldown-section__title">Section 3 — AI Interpretation</h3>
+            <button type="button" className="quick-action-btn" onClick={() => void explainChart()} disabled={aiLoading}>
+              {aiLoading ? "Generating…" : "Explain this Chart with AI"}
+            </button>
+            {aiError ? <p className="bi-drilldown-empty">{aiError}</p> : null}
+            {interpretation ? (
+              <div className="bi-interpretation-block">
+                <h4 className="bi-interpretation-block__title">Interpretation</h4>
+                <p className="bi-drilldown-interpretation">{interpretation}</p>
+              </div>
+            ) : !aiLoading && !aiError ? (
+              <p className="bi-drilldown-meta">Click the button to generate an interpretation from actual chart values.</p>
+            ) : null}
+          </section>
+
           <section className="bi-drilldown-section">
-            <h3 className="bi-drilldown-section__title">Section 3 — Summary / Indicators</h3>
+            <h3 className="bi-drilldown-section__title">Section 4 — Summary / Indicators</h3>
             <div className="bi-indicator-grid">
               {indicators.map((item) => (
                 <div key={item.label} className="bi-indicator-card">
@@ -528,22 +553,6 @@ export function DrillDownAnalyticsModal({
             ) : (
               <p className="bi-drilldown-empty">Insufficient numeric data for statistics on this selection.</p>
             )}
-          </section>
-
-          <section className="bi-drilldown-section">
-            <h3 className="bi-drilldown-section__title">Section 4 — AI Interpretation</h3>
-            <button type="button" className="quick-action-btn" onClick={() => void explainChart()} disabled={aiLoading}>
-              {aiLoading ? "Generating…" : "Explain this Chart with AI"}
-            </button>
-            {aiError ? <p className="bi-drilldown-empty">{aiError}</p> : null}
-            {interpretation ? (
-              <div className="bi-interpretation-block">
-                <h4 className="bi-interpretation-block__title">Interpretation</h4>
-                <p className="bi-drilldown-interpretation">{interpretation}</p>
-              </div>
-            ) : !aiLoading && !aiError ? (
-              <p className="bi-drilldown-meta">Click the button to generate an interpretation from actual chart values.</p>
-            ) : null}
           </section>
         </div>
       </div>

@@ -2640,9 +2640,10 @@ html {
 }
 
 .bi-drilldown-modal {
-  width: min(95vw, 1440px);
-  max-width: 95vw;
-  max-height: 92vh;
+  width: min(98vw, 1600px);
+  max-width: 98vw;
+  height: min(96vh, 920px);
+  max-height: 96vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2688,13 +2689,16 @@ html {
 }
 
 .bi-drilldown-modal__body {
-  display: grid;
-  gap: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   padding: var(--space-4);
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  padding-bottom: var(--space-6);
 }
 
 .bi-drilldown-section {
@@ -2703,7 +2707,30 @@ html {
   padding: var(--space-3);
   background: var(--bg-dark);
   min-width: 0;
-  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.bi-drilldown-section--table {
+  flex: 1 1 auto;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.bi-drilldown-section--table .drilldown-table-wrap {
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
+.bi-drilldown-section--ai {
+  min-height: 120px;
+  overflow: visible;
+}
+
+.bi-drilldown-section--filters {
+  max-height: 42vh;
+  overflow-y: auto;
 }
 
 .bi-drilldown-section__title {
@@ -2733,9 +2760,15 @@ html {
 
 .bi-drilldown-interpretation {
   margin: var(--space-3) 0 0;
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--text-secondary);
+  padding: var(--space-3);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .bi-indicator-grid {
@@ -2801,12 +2834,25 @@ html {
 .drilldown-table-wrap {
   width: 100%;
   max-width: 100%;
-  max-height: min(420px, 45vh);
+  min-height: 260px;
+  max-height: min(560px, 58vh);
   overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   -webkit-overflow-scrolling: touch;
+  background: #fff;
+}
+
+.drilldown-table-wrap::after {
+  content: "Scroll horizontally for more columns →";
+  display: block;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-align: center;
+  border-top: 1px dashed var(--border);
+  background: var(--bg-dark);
 }
 
 .drilldown-table {
@@ -2814,8 +2860,8 @@ html {
   min-width: 100%;
   border-collapse: collapse;
   table-layout: auto;
-  font-size: 0.75rem;
-  line-height: 1.4;
+  font-size: 0.8125rem;
+  line-height: 1.45;
 }
 
 .drilldown-table thead {
@@ -2825,10 +2871,10 @@ html {
 }
 
 .drilldown-table th {
-  padding: 0.5rem 0.65rem;
+  padding: 0.6rem 0.75rem;
   text-align: left;
   font-weight: 700;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2839,7 +2885,7 @@ html {
 }
 
 .drilldown-table td {
-  padding: 0.5rem 0.65rem;
+  padding: 0.55rem 0.75rem;
   color: var(--text);
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
