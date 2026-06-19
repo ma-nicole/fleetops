@@ -122,7 +122,12 @@ def admin_analytics_dashboard(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Admin analytics dashboard build failed")
+        logger.exception(
+            "Admin analytics dashboard build failed role=%s user_id=%s error=%s",
+            getattr(user.role, "value", user.role),
+            user.id,
+            type(exc).__name__,
+        )
         raise HTTPException(status_code=500, detail="Analytics service error") from exc
 
 

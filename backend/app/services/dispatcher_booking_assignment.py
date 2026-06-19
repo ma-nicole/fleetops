@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models.entities import Booking, JobOrder, User, UserRole
@@ -13,11 +13,17 @@ def has_dispatcher_booking_scope(user: User) -> bool:
     return user.role in {UserRole.ADMIN, UserRole.MANAGER}
 
 
+def _job_orders_table_exists(db: Session) -> bool:
+    return "job_orders" in inspect(db.get_bind()).get_table_names()
+
+
 def dispatcher_may_view_booking(db: Session, user: User, booking_id: int) -> bool:
     if has_dispatcher_booking_scope(user):
         return True
     if user.role != UserRole.DISPATCHER:
         return False
+    if not _job_orders_table_exists(db):
+        return True
     job = db.query(JobOrder).filter(JobOrder.booking_id == booking_id).first()
     if not job or job.assigned_dispatcher_id is None:
         return True
@@ -38,6 +44,8 @@ def filter_bookings_for_dispatcher(db: Session, user: User, bookings: list[Booki
 
 
 def blocked_booking_ids_for_dispatcher(db: Session, dispatcher_user_id: int) -> set[int]:
+    if not _job_orders_table_exists(db):
+        return set()
     rows = (
         db.query(JobOrder.booking_id)
         .filter(
@@ -50,6 +58,8 @@ def blocked_booking_ids_for_dispatcher(db: Session, dispatcher_user_id: int) -> 
 
 
 def get_or_create_job_order(db: Session, booking_id: int, *, issued_by_id: int) -> JobOrder:
+    if not _job_orders_table_exists(db):
+        raise RuntimeError("job_orders table is not available")
     job = db.query(JobOrder).filter(JobOrder.booking_id == booking_id).first()
     if job:
         return job
@@ -83,6 +93,8 @@ def auto_assign_dispatcher_on_dispatch_action(db: Session, booking_id: int, acto
     """When a dispatcher acts on an unassigned booking, claim it for that dispatcher."""
     if actor.role != UserRole.DISPATCHER:
         return
+    if not _job_orders_table_exists(db):
+        return
     job = db.query(JobOrder).filter(JobOrder.booking_id == booking_id).first()
     if job is None:
         job = JobOrder(
@@ -108,7 +120,7 @@ def filter_trips_for_dispatcher(db: Session, user: User, trips: list) -> list:
 
 
 def job_order_assignment_map(db: Session, booking_ids: list[int]) -> dict[int, JobOrder]:
-    if not booking_ids:
+    if not booking_ids or not _job_orders_table_exists(db):
         return {}
     rows = db.query(JobOrder).filter(JobOrder.booking_id.in_(booking_ids)).all()
     return {int(j.booking_id): j for j in rows}

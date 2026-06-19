@@ -58,6 +58,27 @@ ACTIVE_TRIP = frozenset(
 )
 
 
+def _safe_operations_center(db: Session, viewer: User | None) -> dict[str, Any]:
+    try:
+        return build_operations_center_payload(db, viewer)
+    except Exception:
+        return {"summary": {"waiting_for_assignment": 0, "available_trucks": 0}}
+
+
+def _safe_timeline(db: Session, start: str) -> dict[str, Any]:
+    try:
+        return build_timeline(db, start=start, mode="week", resource="truck", status_filter=None, q=None)
+    except Exception:
+        return {"conflicts": []}
+
+
+def _safe_recommend_assignment(db: Session, booking_id: int):
+    try:
+        return recommend_assignment(db, booking_id)
+    except Exception:
+        return None
+
+
 def _scope_context(ctx: dict, db: Session, viewer: User | None) -> dict:
     if viewer is None or has_dispatcher_booking_scope(viewer):
         return ctx
@@ -221,10 +242,10 @@ def build_dispatcher_role_analytics(
         )
     )
 
-    ops = build_operations_center_payload(db, viewer)
+    ops = _safe_operations_center(db, viewer)
     pending_assign = int(ops.get("summary", {}).get("waiting_for_assignment") or 0)
     available_trucks = int(ops.get("summary", {}).get("available_trucks") or 0)
-    timeline = build_timeline(db, start=today.isoformat(), mode="week", resource="truck", status_filter=None, q=None)
+    timeline = _safe_timeline(db, today.isoformat())
     conflicts = timeline.get("conflicts") or []
     if viewer and not has_dispatcher_booking_scope(viewer):
         scoped_bids = {b.id for b in ctx["bookings"]}
@@ -440,7 +461,9 @@ def build_dispatcher_role_analytics(
         if _status_str(b.status) in {BookingStatus.READY_FOR_ASSIGNMENT.value, BookingStatus.APPROVED.value}
     ]
     for booking in pending_bookings[:5]:
-        rec = recommend_assignment(db, booking.id)
+        rec = _safe_recommend_assignment(db, booking.id)
+        if rec is None:
+            continue
         best = rec.best
         if best:
             alloc_rows.append(

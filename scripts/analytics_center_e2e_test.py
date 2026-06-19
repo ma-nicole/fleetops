@@ -11,8 +11,9 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.db import apply_runtime_schema_fixes  # noqa: E402
+from app.db import SessionLocal, apply_runtime_schema_fixes  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.entities import User, UserRole  # noqa: E402
 
 PASSED: list[str] = []
 FAILED: list[str] = []
@@ -46,6 +47,11 @@ def module_state(payload: dict, key: str) -> str:
 def main() -> int:
     print("Analytics Center E2E test\n")
     apply_runtime_schema_fixes()
+    with SessionLocal() as db:
+        dispatcher_user = db.query(User).filter(User.email == "dispatcher@fleetops.com").first()
+        if dispatcher_user and dispatcher_user.role != UserRole.DISPATCHER:
+            dispatcher_user.role = UserRole.DISPATCHER
+            db.commit()
     client = TestClient(app)
 
     # ── Auth guards ──
@@ -56,7 +62,8 @@ def main() -> int:
         ok("0 Unauthenticated blocked")
 
     admin_h = {"Authorization": f"Bearer {login(client, 'admin@fleetops.com')}"}
-    manager_h = {"Authorization": f"Bearer {login(client, 'dispatcher@fleetops.com')}"}
+    manager_h = {"Authorization": f"Bearer {login(client, 'manager@fleetops.com')}"}
+    dispatcher_h = {"Authorization": f"Bearer {login(client, 'dispatcher@fleetops.com')}"}
     customer_h = {"Authorization": f"Bearer {login(client, 'customer1@fleetops.com')}"}
 
     r = client.get("/api/admin/analytics", headers=customer_h)
@@ -124,15 +131,17 @@ def main() -> int:
         ok("5 Invalid date range rejected")
 
     # ── Dispatcher subset ──
-    r = client.get("/api/admin/analytics", headers=manager_h)
+    r = client.get("/api/admin/analytics", headers=dispatcher_h)
     if r.status_code != 200:
-        fail("6 Dispatcher analytics", f"status={r.status_code}")
+        fail("6 Dispatcher analytics", f"status={r.status_code} body={r.text[:400]}")
     else:
         d = r.json()
         if d.get("financial") is not None or d.get("clients") is not None:
             fail("6 Dispatcher analytics", "financial/clients should be null")
+        elif d.get("dispatcher_role_analytics") is None:
+            fail("6 Dispatcher analytics", "dispatcher_role_analytics should be populated")
         else:
-            ok("6 Dispatcher analytics", "financial/clients excluded")
+            ok("6 Dispatcher analytics", "financial/clients excluded, dispatcher_role_analytics present")
 
     # ── AI interpretation endpoints ──
     r = client.post(

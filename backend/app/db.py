@@ -588,17 +588,27 @@ def apply_runtime_schema_fixes() -> None:
                     )
                 )
 
-    # Toll matrix enhancement tables (additive)
+    # Dispatcher-critical tables (additive — older Railway DBs may lack these)
     from app.models.entities import (
         AdditionalTollEntry,
+        DriverProfile,
         HistoricalTollRecord,
+        JobOrder,
         TollMatrix,
         TollPlaza,
         TollPlazaAlias,
+        TripIssue,
+        TripLocationUpdate,
         TripShoulderCostEntry,
+        TruckSlotHold,
     )
 
     for table in (
+        JobOrder.__table__,
+        TruckSlotHold.__table__,
+        TripLocationUpdate.__table__,
+        TripIssue.__table__,
+        DriverProfile.__table__,
         TripShoulderCostEntry.__table__,
         TollMatrix.__table__,
         AdditionalTollEntry.__table__,
@@ -609,6 +619,7 @@ def apply_runtime_schema_fixes() -> None:
         if not insp.has_table(table.name):
             table.create(bind=engine, checkfirst=True)
 
+    # Toll matrix column patches (tables must exist first)
     if insp.has_table("toll_matrix"):
         tm_cols = {c["name"] for c in insp.get_columns("toll_matrix")}
         tm_alters: list[str] = []
