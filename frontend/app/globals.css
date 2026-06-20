@@ -3420,6 +3420,15 @@ html {
   position: relative;
 }
 
+.recharts-analytics-chart--horizontal {
+  aspect-ratio: unset;
+  min-height: 260px;
+}
+
+.recharts-analytics-chart--horizontal .recharts-cartesian-axis-tick text {
+  font-size: 11px;
+}
+
 .recharts-analytics-chart--loading {
   display: flex;
   align-items: center;

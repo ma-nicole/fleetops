@@ -112,6 +112,13 @@ def build_driver_role_analytics(
     # ------------------------------------------------------------------ #
     log_rows = [_trip_row(t, ctx, fuel_liters_by_trip=fuel_liters_by_trip) for t in trips]
     log_rows.sort(key=lambda r: r["delivery_date"], reverse=True)
+    route_log_counts: dict[str, int] = defaultdict(int)
+    for row in log_rows:
+        route_log_counts[str(row.get("route") or "unknown")] += 1
+    log_chart = [
+        {"route": route, "trip_count": count}
+        for route, count in sorted(route_log_counts.items(), key=lambda item: -item[1])[:12]
+    ]
 
     completed = [t for t in trips if t.status == TripStatus.COMPLETED]
     active = [t for t in trips if _status_str(t.status) in {s.value for s in ACTIVE_TRIP}]
@@ -126,8 +133,9 @@ def build_driver_role_analytics(
                 {"label": "Completed", "value": len(completed)},
                 {"label": "Active", "value": len(active)},
             ],
-            chart=log_rows[:12],
+            chart=log_chart,
             drilldown=log_rows[:50],
+            note="Trips per route — aggregated count, not individual trip rows.",
         )
     )
 
@@ -291,11 +299,16 @@ def build_driver_role_analytics(
                 {"label": "Unique routes", "value": len(route_rows)},
                 {"label": "Most used", "value": route_rows[0]["route"][:48] if route_rows else "—"},
             ],
-            chart=route_rows[:12],
+            chart=[{"route": row["route"], "trip_count": row["trip_count"]} for row in route_rows[:12]],
             drilldown=route_rows[:50],
+            note="Route frequency ranked by number of trips driven.",
         )
     )
 
+    distance_chart = [
+        {"route": route, "distance_km": round(stats["distance_km"], 2)}
+        for route, stats in sorted(route_stats.items(), key=lambda item: -item[1]["distance_km"])[:12]
+    ]
     distance_rows = [
         _trip_row(t, ctx, fuel_liters_by_trip=fuel_liters_by_trip, extra={"distance_km": round(float(t.distance_km or 0), 2)})
         for t in trips
@@ -306,9 +319,10 @@ def build_driver_role_analytics(
         if not distance_rows
         else _block(
             kpis=[{"label": "Total distance (km)", "value": total_distance}],
-            chart=distance_rows[:12],
+            chart=distance_chart,
             drilldown=distance_rows[:50],
             statistics=compute_statistics([float(r["distance_km"]) for r in distance_rows], min_samples=1),
+            note="Total distance (km) aggregated per route.",
         )
     )
 
@@ -321,7 +335,7 @@ def build_driver_role_analytics(
         if not routes_with_hours
         else _block(
             kpis=[{"label": "Fastest personal route", "value": routes_with_hours[0]["route"][:48]}],
-            chart=routes_with_hours[:12],
+            chart=[{"route": row["route"], "avg_travel_hours": row["avg_travel_hours"]} for row in routes_with_hours[:12]],
             drilldown=routes_with_hours,
             note="Route with lowest average travel time on your completed trips.",
         )
@@ -442,8 +456,9 @@ def build_driver_role_analytics(
         if not usage_rows
         else _block(
             kpis=[{"label": "Vehicles used", "value": len(usage_rows)}],
-            chart=usage_rows[:12],
+            chart=[{"truck": row["truck"], "trip_count": row["trip_count"]} for row in usage_rows[:12]],
             drilldown=usage_rows,
+            note="Trip count per assigned vehicle.",
         )
     )
 

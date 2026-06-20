@@ -2,6 +2,7 @@
 
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
 import type { DriverRoleAnalyticsPayload } from "@/lib/analyticsApi";
+import { driverChartUnit, driverPreferredChartKind } from "@/lib/driverAnalyticsChartConfig";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   trip_execution: {
@@ -51,6 +52,8 @@ export default function DriverRoleAnalyticsTabs({ data }: { data: DriverRoleAnal
       categoryTabs={CATEGORY_TABS}
       featureLabels={FEATURE_LABELS}
       data={data}
+      resolvePreferredChartKind={driverPreferredChartKind}
+      resolveChartUnit={driverChartUnit}
     />
   );
 }

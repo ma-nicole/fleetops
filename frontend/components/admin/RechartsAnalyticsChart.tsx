@@ -40,10 +40,67 @@ const SERIES_COLORS = {
   actual: "#0EA5E9",
 } as const;
 
-const AXIS_TICK = { fontSize: 10, fill: "#64748b" };
+const AXIS_TICK = { fontSize: 11, fill: "#64748b" };
 const GRID_STROKE = "#e2e8f0";
+const LABEL_TRUNCATE = 36;
+const HORIZONTAL_BAR_ROW_HEIGHT = 34;
 
 type ChartRow = Record<string, string | number> & { name: string };
+
+function truncateLabel(text: unknown, maxLen = LABEL_TRUNCATE): string {
+  const value = String(text ?? "").trim();
+  if (value.length <= maxLen) return value;
+  return `${value.slice(0, maxLen - 1)}…`;
+}
+
+function longestLabel(items: Array<Record<string, string | number>>, labelKey: string): number {
+  return items.reduce((max, item) => Math.max(max, String(item[labelKey] ?? "").length), 0);
+}
+
+function horizontalChartHeight(rowCount: number): number {
+  return Math.max(260, rowCount * HORIZONTAL_BAR_ROW_HEIGHT + 72);
+}
+
+function CategoryAxisTick({
+  x,
+  y,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string };
+}) {
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fill="#64748b" fontSize={11}>
+      {truncateLabel(payload?.value)}
+    </text>
+  );
+}
+
+function RotatedCategoryAxisTick({
+  x,
+  y,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string };
+}) {
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={12}
+      dx={-4}
+      transform={`rotate(-35, ${x ?? 0}, ${y ?? 0})`}
+      textAnchor="end"
+      fill="#64748b"
+      fontSize={10}
+    >
+      {truncateLabel(payload?.value, 18)}
+    </text>
+  );
+}
 
 function isSelected(label: string, selectedLabel?: string | null): boolean {
   if (!selectedLabel) return false;
@@ -179,7 +236,13 @@ function RechartsAnalyticsChartInner({
   );
 
   const commonMargin = { top: 28, right: 12, left: 4, bottom: 56 };
-  const showLegend = Boolean(legendLabel) || kind === "stackedBar" || kind === "area" || kind === "combo";
+  const horizontalLeftMargin = Math.min(240, Math.max(108, longestLabel(items, labelKey) * 6.2));
+  const showLegend =
+    kind === "stackedBar" ||
+    kind === "combo" ||
+    (kind === "line" && Boolean(seriesKeys && seriesKeys.length > 1)) ||
+    (kind === "area" && Boolean(seriesKeys && seriesKeys.length > 1));
+  const chartHeight = kind === "horizontalBar" ? horizontalChartHeight(rows.length) : undefined;
 
   if (loading) {
     return (
@@ -195,13 +258,11 @@ function RechartsAnalyticsChartInner({
 
   const xAxisProps = {
     dataKey: "name" as const,
-    tick: AXIS_TICK,
-    angle: -35,
-    textAnchor: "end" as const,
-    height: 72,
+    tick: RotatedCategoryAxisTick,
+    height: 88,
     interval: 0,
     label: xAxisLabel
-      ? { value: xAxisLabel, position: "insideBottom" as const, offset: -48, style: { fontSize: 10, fill: "#64748b" } }
+      ? { value: xAxisLabel, position: "insideBottom" as const, offset: -52, style: { fontSize: 10, fill: "#64748b" } }
       : undefined,
   };
 
@@ -391,22 +452,45 @@ function RechartsAnalyticsChartInner({
     );
   } else if (kind === "horizontalBar") {
     chartNode = (
-      <BarChart data={rows} layout="vertical" margin={{ top: 28, right: 12, left: 8, bottom: 8 }} barCategoryGap="20%">
+      <BarChart
+        data={rows}
+        layout="vertical"
+        margin={{ top: 16, right: 16, left: 8, bottom: 16 }}
+        barCategoryGap="18%"
+      >
         <CartesianGrid stroke={GRID_STROKE} horizontal={false} />
         <XAxis type="number" tick={AXIS_TICK} tickFormatter={yAxisProps.tickFormatter} />
         <YAxis
           type="category"
           dataKey="name"
-          tick={{ ...AXIS_TICK, fontSize: 9 }}
-          width={120}
+          width={horizontalLeftMargin}
           interval={0}
+          tick={CategoryAxisTick}
         />
-        <Tooltip content={<ChartTooltip />} />
-        {showLegend ? <Legend formatter={renderLegendText} verticalAlign="top" /> : null}
+        <Tooltip
+          content={({ active, payload, label }) => {
+            if (!active || !payload?.length) return null;
+            const fullLabel = String(label ?? payload[0]?.payload?.name ?? "");
+            return (
+              <div className="recharts-analytics-tooltip">
+                <p className="recharts-analytics-tooltip__label">{fullLabel}</p>
+                {payload.map((entry) => (
+                  <p key={String(entry.name)} className="recharts-analytics-tooltip__row">
+                    <span className="recharts-analytics-tooltip__swatch" style={{ backgroundColor: entry.color }} />
+                    <span>
+                      {entry.name}: {formatTooltipValue(entry.value)}
+                    </span>
+                  </p>
+                ))}
+              </div>
+            );
+          }}
+        />
         <Bar
           dataKey={valueKey}
           name={legendLabel ?? seriesLabel(valueKey)}
           fill={ENTERPRISE_GREEN}
+          barSize={18}
           onClick={(_event: unknown, index: number) => handleBarClick(index)}
           style={{ cursor: onItemClick ? "pointer" : "default" }}
         >
@@ -414,7 +498,7 @@ function RechartsAnalyticsChartInner({
             const active = isSelected(entry.name, selectedLabel);
             return (
               <Cell
-                key={entry.name}
+                key={`${entry.name}-${i}`}
                 fill={BAR_COLORS[i % BAR_COLORS.length]}
                 stroke={active ? SELECTED_STROKE : "none"}
                 strokeWidth={active ? 2 : 0}
@@ -457,7 +541,12 @@ function RechartsAnalyticsChartInner({
   }
 
   return (
-    <div className="recharts-analytics-chart" role="img" aria-label={`${kind} analytics chart`}>
+    <div
+      className={`recharts-analytics-chart${kind === "horizontalBar" ? " recharts-analytics-chart--horizontal" : ""}`}
+      style={chartHeight ? { minHeight: chartHeight, height: chartHeight, aspectRatio: "unset" } : undefined}
+      role="img"
+      aria-label={`${kind} analytics chart`}
+    >
       <ResponsiveContainer width="100%" height="100%">
         {chartNode}
       </ResponsiveContainer>
