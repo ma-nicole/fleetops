@@ -196,27 +196,58 @@ def build_driver_role_analytics(
         exec_pred_duration = _empty_predict()
 
     fuel_completed = [t for t in completed if (t.distance_km or 0) > 0]
-    if fuel_completed:
-        avg_dist = sum(float(t.distance_km or 0) for t in fuel_completed) / len(fuel_completed)
-        truck = next((t.truck for t in fuel_completed if t.truck and t.truck.fuel_efficiency_kmpl), None)
-        pred_fuel = predict_fuel_consumption(
-            FuelPredictRequest(
-                distance_km=avg_dist,
-                cargo_weight_tons=5.0,
-                avg_speed_kmh=45,
-                road_condition="highway",
-                vehicle_fuel_efficiency_kmpl=float(truck.fuel_efficiency_kmpl) if truck else 4.0,
+    fuel_month_buckets: dict[str, float] = defaultdict(float)
+    for trip in completed:
+        ref = _activity_date(trip.completed_at)
+        if not ref:
+            continue
+        fuel_month_buckets[ref.strftime("%Y-%m")] += _trip_fuel(trip, ctx["fuel_by_trip"])
+    fuel_actuals = sorted(fuel_month_buckets.items())
+    fuel_series = _monthly_series(fuel_actuals, min_points=3)
+    fuel_forecast = _forecast_series(fuel_series, 3) if fuel_series is not None else None
+    if fuel_completed or fuel_actuals:
+        avg_dist = (
+            sum(float(t.distance_km or 0) for t in fuel_completed) / len(fuel_completed)
+            if fuel_completed
+            else None
+        )
+        truck = next((t.truck for t in fuel_completed if t.truck and t.truck.fuel_efficiency_kmpl), None) if fuel_completed else None
+        pred_fuel = (
+            predict_fuel_consumption(
+                FuelPredictRequest(
+                    distance_km=avg_dist,
+                    cargo_weight_tons=5.0,
+                    avg_speed_kmh=45,
+                    road_condition="highway",
+                    vehicle_fuel_efficiency_kmpl=float(truck.fuel_efficiency_kmpl) if truck else 4.0,
+                )
             )
+            if avg_dist is not None
+            else None
         )
         exec_pred_fuel = _block(
             kpis=[
-                {"label": "Sample distance (km)", "value": round(avg_dist, 1)},
-                {"label": "Predicted liters", "value": pred_fuel.fuel_liters},
-                {"label": "Predicted fuel cost (₱)", "value": pred_fuel.fuel_cost},
+                {"label": "Sample distance (km)", "value": round(avg_dist, 1) if avg_dist is not None else "—"},
+                {
+                    "label": "Predicted liters",
+                    "value": pred_fuel.fuel_liters if pred_fuel else (fuel_forecast[0]["value"] if fuel_forecast else "—"),
+                },
+                {
+                    "label": "Predicted fuel cost (₱)",
+                    "value": pred_fuel.fuel_cost if pred_fuel else (fuel_actuals[-1][1] if fuel_actuals else "—"),
+                },
             ],
-            chart=[],
+            chart=_combine_forecast_chart(
+                fuel_actuals,
+                fuel_forecast,
+                actual_key="actual_fuel_php",
+                forecast_key="forecast_fuel_php",
+            )
+            if fuel_actuals
+            else [],
             drilldown=completed_rows[:20],
-            note="Fuel model using your typical trip distance and assigned truck efficiency.",
+            statistics=compute_statistics([float(v) for _, v in fuel_actuals], min_samples=1) if fuel_actuals else None,
+            note="Historical fuel spend by month with forecast; sample liters from your typical trip profile.",
         )
     else:
         exec_pred_fuel = _empty_predict()

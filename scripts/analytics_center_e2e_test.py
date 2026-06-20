@@ -145,12 +145,20 @@ def main() -> int:
     role = payload.get("role_analytics") or {}
     planning = (role.get("planning") or {}).get("predictive") or {}
     cost_forecast = planning.get("cost_forecasting") or {}
+    fuel_prediction = planning.get("fuel_prediction") or {}
     if cost_forecast.get("empty"):
         fail("5c Manager predictive", "cost_forecasting still empty after seed")
     elif not cost_forecast.get("chart"):
         fail("5c Manager predictive", "cost_forecasting has no chart rows")
+    elif fuel_prediction.get("empty"):
+        fail("5c Manager predictive", "fuel_prediction still empty after seed")
+    elif not fuel_prediction.get("chart"):
+        fail("5c Manager predictive", "fuel_prediction has no chart rows")
     else:
-        ok("5c Manager predictive", f"cost_forecast_points={len(cost_forecast.get('chart') or [])}")
+        ok(
+            "5c Manager predictive",
+            f"cost={len(cost_forecast.get('chart') or [])} fuel={len(fuel_prediction.get('chart') or [])}",
+        )
 
     # ── Dispatcher subset ──
     r = client.get("/api/admin/analytics", headers=dispatcher_h)

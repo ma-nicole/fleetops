@@ -265,6 +265,20 @@ def _fuel_liters_rows(ctx: dict, f: AnalyticsFilters, limit: int = 50) -> list[d
     return rows[:limit]
 
 
+def _monthly_fuel_actuals(ctx: dict, f: AnalyticsFilters) -> list[tuple[str, float]]:
+    filtered_ids = {t.id for t in _filtered_trips(ctx, f) if t.completed_at}
+    buckets: dict[str, float] = defaultdict(float)
+    for trip in ctx["trips"]:
+        if trip.id not in filtered_ids:
+            continue
+        ref = _activity_date(trip.completed_at)
+        if not ref:
+            continue
+        month = ref.strftime("%Y-%m")
+        buckets[month] += _trip_fuel(trip, ctx["fuel_by_trip"])
+    return sorted(buckets.items())
+
+
 def _combine_forecast_chart(
     actuals: list[tuple[str, float]],
     forecast: list[dict[str, float | str]] | None,
@@ -764,46 +778,83 @@ def build_manager_role_analytics(
         m = t.completed_at.strftime("%Y-%m")
         cost_month_buckets[m] += float((t.fuel_cost or 0) + (t.toll_cost or 0) + (t.labor_cost or 0))
     cost_actuals = sorted(cost_month_buckets.items())
+    cost_forecast_points = [{"period": p.period, "value": p.value} for p in cost_forecast_resp.points]
+    if not cost_forecast_points and cost_actuals:
+        cost_series = _monthly_series(cost_actuals, min_points=3)
+        cost_forecast_points = _forecast_series(cost_series, 3) if cost_series is not None else []
     planning_pred_cost = (
-        {"empty": True, "message": "Insufficient data.", "chart": [], "drilldown": []}
-        if not cost_forecast_resp.points
+        _empty("Insufficient data.")
+        if not cost_actuals and not cost_forecast_points
         else _block(
-            kpis=[{"label": "Next horizon", "value": cost_forecast_resp.points[0].period if cost_forecast_resp.points else "—"}],
+            kpis=[
+                {
+                    "label": "Next horizon",
+                    "value": cost_forecast_points[0]["period"] if cost_forecast_points else "—",
+                }
+            ],
             chart=_combine_forecast_chart(
                 cost_actuals,
-                [{"period": p.period, "value": p.value} for p in cost_forecast_resp.points],
+                cost_forecast_points or None,
                 actual_key="actual_cost_php",
                 forecast_key="forecast_cost_php",
             ),
             drilldown=[],
+            statistics=compute_statistics([float(v) for _, v in cost_actuals], min_samples=1) if cost_actuals else None,
             note="Forecast from completed trip cost time series (Holt-Winters).",
         )
     )
 
-    # Fuel prediction sample from fleet avg trip profile
+    fuel_actuals = _monthly_fuel_actuals(ctx, f)
+    fuel_series = _monthly_series(fuel_actuals, min_points=3)
+    fuel_forecast = _forecast_series(fuel_series, 3) if fuel_series is not None else None
     completed = [t for t in _filtered_trips(ctx, f) if t.status == TripStatus.COMPLETED and (t.distance_km or 0) > 0]
-    if completed:
-        avg_dist = sum(float(t.distance_km or 0) for t in completed) / len(completed)
+    if fuel_actuals or completed:
+        avg_dist = (
+            sum(float(t.distance_km or 0) for t in completed) / len(completed)
+            if completed
+            else None
+        )
         avg_load = 5.0
-        sample_truck = next((t.truck for t in completed if t.truck and t.truck.fuel_efficiency_kmpl), None)
-        pred = predict_fuel_consumption(
-            FuelPredictRequest(
-                distance_km=avg_dist,
-                cargo_weight_tons=avg_load,
-                avg_speed_kmh=45,
-                road_condition="highway",
-                vehicle_fuel_efficiency_kmpl=float(sample_truck.fuel_efficiency_kmpl) if sample_truck else 4.0,
+        sample_truck = next((t.truck for t in completed if t.truck and t.truck.fuel_efficiency_kmpl), None) if completed else None
+        pred = (
+            predict_fuel_consumption(
+                FuelPredictRequest(
+                    distance_km=avg_dist,
+                    cargo_weight_tons=avg_load,
+                    avg_speed_kmh=45,
+                    road_condition="highway",
+                    vehicle_fuel_efficiency_kmpl=float(sample_truck.fuel_efficiency_kmpl) if sample_truck else 4.0,
+                )
             )
+            if avg_dist is not None
+            else None
+        )
+        fuel_chart = (
+            _combine_forecast_chart(
+                fuel_actuals,
+                fuel_forecast,
+                actual_key="actual_fuel_php",
+                forecast_key="forecast_fuel_php",
+            )
+            if fuel_actuals
+            else []
         )
         planning_pred_fuel = _block(
             kpis=[
-                {"label": "Sample distance (km)", "value": round(avg_dist, 1)},
-                {"label": "Predicted liters", "value": round(pred.fuel_liters, 2)},
-                {"label": "Predicted fuel cost (₱)", "value": round(pred.fuel_cost, 2)},
+                {"label": "Sample distance (km)", "value": round(avg_dist, 1) if avg_dist is not None else "—"},
+                {
+                    "label": "Predicted liters",
+                    "value": round(pred.fuel_liters, 2) if pred else (fuel_forecast[0]["value"] if fuel_forecast else "—"),
+                },
+                {
+                    "label": "Predicted fuel cost (₱)",
+                    "value": round(pred.fuel_cost, 2) if pred else (fuel_actuals[-1][1] if fuel_actuals else "—"),
+                },
             ],
-            chart=[],
-            drilldown=[],
-            note="Rule-based fuel model using fleet average trip distance.",
+            chart=fuel_chart,
+            drilldown=fuel_rows[:50],
+            statistics=compute_statistics([float(v) for _, v in fuel_actuals], min_samples=1) if fuel_actuals else None,
+            note="Historical fuel spend by month with Holt-Winters forecast; sample liters from fleet average trip profile.",
         )
     else:
         planning_pred_fuel = _empty("Insufficient data.")
@@ -895,7 +946,10 @@ def build_manager_role_analytics(
             {"label": "Available trucks", "value": available_trucks},
             {"label": "Capacity gap", "value": max(0, pending_bookings - available_trucks)},
         ],
-        chart=[],
+        chart=[
+            {"category": "Pending assignments", "count": pending_bookings},
+            {"category": "Available trucks", "count": available_trucks},
+        ],
         drilldown=[],
         note="Use Job assignment module for full recommend-assignment scoring.",
     )
@@ -1027,6 +1081,11 @@ def build_manager_role_analytics(
     total_ship = int(ship_summary.get("total_shipments") or 0) if not shipments.get("empty") else 0
     delayed = int(ship_summary.get("delayed") or 0) if not shipments.get("empty") else 0
     delay_rate = round((delayed / total_ship) * 100, 1) if total_ship else None
+    delay_month: dict[str, int] = defaultdict(int)
+    for row in delay_candidates:
+        if row.get("date") and row["date"] != "—":
+            delay_month[str(row["date"])[:7]] += 1
+    delay_chart = [{"period": m, "delay_count": c} for m, c in sorted(delay_month.items())[-12:]]
     execution_pred_delay = (
         _empty("Insufficient data.")
         if not delay_candidates and delay_rate is None
@@ -1035,8 +1094,9 @@ def build_manager_role_analytics(
                 {"label": "At-risk / delayed trips", "value": len(delay_candidates)},
                 {"label": "Historical delay rate %", "value": delay_rate if delay_rate is not None else "Insufficient data"},
             ],
-            chart=[],
+            chart=delay_chart or [{"status": "at_risk", "delay_count": len(delay_candidates)}],
             drilldown=delay_candidates[:50],
+            statistics=compute_statistics([float(c) for c in delay_month.values()], min_samples=1) if delay_month else None,
             note="Delay signals from ETA breach and operational delay logs.",
         )
     )
@@ -1157,8 +1217,12 @@ def build_manager_role_analytics(
                 {"label": "Trips with variance", "value": len(overrun_rows)},
                 {"label": "Avg variance (₱)", "value": avg_overrun},
             ],
-            chart=[],
+            chart=[
+                {"status": r["status"], "variance_php": r["variance_php"], "route": r["route"]}
+                for r in sorted(overrun_rows, key=lambda x: abs(float(x["variance_php"])), reverse=True)[:12]
+            ],
             drilldown=overrun_rows[:50],
+            statistics=compute_statistics([abs(float(r["variance_php"])) for r in overrun_rows], min_samples=1),
             note="Predicted vs actual cost on completed trips with stored predictions.",
         )
     )
