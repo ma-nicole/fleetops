@@ -14,6 +14,8 @@ import {
   type AdminAnalyticsPayload,
 } from "@/lib/analyticsApi";
 import { ApiError } from "@/lib/api";
+import { TimeGranularityPicker } from "@/components/admin/TimeGranularityPicker";
+import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
 export default function DispatcherAnalyticsDashboard() {
   const router = useRouter();
@@ -21,31 +23,36 @@ export default function DispatcherAnalyticsDashboard() {
   const [data, setData] = useState<AdminAnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [driverId, setDriverId] = useState("");
-  const [truckId, setTruckId] = useState("");
-  const [route, setRoute] = useState("");
-  const [shipmentStatus, setShipmentStatus] = useState("");
+  const {
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    driverId,
+    setDriverId,
+    truckId,
+    setTruckId,
+    route,
+    setRoute,
+    shipmentStatus,
+    setShipmentStatus,
+    granularity,
+    setGranularity,
+    dateRangeError,
+    buildAdminQuery,
+  } = useAnalyticsPageFilters();
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      setError("Start date cannot be after end date.");
+    if (dateRangeError) {
+      setError(dateRangeError);
       setLoading(false);
       return;
     }
     try {
-      const payload = await AnalyticsApi.adminAnalytics({
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        driver_id: driverId ? Number(driverId) : undefined,
-        truck_id: truckId ? Number(truckId) : undefined,
-        route: route || undefined,
-        shipment_status: shipmentStatus || undefined,
-      });
+      const payload = await AnalyticsApi.adminAnalytics(buildAdminQuery());
       if (seq !== loadSeqRef.current) return;
       setData(payload);
     } catch (e) {
@@ -61,7 +68,7 @@ export default function DispatcherAnalyticsDashboard() {
         setLoading(false);
       }
     }
-  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus, router]);
+  }, [dateRangeError, buildAdminQuery, router]);
 
   useEffect(() => {
     void load();
@@ -131,6 +138,7 @@ export default function DispatcherAnalyticsDashboard() {
             </select>
           </label>
         </div>
+        <TimeGranularityPicker value={granularity} onChange={setGranularity} />
       </section>
 
       {loading && (

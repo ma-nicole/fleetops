@@ -32,6 +32,7 @@ from app.services.analytics_stats import compute_statistics
 from app.services.manager_role_analytics import (
     _block,
     _empty,
+    _combine_forecast_chart,
     _empty_predict,
     _forecast_series,
     _is_breakdown_issue,
@@ -351,10 +352,8 @@ def build_driver_role_analytics(
         ref = _activity_date(t.completed_at)
         if h is not None and ref:
             month_completion[ref.strftime("%Y-%m")].append(h)
-    completion_series = _monthly_series(
-        [(m, sum(v) / len(v)) for m, v in sorted(month_completion.items())],
-        min_points=2,
-    )
+    completion_actuals = [(m, sum(v) / len(v)) for m, v in sorted(month_completion.items())]
+    completion_series = _monthly_series(completion_actuals, min_points=2)
     completion_forecast = _forecast_series(completion_series, 3) if completion_series is not None else None
     report_pred_completion = (
         _empty_predict()
@@ -367,7 +366,12 @@ def build_driver_role_analytics(
                 },
                 {"label": "Next period est. (hrs)", "value": completion_forecast[0]["value"]},
             ],
-            chart=[{"period": p["period"], "forecast_hours": p["value"]} for p in completion_forecast],
+            chart=_combine_forecast_chart(
+                completion_actuals,
+                completion_forecast,
+                actual_key="actual_hours",
+                forecast_key="forecast_hours",
+            ),
             drilldown=completed_rows[:30],
             note="Monthly average completion duration trend from your completed trips.",
         )

@@ -176,9 +176,16 @@ def customer_analytics(
     truck_id: int | None = Query(default=None),
     route: str | None = Query(default=None),
     shipment_status: str | None = Query(default=None),
+    granularity: str | None = Query(default="monthly"),
 ):
+    from app.services.time_bucket import GRANULARITY_OPTIONS
+
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+    valid_gran = set(GRANULARITY_OPTIONS)
+    gran = (granularity or "monthly").strip().lower()
+    if gran not in valid_gran:
+        raise HTTPException(status_code=400, detail=f"Invalid granularity. Use one of: {', '.join(sorted(valid_gran))}")
 
     filters = AnalyticsFilters(
         date_from=date_from,
@@ -186,6 +193,7 @@ def customer_analytics(
         truck_id=truck_id,
         route=route.strip() if route else None,
         shipment_status=shipment_status.strip().lower() if shipment_status else None,
+        granularity=gran,  # type: ignore[arg-type]
     )
     return {
         "generated_at": datetime.utcnow().isoformat(),
@@ -195,6 +203,11 @@ def customer_analytics(
             "truck_id": filters.truck_id,
             "route": filters.route,
             "shipment_status": filters.shipment_status,
+            "granularity": filters.granularity,
+        },
+        "filter_options": {
+            "granularity": filters.granularity,
+            "granularity_options": list(GRANULARITY_OPTIONS),
         },
         "customer_role_analytics": build_customer_role_analytics(db, filters, customer=user),
     }

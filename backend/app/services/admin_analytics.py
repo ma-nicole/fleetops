@@ -5,7 +5,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import inspect
@@ -30,6 +30,15 @@ from app.models.entities import (
 )
 from app.services.admin_analytics_validation import validate_admin_analytics
 from app.services.analytics_stats import compute_statistics, empty_module
+from app.services.time_bucket import (
+    GRANULARITY_OPTIONS,
+    add_to_count,
+    period_chart_row,
+    period_key,
+    rollup_count_series,
+    rollup_nested_series,
+    sort_period_keys,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +79,7 @@ class AnalyticsFilters:
     truck_id: int | None = None
     route: str | None = None
     shipment_status: str | None = None
+    granularity: Literal["daily", "weekly", "monthly", "quarterly", "yearly"] = "monthly"
 
 
 def _status_str(val) -> str:
@@ -86,6 +96,10 @@ def _activity_month(dt: datetime | date | None) -> str | None:
     if isinstance(dt, datetime):
         return dt.strftime("%Y-%m")
     return dt.strftime("%Y-%m")
+
+
+def _time_period(dt: datetime | date | None, f: AnalyticsFilters) -> str | None:
+    return period_key(dt, f.granularity)
 
 
 def _activity_date(dt: datetime | date | None) -> date | None:
@@ -339,11 +353,11 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
         if f.shipment_status and cat != f.shipment_status:
             continue
         status_counts[cat] += 1
-        month = _activity_month(booking.scheduled_date)
-        if month:
-            monthly_jobs[month] += 1
-        if cat == "delivered" and month:
-            monthly[month] += 1
+        period = _time_period(booking.scheduled_date, f)
+        if period:
+            add_to_count(monthly_jobs, booking.scheduled_date, f.granularity)
+        if cat == "delivered" and period:
+            add_to_count(monthly, booking.scheduled_date, f.granularity)
         if trip:
             hrs = _delivery_hours(trip)
             if hrs is not None and cat == "delivered":
@@ -370,7 +384,7 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
                 "status": _status_str(booking.status),
                 "delivery_status": cat,
                 "delivery_date": delivery_date,
-                "scheduled_month": month,
+                "scheduled_month": period or _activity_month(booking.scheduled_date),
                 "delay_reason": _trip_delay_reason(trip, ctx["delay_logs"]) if trip else None,
                 "revenue_php": round(revenue_php, 2),
                 "expense_php": round(expense_php, 2),
@@ -408,8 +422,8 @@ def build_shipment_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
         "status_distribution": [
             {"status": k, "count": v} for k, v in sorted(status_counts.items(), key=lambda x: -x[1])
         ],
-        "monthly_deliveries": [{"month": m, "count": c} for m, c in sorted(monthly.items())][-12:],
-        "jobs_over_time": [{"month": m, "count": c} for m, c in sorted(monthly_jobs.items())][-12:],
+        "monthly_deliveries": rollup_count_series(monthly, f.granularity),
+        "jobs_over_time": rollup_count_series(monthly_jobs, f.granularity),
         "drilldown": rows,
     }
 
@@ -748,10 +762,17 @@ def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     monthly: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
 
     trip_by_id = {t.id: t for t in ctx["trips"]}
+    gran = f.granularity
     for rec in records:
         amt = float(rec["amount_php"])
-        month = rec["expense_date"][:7]
-        monthly[month][rec["category"]] += amt
+        try:
+            expense_dt = date.fromisoformat(str(rec["expense_date"])[:10])
+        except ValueError:
+            continue
+        period = period_key(expense_dt, gran)
+        if not period:
+            continue
+        monthly[period][rec["category"]] += amt
         if rec["category"] == "fuel":
             fuel_values.append(amt)
             if rec.get("truck_id"):
@@ -770,21 +791,21 @@ def build_expense_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     ]
 
     monthly_trend = []
-    for month in sorted(monthly.keys())[-12:]:
-        bucket = monthly[month]
+    for period in sort_period_keys(list(monthly.keys()), gran)[-24:]:
+        bucket = monthly[period]
         fuel_m = bucket.get("fuel", 0)
         toll_m = bucket.get("toll", 0)
         maint_m = bucket.get("maintenance", 0)
         allow_m = bucket.get("driver_allowance", 0) + bucket.get("helper_allowance", 0)
         monthly_trend.append(
-            {
-                "month": month,
-                "fuel": round(fuel_m, 2),
-                "toll": round(toll_m, 2),
-                "maintenance": round(maint_m, 2),
-                "allowance": round(allow_m, 2),
-                "total": round(fuel_m + toll_m + maint_m + allow_m, 2),
-            }
+            period_chart_row(
+                period,
+                fuel=round(fuel_m, 2),
+                toll=round(toll_m, 2),
+                maintenance=round(maint_m, 2),
+                allowance=round(allow_m, 2),
+                total=round(fuel_m + toll_m + maint_m + allow_m, 2),
+            )
         )
 
     context_year = _expense_context_year(records, f)
@@ -1074,14 +1095,16 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     client_rev: dict[int, float] = defaultdict(float)
     route_profit: dict[str, float] = defaultdict(float)
     rev_values: list[float] = []
+    gran = f.granularity
 
     revenue_rows = _verified_revenue_rows(ctx, f)
     undated_rev = 0.0
     for pay, booking, _trip in revenue_rows:
         amt = float(pay.amount or 0)
-        month = _activity_month(pay.paid_at or pay.created_at)
-        if month:
-            monthly_rev[month] += amt
+        paid_dt = pay.paid_at or pay.created_at
+        period = period_key(paid_dt, gran) if paid_dt else None
+        if period:
+            monthly_rev[period] += amt
         else:
             undated_rev += amt
         rev_values.append(amt)
@@ -1094,7 +1117,9 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     if not expense_summary.get("empty"):
         total_exp = float(expense_summary["summary"]["total_operational_cost_php"])
         for row in expense_summary.get("monthly_totals") or []:
-            monthly_exp[row["month"]] = float(row["total"])
+            period = row.get("period") or row.get("month")
+            if period:
+                monthly_exp[period] = float(row["total"])
 
     if not rev_values:
         return empty_module()
@@ -1102,12 +1127,19 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
     total_rev = round(sum(rev_values), 2)
     total_exp = round(total_exp, 2)
 
-    months = sorted(set(monthly_rev.keys()) | set(monthly_exp.keys()))[-12:]
+    periods = sort_period_keys(list(set(monthly_rev.keys()) | set(monthly_exp.keys())), gran)[-24:]
     trend = []
-    for m in months:
-        rev = round(monthly_rev.get(m, 0), 2)
-        exp = round(monthly_exp.get(m, 0), 2)
-        trend.append({"month": m, "revenue_php": rev, "expense_php": exp, "profit_php": round(rev - exp, 2)})
+    for p in periods:
+        rev = round(monthly_rev.get(p, 0), 2)
+        exp = round(monthly_exp.get(p, 0), 2)
+        trend.append(
+            period_chart_row(
+                p,
+                revenue_php=rev,
+                expense_php=exp,
+                profit_php=round(rev - exp, 2),
+            )
+        )
 
     top_routes = sorted(route_profit.items(), key=lambda x: -x[1])[:5]
 
@@ -1195,7 +1227,7 @@ def build_financial_analytics(ctx: dict, f: AnalyticsFilters) -> dict[str, Any]:
         "statistics": compute_statistics(rev_values, min_samples=1),
         "revenue_trend": trend,
         "revenue_vs_expense": trend,
-        "profit_trend": [{"month": t["month"], "profit_php": t["profit_php"]} for t in trend],
+        "profit_trend": [{"period": t["period"], "month": t.get("month"), "profit_php": t["profit_php"]} for t in trend],
         "category_summary": [
             {"category": "revenue", "label": "Revenue", "amount_php": total_rev},
             {"category": "expenses", "label": "Expenses", "amount_php": total_exp},
@@ -1290,6 +1322,8 @@ def build_admin_analytics(
         "clients": [{"id": c.id, "name": (c.full_name or c.email)} for c in ctx["customers"]],
         "routes": sorted({_route_key(b.pickup_location, b.dropoff_location) for b in ctx["bookings"]}),
         "shipment_statuses": ["delivered", "delayed", "cancelled", "in_transit", "pending"],
+        "granularity": filters.granularity,
+        "granularity_options": list(GRANULARITY_OPTIONS),
     }
 
     expenses = build_expense_analytics(ctx, filters)
@@ -1307,6 +1341,7 @@ def build_admin_analytics(
             "truck_id": filters.truck_id,
             "route": filters.route,
             "shipment_status": filters.shipment_status,
+            "granularity": filters.granularity,
         },
         "filter_options": filter_options,
         "shipments": shipments,
@@ -1386,5 +1421,5 @@ def build_admin_analytics(
         "expenses": build_section_percentages(expenses, "expenses"),
         "financial": build_section_percentages(payload["financial"], "financial") if payload.get("financial") else None,
     }
-    payload["toll_analytics"] = build_toll_analytics(db)
+    payload["toll_analytics"] = build_toll_analytics(db, granularity=filters.granularity)
     return payload

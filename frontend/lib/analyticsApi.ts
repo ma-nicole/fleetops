@@ -328,6 +328,8 @@ export type DriverAnalyticsPayload = {
     trucks: { id: number; code: string }[];
     routes: string[];
     shipment_statuses: string[];
+    granularity?: TimeGranularity;
+    granularity_options?: TimeGranularity[];
   };
   driver_role_analytics: DriverRoleAnalyticsPayload;
 };
@@ -338,12 +340,15 @@ export type CustomerAnalyticsPayload = {
   customer_role_analytics: CustomerRoleAnalyticsPayload;
 };
 
+export type TimeGranularity = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
+
 export type DriverAnalyticsQuery = {
   date_from?: string;
   date_to?: string;
   truck_id?: number;
   route?: string;
   shipment_status?: string;
+  granularity?: TimeGranularity;
 };
 
 export type ExpenseInterpretationRequest = {
@@ -399,9 +404,9 @@ export type ComparativeComparison = {
 
 export type ComparativeMetric = {
   value_format: "php" | "count";
-  granularity_options: ("weekly" | "monthly" | "quarterly" | "yearly")[];
-  series: Partial<Record<"weekly" | "monthly" | "quarterly" | "yearly", ComparativePoint[]>>;
-  comparisons: Partial<Record<"weekly" | "monthly" | "quarterly" | "yearly", ComparativeComparison[]>>;
+  granularity_options: TimeGranularity[];
+  series: Partial<Record<TimeGranularity, ComparativePoint[]>>;
+  comparisons: Partial<Record<TimeGranularity, ComparativeComparison[]>>;
 };
 
 export type ComparativeAnalytics = {
@@ -432,13 +437,15 @@ export type AdminAnalyticsPayload = {
     clients?: { id: number; name: string }[];
     routes: string[];
     shipment_statuses: string[];
+    granularity?: TimeGranularity;
+    granularity_options?: TimeGranularity[];
   };
   shipments: AdminAnalyticsEmpty | {
     summary: Record<string, number | null>;
     statistics: StatisticsSummary | null;
     status_distribution: { status: string; count: number }[];
-    monthly_deliveries: { month: string; count: number }[];
-    jobs_over_time?: { month: string; count: number }[];
+    monthly_deliveries: { period?: string; month?: string; count: number }[];
+    jobs_over_time?: { period?: string; month?: string; count: number }[];
     drilldown: Record<string, unknown>[];
   };
   expenses: AdminAnalyticsEmpty | {
@@ -447,7 +454,7 @@ export type AdminAnalyticsPayload = {
     fuel_by_truck: { truck_id: number; truck_code: string; fuel_php: number }[];
     fuel_by_route: { route: string; fuel_php: number }[];
     expense_breakdown: { key: string; label: string; amount_php: number }[];
-    monthly_totals: { month: string; total: number; fuel: number; toll: number; maintenance: number; allowance: number }[];
+    monthly_totals: { period?: string; month?: string; total: number; fuel: number; toll: number; maintenance: number; allowance: number }[];
     drilldown: {
       context_year: number;
       categories: { key: string; label: string }[];
@@ -488,9 +495,9 @@ export type AdminAnalyticsPayload = {
   financial: AdminAnalyticsEmpty | {
     summary: Record<string, string | number | null>;
     statistics: StatisticsSummary | null;
-    revenue_trend: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
-    revenue_vs_expense: { month: string; revenue_php: number; expense_php: number; profit_php: number }[];
-    profit_trend: { month: string; profit_php: number }[];
+    revenue_trend: { period?: string; month?: string; revenue_php: number; expense_php?: number; profit_php?: number }[];
+    revenue_vs_expense: { period?: string; month?: string; revenue_php: number; expense_php: number; profit_php: number }[];
+    profit_trend: { period?: string; month?: string; profit_php: number }[];
     category_summary?: { category: string; label: string; amount_php: number }[];
     revenue_per_client: Record<string, unknown>[];
     drilldown?: Record<string, unknown>[];
@@ -527,7 +534,8 @@ export type AdminAnalyticsPayload = {
     statistics: StatisticsSummary | null;
     most_expensive_routes: { route: string; actual_toll_php: number }[];
     route_trends: {
-      month: string;
+      period?: string;
+      month?: string;
       estimated_toll_php: number;
       actual_toll_php: number;
       variance_php: number;
@@ -556,6 +564,7 @@ export type AdminAnalyticsQuery = {
   truck_id?: number;
   route?: string;
   shipment_status?: string;
+  granularity?: TimeGranularity;
 };
 
 export function isAnalyticsModuleEmpty(mod: unknown): boolean {
@@ -649,6 +658,7 @@ export const AnalyticsApi = {
     if (query.truck_id != null) params.set("truck_id", String(query.truck_id));
     if (query.route) params.set("route", query.route);
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
+    if (query.granularity) params.set("granularity", query.granularity);
     const qs = params.toString();
     return apiGet<AdminAnalyticsPayload>(`/admin/analytics${qs ? `?${qs}` : ""}`);
   },
@@ -659,6 +669,7 @@ export const AnalyticsApi = {
     if (query.truck_id != null) params.set("truck_id", String(query.truck_id));
     if (query.route) params.set("route", query.route);
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
+    if (query.granularity) params.set("granularity", query.granularity);
     const qs = params.toString();
     return apiGet<DriverAnalyticsPayload>(`/driver/analytics${qs ? `?${qs}` : ""}`);
   },
@@ -669,6 +680,7 @@ export const AnalyticsApi = {
     if (query.truck_id != null) params.set("truck_id", String(query.truck_id));
     if (query.route) params.set("route", query.route);
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
+    if (query.granularity) params.set("granularity", query.granularity);
     const qs = params.toString();
     return apiGet<CustomerAnalyticsPayload>(`/customer/analytics${qs ? `?${qs}` : ""}`);
   },

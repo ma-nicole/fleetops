@@ -4,6 +4,12 @@ import { useMemo, useState } from "react";
 import { BiChartWidget } from "@/components/admin/BiChartWidget";
 import { EmptyChart } from "@/components/admin/AnalyticsCharts";
 import type { AdminAnalyticsPayload, RoleAnalyticsFeatureBlock, RoleAnalyticsPillar } from "@/lib/analyticsApi";
+import {
+  inferAnalyticsMethod,
+  inferAnalyticsType,
+  inferPreferredChartKind,
+  type AnalyticsChartKind,
+} from "@/lib/analyticsChartConfig";
 
 export type CategoryInclude = {
   pillar: string;
@@ -22,8 +28,26 @@ type WidgetDef = {
   block: RoleAnalyticsFeatureBlock;
   analyticsType: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
   analyticsMethod: string;
-  preferredChartKind?: "bar" | "line" | "pie";
+  preferredChartKind?: AnalyticsChartKind;
 };
+
+function buildWidget(
+  id: string,
+  title: string,
+  source: "descriptive" | "predictive",
+  featureKey: string,
+  block: RoleAnalyticsFeatureBlock,
+): WidgetDef {
+  const analyticsType = inferAnalyticsType(source, featureKey);
+  return {
+    id,
+    title,
+    block,
+    analyticsType,
+    analyticsMethod: inferAnalyticsMethod(featureKey, analyticsType),
+    preferredChartKind: inferPreferredChartKind(featureKey),
+  };
+}
 
 function flattenCategory(
   data: Record<string, RoleAnalyticsPillar>,
@@ -31,69 +55,15 @@ function flattenCategory(
   featureLabels: Record<string, Record<string, string>>,
 ): WidgetDef[] {
   const out: WidgetDef[] = [];
-  const inferType = (
-    source: "descriptive" | "predictive",
-    featureKey: string,
-  ): "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive" => {
-    const key = featureKey.toLowerCase();
-    if (source === "predictive") {
-      if (key.includes("optimal") || key.includes("allocation") || key.includes("recommend")) return "Prescriptive";
-      return "Predictive";
-    }
-    if (
-      key.includes("risk") ||
-      key.includes("variance") ||
-      key.includes("overrun") ||
-      key.includes("fluctuation") ||
-      key.includes("issue") ||
-      key.includes("breakdown")
-    ) {
-      return "Diagnostic";
-    }
-    return "Descriptive";
-  };
-  const inferMethod = (featureKey: string, analyticsType: WidgetDef["analyticsType"]): string => {
-    const key = featureKey.toLowerCase();
-    if (analyticsType === "Predictive") return "Time-series / predictive modeling";
-    if (analyticsType === "Prescriptive") return "Optimization / recommendation modeling";
-    if (key.includes("trend") || key.includes("history")) return "Trend and historical analysis";
-    if (key.includes("distribution")) return "Distribution analysis";
-    if (key.includes("ranking")) return "Ranking analysis";
-    if (key.includes("risk")) return "Risk pattern analysis";
-    return "Comparative aggregation";
-  };
-  const inferPreferredChartKind = (featureKey: string): WidgetDef["preferredChartKind"] => {
-    const key = featureKey.toLowerCase();
-    if (
-      key.includes("trend") ||
-      key.includes("history") ||
-      key.includes("forecast") ||
-      key.includes("over_time") ||
-      key.includes("monthly") ||
-      key.includes("timeline")
-    ) {
-      return "line";
-    }
-    if (key.includes("distribution") || key.includes("share") || key.includes("composition") || key.includes("status")) {
-      return "pie";
-    }
-    return "bar";
-  };
   for (const inc of category.include) {
     const pillar = data[inc.pillar];
     if (!pillar) continue;
     const labels = featureLabels[inc.pillar] ?? {};
     const addBlock = (type: "descriptive" | "predictive", key: string, block: RoleAnalyticsFeatureBlock) => {
       if (inc.features && !inc.features.includes(key)) return;
-      const analyticsType = inferType(type, key);
-      out.push({
-        id: `${inc.pillar}-${type}-${key}`,
-        title: labels[key] ?? key,
-        block,
-        analyticsType,
-        analyticsMethod: inferMethod(key, analyticsType),
-        preferredChartKind: inferPreferredChartKind(key),
-      });
+      out.push(
+        buildWidget(`${inc.pillar}-${type}-${key}`, labels[key] ?? key, type, key, block),
+      );
     };
     for (const [key, block] of Object.entries(pillar.descriptive)) {
       addBlock("descriptive", key, block);
@@ -107,75 +77,11 @@ function flattenCategory(
 
 function flattenPillar(pillarKey: string, pillar: RoleAnalyticsPillar, labels: Record<string, string>): WidgetDef[] {
   const out: WidgetDef[] = [];
-  const inferType = (
-    source: "descriptive" | "predictive",
-    featureKey: string,
-  ): "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive" => {
-    const key = featureKey.toLowerCase();
-    if (source === "predictive") {
-      if (key.includes("optimal") || key.includes("allocation") || key.includes("recommend")) return "Prescriptive";
-      return "Predictive";
-    }
-    if (
-      key.includes("risk") ||
-      key.includes("variance") ||
-      key.includes("overrun") ||
-      key.includes("fluctuation") ||
-      key.includes("issue") ||
-      key.includes("breakdown")
-    ) {
-      return "Diagnostic";
-    }
-    return "Descriptive";
-  };
-  const inferMethod = (featureKey: string, analyticsType: WidgetDef["analyticsType"]): string => {
-    const key = featureKey.toLowerCase();
-    if (analyticsType === "Predictive") return "Time-series / predictive modeling";
-    if (analyticsType === "Prescriptive") return "Optimization / recommendation modeling";
-    if (key.includes("trend") || key.includes("history")) return "Trend and historical analysis";
-    if (key.includes("distribution")) return "Distribution analysis";
-    if (key.includes("ranking")) return "Ranking analysis";
-    if (key.includes("risk")) return "Risk pattern analysis";
-    return "Comparative aggregation";
-  };
-  const inferPreferredChartKind = (featureKey: string): WidgetDef["preferredChartKind"] => {
-    const key = featureKey.toLowerCase();
-    if (
-      key.includes("trend") ||
-      key.includes("history") ||
-      key.includes("forecast") ||
-      key.includes("over_time") ||
-      key.includes("monthly") ||
-      key.includes("timeline")
-    ) {
-      return "line";
-    }
-    if (key.includes("distribution") || key.includes("share") || key.includes("composition") || key.includes("status")) {
-      return "pie";
-    }
-    return "bar";
-  };
   for (const [key, block] of Object.entries(pillar.descriptive)) {
-    const analyticsType = inferType("descriptive", key);
-    out.push({
-      id: `${pillarKey}-desc-${key}`,
-      title: labels[key] ?? key,
-      block,
-      analyticsType,
-      analyticsMethod: inferMethod(key, analyticsType),
-      preferredChartKind: inferPreferredChartKind(key),
-    });
+    out.push(buildWidget(`${pillarKey}-desc-${key}`, labels[key] ?? key, "descriptive", key, block));
   }
   for (const [key, block] of Object.entries(pillar.predictive)) {
-    const analyticsType = inferType("predictive", key);
-    out.push({
-      id: `${pillarKey}-pred-${key}`,
-      title: labels[key] ?? key,
-      block,
-      analyticsType,
-      analyticsMethod: inferMethod(key, analyticsType),
-      preferredChartKind: inferPreferredChartKind(key),
-    });
+    out.push(buildWidget(`${pillarKey}-pred-${key}`, labels[key] ?? key, "predictive", key, block));
   }
   return out;
 }

@@ -73,9 +73,14 @@ def _parse_filters(
     truck_id: int | None,
     route: str | None,
     shipment_status: str | None,
+    granularity: str | None = None,
 ) -> AnalyticsFilters:
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+    valid_gran = {"daily", "weekly", "monthly", "quarterly", "yearly"}
+    gran = (granularity or "monthly").strip().lower()
+    if gran not in valid_gran:
+        raise HTTPException(status_code=400, detail=f"Invalid granularity. Use one of: {', '.join(sorted(valid_gran))}")
     return AnalyticsFilters(
         date_from=date_from,
         date_to=date_to,
@@ -83,6 +88,7 @@ def _parse_filters(
         truck_id=truck_id,
         route=route.strip() if route else None,
         shipment_status=shipment_status.strip().lower() if shipment_status else None,
+        granularity=gran,  # type: ignore[arg-type]
     )
 
 
@@ -96,9 +102,10 @@ def admin_analytics_dashboard(
     truck_id: int | None = Query(default=None),
     route: str | None = Query(default=None),
     shipment_status: str | None = Query(default=None),
+    granularity: str | None = Query(default="monthly"),
 ):
     """Company-wide analytics for admin/manager; operational subset for dispatcher."""
-    filters = _parse_filters(date_from, date_to, driver_id, truck_id, route, shipment_status)
+    filters = _parse_filters(date_from, date_to, driver_id, truck_id, route, shipment_status, granularity)
 
     try:
         if user.role == UserRole.DISPATCHER:
@@ -141,9 +148,10 @@ def dispatcher_operational_analytics(
     truck_id: int | None = Query(default=None),
     route: str | None = Query(default=None),
     shipment_status: str | None = Query(default=None),
+    granularity: str | None = Query(default="monthly"),
 ):
     """Operational analytics without revenue, profit, or client contribution."""
-    filters = _parse_filters(date_from, date_to, driver_id, truck_id, route, shipment_status)
+    filters = _parse_filters(date_from, date_to, driver_id, truck_id, route, shipment_status, granularity)
     return build_admin_analytics(
         db,
         filters=filters,

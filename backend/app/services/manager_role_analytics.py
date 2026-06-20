@@ -75,15 +75,26 @@ def _block(
             return []
 
         # 1) Status/category frequency chart.
-        for key in ("status", "category", "severity", "issue_type"):
+        for key in (
+            "issue_type",
+            "severity",
+            "report_type",
+            "priority_level",
+            "service_type",
+            "truck_code",
+            "driver_name",
+            "route",
+            "status",
+            "category",
+        ):
             if key in sample:
                 counts: dict[str, int] = defaultdict(int)
                 for r in rows:
                     counts[str(r.get(key) or "unknown")] += 1
                 return [{key: k, "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])[:12]]
 
-        # 2) Time trend chart using first numeric value by month.
-        time_key = next((k for k in ("month", "date", "delivery_date", "scheduled_date", "period") if k in sample), None)
+        # 2) Time trend chart using first numeric value by period/month.
+        time_key = next((k for k in ("period", "month", "date", "delivery_date", "scheduled_date") if k in sample), None)
         numeric_keys = [k for k in keys if isinstance(sample.get(k), (int, float))]
         if time_key and numeric_keys:
             value_key = next((k for k in numeric_keys if any(token in k for token in ("cost", "amount", "hours", "liters", "count"))), numeric_keys[0])
@@ -92,15 +103,19 @@ def _block(
                 raw_time = r.get(time_key)
                 if raw_time in (None, "", "—"):
                     continue
-                t = str(raw_time)[:7] if time_key != "period" else str(raw_time)
+                t = str(raw_time) if time_key == "period" else str(raw_time)[:7]
                 val = r.get(value_key)
                 if isinstance(val, (int, float)):
                     buckets[t] += float(val)
             if buckets:
-                return [{time_key: k, value_key: round(v, 2)} for k, v in sorted(buckets.items())[-12:]]
+                axis = "period" if time_key == "period" else time_key
+                return [{axis: k, value_key: round(v, 2), **({"month": k} if axis == "period" and len(k) == 7 else {})} for k, v in sorted(buckets.items())[-24:]]
 
         # 3) Categorical + numeric aggregation.
-        label_key = next((k for k in keys if isinstance(sample.get(k), str) and k not in {"route", "details"}), None)
+        label_key = next(
+            (k for k in ("truck_code", "driver_name", "route", "issue_type", "service_type", "client_name") + tuple(keys) if k in sample and isinstance(sample.get(k), str)),
+            None,
+        )
         value_key = next((k for k in keys if isinstance(sample.get(k), (int, float))), None)
         if label_key and value_key:
             sums: dict[str, float] = defaultdict(float)
@@ -248,6 +263,37 @@ def _fuel_liters_rows(ctx: dict, f: AnalyticsFilters, limit: int = 50) -> list[d
         )
     rows.sort(key=lambda r: r["date"], reverse=True)
     return rows[:limit]
+
+
+def _combine_forecast_chart(
+    actuals: list[tuple[str, float]],
+    forecast: list[dict[str, float | str]] | None,
+    *,
+    actual_key: str,
+    forecast_key: str,
+) -> list[dict[str, Any]]:
+    chart: list[dict[str, Any]] = []
+    for period, value in actuals:
+        row: dict[str, Any] = {
+            "period": period,
+            actual_key: round(float(value), 2),
+            "series_type": "actual",
+        }
+        if len(period) == 7 and period[4] == "-":
+            row["month"] = period
+        chart.append(row)
+    if forecast:
+        for pt in forecast:
+            period = str(pt["period"])
+            row = {
+                "period": period,
+                forecast_key: pt["value"],
+                "series_type": "forecast",
+            }
+            if len(period) == 7 and period[4] == "-":
+                row["month"] = period
+            chart.append(row)
+    return chart
 
 
 def _empty_predict(message: str = "Insufficient data for prediction.") -> dict[str, Any]:
@@ -710,12 +756,25 @@ def build_manager_role_analytics(
     )
 
     cost_forecast_resp = forecast_monthly_cost(db, periods=6)
+    cost_actuals: list[tuple[str, float]] = []
+    cost_month_buckets: dict[str, float] = defaultdict(float)
+    for t in ctx["trips"]:
+        if not t.completed_at:
+            continue
+        m = t.completed_at.strftime("%Y-%m")
+        cost_month_buckets[m] += float((t.fuel_cost or 0) + (t.toll_cost or 0) + (t.labor_cost or 0))
+    cost_actuals = sorted(cost_month_buckets.items())
     planning_pred_cost = (
         {"empty": True, "message": "Insufficient data.", "chart": [], "drilldown": []}
         if not cost_forecast_resp.points
         else _block(
             kpis=[{"label": "Next horizon", "value": cost_forecast_resp.points[0].period if cost_forecast_resp.points else "—"}],
-            chart=[{"period": p.period, "forecast_cost_php": p.value} for p in cost_forecast_resp.points],
+            chart=_combine_forecast_chart(
+                cost_actuals,
+                [{"period": p.period, "value": p.value} for p in cost_forecast_resp.points],
+                actual_key="actual_cost_php",
+                forecast_key="forecast_cost_php",
+            ),
             drilldown=[],
             note="Forecast from completed trip cost time series (Holt-Winters).",
         )
@@ -763,7 +822,12 @@ def build_manager_role_analytics(
         if not demand_forecast
         else _block(
             kpis=[{"label": "Next period trips (est.)", "value": demand_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_trips": p["value"]} for p in demand_forecast],
+            chart=_combine_forecast_chart(
+                [(m, float(c)) for m, c in trip_month_counts],
+                demand_forecast,
+                actual_key="actual_trips",
+                forecast_key="forecast_trips",
+            ),
             drilldown=[],
             note="Trip volume forecast from completed trip counts by month.",
         )
@@ -848,7 +912,12 @@ def build_manager_role_analytics(
         if not workforce_forecast
         else _block(
             kpis=[{"label": "Drivers needed (est.)", "value": workforce_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_drivers": p["value"]} for p in workforce_forecast],
+            chart=_combine_forecast_chart(
+                [(m, float(c)) for m, c in workforce_counts],
+                workforce_forecast,
+                actual_key="actual_drivers",
+                forecast_key="forecast_drivers",
+            ),
             drilldown=[],
             note="Unique drivers per month trend extrapolation.",
         )

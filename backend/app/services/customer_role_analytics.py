@@ -17,7 +17,7 @@ from app.services.admin_analytics import (
     _route_key,
     _shipment_category,
 )
-from app.services.manager_role_analytics import _block, _empty, _empty_predict, _forecast_series, _monthly_series
+from app.services.manager_role_analytics import _block, _combine_forecast_chart, _empty, _empty_predict, _forecast_series, _monthly_series
 
 
 def _customer_bookings(ctx: dict, f: AnalyticsFilters, customer_id: int) -> list:
@@ -148,7 +148,12 @@ def build_customer_role_analytics(
         if not booking_forecast
         else _block(
             kpis=[{"label": "Next period bookings (est.)", "value": booking_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_bookings": p["value"]} for p in booking_forecast],
+            chart=_combine_forecast_chart(
+                [(m, float(c)) for m, c in sorted(monthly_bookings.items())],
+                booking_forecast,
+                actual_key="actual_bookings",
+                forecast_key="forecast_bookings",
+            ),
             drilldown=account_rows[:20],
         )
     )

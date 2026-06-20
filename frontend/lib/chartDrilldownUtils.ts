@@ -31,7 +31,7 @@ export function filterDrilldownRows(
     }
 
     if (selection.monthKey) {
-      const monthFields = ["month", "scheduled_month", "expense_date", "paid_at", "delivery_date"];
+      const monthFields = ["period", "month", "scheduled_month", "expense_date", "paid_at", "delivery_date", "date"];
       const monthMatch = monthFields.some((field) => {
         const raw = row[field];
         if (raw == null) return false;
@@ -193,6 +193,68 @@ export function inferChartMeta(
   const row = chart[0];
   const keys = Object.keys(row);
 
+  if (keys.includes("period") && keys.includes("count")) {
+    return {
+      kind: "line",
+      labelKey: "period",
+      valueKey: "count",
+      xKey: "period",
+      yKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("period") && keys.some((k) => k.startsWith("actual_")) && keys.some((k) => k.startsWith("forecast_"))) {
+    const actualKey = keys.find((k) => k.startsWith("actual_"))!;
+    const forecastKey = keys.find((k) => k.startsWith("forecast_"))!;
+    return {
+      kind: "line",
+      labelKey: "period",
+      valueKey: actualKey,
+      xKey: "period",
+      yKey: actualKey,
+      seriesKeys: [actualKey, forecastKey],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("period") && keys.includes("revenue_php") && keys.includes("expense_php") && keys.includes("profit_php")) {
+    return {
+      kind: "combo",
+      labelKey: "period",
+      valueKey: "revenue_php",
+      xKey: "period",
+      yKey: "revenue_php",
+      seriesKeys: ["revenue_php", "expense_php"],
+      secondarySeriesKey: "profit_php",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("period") && keys.includes("estimated_toll_php") && keys.includes("actual_toll_php")) {
+    return {
+      kind: "area",
+      labelKey: "period",
+      valueKey: "actual_toll_php",
+      xKey: "period",
+      yKey: "actual_toll_php",
+      seriesKeys: ["estimated_toll_php", "actual_toll_php"],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("period") && keys.includes("fuel") && keys.includes("toll") && keys.includes("maintenance")) {
+    return {
+      kind: "stackedBar",
+      labelKey: "period",
+      valueKey: "total",
+      xKey: "period",
+      yKey: "total",
+      seriesKeys: ["fuel", "toll", "maintenance", "allowance"],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
   if (keys.includes("status") && keys.includes("count")) {
     return {
       kind: "pie",

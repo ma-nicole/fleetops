@@ -246,39 +246,57 @@ function RechartsAnalyticsChartInner({
       </PieChart>
     );
   } else if (kind === "line") {
+    const lineKeys =
+      seriesKeys?.length && seriesKeys.length > 1
+        ? seriesKeys
+        : items.some((item) => Object.keys(item).some((k) => k.startsWith("forecast_")))
+          ? [
+              ...new Set(
+                items.flatMap((item) =>
+                  Object.keys(item).filter((k) => k.startsWith("actual_") || k.startsWith("forecast_")),
+                ),
+              ),
+            ]
+          : [valueKey];
     chartNode = (
       <LineChart data={rows} margin={commonMargin}>
         <CartesianGrid stroke={GRID_STROKE} vertical={false} />
         <XAxis {...xAxisProps} />
         <YAxis {...yAxisProps} />
         <Tooltip content={<ChartTooltip />} />
-        {showLegend ? <Legend formatter={renderLegendText} verticalAlign="top" /> : null}
-        <Line
-          type="monotone"
-          dataKey={valueKey}
-          name={legendLabel ?? seriesLabel(valueKey)}
-          stroke={ENTERPRISE_LINE}
-          strokeWidth={2.5}
-          dot={(props: { cx?: number; cy?: number; index?: number }) => {
-            const { cx, cy, index = 0 } = props;
-            const name = rows[index]?.name ?? "";
-            const active = isSelected(name, selectedLabel);
-            return (
-              <circle
-                key={`dot-${index}`}
-                cx={cx}
-                cy={cy}
-                r={active ? 5 : 3.5}
-                fill={active ? SELECTED_STROKE : ENTERPRISE_LINE}
-                stroke="#fff"
-                strokeWidth={1}
-                style={{ cursor: onItemClick ? "pointer" : "default" }}
-                onClick={() => handleBarClick(index)}
-              />
-            );
-          }}
-          activeDot={{ r: 6, stroke: SELECTED_STROKE, strokeWidth: 2 }}
-        />
+        {showLegend || lineKeys.length > 1 ? <Legend formatter={renderLegendText} verticalAlign="top" /> : null}
+        {lineKeys.map((key, idx) => (
+          <Line
+            key={key}
+            type="monotone"
+            dataKey={key}
+            name={legendLabel && lineKeys.length === 1 ? legendLabel : seriesLabel(key)}
+            stroke={idx === 0 ? ENTERPRISE_LINE : "#E76F51"}
+            strokeWidth={2.5}
+            strokeDasharray={key.startsWith("forecast_") ? "6 4" : undefined}
+            connectNulls
+            dot={(props: { cx?: number; cy?: number; index?: number }) => {
+              const { cx, cy, index = 0 } = props;
+              const name = rows[index]?.name ?? "";
+              const active = isSelected(name, selectedLabel);
+              const stroke = idx === 0 ? ENTERPRISE_LINE : "#E76F51";
+              return (
+                <circle
+                  key={`dot-${key}-${index}`}
+                  cx={cx}
+                  cy={cy}
+                  r={active ? 5 : 3.5}
+                  fill={active ? SELECTED_STROKE : stroke}
+                  stroke="#fff"
+                  strokeWidth={1}
+                  style={{ cursor: onItemClick ? "pointer" : "default" }}
+                  onClick={() => handleBarClick(index)}
+                />
+              );
+            }}
+            activeDot={{ r: 6, stroke: SELECTED_STROKE, strokeWidth: 2 }}
+          />
+        ))}
       </LineChart>
     );
   } else if (kind === "area") {

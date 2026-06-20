@@ -5,7 +5,8 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
 
-from app.services.admin_analytics import AnalyticsFilters, _activity_month, _collect_expense_records, _verified_revenue_rows
+from app.services.admin_analytics import AnalyticsFilters, _collect_expense_records, _verified_revenue_rows
+from app.services.time_bucket import GRANULARITY_OPTIONS, period_key, series_from_buckets, sort_period_keys
 
 
 def _growth_pct(current: float, previous: float | None) -> float | None:
@@ -27,28 +28,11 @@ def _trend(change_pct: float | None) -> str:
 
 
 def _period_key(dt: date | datetime, granularity: str) -> str | None:
-    if dt is None:
-        return None
-    d = dt.date() if isinstance(dt, datetime) else dt
-    if granularity == "yearly":
-        return str(d.year)
-    if granularity == "quarterly":
-        return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
-    if granularity == "monthly":
-        return d.strftime("%Y-%m")
-    if granularity == "weekly":
-        iso = d.isocalendar()
-        return f"{iso.year}-W{iso.week:02d}"
-    return None
+    return period_key(dt, granularity)
 
 
 def _series_from_buckets(buckets: dict[str, float], granularity: str, limit: int = 24) -> list[dict[str, Any]]:
-    keys = sorted(buckets.keys())
-    if granularity == "quarterly":
-        keys = sorted(keys, key=lambda k: (int(k.split("-Q")[0]), int(k.split("-Q")[1])))
-    elif granularity == "weekly":
-        keys = sorted(keys, key=lambda k: (int(k.split("-W")[0]), int(k.split("-W")[1])))
-    return [{"period": k, "value": round(buckets[k], 2)} for k in keys[-limit:]]
+    return series_from_buckets(buckets, granularity, limit)
 
 
 def _build_comparisons(series: list[dict[str, Any]], *, comparison_type: str) -> list[dict[str, Any]]:
@@ -97,6 +81,7 @@ def _build_comparisons(series: list[dict[str, Any]], *, comparison_type: str) ->
 
 def _aggregate_revenue(ctx: dict, f: AnalyticsFilters) -> dict[str, dict[str, float]]:
     buckets: dict[str, dict[str, float]] = {
+        "daily": defaultdict(float),
         "yearly": defaultdict(float),
         "quarterly": defaultdict(float),
         "monthly": defaultdict(float),
@@ -114,6 +99,7 @@ def _aggregate_revenue(ctx: dict, f: AnalyticsFilters) -> dict[str, dict[str, fl
 
 def _aggregate_expenses(ctx: dict, f: AnalyticsFilters) -> dict[str, dict[str, float]]:
     buckets: dict[str, dict[str, float]] = {
+        "daily": defaultdict(float),
         "yearly": defaultdict(float),
         "quarterly": defaultdict(float),
         "monthly": defaultdict(float),
@@ -139,6 +125,7 @@ def _aggregate_deliveries(ctx: dict, f: AnalyticsFilters) -> dict[str, dict[str,
     from app.services.admin_analytics import _booking_in_filters, _primary_trip, _shipment_category
 
     buckets: dict[str, dict[str, float]] = {
+        "daily": defaultdict(float),
         "yearly": defaultdict(float),
         "quarterly": defaultdict(float),
         "monthly": defaultdict(float),
@@ -162,14 +149,14 @@ def _aggregate_deliveries(ctx: dict, f: AnalyticsFilters) -> dict[str, dict[str,
 def _metric_comparative(buckets: dict[str, dict[str, float]], *, value_format: str) -> dict[str, Any]:
     series_by_gran: dict[str, list[dict[str, Any]]] = {}
     comparisons_by_gran: dict[str, list[dict[str, Any]]] = {}
-    for gran in ("weekly", "monthly", "quarterly", "yearly"):
+    for gran in ("daily", "weekly", "monthly", "quarterly", "yearly"):
         series = _series_from_buckets(buckets[gran], gran)
         series_by_gran[gran] = series
         comp_type = "year_over_year" if gran == "yearly" else "period_over_period"
         comparisons_by_gran[gran] = _build_comparisons(series, comparison_type=comp_type)
     return {
         "value_format": value_format,
-        "granularity_options": ["weekly", "monthly", "quarterly", "yearly"],
+        "granularity_options": list(GRANULARITY_OPTIONS),
         "series": series_by_gran,
         "comparisons": comparisons_by_gran,
     }

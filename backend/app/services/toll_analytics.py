@@ -9,9 +9,10 @@ from sqlalchemy import inspect
 
 from app.models.entities import HistoricalTollRecord
 from app.services.analytics_stats import compute_statistics, empty_module
+from app.services.time_bucket import period_chart_row, period_key, sort_period_keys
 
 
-def build_toll_analytics(db: Session) -> dict[str, Any]:
+def build_toll_analytics(db: Session, *, granularity: str = "monthly") -> dict[str, Any]:
     if "historical_toll_records" not in inspect(db.get_bind()).get_table_names():
         return empty_module("No historical toll records yet.")
 
@@ -40,7 +41,7 @@ def build_toll_analytics(db: Session) -> dict[str, Any]:
         data_messages.append("Standard deviation requires at least two completed trips.")
 
     route_totals: dict[str, float] = defaultdict(float)
-    monthly: dict[str, dict[str, float]] = defaultdict(lambda: {"estimated": 0.0, "actual": 0.0, "count": 0})
+    period_buckets: dict[str, dict[str, float]] = defaultdict(lambda: {"estimated": 0.0, "actual": 0.0, "count": 0})
 
     for rec in rows:
         key = rec.route_label or (
@@ -49,10 +50,10 @@ def build_toll_analytics(db: Session) -> dict[str, Any]:
             else f"{rec.origin} → {rec.destination}"
         )
         route_totals[key] += float(rec.actual_toll or 0)
-        month = rec.completed_at.strftime("%Y-%m") if rec.completed_at else "unknown"
-        monthly[month]["estimated"] += float(rec.estimated_toll or 0)
-        monthly[month]["actual"] += float(rec.actual_toll or 0)
-        monthly[month]["count"] += 1
+        period = period_key(rec.completed_at, granularity) if rec.completed_at else "unknown"
+        period_buckets[period]["estimated"] += float(rec.estimated_toll or 0)
+        period_buckets[period]["actual"] += float(rec.actual_toll or 0)
+        period_buckets[period]["count"] += 1
 
     most_expensive = sorted(
         [{"route": k, "actual_toll_php": round(v, 2)} for k, v in route_totals.items()],
@@ -60,16 +61,16 @@ def build_toll_analytics(db: Session) -> dict[str, Any]:
     )[:10]
 
     trend = []
-    for month in sorted(monthly.keys())[-12:]:
-        m = monthly[month]
+    for period in sort_period_keys(list(period_buckets.keys()), granularity)[-24:]:
+        m = period_buckets[period]
         trend.append(
-            {
-                "month": month,
-                "estimated_toll_php": round(m["estimated"], 2),
-                "actual_toll_php": round(m["actual"], 2),
-                "variance_php": round(m["actual"] - m["estimated"], 2),
-                "trip_count": int(m["count"]),
-            }
+            period_chart_row(
+                period,
+                estimated_toll_php=round(m["estimated"], 2),
+                actual_toll_php=round(m["actual"], 2),
+                variance_php=round(m["actual"] - m["estimated"], 2),
+                trip_count=int(m["count"]),
+            )
         )
 
     return {

@@ -40,6 +40,7 @@ from app.services.dispatcher_booking_assignment import (
 )
 from app.services.manager_role_analytics import (
     _block,
+    _combine_forecast_chart,
     _empty,
     _empty_predict,
     _forecast_series,
@@ -304,7 +305,12 @@ def build_dispatcher_role_analytics(
         if not workload_forecast
         else _block(
             kpis=[{"label": "Next period trips (est.)", "value": workload_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_trips": p["value"]} for p in workload_forecast],
+            chart=_combine_forecast_chart(
+                [(m, float(c)) for m, c in sorted(month_counts.items())],
+                workload_forecast,
+                actual_key="actual_trips",
+                forecast_key="forecast_trips",
+            ),
             drilldown=schedule_rows[:30],
             note="Trip volume forecast from scheduled trip counts by month.",
         )
@@ -531,7 +537,12 @@ def build_dispatcher_role_analytics(
         if not truck_demand_forecast
         else _block(
             kpis=[{"label": "Next period trips (est.)", "value": truck_demand_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_trips": p["value"]} for p in truck_demand_forecast],
+            chart=_combine_forecast_chart(
+                [(m, float(c)) for m, c in sorted(truck_month.items())],
+                truck_demand_forecast,
+                actual_key="actual_trips",
+                forecast_key="forecast_trips",
+            ),
             drilldown=[],
             note="Fleet trip demand from completed trip counts by month.",
         )
@@ -618,7 +629,12 @@ def build_dispatcher_role_analytics(
         if not staffing_forecast
         else _block(
             kpis=[{"label": "Drivers needed (est.)", "value": staffing_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_drivers": p["value"]} for p in staffing_forecast],
+            chart=_combine_forecast_chart(
+                [(m, float(len(d))) for m, d in sorted(driver_month.items())],
+                staffing_forecast,
+                actual_key="actual_drivers",
+                forecast_key="forecast_drivers",
+            ),
             drilldown=[],
             note="Unique drivers per month trend extrapolation.",
         )
@@ -703,14 +719,20 @@ def build_dispatcher_role_analytics(
     )
 
     monthly_del = shipments.get("monthly_deliveries") or []
-    del_series = _monthly_series([(m["month"], float(m["count"])) for m in monthly_del], min_points=2)
+    del_actuals = [(str(m.get("period") or m["month"]), float(m["count"])) for m in monthly_del]
+    del_series = _monthly_series(del_actuals, min_points=2)
     completion_forecast = _forecast_series(del_series, 3) if del_series is not None else None
     order_pred_completion = (
         _empty_predict()
         if not completion_forecast
         else _block(
             kpis=[{"label": "Next period deliveries (est.)", "value": completion_forecast[0]["value"]}],
-            chart=[{"period": p["period"], "forecast_deliveries": p["value"]} for p in completion_forecast],
+            chart=_combine_forecast_chart(
+                del_actuals,
+                completion_forecast,
+                actual_key="actual_deliveries",
+                forecast_key="forecast_deliveries",
+            ),
             drilldown=delivery_rows[:30],
         )
     )
@@ -847,8 +869,14 @@ def build_dispatcher_role_analytics(
                     "value": issue_forecast[0]["value"] if issue_forecast else "Insufficient data",
                 },
             ],
-            chart=(issue_forecast and [{"period": p["period"], "forecast_issues": p["value"]} for p in issue_forecast])
-            or [],
+            chart=_combine_forecast_chart(
+                [(m, float(c)) for m, c in sorted(issue_month.items())],
+                issue_forecast,
+                actual_key="actual_issues",
+                forecast_key="forecast_issues",
+            )
+            if issue_forecast
+            else [],
             drilldown=issue_sources[:50],
             note="Trip issues and vehicle issue reports with monthly trend when sufficient history exists.",
         )

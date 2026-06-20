@@ -18,6 +18,7 @@ import {
   type InferredChartMeta,
   type SynthesizedChart,
 } from "@/lib/chartDrilldownUtils";
+import { mergeChartKind } from "@/lib/analyticsChartConfig";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -136,7 +137,7 @@ export function BiChartWidget({
   analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
   analyticsMethod?: string;
   riskLegend?: Array<{ label: string; color: string }>;
-  preferredChartKind?: "bar" | "line" | "pie";
+  preferredChartKind?: AnalyticsChartKind;
   loading?: boolean;
 }) {
   const [selection, setSelection] = useState<ChartSelection | null>(null);
@@ -160,7 +161,7 @@ export function BiChartWidget({
   const resolvedMeta = useMemo<InferredChartMeta | null>(() => {
     if (!meta) return null;
     if (!preferredChartKind) return meta;
-    return { ...meta, kind: preferredChartKind };
+    return { ...meta, kind: mergeChartKind(meta.kind, preferredChartKind) };
   }, [meta, preferredChartKind]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);

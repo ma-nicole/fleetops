@@ -5,6 +5,7 @@ import { BiChartWidget } from "@/components/admin/BiChartWidget";
 import { EmptyChart } from "@/components/admin/AnalyticsCharts";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock } from "@/lib/analyticsApi";
 import { isPopulatedAnalyticsModule } from "@/lib/analyticsApi";
+import type { AnalyticsChartKind } from "@/lib/analyticsChartConfig";
 
 type WidgetSpec = {
   id: string;
@@ -14,8 +15,13 @@ type WidgetSpec = {
   analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
   analyticsMethod?: string;
   riskLegend?: Array<{ label: string; color: string }>;
-  preferredChartKind?: "bar" | "line" | "pie";
+  preferredChartKind?: AnalyticsChartKind;
 };
+
+function withPeriod<T extends { period?: string; month?: string }>(row: T): T & { period: string; month?: string } {
+  const period = row.period ?? row.month ?? "";
+  return { ...row, period, ...(period.length === 7 && period[4] === "-" ? { month: period } : {}) };
+}
 
 function moduleBlock(
   chart: Record<string, unknown>[],
@@ -54,7 +60,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       "revenue-tracking",
       "Revenue Tracking Performance",
       moduleBlock(
-        fin.revenue_trend.map((x) => ({ month: x.month, revenue_php: x.revenue_php })),
+        fin.revenue_trend.map((x) => withPeriod({ ...x, revenue_php: x.revenue_php })),
         fin.drilldown ?? [],
       ),
       comp?.revenue,
@@ -64,21 +70,25 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       "revenue-vs-expense",
       "Revenue vs Expense Historical",
       moduleBlock(
-        fin.revenue_vs_expense.map((x) => ({
-          month: x.month,
-          revenue_php: x.revenue_php,
-          expense_php: x.expense_php,
-        })),
+        fin.revenue_vs_expense.map((x) =>
+          withPeriod({
+            revenue_php: x.revenue_php,
+            expense_php: x.expense_php,
+            profit_php: x.profit_php,
+            period: x.period,
+            month: x.month,
+          }),
+        ),
         fin.drilldown ?? [],
       ),
       comp?.expenses,
-      { analyticsType: "Diagnostic", analyticsMethod: "Revenue-cost variance analysis", preferredChartKind: "line" },
+      { analyticsType: "Diagnostic", analyticsMethod: "Revenue-cost variance analysis" },
     );
     add(
       "profit-margin",
       "Profit & Margin Historical",
       moduleBlock(
-        fin.profit_trend.map((x) => ({ month: x.month, profit_php: x.profit_php })),
+        fin.profit_trend.map((x) => withPeriod({ profit_php: x.profit_php, period: x.period, month: x.month })),
         fin.drilldown ?? [],
       ),
       comp?.revenue,
@@ -127,7 +137,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         add(
           "jobs-over-time",
           "Jobs / Trips Over Time",
-          moduleBlock(ship.jobs_over_time, ship.drilldown),
+          moduleBlock(ship.jobs_over_time.map(withPeriod), ship.drilldown),
           comp?.deliveries,
           { analyticsType: "Descriptive", analyticsMethod: "Time-series throughput analysis", preferredChartKind: "line" },
         );
@@ -135,7 +145,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       add(
         "monthly-deliveries",
         "Monthly Deliveries",
-        moduleBlock(ship.monthly_deliveries, ship.drilldown),
+        moduleBlock(ship.monthly_deliveries.map(withPeriod), ship.drilldown),
         comp?.deliveries,
         { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "line" },
       );
@@ -212,11 +222,21 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       "expense-monthly",
       "Monthly Operational Expenses",
       moduleBlock(
-        exp.monthly_totals.map((x) => ({ month: x.month, total: x.total })),
+        exp.monthly_totals.map((x) =>
+          withPeriod({
+            fuel: x.fuel,
+            toll: x.toll,
+            maintenance: x.maintenance,
+            allowance: x.allowance,
+            total: x.total,
+            period: x.period,
+            month: x.month,
+          }),
+        ),
         exp.drilldown?.records ?? [],
       ),
       comp?.expenses,
-      { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "line" },
+      { analyticsType: "Descriptive", analyticsMethod: "Expense composition by period", preferredChartKind: "stackedBar" },
     );
   }
 
@@ -269,14 +289,18 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         "toll-trends",
         "Toll Trends by Month",
         moduleBlock(
-          tolls.route_trends.map((x) => ({
-            month: x.month,
-            actual_toll_php: x.actual_toll_php,
-          })),
+          tolls.route_trends.map((x) =>
+            withPeriod({
+              estimated_toll_php: x.estimated_toll_php,
+              actual_toll_php: x.actual_toll_php,
+              period: x.period,
+              month: x.month,
+            }),
+          ),
           tolls.drilldown as unknown as Record<string, unknown>[],
         ),
         undefined,
-        { analyticsType: "Descriptive", analyticsMethod: "Monthly toll trend analysis", preferredChartKind: "line" },
+        { analyticsType: "Descriptive", analyticsMethod: "Estimated vs actual toll trend" },
       );
     }
   }

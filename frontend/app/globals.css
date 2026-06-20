@@ -1959,6 +1959,19 @@ html {
   color: var(--text-secondary);
 }
 
+.filter-panel__granularity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.filter-panel__granularity-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 /* Tab pills */
 .tab-pills {
   display: flex;

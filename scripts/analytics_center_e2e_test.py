@@ -130,6 +130,28 @@ def main() -> int:
     else:
         ok("5 Invalid date range rejected")
 
+    for gran in ("daily", "weekly", "monthly", "quarterly", "yearly"):
+        r = client.get("/api/admin/analytics", headers=admin_h, params={"granularity": gran})
+        if r.status_code != 200:
+            fail(f"5b Granularity {gran}", f"status={r.status_code}")
+            continue
+        ship = r.json().get("shipments") or {}
+        deliveries = ship.get("monthly_deliveries") or []
+        if deliveries and "period" not in deliveries[0]:
+            fail(f"5b Granularity {gran}", "monthly_deliveries missing period key")
+        else:
+            ok(f"5b Granularity {gran}", f"deliveries={len(deliveries)}")
+
+    role = payload.get("role_analytics") or {}
+    planning = (role.get("planning") or {}).get("predictive") or {}
+    cost_forecast = planning.get("cost_forecasting") or {}
+    if cost_forecast.get("empty"):
+        fail("5c Manager predictive", "cost_forecasting still empty after seed")
+    elif not cost_forecast.get("chart"):
+        fail("5c Manager predictive", "cost_forecasting has no chart rows")
+    else:
+        ok("5c Manager predictive", f"cost_forecast_points={len(cost_forecast.get('chart') or [])}")
+
     # ── Dispatcher subset ──
     r = client.get("/api/admin/analytics", headers=dispatcher_h)
     if r.status_code != 200:

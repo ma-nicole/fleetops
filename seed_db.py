@@ -35,9 +35,11 @@ from app.models.entities import (  # noqa: E402
     Feedback,
     FuelLog,
     HelperProfile,
+    HistoricalTollRecord,
     JobOrder,
     MaintenanceRecord,
     MaintenanceStatus,
+    OperationalLog,
     Payment,
     PaymentStatus,
     PredictionFeedback,
@@ -48,11 +50,14 @@ from app.models.entities import (  # noqa: E402
     TollLog,
     Transaction,
     Trip,
+    TripIssue,
     TripStatus,
     Truck,
     TruckBanRule,
     User,
     UserRole,
+    VehicleIssueReport,
+    VehicleIssueReportStatus,
 )
 
 
@@ -164,57 +169,86 @@ def seed_database(*, force: bool = False) -> None:
             PricingConfig(service_type=ServiceType.CUSTOMIZED, base_rate=3500, labor_rate=180, helper_rate=120),
         ])
 
-        # ----------- Bookings (mix of statuses) -----------
+        # ----------- Bookings & trips spread over 18 months -----------
         today = date.today()
         bookings: list[Booking] = []
-        for idx in range(20):
-            customer = customers[idx % len(customers)]
-            scheduled = today + timedelta(days=(idx - 10))
-            status = (
-                BookingStatus.COMPLETED if idx < 12
-                else BookingStatus.OUT_FOR_DELIVERY if idx == 12
-                else BookingStatus.LOADING if idx == 13
-                else BookingStatus.ASSIGNED if idx in (14, 15)
-                else BookingStatus.APPROVED if idx in (16, 17)
-                else BookingStatus.PENDING_APPROVAL
-            )
-            bookings.append(Booking(
+        trips: list[Trip] = []
+        ISSUE_TYPES = ["traffic", "mechanical", "weather", "customs", "loading_delay"]
+        REPORT_TYPES = ["delay", "traffic", "route_deviation", "customs_hold"]
+        total_bookings = 96
+
+        for seq in range(total_bookings):
+            customer = customers[seq % len(customers)]
+            days_ago = 14 + (seq * 6)
+            scheduled = today - timedelta(days=days_ago)
+            route = routes[seq % len(routes)]
+
+            if days_ago > 45:
+                status = BookingStatus.COMPLETED
+            elif days_ago > 14:
+                status = BookingStatus.COMPLETED if seq % 6 != 0 else BookingStatus.ASSIGNED
+            elif seq % 4 == 0:
+                status = BookingStatus.OUT_FOR_DELIVERY
+            elif seq % 4 == 1:
+                status = BookingStatus.LOADING
+            elif seq % 4 == 2:
+                status = BookingStatus.ASSIGNED
+            elif seq % 4 == 3:
+                status = BookingStatus.APPROVED
+            else:
+                status = BookingStatus.PENDING_APPROVAL
+
+            if seq >= total_bookings - 2:
+                status = BookingStatus.PENDING_APPROVAL
+
+            booking = Booking(
                 customer_id=customer.id,
-                pickup_location=routes[idx % len(routes)].origin,
-                dropoff_location=routes[idx % len(routes)].destination,
-                service_type=ServiceType.FIXED if idx % 2 == 0 else ServiceType.CUSTOMIZED,
+                pickup_location=route.origin,
+                dropoff_location=route.destination,
+                service_type=ServiceType.FIXED if seq % 2 == 0 else ServiceType.CUSTOMIZED,
                 scheduled_date=scheduled,
-                cargo_weight_tons=5 + (idx % 8),
-                estimated_cost=3500 + idx * 220,
+                cargo_weight_tons=5 + (seq % 8),
+                estimated_cost=3500 + seq * 180 + (seq % 12) * 40,
                 status=status,
                 approved_by_id=manager.id if status not in (BookingStatus.PENDING_APPROVAL, BookingStatus.REJECTED) else None,
-                approved_at=datetime.utcnow() if status not in (BookingStatus.PENDING_APPROVAL, BookingStatus.REJECTED) else None,
-            ))
+                approved_at=datetime.utcnow() - timedelta(days=days_ago, hours=12)
+                if status not in (BookingStatus.PENDING_APPROVAL, BookingStatus.REJECTED)
+                else None,
+                created_at=datetime.utcnow() - timedelta(days=days_ago + 2),
+            )
+            bookings.append(booking)
+
         db.add_all(bookings)
         db.flush()
         print(f"[OK] Bookings: {len(bookings)}")
 
-        # ----------- Trips for non-pending bookings -----------
-        trips: list[Trip] = []
+        operational_logs: list[OperationalLog] = []
+        trip_issues: list[TripIssue] = []
+        vehicle_issues: list[VehicleIssueReport] = []
+
         for idx, booking in enumerate(bookings):
             if booking.status in (BookingStatus.PENDING_APPROVAL, BookingStatus.REJECTED, BookingStatus.APPROVED):
                 continue
             distance_km = 60 + (idx % 5) * 18
             trip_status = (
-                TripStatus.COMPLETED if booking.status == BookingStatus.COMPLETED
-                else TripStatus.IN_DELIVERY if booking.status == BookingStatus.OUT_FOR_DELIVERY
-                else TripStatus.LOADING if booking.status == BookingStatus.LOADING
+                TripStatus.COMPLETED
+                if booking.status == BookingStatus.COMPLETED
+                else TripStatus.IN_DELIVERY
+                if booking.status == BookingStatus.OUT_FOR_DELIVERY
+                else TripStatus.LOADING
+                if booking.status == BookingStatus.LOADING
                 else TripStatus.ASSIGNED
             )
+            days_ago = (today - booking.scheduled_date).days if booking.scheduled_date else idx + 1
             completed_at = (
-                datetime.utcnow() - timedelta(days=idx + 1)
+                datetime.utcnow() - timedelta(days=max(days_ago - 1, 1), hours=idx % 8)
                 if trip_status == TripStatus.COMPLETED
                 else None
             )
             departure = (
-                datetime.utcnow() - timedelta(days=idx + 1, hours=4)
-                if trip_status == TripStatus.COMPLETED
-                else datetime.utcnow() - timedelta(hours=2)
+                completed_at - timedelta(hours=5)
+                if completed_at
+                else datetime.utcnow() - timedelta(hours=2 + (idx % 6))
             )
             fuel_cost = round(distance_km * 0.32 * 65, 2)
             toll_cost = round(distance_km * 1.5, 2)
@@ -249,9 +283,58 @@ def seed_database(*, force: bool = False) -> None:
                 proof_of_delivery=f"https://podstore.example.com/pods/{idx}.png" if completed_at else None,
             )
             trips.append(trip)
+
         db.add_all(trips)
         db.flush()
         print(f"[OK] Trips: {len(trips)}")
+
+        for idx, trip in enumerate(trips):
+            if trip.status != TripStatus.COMPLETED or not trip.completed_at:
+                continue
+            if idx % 4 == 0:
+                issue_type = ISSUE_TYPES[idx % len(ISSUE_TYPES)]
+                trip_issues.append(
+                    TripIssue(
+                        trip_id=trip.id,
+                        reported_by_id=trip.driver_id,
+                        issue_type=issue_type,
+                        description=f"{issue_type.replace('_', ' ').title()} reported during trip execution",
+                        severity="high" if issue_type in ("mechanical", "weather") else "medium",
+                        resolved=idx % 8 != 0,
+                        created_at=trip.completed_at - timedelta(hours=2),
+                    )
+                )
+            if idx % 5 == 0:
+                operational_logs.append(
+                    OperationalLog(
+                        booking_id=trip.booking_id,
+                        trip_id=trip.id,
+                        dispatcher_id=dispatcher.id,
+                        report_type=REPORT_TYPES[idx % len(REPORT_TYPES)],
+                        priority_level="high" if idx % 10 == 0 else "medium",
+                        operational_details="Delay logged from dispatcher operations center during monitoring.",
+                        created_at=trip.completed_at - timedelta(hours=1),
+                    )
+                )
+            if idx % 7 == 0:
+                vehicle_issues.append(
+                    VehicleIssueReport(
+                        booking_id=trip.booking_id,
+                        trip_id=trip.id,
+                        truck_id=trip.truck_id,
+                        driver_id=trip.driver_id,
+                        helper_id=trip.helper_id,
+                        issue_type="breakdown" if idx % 14 == 0 else "warning_light",
+                        priority="high" if idx % 14 == 0 else "medium",
+                        description="Vehicle issue observed during or after trip completion.",
+                        status=VehicleIssueReportStatus.RESOLVED if idx % 3 == 0 else VehicleIssueReportStatus.SUBMITTED,
+                    )
+                )
+
+        db.add_all(operational_logs)
+        db.add_all(trip_issues)
+        db.add_all(vehicle_issues)
+        print(f"[OK] Operational logs: {len(operational_logs)}, trip issues: {len(trip_issues)}, vehicle issues: {len(vehicle_issues)}")
 
         # ----------- Fuel & toll logs for completed trips -----------
         fuel_logs: list[FuelLog] = []
@@ -268,12 +351,14 @@ def seed_database(*, force: bool = False) -> None:
                 liters=round(trip.distance_km / 4.0, 2),
                 cost=trip.fuel_cost,
                 odometer_km=trip.distance_km,
+                recorded_at=trip.completed_at or datetime.utcnow(),
             ))
             toll_logs.append(TollLog(
                 trip_id=trip.id,
                 driver_id=trip.driver_id,
                 location="NLEX/SCTEX",
                 amount=trip.toll_cost,
+                recorded_at=trip.completed_at or datetime.utcnow(),
             ))
             completion_reports.append(CompletionReport(
                 trip_id=trip.id,
@@ -301,6 +386,29 @@ def seed_database(*, force: bool = False) -> None:
         db.add_all(toll_logs)
         db.add_all(completion_reports)
         db.add_all(prediction_feedback)
+
+        toll_history: list[HistoricalTollRecord] = []
+        for trip in trips:
+            if trip.status != TripStatus.COMPLETED or not trip.completed_at:
+                continue
+            booking = next(b for b in bookings if b.id == trip.booking_id)
+            estimated = float(trip.toll_cost or 0)
+            actual = round(estimated * (0.92 + (trip.id % 5) * 0.03), 2)
+            toll_history.append(
+                HistoricalTollRecord(
+                    trip_id=trip.id,
+                    booking_id=trip.booking_id,
+                    route_label=f"{booking.pickup_location} → {booking.dropoff_location}",
+                    origin=booking.pickup_location,
+                    destination=booking.dropoff_location,
+                    estimated_toll=estimated,
+                    actual_toll=actual,
+                    toll_variance=round(actual - estimated, 2),
+                    completed_at=trip.completed_at,
+                )
+            )
+        db.add_all(toll_history)
+        print(f"[OK] Historical toll records: {len(toll_history)}")
 
         # ----------- Maintenance -----------
         db.add_all([
@@ -335,16 +443,18 @@ def seed_database(*, force: bool = False) -> None:
 
         for tx in transactions:
             booking = next(b for b in bookings if b.id == tx.booking_id)
+            trip = next((t for t in trips if t.booking_id == booking.id), None)
             paid = booking.status == BookingStatus.COMPLETED
+            paid_at = trip.completed_at if paid and trip and trip.completed_at else None
             payments.append(Payment(
                 booking_id=booking.id,
                 transaction_id=tx.id,
                 customer_id=booking.customer_id,
-                method="gcash",
+                method="gcash" if tx.id % 2 == 0 else "bank_transfer",
                 amount=booking.estimated_cost,
                 status=PaymentStatus.VERIFIED if paid else PaymentStatus.FOR_VERIFICATION,
                 reference=f"PAY-{1000 + booking.id}",
-                paid_at=datetime.utcnow() if paid else None,
+                paid_at=paid_at,
             ))
         db.add_all(payments)
         print(f"[OK] Payments: {len(payments)}")
@@ -383,6 +493,7 @@ def seed_database(*, force: bool = False) -> None:
         print("  Dispatcher: dispatcher@fleetops.com")
         print("  Manager:    manager@fleetops.com")
         print("  Admin:      admin@fleetops.com")
+        print("\nRe-seed on Railway after deploy: python seed_db.py --force")
 
 
 if __name__ == "__main__":

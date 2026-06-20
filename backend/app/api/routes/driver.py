@@ -560,13 +560,19 @@ def driver_analytics(
     truck_id: int | None = Query(default=None),
     route: str | None = Query(default=None),
     shipment_status: str | None = Query(default=None),
+    granularity: str | None = Query(default="monthly"),
 ):
     """Driver-scoped descriptive and predictive analytics from real trip records."""
     from app.services.admin_analytics import AnalyticsFilters, _load_context, _route_key
     from app.services.driver_role_analytics import build_driver_role_analytics
+    from app.services.time_bucket import GRANULARITY_OPTIONS
 
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=400, detail="Start date cannot be after end date.")
+    valid_gran = set(GRANULARITY_OPTIONS)
+    gran = (granularity or "monthly").strip().lower()
+    if gran not in valid_gran:
+        raise HTTPException(status_code=400, detail=f"Invalid granularity. Use one of: {', '.join(sorted(valid_gran))}")
 
     filters = AnalyticsFilters(
         date_from=date_from,
@@ -575,6 +581,7 @@ def driver_analytics(
         truck_id=truck_id,
         route=route.strip() if route else None,
         shipment_status=shipment_status.strip().lower() if shipment_status else None,
+        granularity=gran,  # type: ignore[arg-type]
     )
     ctx = _load_context(db)
     driver_trips = [t for t in ctx["trips"] if t.driver_id == user.id]
@@ -591,11 +598,14 @@ def driver_analytics(
             "truck_id": filters.truck_id,
             "route": filters.route,
             "shipment_status": filters.shipment_status,
+            "granularity": filters.granularity,
         },
         "filter_options": {
             "trucks": [{"id": tid, "code": code} for tid, code in trucks],
             "routes": routes,
             "shipment_statuses": ["delivered", "delayed", "cancelled", "in_transit", "pending"],
+            "granularity": filters.granularity,
+            "granularity_options": list(GRANULARITY_OPTIONS),
         },
         "driver_role_analytics": build_driver_role_analytics(db, ctx, filters, driver=user),
     }

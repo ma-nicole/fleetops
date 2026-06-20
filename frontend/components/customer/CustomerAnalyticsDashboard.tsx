@@ -8,38 +8,45 @@ import LoadingMessage from "@/components/ui/LoadingMessage";
 import { SkeletonDashboard } from "@/components/Skeleton";
 import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { AnalyticsApi, type CustomerAnalyticsPayload } from "@/lib/analyticsApi";
+import { TimeGranularityPicker } from "@/components/admin/TimeGranularityPicker";
+import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
 export default function CustomerAnalyticsDashboard() {
   const [data, setData] = useState<CustomerAnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [route, setRoute] = useState("");
-  const [shipmentStatus, setShipmentStatus] = useState("");
+  const {
+    dateFrom,
+    setDateFrom,
+    dateTo,
+    setDateTo,
+    route,
+    setRoute,
+    shipmentStatus,
+    setShipmentStatus,
+    granularity,
+    setGranularity,
+    dateRangeError,
+    buildRoleQuery,
+  } = useAnalyticsPageFilters();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    if (dateFrom && dateTo && dateFrom > dateTo) {
-      setError("Start date cannot be after end date.");
+    if (dateRangeError) {
+      setError(dateRangeError);
       setLoading(false);
       return;
     }
     try {
-      const payload = await AnalyticsApi.customerAnalytics({
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        route: route || undefined,
-        shipment_status: shipmentStatus || undefined,
-      });
+      const payload = await AnalyticsApi.customerAnalytics(buildRoleQuery());
       setData(payload);
     } catch (e) {
       setError(e instanceof Error ? e.message : ERROR_LOAD_DATA);
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, route, shipmentStatus]);
+  }, [dateRangeError, buildRoleQuery]);
 
   useEffect(() => {
     void load();
@@ -85,6 +92,7 @@ export default function CustomerAnalyticsDashboard() {
             </select>
           </label>
         </div>
+        <TimeGranularityPicker value={granularity} onChange={setGranularity} />
       </section>
 
       {loading && (
