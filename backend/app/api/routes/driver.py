@@ -21,7 +21,6 @@ from app.models.entities import (
     VehicleIssueReportStatus,
 )
 from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
-from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.dispatch_operations_center import _display_status
 from app.services.driver_dashboard_metrics import CrewRole, build_crew_dashboard_metrics
 from app.services.driver_pay_summary import build_driver_pay_summary
@@ -62,6 +61,72 @@ OPERATIONAL_STATUS_LABELS: dict[str, str] = {
 
 def _operational_status_label(slug: str) -> str:
     return OPERATIONAL_STATUS_LABELS.get(slug, slug.replace("_", " ").title())
+
+
+def _group_trip_updates(rows, *, max_per_trip: int) -> dict[int, list]:
+    grouped: dict[int, list] = {}
+    for row in rows:
+        bucket = grouped.setdefault(row.trip_id, [])
+        if len(bucket) < max_per_trip:
+            bucket.append(row)
+    return grouped
+
+
+def _latest_ping_from_updates(
+    trip: Trip,
+    location_updates: list[TripLocationUpdate],
+    status_updates: list[TripStatusUpdate],
+) -> str | None:
+    latest_ping = None
+    if location_updates:
+        latest_ping = location_updates[-1].location_name
+    if not (latest_ping or "").strip():
+        for su in reversed(status_updates):
+            if (su.location_name or "").strip():
+                latest_ping = su.location_name
+                break
+    if not (latest_ping or "").strip():
+        latest_ping = getattr(trip, "latest_location", None)
+    return latest_ping
+
+
+def _resolve_latest_ping(
+    trip: Trip,
+    *,
+    latest_location_ping: str | None,
+    latest_status_location: str | None,
+) -> str | None:
+    latest_ping = latest_location_ping
+    if not (latest_ping or "").strip():
+        latest_ping = latest_status_location
+    if not (latest_ping or "").strip():
+        latest_ping = getattr(trip, "latest_location", None)
+    return latest_ping
+
+
+def _serialize_location_updates(rows: list[TripLocationUpdate]) -> list[dict]:
+    return [
+        {
+            "location_name": lu.location_name,
+            "remarks": lu.remarks,
+            "photo_url": lu.photo_url,
+            "created_at": lu.created_at.isoformat(),
+        }
+        for lu in rows
+    ]
+
+
+def _serialize_status_timeline(rows: list[TripStatusUpdate]) -> list[dict]:
+    return [
+        {
+            "status": su.status,
+            "location_name": su.location_name,
+            "remarks": su.remarks,
+            "photo_url": su.photo_url,
+            "created_at": su.created_at.isoformat(),
+        }
+        for su in rows
+    ]
 
 
 def _open_attendance_row(db: Session, user_id: int) -> AttendanceRecord | None:
@@ -330,6 +395,10 @@ async def driver_submit_general_operational_report(
 
 @router.get("/trips")
 def my_trips(
+    include_timeline: bool = Query(
+        False,
+        description="When true, embed location_updates and status_timeline per trip (heavier payload).",
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
 ):
@@ -344,132 +413,145 @@ def my_trips(
     else:
         q = q.filter(Trip.helper_id == user.id)
     trips = q.order_by(Trip.id.desc()).limit(100).all()
+    trip_ids = [t.id for t in trips]
     paid_map = paid_verified_amount_by_booking_ids(db, [t.booking_id for t in trips])
+
+    loc_by_trip: dict[int, list[TripLocationUpdate]] = {}
+    status_by_trip: dict[int, list[TripStatusUpdate]] = {}
+    latest_loc_ping: dict[int, str | None] = {}
+    latest_status_loc: dict[int, str | None] = {}
+    if trip_ids:
+        if include_timeline:
+            loc_rows = (
+                db.query(TripLocationUpdate)
+                .filter(TripLocationUpdate.trip_id.in_(trip_ids))
+                .order_by(TripLocationUpdate.trip_id, TripLocationUpdate.created_at.asc())
+                .all()
+            )
+            status_rows = (
+                db.query(TripStatusUpdate)
+                .filter(TripStatusUpdate.trip_id.in_(trip_ids))
+                .order_by(TripStatusUpdate.trip_id, TripStatusUpdate.created_at.asc())
+                .all()
+            )
+            loc_by_trip = _group_trip_updates(loc_rows, max_per_trip=50)
+            status_by_trip = _group_trip_updates(status_rows, max_per_trip=100)
+        else:
+            loc_rows = (
+                db.query(TripLocationUpdate)
+                .filter(TripLocationUpdate.trip_id.in_(trip_ids))
+                .order_by(TripLocationUpdate.trip_id, TripLocationUpdate.created_at.desc())
+                .all()
+            )
+            for loc in loc_rows:
+                if loc.trip_id not in latest_loc_ping:
+                    latest_loc_ping[loc.trip_id] = loc.location_name
+            status_rows = (
+                db.query(TripStatusUpdate)
+                .filter(TripStatusUpdate.trip_id.in_(trip_ids))
+                .order_by(TripStatusUpdate.trip_id, TripStatusUpdate.created_at.desc())
+                .all()
+            )
+            for su in status_rows:
+                if su.trip_id not in latest_status_loc and (su.location_name or "").strip():
+                    latest_status_loc[su.trip_id] = su.location_name
+
     out = []
     for t in trips:
         bk = t.booking
         tk = t.truck
         cust = bk.customer if bk else None
-        location_updates = (
-            db.query(TripLocationUpdate)
-            .filter(TripLocationUpdate.trip_id == t.id)
-            .order_by(TripLocationUpdate.created_at.asc())
-            .limit(50)
-            .all()
-        )
-        status_updates = (
-            db.query(TripStatusUpdate)
-            .filter(TripStatusUpdate.trip_id == t.id)
-            .order_by(TripStatusUpdate.created_at.asc())
-            .limit(100)
-            .all()
-        )
-        latest_ping = None
-        if location_updates:
-            latest_ping = location_updates[-1].location_name
-        if not (latest_ping or "").strip():
-            for su in reversed(status_updates):
-                if (su.location_name or "").strip():
-                    latest_ping = su.location_name
-                    break
-        if not (latest_ping or "").strip():
-            latest_ping = getattr(t, "latest_location", None)
+        if include_timeline:
+            location_updates = loc_by_trip.get(t.id, [])
+            status_updates = status_by_trip.get(t.id, [])
+            latest_ping = _latest_ping_from_updates(t, location_updates, status_updates)
+        else:
+            location_updates = []
+            status_updates = []
+            latest_ping = _resolve_latest_ping(
+                t,
+                latest_location_ping=latest_loc_ping.get(t.id),
+                latest_status_location=latest_status_loc.get(t.id),
+            )
         latest_display = latest_location_display_for_trip(t, bk.dropoff_location if bk else "", latest_ping)
         op_slug = _display_status(t)
         op_label = _operational_status_label(op_slug)
-        road_km = booking_pickup_dropoff_distance_km(bk) if bk else None
-        out.append(
-            {
-                "id": t.id,
-                "booking_id": t.booking_id,
-                "truck_id": t.truck_id,
-                "driver_id": t.driver_id,
-                "dispatcher_id": t.dispatcher_id,
-                "route_path": t.route_path,
-                "distance_km": t.distance_km,
-                "toll_cost": t.toll_cost,
-                "fuel_cost": t.fuel_cost,
-                "labor_cost": t.labor_cost,
-                "driver_allowance_php": float(getattr(t, "driver_allowance_php", 0) or 0),
-                "helper_allowance_php": float(getattr(t, "helper_allowance_php", 0) or 0),
-                "duration_hours": t.duration_hours,
-                "status": t.status.value if hasattr(t.status, "value") else str(t.status),
-                "assigned_at": t.assigned_at.isoformat() if t.assigned_at else None,
-                "accepted_at": t.accepted_at.isoformat() if t.accepted_at else None,
-                "departure_time": t.departure_time.isoformat() if t.departure_time else None,
-                "arrival_pickup_time": t.arrival_pickup_time.isoformat() if t.arrival_pickup_time else None,
-                "loading_start_time": t.loading_start_time.isoformat() if t.loading_start_time else None,
-                "loading_end_time": t.loading_end_time.isoformat() if t.loading_end_time else None,
-                "departure_delivery_time": t.departure_delivery_time.isoformat() if t.departure_delivery_time else None,
-                "arrival_delivery_time": t.arrival_delivery_time.isoformat() if t.arrival_delivery_time else None,
-                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
-                "proof_of_delivery": t.proof_of_delivery,
-                "pod_notes": t.pod_notes,
-                "latest_location": latest_display,
-                "estimated_delivery_time": t.estimated_delivery_time.isoformat()
-                if t.estimated_delivery_time
-                else None,
-                "helper_id": t.helper_id,
-                "helper_name": t.helper.full_name if getattr(t, "helper", None) else None,
-                "helper_progress_status": getattr(t, "helper_progress_status", None),
-                "helper_last_proof_path": getattr(t, "helper_last_proof_path", None),
-                "operational_status": op_slug,
-                "operational_status_label": op_label,
-                "road_distance_km": float(road_km) if road_km is not None else None,
-                "driver_name": t.driver.full_name if getattr(t, "driver", None) else None,
-                "location_updates": [
-                    {
-                        "location_name": lu.location_name,
-                        "remarks": lu.remarks,
-                        "photo_url": lu.photo_url,
-                        "created_at": lu.created_at.isoformat(),
-                    }
-                    for lu in location_updates
-                ],
-                "status_timeline": [
-                    {
-                        "status": su.status,
-                        "location_name": su.location_name,
-                        "remarks": su.remarks,
-                        "photo_url": su.photo_url,
-                        "created_at": su.created_at.isoformat(),
-                    }
-                    for su in status_updates
-                ],
-                "booking": (
-                    {
-                        "id": bk.id,
-                        "customer_id": bk.customer_id,
-                        "customer_name": cust.full_name if cust else None,
-                        "customer_company_name": (cust.company_name or None) if cust else None,
-                        "paid_amount_verified": paid_map.get(bk.id),
-                        "pickup_location": bk.pickup_location,
-                        "dropoff_location": bk.dropoff_location,
-                        "scheduled_date": bk.scheduled_date.isoformat(),
-                        "scheduled_time_slot": bk.scheduled_time_slot,
-                        "cargo_weight_tons": bk.cargo_weight_tons,
-                        "cargo_description": bk.cargo_description,
-                        "estimated_cost": bk.estimated_cost,
-                        "status": bk.status.value if hasattr(bk.status, "value") else str(bk.status),
-                    }
-                    if bk
-                    else None
-                ),
-                "truck": (
-                    {
-                        "id": tk.id,
-                        "code": tk.code,
-                        "model_name": tk.model_name,
-                        "plate_number": tk.code,
-                        "capacity_tons": float(tk.capacity_tons or 0),
-                        "status": tk.status,
-                        "availability_status": getattr(tk, "availability_status", None),
-                    }
-                    if tk
-                    else None
-                ),
-            }
-        )
+        stored_km = float(t.distance_km) if t.distance_km else None
+        row: dict = {
+            "id": t.id,
+            "booking_id": t.booking_id,
+            "truck_id": t.truck_id,
+            "driver_id": t.driver_id,
+            "dispatcher_id": t.dispatcher_id,
+            "route_path": t.route_path,
+            "distance_km": t.distance_km,
+            "toll_cost": t.toll_cost,
+            "fuel_cost": t.fuel_cost,
+            "labor_cost": t.labor_cost,
+            "driver_allowance_php": float(getattr(t, "driver_allowance_php", 0) or 0),
+            "helper_allowance_php": float(getattr(t, "helper_allowance_php", 0) or 0),
+            "duration_hours": t.duration_hours,
+            "status": t.status.value if hasattr(t.status, "value") else str(t.status),
+            "assigned_at": t.assigned_at.isoformat() if t.assigned_at else None,
+            "accepted_at": t.accepted_at.isoformat() if t.accepted_at else None,
+            "departure_time": t.departure_time.isoformat() if t.departure_time else None,
+            "arrival_pickup_time": t.arrival_pickup_time.isoformat() if t.arrival_pickup_time else None,
+            "loading_start_time": t.loading_start_time.isoformat() if t.loading_start_time else None,
+            "loading_end_time": t.loading_end_time.isoformat() if t.loading_end_time else None,
+            "departure_delivery_time": t.departure_delivery_time.isoformat() if t.departure_delivery_time else None,
+            "arrival_delivery_time": t.arrival_delivery_time.isoformat() if t.arrival_delivery_time else None,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "proof_of_delivery": t.proof_of_delivery,
+            "pod_notes": t.pod_notes,
+            "latest_location": latest_display,
+            "estimated_delivery_time": t.estimated_delivery_time.isoformat()
+            if t.estimated_delivery_time
+            else None,
+            "helper_id": t.helper_id,
+            "helper_name": t.helper.full_name if getattr(t, "helper", None) else None,
+            "helper_progress_status": getattr(t, "helper_progress_status", None),
+            "helper_last_proof_path": getattr(t, "helper_last_proof_path", None),
+            "operational_status": op_slug,
+            "operational_status_label": op_label,
+            "road_distance_km": stored_km,
+            "driver_name": t.driver.full_name if getattr(t, "driver", None) else None,
+            "booking": (
+                {
+                    "id": bk.id,
+                    "customer_id": bk.customer_id,
+                    "customer_name": cust.full_name if cust else None,
+                    "customer_company_name": (cust.company_name or None) if cust else None,
+                    "paid_amount_verified": paid_map.get(bk.id),
+                    "pickup_location": bk.pickup_location,
+                    "dropoff_location": bk.dropoff_location,
+                    "scheduled_date": bk.scheduled_date.isoformat(),
+                    "scheduled_time_slot": bk.scheduled_time_slot,
+                    "cargo_weight_tons": bk.cargo_weight_tons,
+                    "cargo_description": bk.cargo_description,
+                    "estimated_cost": bk.estimated_cost,
+                    "status": bk.status.value if hasattr(bk.status, "value") else str(bk.status),
+                }
+                if bk
+                else None
+            ),
+            "truck": (
+                {
+                    "id": tk.id,
+                    "code": tk.code,
+                    "model_name": tk.model_name,
+                    "plate_number": tk.code,
+                    "capacity_tons": float(tk.capacity_tons or 0),
+                    "status": tk.status,
+                    "availability_status": getattr(tk, "availability_status", None),
+                }
+                if tk
+                else None
+            ),
+        }
+        if include_timeline:
+            row["location_updates"] = _serialize_location_updates(location_updates)
+            row["status_timeline"] = _serialize_status_timeline(status_updates)
+        out.append(row)
     if user.role == UserRole.HELPER:
         return [redact_trip_payload_for_helper(row) for row in out]
     return out

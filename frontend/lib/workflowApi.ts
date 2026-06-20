@@ -897,7 +897,10 @@ export const WorkflowApi = {
   getTrip: (trip_id: number) => apiGet<Trip>(`/workflow/job/${trip_id}`),
 
   // Driver
-  myTrips: () => apiGet<Trip[]>("/driver/trips"),
+  myTrips: (opts?: { includeTimeline?: boolean }) => {
+    const qs = opts?.includeTimeline ? "?include_timeline=true" : "";
+    return apiGet<Trip[]>(`/driver/trips${qs}`);
+  },
   driverDashboardSummary: () => apiGet<DriverDashboardSummary>("/driver/dashboard-summary"),
   driverPaySummary: () => apiGet<DriverPaySummary>("/driver/pay-summary"),
   driverVehicleIssueSelectableTrips: () =>

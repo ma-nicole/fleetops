@@ -142,18 +142,33 @@ export default function OperationalCrewDashboard() {
   const [checkOutBusy, setCheckOutBusy] = useState(false);
   const [checkInOk, setCheckInOk] = useState<string | null>(null);
 
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const [t, d] = await Promise.all([WorkflowApi.myTrips(), WorkflowApi.driverDashboardSummary().catch(() => null)]);
-      setTrips(t);
-      setSummary(d);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : ERROR_LOAD_DATA);
-    } finally {
-      setLoading(false);
+    setSummaryError(null);
+    const [tripsResult, summaryResult] = await Promise.allSettled([
+      WorkflowApi.myTrips(),
+      WorkflowApi.driverDashboardSummary(),
+    ]);
+    if (tripsResult.status === "fulfilled") {
+      setTrips(tripsResult.value);
+    } else {
+      const msg =
+        tripsResult.reason instanceof Error ? tripsResult.reason.message : ERROR_LOAD_DATA;
+      setError(msg);
+      setTrips([]);
     }
+    if (summaryResult.status === "fulfilled") {
+      setSummary(summaryResult.value);
+    } else {
+      setSummary(null);
+      const msg =
+        summaryResult.reason instanceof Error ? summaryResult.reason.message : ERROR_LOAD_DATA;
+      setSummaryError(msg);
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -377,9 +392,22 @@ export default function OperationalCrewDashboard() {
             <LoadingMessage label="Loading summary…" size="sm" />
             <SkeletonKpiGrid count={4} />
           </div>
-        ) : (
-          <ErrorState message={error ?? ERROR_LOAD_DATA} onRetry={() => void refresh()} compact />
-        )}
+        ) : summaryError && !error ? (
+          <div
+            role="status"
+            style={{
+              padding: "0.75rem 1rem",
+              borderRadius: 8,
+              background: "#FEF3C7",
+              color: "#92400E",
+              fontSize: "0.9rem",
+            }}
+          >
+            Summary metrics unavailable ({summaryError}). Trip list below is still live.
+          </div>
+        ) : error ? (
+          <ErrorState message={error} onRetry={() => void refresh()} compact />
+        ) : null}
 
         {crewRole === "driver" && truckForVehicle ? (
           <article className="panel-card" style={{ ...card }}>
