@@ -46,7 +46,13 @@ from app.services.manager_role_analytics import (
     _forecast_series,
     _monthly_series,
 )
-from app.services.time_bucket import period_key
+from app.services.time_bucket import (
+    GRANULARITY_OPTIONS,
+    period_key,
+    rollup_count_series,
+    rollup_nested_series,
+    series_from_buckets,
+)
 from app.services.prescriptive.assignment import recommend_assignment
 from app.services.schedule_timeline import build_timeline
 
@@ -136,6 +142,33 @@ def _count_by_field(rows: list[dict], field: str, *, limit: int = 12) -> list[di
     return [{field: label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
 
 
+def _cause_count_chart(rows: list[dict], *, field: str = "cause", limit: int = 12) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        counts[str(row.get(field) or "unknown")] += 1
+    return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
+
+
+_GRANULARITY_LABEL = {g: g.replace("ly", "").replace("i", "y") for g in GRANULARITY_OPTIONS}
+_GRANULARITY_LABEL.update(
+    {
+        "yearly": "year",
+        "quarterly": "quarter",
+        "monthly": "month",
+        "weekly": "week",
+        "daily": "day",
+    }
+)
+
+
+def _period_note(metric: str, granularity: str) -> str:
+    unit = _GRANULARITY_LABEL.get(granularity, granularity)
+    return (
+        f"{metric} summarized by {unit}. "
+        "Click a period on the chart to drill down Year → Quarter → Month → Week → Day."
+    )
+
+
 def _period_count_chart(rows: list[dict], date_field: str, granularity: str, *, limit: int = 24) -> list[dict]:
     buckets: dict[str, int] = defaultdict(int)
     for row in rows:
@@ -149,7 +182,64 @@ def _period_count_chart(rows: list[dict], date_field: str, granularity: str, *, 
         bucket = period_key(ref, granularity)
         if bucket:
             buckets[bucket] += 1
-    return [{"period": key, "count": value} for key, value in sorted(buckets.items())[-limit:]]
+    return rollup_count_series(buckets, granularity, limit)
+
+
+def _period_avg_chart(
+    rows: list[dict],
+    date_field: str,
+    value_field: str,
+    granularity: str,
+    *,
+    limit: int = 24,
+) -> list[dict]:
+    buckets: dict[str, list[float]] = defaultdict(list)
+    for row in rows:
+        raw = row.get(date_field)
+        value = row.get(value_field)
+        if not raw or raw == "—" or value is None or value == "—":
+            continue
+        try:
+            ref = date.fromisoformat(str(raw)[:10])
+            numeric = float(value)
+        except (ValueError, TypeError):
+            continue
+        bucket = period_key(ref, granularity)
+        if bucket:
+            buckets[bucket].append(numeric)
+    if not buckets:
+        return []
+    averages = {key: sum(values) / len(values) for key, values in buckets.items()}
+    return series_from_buckets(averages, granularity, limit, value_key="avg_hours")
+
+
+def _trip_period_status_chart(trips: list[Trip], granularity: str, *, limit: int = 24) -> list[dict]:
+    buckets: dict[str, dict[str, float]] = defaultdict(lambda: {"completed": 0.0, "active": 0.0})
+    for trip in trips:
+        if trip.status == TripStatus.COMPLETED:
+            ref = trip.completed_at or trip.assigned_at
+            bucket_key = "completed"
+        elif trip.status in ACTIVE_TRIP:
+            ref = trip.assigned_at or (trip.booking.scheduled_date if trip.booking else None)
+            bucket_key = "active"
+        else:
+            continue
+        if ref is None:
+            continue
+        ref_date = ref.date() if isinstance(ref, datetime) else ref
+        period = period_key(ref_date, granularity)
+        if period:
+            buckets[period][bucket_key] += 1
+    return rollup_nested_series(buckets, granularity, limit)
+
+
+def _fleet_availability_chart(rows: list[dict]) -> list[dict]:
+    available = sum(1 for row in rows if row.get("availability") == "available")
+    busy = max(0, len(rows) - available)
+    return [
+        {"availability": "available", "count": available},
+        {"availability": "busy", "count": busy},
+    ]
 
 
 def _capacity_snapshot_chart(*, pending: int, available: int, conflicts: int) -> list[dict]:
@@ -172,13 +262,6 @@ def _conflict_cause_chart(conflicts: list[dict], *, limit: int = 12) -> list[dic
     for conflict in conflicts:
         for reason in conflict.get("reasons") or ["unknown"]:
             counts[str(reason)] += 1
-    return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
-
-
-def _cause_count_chart(rows: list[dict], *, field: str = "cause", limit: int = 12) -> list[dict]:
-    counts: dict[str, int] = defaultdict(int)
-    for row in rows:
-        counts[str(row.get(field) or "unknown")] += 1
     return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
 
 
@@ -257,7 +340,7 @@ def build_dispatcher_role_analytics(
             period_counts[p] += 1
 
     sched_desc_trips = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not schedule_rows
         else _block(
             kpis=[
@@ -265,9 +348,10 @@ def build_dispatcher_role_analytics(
                 {"label": "Upcoming", "value": len(upcoming)},
                 {"label": "Today", "value": day_counts.get(today.isoformat(), 0)},
             ],
-            chart=[{"period": m, "count": c} for m, c in sorted(period_counts.items())[-24:]],
+            chart=rollup_count_series(period_counts, f.granularity),
             drilldown=schedule_rows[:50],
-            statistics=compute_statistics(list(day_counts.values()), min_samples=1) if day_counts else None,
+            statistics=compute_statistics(list(period_counts.values()), min_samples=1) if period_counts else None,
+            note=_period_note("Scheduled trip volume", f.granularity),
         )
     )
 
@@ -297,17 +381,18 @@ def build_dispatcher_role_analytics(
                 "dispatcher": _dispatcher_for(booking_id, jobs, dispatcher_names) if booking_id else "—",
             }
         )
-    dispatch_status_chart = _count_by_field(dispatch_log_rows, "status")
+    dispatch_log_chart = _period_count_chart(dispatch_log_rows, "date", f.granularity)
     sched_desc_dispatch = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not dispatch_log_rows
         else _block(
             kpis=[{"label": "Dispatch log entries", "value": len(dispatch_log_rows)}],
-            chart=dispatch_status_chart,
+            chart=dispatch_log_chart,
             drilldown=dispatch_log_rows[:50],
-            statistics=compute_statistics([row["count"] for row in dispatch_status_chart], min_samples=1)
-            if dispatch_status_chart
+            statistics=compute_statistics([row["count"] for row in dispatch_log_chart], min_samples=1)
+            if dispatch_log_chart
             else None,
+            note=_period_note("Dispatch log activity", f.granularity),
         )
     )
 
@@ -330,15 +415,16 @@ def build_dispatcher_role_analytics(
         if bucket:
             delivery_period_counts[bucket] += 1
     sched_desc_delivery = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not delivery_rows
         else _block(
             kpis=[{"label": "Completed deliveries", "value": len(delivery_rows)}],
-            chart=[{"period": key, "count": value} for key, value in sorted(delivery_period_counts.items())[-24:]],
+            chart=rollup_count_series(delivery_period_counts, f.granularity),
             drilldown=delivery_rows[:50],
             statistics=compute_statistics(list(delivery_period_counts.values()), min_samples=1)
             if delivery_period_counts
             else None,
+            note=_period_note("Completed delivery volume", f.granularity),
         )
     )
 
@@ -405,17 +491,22 @@ def build_dispatcher_role_analytics(
     route_summary = routes.get("summary") or {}
     route_perf = routes.get("performance") or []
     route_drill = routes.get("drilldown") or route_perf
+    route_util_chart = [
+        {"route": row.get("route"), "deliveries": int(row.get("deliveries") or 0)}
+        for row in sorted(route_perf, key=lambda item: -int(item.get("deliveries") or 0))[:12]
+    ]
     route_desc_history = (
-        _empty(routes.get("message", "No data available yet."))
+        _empty(routes.get("message", "No data available for the selected filters."))
         if routes.get("empty")
         else _block(
             kpis=[
                 {"label": "Routes tracked", "value": route_summary.get("route_count", len(route_perf))},
                 {"label": "Most used", "value": route_summary.get("most_used_route", "—")},
             ],
-            chart=routes.get("cost_comparison") or route_perf,
+            chart=route_util_chart,
             drilldown=route_drill[:50] if isinstance(route_drill, list) else [],
             statistics=routes.get("statistics"),
+            note="Route utilization ranked by completed deliveries — not individual trip rows.",
         )
     )
 
@@ -444,12 +535,13 @@ def build_dispatcher_role_analytics(
             bucket = period_key(ref_date, f.granularity)
             if bucket:
                 travel_by_period[bucket].append(hours)
-    travel_chart = [
-        {"period": key, "avg_hours": round(sum(values) / len(values), 2)}
-        for key, values in sorted(travel_by_period.items())[-24:]
-    ]
+    travel_chart = series_from_buckets(
+        {key: sum(values) / len(values) for key, values in travel_by_period.items()},
+        f.granularity,
+        value_key="avg_hours",
+    )
     route_desc_travel = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not travel_rows
         else _block(
             kpis=[
@@ -459,6 +551,7 @@ def build_dispatcher_role_analytics(
             chart=travel_chart,
             drilldown=travel_rows[:50],
             statistics=compute_statistics(travel_hours, min_samples=1),
+            note=_period_note("Average delivery travel time (hours)", f.granularity),
         )
     )
 
@@ -474,7 +567,7 @@ def build_dispatcher_role_analytics(
             }
         )
     route_desc_performance = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not perf_log_rows
         else _block(
             kpis=[
@@ -484,12 +577,16 @@ def build_dispatcher_role_analytics(
             chart=[
                 {
                     "route": row["route"],
-                    "avg_delivery_hours": row.get("avg_delivery_hours"),
-                    "delayed_count": row.get("delayed_count"),
+                    "on_time": max(
+                        0,
+                        int(row.get("deliveries") or 0) - int(row.get("delayed_count") or 0),
+                    ),
+                    "delayed": int(row.get("delayed_count") or 0),
                 }
                 for row in perf_log_rows[:12]
             ],
             drilldown=perf_log_rows,
+            note="On-time vs delayed deliveries per route — aggregated route performance.",
         )
     )
 
@@ -559,36 +656,42 @@ def build_dispatcher_role_analytics(
                 "date": today.isoformat(),
             }
         )
-    truck_avail_chart = sorted(
-        [{"truck": row["truck"], "trip_count": row["trip_count"]} for row in truck_avail_rows],
-        key=lambda item: -int(item["trip_count"] or 0),
-    )[:12]
+    fleet_avail_chart = _fleet_availability_chart(truck_avail_rows)
     truck_desc_availability = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not truck_avail_rows
         else _block(
             kpis=[
                 {"label": "Fleet size", "value": len(truck_avail_rows)},
                 {"label": "Available now", "value": sum(1 for r in truck_avail_rows if r["availability"] == "available")},
             ],
-            chart=truck_avail_chart,
+            chart=fleet_avail_chart,
             drilldown=truck_avail_rows,
             statistics=compute_statistics([row["trip_count"] for row in truck_avail_rows], min_samples=1),
+            note="Current fleet availability snapshot — available vs busy trucks.",
         )
     )
 
     fleet_summary = fleet.get("summary") or {}
+    fleet_usage_chart = [
+        {
+            "truck_code": str(row.get("truck_code") or row.get("truck") or "—"),
+            "trip_count": int(row.get("trip_count") or 0),
+        }
+        for row in (fleet.get("truck_usage") or [])
+    ]
     truck_desc_utilization = (
-        _empty(fleet.get("message", "No data available yet."))
+        _empty(fleet.get("message", "No data available for the selected filters."))
         if fleet.get("empty")
         else _block(
             kpis=[
                 {"label": "Utilization %", "value": fleet_summary.get("fleet_utilization_rate_pct", "—")},
                 {"label": "Most used", "value": fleet_summary.get("most_used_truck", "—")},
             ],
-            chart=fleet.get("truck_usage") or [],
+            chart=fleet_usage_chart,
             drilldown=fleet.get("drilldown") or [],
             statistics=fleet.get("statistics"),
+            note="Trip assignments per truck — ranked fleet utilization for the filtered period.",
         )
     )
 
@@ -680,7 +783,7 @@ def build_dispatcher_role_analytics(
 
     driver_schedule_chart = _period_count_chart(driver_schedule_rows, "date", f.granularity)
     driver_desc_schedules = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not driver_schedule_rows
         else _block(
             kpis=[{"label": "Driver schedule entries", "value": len(driver_schedule_rows)}],
@@ -689,32 +792,56 @@ def build_dispatcher_role_analytics(
             statistics=compute_statistics([row["count"] for row in driver_schedule_chart], min_samples=1)
             if driver_schedule_chart
             else None,
+            note=_period_note("Driver schedule assignments", f.granularity),
         )
     )
 
     assignment_hist = driver_schedule_rows.copy()
     driver_desc_assignments = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not assignment_hist
         else _block(
             kpis=[{"label": "Assignments", "value": len(assignment_hist)}],
             chart=drivers.get("distribution") or [],
             drilldown=assignment_hist[:50],
+            note="Completed vs delayed deliveries per driver — workload distribution.",
         )
     )
 
     completion_rows = delivery_rows.copy()
-    completion_chart = _period_count_chart(completion_rows, "completed_at", f.granularity)
+    completion_metric_rows: list[dict] = []
+    for trip in filtered_trips:
+        if trip.status != TripStatus.COMPLETED or not trip.completed_at:
+            continue
+        hours = _delivery_hours(trip)
+        if hours is None:
+            continue
+        completion_metric_rows.append(
+            {
+                "completed_at": trip.completed_at.isoformat(),
+                "completion_hours": round(hours, 2),
+            }
+        )
+    completion_time_chart = _period_avg_chart(
+        completion_metric_rows,
+        "completed_at",
+        "completion_hours",
+        f.granularity,
+    )
     driver_desc_completion = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not completion_rows
         else _block(
             kpis=[{"label": "Completed trips", "value": len(completion_rows)}],
-            chart=completion_chart,
+            chart=completion_time_chart,
             drilldown=completion_rows[:50],
-            statistics=compute_statistics([row["count"] for row in completion_chart], min_samples=1)
-            if completion_chart
+            statistics=compute_statistics(
+                [row["completion_hours"] for row in completion_metric_rows],
+                min_samples=1,
+            )
+            if completion_metric_rows
             else None,
+            note=_period_note("Average trip completion time (hours)", f.granularity),
         )
     )
 
@@ -788,23 +915,24 @@ def build_dispatcher_role_analytics(
                 "dispatcher": _dispatcher_for(booking.id, jobs, dispatcher_names),
             }
         )
-    order_status_chart = _count_by_field(order_rows, "status")
+    order_intake_chart = _period_count_chart(order_rows, "date", f.granularity)
     order_desc_details = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not order_rows
         else _block(
             kpis=[{"label": "Orders", "value": len(order_rows)}],
-            chart=order_status_chart,
+            chart=order_intake_chart,
             drilldown=order_rows[:50],
-            statistics=compute_statistics([row["count"] for row in order_status_chart], min_samples=1)
-            if order_status_chart
+            statistics=compute_statistics([row["count"] for row in order_intake_chart], min_samples=1)
+            if order_intake_chart
             else None,
+            note=_period_note("Order intake by scheduled date", f.granularity),
         )
     )
 
     ship_summary = shipments.get("summary") or {}
     order_desc_shipment = (
-        _empty(shipments.get("message", "No data available yet."))
+        _empty(shipments.get("message", "No data available for the selected filters."))
         if shipments.get("empty")
         else _block(
             kpis=[
@@ -815,25 +943,36 @@ def build_dispatcher_role_analytics(
             chart=shipments.get("status_distribution") or [],
             drilldown=shipments.get("drilldown") or [],
             statistics=shipments.get("statistics"),
+            note="Shipment status distribution — part-to-whole view of delivery outcomes.",
         )
     )
 
+    progress_period_rows: list[dict] = []
+    for trip in filtered_trips:
+        if _status_str(trip.status) not in {s.value for s in ACTIVE_TRIP}:
+            continue
+        ref = trip.assigned_at or (trip.booking.scheduled_date if trip.booking else None)
+        if ref is None:
+            continue
+        ref_date = ref.date() if isinstance(ref, datetime) else ref
+        progress_period_rows.append({"date": ref_date.isoformat()})
+    progress_volume_chart = _period_count_chart(progress_period_rows, "date", f.granularity)
     progress_rows = [
         _trip_row(t, jobs, dispatcher_names)
         for t in filtered_trips
         if _status_str(t.status) in {s.value for s in ACTIVE_TRIP}
     ]
-    progress_status_chart = _count_by_field(progress_rows, "status")
     order_desc_progress = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not progress_rows
         else _block(
             kpis=[{"label": "Active shipments", "value": len(progress_rows)}],
-            chart=progress_status_chart,
+            chart=progress_volume_chart,
             drilldown=progress_rows,
-            statistics=compute_statistics([row["count"] for row in progress_status_chart], min_samples=1)
-            if progress_status_chart
+            statistics=compute_statistics([row["count"] for row in progress_volume_chart], min_samples=1)
+            if progress_volume_chart
             else None,
+            note=_period_note("In-transit shipment volume", f.granularity),
         )
     )
 
@@ -892,9 +1031,9 @@ def build_dispatcher_role_analytics(
                 "dispatcher": _dispatcher_for(booking.id, jobs, dispatcher_names),
             }
         )
-    dispatch_record_chart = _count_by_field(dispatch_record_rows, "status")
+    dispatch_record_chart = _period_count_chart(dispatch_record_rows, "date", f.granularity)
     ops_desc_dispatch = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not dispatch_record_rows
         else _block(
             kpis=[{"label": "Dispatch records", "value": len(dispatch_record_rows)}],
@@ -903,20 +1042,19 @@ def build_dispatcher_role_analytics(
             statistics=compute_statistics([row["count"] for row in dispatch_record_chart], min_samples=1)
             if dispatch_record_chart
             else None,
+            note=_period_note("Dispatch record volume (logs + pending queue)", f.granularity),
         )
     )
 
-    status_counts: dict[str, int] = defaultdict(int)
-    for trip in filtered_trips:
-        status_counts[_status_str(trip.status)] += 1
-    trip_summary_chart = [{"status": k, "count": v} for k, v in sorted(status_counts.items())]
+    trip_summary_chart = _trip_period_status_chart(filtered_trips, f.granularity)
     ops_desc_trips = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not filtered_trips
         else _block(
             kpis=[{"label": "Trips in scope", "value": len(filtered_trips)}],
             chart=trip_summary_chart,
             drilldown=[_trip_row(t, jobs, dispatcher_names) for t in filtered_trips[:50]],
+            note=_period_note("Completed vs active trip volume", f.granularity),
         )
     )
 
@@ -936,16 +1074,24 @@ def build_dispatcher_role_analytics(
                 "route": "—",
             }
         )
+    driver_ranking_chart = [
+        {
+            "driver_name": str(row.get("driver_name") or row.get("driver") or "—"),
+            "completed": int(row.get("deliveries_completed") or row.get("completed") or 0),
+        }
+        for row in (drivers.get("ranking") or [])
+    ]
     ops_desc_performance = (
-        _empty("No data available yet.")
+        _empty("No data available for the selected filters.")
         if not op_log_rows and drivers.get("empty")
         else _block(
             kpis=[
                 {"label": "Completed deliveries", "value": perf_summary.get("total_completed", "—")},
                 {"label": "Operational reports", "value": len(op_log_rows)},
             ],
-            chart=drivers.get("ranking") or [],
+            chart=driver_ranking_chart,
             drilldown=op_log_rows[:50],
+            note="Driver completion ranking — aggregated deliveries per driver.",
         )
     )
 

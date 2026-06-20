@@ -82,6 +82,15 @@ def period_date_range(period: str, granularity: str) -> tuple[str, str] | None:
         return date(year, month, 1).isoformat(), last_day.isoformat()
     if granularity == "daily" and len(token) >= 10:
         return token[:10], token[:10]
+    if granularity == "weekly" and "-W" in token:
+        year_s, week_s = token.split("-W")
+        year = int(year_s)
+        week = int(week_s)
+        jan4 = date(year, 1, 4)
+        monday_week1 = jan4 - timedelta(days=jan4.isoweekday() - 1)
+        monday = monday_week1 + timedelta(weeks=week - 1)
+        sunday = monday + timedelta(days=6)
+        return monday.isoformat(), sunday.isoformat()
     return None
 
 

@@ -45,6 +45,20 @@ export function dateRangeForPeriod(period: string, granularity: TimeGranularity)
       to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
     };
   }
+  if (granularity === "weekly" && /^\d{4}-W\d{2}$/.test(token)) {
+    const year = Number(token.slice(0, 4));
+    const week = Number(token.slice(6, 8));
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const dayOfWeek = jan4.getUTCDay() || 7;
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setUTCDate(jan4.getUTCDate() - dayOfWeek + 1);
+    const monday = new Date(mondayWeek1);
+    monday.setUTCDate(mondayWeek1.getUTCDate() + (week - 1) * 7);
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    return { from: fmt(monday), to: fmt(sunday) };
+  }
   if (granularity === "daily" && token.length >= 10) {
     return { from: token.slice(0, 10), to: token.slice(0, 10) };
   }

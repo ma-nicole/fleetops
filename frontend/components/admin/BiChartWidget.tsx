@@ -130,6 +130,7 @@ export function BiChartWidget({
   analyticsMethod = "Comparative aggregation",
   riskLegend,
   preferredChartKind,
+  valueUnit,
   loading = false,
   timeGranularity,
   onPeriodDrillDown,
@@ -143,6 +144,7 @@ export function BiChartWidget({
   analyticsMethod?: string;
   riskLegend?: Array<{ label: string; color: string }>;
   preferredChartKind?: AnalyticsChartKind;
+  valueUnit?: string;
   loading?: boolean;
   timeGranularity?: TimeGranularity;
   onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
@@ -184,7 +186,7 @@ export function BiChartWidget({
     if (chartStats) return chartStats;
     return computeRowStatistics(drilldown, preferFields);
   }, [block, chart, drilldown, empty, resolvedMeta?.valueKey]);
-  const legendLabel = resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
+  const legendLabel = valueUnit ?? resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
 
   const quarterCompare = useMemo(() => {
     if (comparative?.comparisons?.quarterly?.length) {
@@ -308,7 +310,7 @@ export function BiChartWidget({
       );
     }
 
-    return wrapChartVisual(<EmptyChart message="No data available." />, 0);
+    return wrapChartVisual(<EmptyChart message="No data available for the selected filters." />, 0);
   };
 
   if (empty) {
@@ -330,6 +332,9 @@ export function BiChartWidget({
           <span className="bi-badge bi-badge--type">{analyticsType}</span>
           <span className="bi-badge bi-badge--method">{analyticsMethod}</span>
         </div>
+        {"note" in block && block.note ? (
+          <p className="bi-chart-widget__subtitle">{block.note}</p>
+        ) : null}
         <p className="bi-chart-widget__hint">
           <span className="bi-chart-widget__hint-icon" aria-hidden>
             ⚡

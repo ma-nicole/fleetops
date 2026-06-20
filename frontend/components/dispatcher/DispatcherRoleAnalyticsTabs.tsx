@@ -3,7 +3,7 @@
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
 import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import type { AdminAnalyticsPayload, DispatcherRoleAnalyticsPayload } from "@/lib/analyticsApi";
-import { dispatcherPreferredChartKind } from "@/lib/dispatcherAnalyticsChartConfig";
+import { dispatcherChartUnit, dispatcherPreferredChartKind } from "@/lib/dispatcherAnalyticsChartConfig";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   trip_scheduling: {
@@ -80,6 +80,7 @@ export default function DispatcherRoleAnalyticsTabs({
       timeGranularity={timeGranularity}
       onPeriodDrillDown={onPeriodDrillDown}
       resolvePreferredChartKind={dispatcherPreferredChartKind}
+      resolveChartUnit={dispatcherChartUnit}
     />
   );
 }

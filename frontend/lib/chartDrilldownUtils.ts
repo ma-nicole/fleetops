@@ -216,6 +216,18 @@ export function inferChartMeta(
       monthFromX: true,
     };
   }
+  if (keys.includes("period") && keys.includes("completed") && keys.includes("active")) {
+    return {
+      kind: "stackedBar",
+      labelKey: "period",
+      valueKey: "completed",
+      xKey: "period",
+      yKey: "completed",
+      seriesKeys: ["completed", "active"],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
   if (keys.includes("period") && keys.some((k) => k.startsWith("actual_")) && keys.some((k) => k.startsWith("forecast_"))) {
     const actualKey = keys.find((k) => k.startsWith("actual_"))!;
     const forecastKey = keys.find((k) => k.startsWith("forecast_"))!;
@@ -284,6 +296,14 @@ export function inferChartMeta(
       labelKey: "status",
       valueKey: "count",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "status"),
+    };
+  }
+  if (keys.includes("availability") && keys.includes("count")) {
+    return {
+      kind: "pie",
+      labelKey: "availability",
+      valueKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "availability"),
     };
   }
   if (keys.includes("cause") && keys.includes("count")) {
@@ -439,6 +459,15 @@ export function inferChartMeta(
       labelKey: "truck",
       valueKey,
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "truck"),
+    };
+  }
+  if (keys.includes("route") && keys.includes("on_time") && keys.includes("delayed")) {
+    return {
+      kind: "stackedBar",
+      labelKey: "route",
+      valueKey: "on_time",
+      seriesKeys: ["on_time", "delayed"],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "route"),
     };
   }
   if (keys.includes("route")) {

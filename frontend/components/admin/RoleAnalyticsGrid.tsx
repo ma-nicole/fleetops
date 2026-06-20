@@ -26,6 +26,7 @@ export type AnalyticsCategoryTab = {
 type WidgetDef = {
   id: string;
   title: string;
+  featureKey: string;
   block: RoleAnalyticsFeatureBlock;
   analyticsType: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
   analyticsMethod: string;
@@ -44,6 +45,7 @@ function buildWidget(
   return {
     id,
     title,
+    featureKey,
     block,
     analyticsType,
     analyticsMethod: inferAnalyticsMethod(featureKey, analyticsType),
@@ -105,6 +107,7 @@ export function RoleAnalyticsGrid({
   timeGranularity,
   onPeriodDrillDown,
   resolvePreferredChartKind,
+  resolveChartUnit,
 }: {
   categoryTabs?: AnalyticsCategoryTab[];
   pillarTabs?: { id: string; label: string }[];
@@ -115,6 +118,7 @@ export function RoleAnalyticsGrid({
   timeGranularity?: TimeGranularity;
   onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
   resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined;
+  resolveChartUnit?: (featureKey: string) => string | undefined;
 }) {
   const tabs = categoryTabs ?? pillarTabs ?? [];
   const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? "");
@@ -187,6 +191,7 @@ export function RoleAnalyticsGrid({
                       analyticsType={w.analyticsType}
                       analyticsMethod={w.analyticsMethod}
                       preferredChartKind={w.preferredChartKind}
+                      valueUnit={resolveChartUnit?.(w.featureKey)}
                       timeGranularity={timeGranularity}
                       onPeriodDrillDown={onPeriodDrillDown}
                     />
