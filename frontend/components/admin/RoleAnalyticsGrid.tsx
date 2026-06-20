@@ -10,6 +10,7 @@ import {
   inferPreferredChartKind,
   type AnalyticsChartKind,
 } from "@/lib/analyticsChartConfig";
+import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 
 export type CategoryInclude = {
   pillar: string;
@@ -37,6 +38,7 @@ function buildWidget(
   source: "descriptive" | "predictive",
   featureKey: string,
   block: RoleAnalyticsFeatureBlock,
+  resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined,
 ): WidgetDef {
   const analyticsType = inferAnalyticsType(source, featureKey);
   return {
@@ -45,7 +47,8 @@ function buildWidget(
     block,
     analyticsType,
     analyticsMethod: inferAnalyticsMethod(featureKey, analyticsType),
-    preferredChartKind: inferPreferredChartKind(featureKey),
+    preferredChartKind:
+      resolvePreferredChartKind?.(featureKey) ?? inferPreferredChartKind(featureKey),
   };
 }
 
@@ -53,6 +56,7 @@ function flattenCategory(
   data: Record<string, RoleAnalyticsPillar>,
   category: AnalyticsCategoryTab,
   featureLabels: Record<string, Record<string, string>>,
+  resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined,
 ): WidgetDef[] {
   const out: WidgetDef[] = [];
   for (const inc of category.include) {
@@ -62,7 +66,7 @@ function flattenCategory(
     const addBlock = (type: "descriptive" | "predictive", key: string, block: RoleAnalyticsFeatureBlock) => {
       if (inc.features && !inc.features.includes(key)) return;
       out.push(
-        buildWidget(`${inc.pillar}-${type}-${key}`, labels[key] ?? key, type, key, block),
+        buildWidget(`${inc.pillar}-${type}-${key}`, labels[key] ?? key, type, key, block, resolvePreferredChartKind),
       );
     };
     for (const [key, block] of Object.entries(pillar.descriptive)) {
@@ -75,13 +79,18 @@ function flattenCategory(
   return out;
 }
 
-function flattenPillar(pillarKey: string, pillar: RoleAnalyticsPillar, labels: Record<string, string>): WidgetDef[] {
+function flattenPillar(
+  pillarKey: string,
+  pillar: RoleAnalyticsPillar,
+  labels: Record<string, string>,
+  resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined,
+): WidgetDef[] {
   const out: WidgetDef[] = [];
   for (const [key, block] of Object.entries(pillar.descriptive)) {
-    out.push(buildWidget(`${pillarKey}-desc-${key}`, labels[key] ?? key, "descriptive", key, block));
+    out.push(buildWidget(`${pillarKey}-desc-${key}`, labels[key] ?? key, "descriptive", key, block, resolvePreferredChartKind));
   }
   for (const [key, block] of Object.entries(pillar.predictive)) {
-    out.push(buildWidget(`${pillarKey}-pred-${key}`, labels[key] ?? key, "predictive", key, block));
+    out.push(buildWidget(`${pillarKey}-pred-${key}`, labels[key] ?? key, "predictive", key, block, resolvePreferredChartKind));
   }
   return out;
 }
@@ -93,6 +102,9 @@ export function RoleAnalyticsGrid({
   data,
   filterOptions,
   dashboardTitle,
+  timeGranularity,
+  onPeriodDrillDown,
+  resolvePreferredChartKind,
 }: {
   categoryTabs?: AnalyticsCategoryTab[];
   pillarTabs?: { id: string; label: string }[];
@@ -100,6 +112,9 @@ export function RoleAnalyticsGrid({
   data: Record<string, RoleAnalyticsPillar>;
   filterOptions?: AdminAnalyticsPayload["filter_options"];
   dashboardTitle: string;
+  timeGranularity?: TimeGranularity;
+  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined;
 }) {
   const tabs = categoryTabs ?? pillarTabs ?? [];
   const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? "");
@@ -108,13 +123,13 @@ export function RoleAnalyticsGrid({
     if (categoryTabs) {
       const category = categoryTabs.find((t) => t.id === activeTab);
       if (!category) return [];
-      return flattenCategory(data, category, featureLabels);
+      return flattenCategory(data, category, featureLabels, resolvePreferredChartKind);
     }
     const pillarData = data[activeTab];
     if (!pillarData) return [];
     const labels = featureLabels[activeTab] ?? {};
-    return flattenPillar(activeTab, pillarData, labels);
-  }, [activeTab, categoryTabs, data, featureLabels]);
+    return flattenPillar(activeTab, pillarData, labels, resolvePreferredChartKind);
+  }, [activeTab, categoryTabs, data, featureLabels, resolvePreferredChartKind]);
 
   const groupedWidgets = useMemo(() => {
     const buckets: Record<WidgetDef["analyticsType"], WidgetDef[]> = {
@@ -172,6 +187,8 @@ export function RoleAnalyticsGrid({
                       analyticsType={w.analyticsType}
                       analyticsMethod={w.analyticsMethod}
                       preferredChartKind={w.preferredChartKind}
+                      timeGranularity={timeGranularity}
+                      onPeriodDrillDown={onPeriodDrillDown}
                     />
                   ))}
                 </div>

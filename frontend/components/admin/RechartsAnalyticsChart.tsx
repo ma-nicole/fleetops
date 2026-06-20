@@ -22,7 +22,7 @@ import {
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import { SkeletonChart } from "@/components/Skeleton";
 
-export type AnalyticsChartKind = "bar" | "line" | "pie" | "area" | "stackedBar" | "combo";
+export type AnalyticsChartKind = "bar" | "horizontalBar" | "line" | "pie" | "area" | "stackedBar" | "combo";
 
 const BAR_COLORS = ["#2D6A4F", "#E76F51", "#277DA1", "#40916C", "#F4A261", "#52B788", "#1B4332", "#6366F1"];
 const ENTERPRISE_GREEN = "#2D6A4F";
@@ -388,6 +388,41 @@ function RechartsAnalyticsChartInner({
           dot={{ r: 3.5, fill: SERIES_COLORS.profit }}
         />
       </ComposedChart>
+    );
+  } else if (kind === "horizontalBar") {
+    chartNode = (
+      <BarChart data={rows} layout="vertical" margin={{ top: 28, right: 12, left: 8, bottom: 8 }} barCategoryGap="20%">
+        <CartesianGrid stroke={GRID_STROKE} horizontal={false} />
+        <XAxis type="number" tick={AXIS_TICK} tickFormatter={yAxisProps.tickFormatter} />
+        <YAxis
+          type="category"
+          dataKey="name"
+          tick={{ ...AXIS_TICK, fontSize: 9 }}
+          width={120}
+          interval={0}
+        />
+        <Tooltip content={<ChartTooltip />} />
+        {showLegend ? <Legend formatter={renderLegendText} verticalAlign="top" /> : null}
+        <Bar
+          dataKey={valueKey}
+          name={legendLabel ?? seriesLabel(valueKey)}
+          fill={ENTERPRISE_GREEN}
+          onClick={(_event: unknown, index: number) => handleBarClick(index)}
+          style={{ cursor: onItemClick ? "pointer" : "default" }}
+        >
+          {rows.map((entry, i) => {
+            const active = isSelected(entry.name, selectedLabel);
+            return (
+              <Cell
+                key={entry.name}
+                fill={BAR_COLORS[i % BAR_COLORS.length]}
+                stroke={active ? SELECTED_STROKE : "none"}
+                strokeWidth={active ? 2 : 0}
+              />
+            );
+          })}
+        </Bar>
+      </BarChart>
     );
   } else {
     chartNode = (

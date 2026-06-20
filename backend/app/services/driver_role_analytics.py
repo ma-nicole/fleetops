@@ -38,6 +38,7 @@ from app.services.manager_role_analytics import (
     _is_breakdown_issue,
     _monthly_series,
 )
+from app.services.time_bucket import period_key
 from app.services.predictive.fuel_model import predict_fuel_consumption
 from app.services.predictive.maintenance_model import predict_maintenance
 from app.schemas.predict import FuelPredictRequest, MaintenancePredictRequest
@@ -196,15 +197,17 @@ def build_driver_role_analytics(
         exec_pred_duration = _empty_predict()
 
     fuel_completed = [t for t in completed if (t.distance_km or 0) > 0]
-    fuel_month_buckets: dict[str, float] = defaultdict(float)
+    fuel_period_buckets: dict[str, float] = defaultdict(float)
     for trip in completed:
         ref = _activity_date(trip.completed_at)
         if not ref:
             continue
-        fuel_month_buckets[ref.strftime("%Y-%m")] += _trip_fuel(trip, ctx["fuel_by_trip"])
-    fuel_actuals = sorted(fuel_month_buckets.items())
+        p = period_key(ref, f.granularity)
+        if p:
+            fuel_period_buckets[p] += _trip_fuel(trip, ctx["fuel_by_trip"])
+    fuel_actuals = sorted(fuel_period_buckets.items())
     fuel_series = _monthly_series(fuel_actuals, min_points=3)
-    fuel_forecast = _forecast_series(fuel_series, 3) if fuel_series is not None else None
+    fuel_forecast = _forecast_series(fuel_series, 3, granularity=f.granularity) if fuel_series is not None else None
     if fuel_completed or fuel_actuals:
         avg_dist = (
             sum(float(t.distance_km or 0) for t in fuel_completed) / len(fuel_completed)
@@ -377,15 +380,19 @@ def build_driver_role_analytics(
     report_desc_shipments = exec_desc_logs
 
     completion_hours = travel_hours.copy()
-    month_completion: dict[str, list[float]] = defaultdict(list)
+    period_completion: dict[str, list[float]] = defaultdict(list)
     for t in completed:
         h = _delivery_hours(t)
         ref = _activity_date(t.completed_at)
         if h is not None and ref:
-            month_completion[ref.strftime("%Y-%m")].append(h)
-    completion_actuals = [(m, sum(v) / len(v)) for m, v in sorted(month_completion.items())]
+            p = period_key(ref, f.granularity)
+            if p:
+                period_completion[p].append(h)
+    completion_actuals = [(m, sum(v) / len(v)) for m, v in sorted(period_completion.items())]
     completion_series = _monthly_series(completion_actuals, min_points=2)
-    completion_forecast = _forecast_series(completion_series, 3) if completion_series is not None else None
+    completion_forecast = (
+        _forecast_series(completion_series, 3, granularity=f.granularity) if completion_series is not None else None
+    )
     report_pred_completion = (
         _empty_predict()
         if not completion_forecast

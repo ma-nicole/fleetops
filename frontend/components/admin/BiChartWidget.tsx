@@ -19,6 +19,8 @@ import {
   type SynthesizedChart,
 } from "@/lib/chartDrilldownUtils";
 import { mergeChartKind } from "@/lib/analyticsChartConfig";
+import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
+import { drillDownFromPeriod } from "@/lib/timePeriodDrilldown";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -66,6 +68,7 @@ function toChartKind(kind: InferredChartMeta["kind"]): AnalyticsChartKind {
   if (kind === "area") return "area";
   if (kind === "stackedBar") return "stackedBar";
   if (kind === "combo") return "combo";
+  if (kind === "horizontalBar") return "horizontalBar";
   return "bar";
 }
 
@@ -128,6 +131,8 @@ export function BiChartWidget({
   riskLegend,
   preferredChartKind,
   loading = false,
+  timeGranularity,
+  onPeriodDrillDown,
 }: {
   title: string;
   block: RoleAnalyticsFeatureBlock;
@@ -139,6 +144,8 @@ export function BiChartWidget({
   riskLegend?: Array<{ label: string; color: string }>;
   preferredChartKind?: AnalyticsChartKind;
   loading?: boolean;
+  timeGranularity?: TimeGranularity;
+  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
 }) {
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -200,6 +207,10 @@ export function BiChartWidget({
   }, [chart, comparative, resolvedMeta]);
 
   const openDrill = (payload: ChartClickPayload) => {
+    if (resolvedMeta?.monthFromX && timeGranularity && onPeriodDrillDown) {
+      const next = drillDownFromPeriod(payload.label, timeGranularity);
+      if (next) onPeriodDrillDown(next);
+    }
     setSelection(resolvedMeta ? buildSelection(resolvedMeta, payload) : { label: payload.label, displayLabel: payload.label, fieldKeys: [] });
     setModalOpen(true);
   };
@@ -323,7 +334,7 @@ export function BiChartWidget({
           <span className="bi-chart-widget__hint-icon" aria-hidden>
             ⚡
           </span>
-          Click any data element (bar, line, slice) to drill down into disaggregated record sheets.
+          Click any data element to drill down records, or on time-series points to zoom Year → Quarter → Month → Week → Day.
         </p>
       </header>
 

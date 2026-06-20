@@ -70,6 +70,15 @@ export default function DispatcherAnalyticsDashboard() {
     }
   }, [dateRangeError, buildAdminQuery, router]);
 
+  const handlePeriodDrillDown = useCallback(
+    (next: { granularity: typeof granularity; dateFrom: string; dateTo: string }) => {
+      setGranularity(next.granularity);
+      setDateFrom(next.dateFrom);
+      setDateTo(next.dateTo);
+    },
+    [setGranularity, setDateFrom, setDateTo],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -150,7 +159,12 @@ export default function DispatcherAnalyticsDashboard() {
       {error && !loading && <ErrorState message={error} onRetry={() => void load()} />}
 
       {data && !loading && !error && data.dispatcher_role_analytics && (
-        <DispatcherRoleAnalyticsTabs data={data.dispatcher_role_analytics} />
+        <DispatcherRoleAnalyticsTabs
+          data={data.dispatcher_role_analytics}
+          filterOptions={data.filter_options}
+          timeGranularity={granularity}
+          onPeriodDrillDown={handlePeriodDrillDown}
+        />
       )}
 
       {data && !loading && !error && !data.dispatcher_role_analytics && (

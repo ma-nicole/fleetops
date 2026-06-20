@@ -33,6 +33,7 @@ from app.services.admin_analytics import (
 )
 from app.services.analytics_stats import compute_statistics, empty_module
 from app.services.analytics import maintenance_risk_snapshot
+from app.services.time_bucket import advance_period, period_key
 from app.services.predictive.demand_model import forecast_monthly_cost
 from app.services.predictive.fuel_model import predict_fuel_consumption
 from app.services.predictive.maintenance_model import predict_maintenance
@@ -181,14 +182,28 @@ def _trip_cost_rows(ctx: dict, f: AnalyticsFilters, limit: int = 50) -> list[dic
     return rows[:limit]
 
 
-def _monthly_series(values: list[tuple[str, float]], min_points: int = 3) -> pd.Series | None:
+def _min_series_points(f: AnalyticsFilters, default: int = 3) -> int:
+    return 2 if f.granularity in ("yearly", "quarterly") else default
+
+
+def _period_series(values: list[tuple[str, float]], min_points: int = 3) -> pd.Series | None:
     if len(values) < min_points:
         return None
-    frame = pd.DataFrame(values, columns=["month", "value"])
-    return frame.groupby("month")["value"].sum().sort_index()
+    frame = pd.DataFrame(values, columns=["period", "value"])
+    return frame.groupby("period")["value"].sum().sort_index()
 
 
-def _forecast_series(series: pd.Series, periods: int = 3) -> list[dict[str, float | str]] | None:
+def _monthly_series(values: list[tuple[str, float]], min_points: int = 3) -> pd.Series | None:
+    """Backward-compatible alias for period series built from monthly keys."""
+    return _period_series(values, min_points=min_points)
+
+
+def _forecast_series(
+    series: pd.Series,
+    periods: int = 3,
+    *,
+    granularity: str = "monthly",
+) -> list[dict[str, float | str]] | None:
     if series is None or len(series) < 3:
         return None
     try:
@@ -197,24 +212,6 @@ def _forecast_series(series: pd.Series, periods: int = 3) -> list[dict[str, floa
     except Exception:
         avg = float(series.tail(3).mean())
         prediction = [avg] * periods
-    # Avoid pandas out-of-bounds timestamps from malformed/future month labels.
-    def _parse_month(raw: Any) -> tuple[int, int]:
-        token = str(raw or "").strip()[:7]
-        try:
-            year_s, month_s = token.split("-")
-            year = int(year_s)
-            month = int(month_s)
-            if year >= 1 and 1 <= month <= 12:
-                return year, month
-        except Exception:
-            pass
-        now = datetime.utcnow()
-        return now.year, now.month
-
-    def _add_months(year: int, month: int, delta: int) -> tuple[int, int]:
-        total = (year * 12 + (month - 1)) + delta
-        return total // 12, total % 12 + 1
-
     def _safe_float(value: Any, fallback: float) -> float:
         try:
             number = float(value)
@@ -224,14 +221,14 @@ def _forecast_series(series: pd.Series, periods: int = 3) -> list[dict[str, floa
             return round(fallback, 2)
         return round(number, 2)
 
-    base_year, base_month = _parse_month(series.index[-1] if len(series.index) else None)
+    last_period = str(series.index[-1] if len(series.index) else "")
     fallback = float(series.tail(3).mean())
     points: list[dict[str, float | str]] = []
     for idx, pred in enumerate(prediction):
-        year, month = _add_months(base_year, base_month, idx + 1)
+        period_label = advance_period(last_period, granularity, idx + 1) if last_period else str(idx + 1)
         points.append(
             {
-                "period": f"{year:04d}-{month:02d}",
+                "period": period_label,
                 "value": _safe_float(pred, fallback),
             }
         )
@@ -274,8 +271,9 @@ def _monthly_fuel_actuals(ctx: dict, f: AnalyticsFilters) -> list[tuple[str, flo
         ref = _activity_date(trip.completed_at)
         if not ref:
             continue
-        month = ref.strftime("%Y-%m")
-        buckets[month] += _trip_fuel(trip, ctx["fuel_by_trip"])
+        p = period_key(ref, f.granularity)
+        if p:
+            buckets[p] += _trip_fuel(trip, ctx["fuel_by_trip"])
     return sorted(buckets.items())
 
 
@@ -630,13 +628,23 @@ def _build_risk_management_analytics(
             }
         )
 
-    month_disruptions: dict[str, int] = defaultdict(int)
+    period_disruptions: dict[str, int] = defaultdict(int)
     for src in disruption_sources:
         d = src.get("date")
         if d and d != "—":
-            month_disruptions[str(d)[:7]] += 1
-    disruption_series = _monthly_series([(m, float(c)) for m, c in sorted(month_disruptions.items())], min_points=2)
-    disruption_forecast = _forecast_series(disruption_series, 3) if disruption_series is not None else None
+            try:
+                from datetime import date as date_cls
+
+                ref = date_cls.fromisoformat(str(d)[:10])
+                p = period_key(ref, f.granularity)
+                if p:
+                    period_disruptions[p] += 1
+            except ValueError:
+                continue
+    disruption_series = _period_series([(m, float(c)) for m, c in sorted(period_disruptions.items())], min_points=2)
+    disruption_forecast = (
+        _forecast_series(disruption_series, 3, granularity=f.granularity) if disruption_series is not None else None
+    )
 
     route_risk_chart: list[dict] = []
     route_buckets: dict[str, dict[str, int]] = defaultdict(lambda: {"delays": 0, "breakdowns": 0, "cancelled": 0})
@@ -771,17 +779,22 @@ def build_manager_role_analytics(
 
     cost_forecast_resp = forecast_monthly_cost(db, periods=6)
     cost_actuals: list[tuple[str, float]] = []
-    cost_month_buckets: dict[str, float] = defaultdict(float)
+    cost_period_buckets: dict[str, float] = defaultdict(float)
     for t in ctx["trips"]:
         if not t.completed_at:
             continue
-        m = t.completed_at.strftime("%Y-%m")
-        cost_month_buckets[m] += float((t.fuel_cost or 0) + (t.toll_cost or 0) + (t.labor_cost or 0))
-    cost_actuals = sorted(cost_month_buckets.items())
-    cost_forecast_points = [{"period": p.period, "value": p.value} for p in cost_forecast_resp.points]
+        p = period_key(t.completed_at, f.granularity)
+        if p:
+            cost_period_buckets[p] += float((t.fuel_cost or 0) + (t.toll_cost or 0) + (t.labor_cost or 0))
+    cost_actuals = sorted(cost_period_buckets.items())
+    cost_forecast_points: list[dict[str, float | str]] = []
+    if f.granularity == "monthly" and cost_forecast_resp.points:
+        cost_forecast_points = [{"period": p.period, "value": p.value} for p in cost_forecast_resp.points]
     if not cost_forecast_points and cost_actuals:
-        cost_series = _monthly_series(cost_actuals, min_points=3)
-        cost_forecast_points = _forecast_series(cost_series, 3) if cost_series is not None else []
+        cost_series = _period_series(cost_actuals, min_points=_min_series_points(f))
+        cost_forecast_points = (
+            _forecast_series(cost_series, 3, granularity=f.granularity) if cost_series is not None else []
+        )
     planning_pred_cost = (
         _empty("Insufficient data.")
         if not cost_actuals and not cost_forecast_points
@@ -805,8 +818,8 @@ def build_manager_role_analytics(
     )
 
     fuel_actuals = _monthly_fuel_actuals(ctx, f)
-    fuel_series = _monthly_series(fuel_actuals, min_points=3)
-    fuel_forecast = _forecast_series(fuel_series, 3) if fuel_series is not None else None
+    fuel_series = _period_series(fuel_actuals, min_points=_min_series_points(f))
+    fuel_forecast = _forecast_series(fuel_series, 3, granularity=f.granularity) if fuel_series is not None else None
     completed = [t for t in _filtered_trips(ctx, f) if t.status == TripStatus.COMPLETED and (t.distance_km or 0) > 0]
     if fuel_actuals or completed:
         avg_dist = (
@@ -861,13 +874,14 @@ def build_manager_role_analytics(
 
     completed_trips = [t for t in ctx["trips"] if t.completed_at]
     trip_month_counts: list[tuple[str, float]] = []
-    month_buckets: dict[str, int] = defaultdict(int)
+    period_buckets: dict[str, int] = defaultdict(int)
     for t in completed_trips:
-        m = t.completed_at.strftime("%Y-%m")
-        month_buckets[m] += 1
-    trip_month_counts = sorted(month_buckets.items())
-    demand_series = _monthly_series(trip_month_counts, min_points=3)
-    demand_forecast = _forecast_series(demand_series, 3) if demand_series is not None else None
+        p = period_key(t.completed_at, f.granularity)
+        if p:
+            period_buckets[p] += 1
+    trip_month_counts = sorted(period_buckets.items())
+    demand_series = _period_series([(m, float(c)) for m, c in trip_month_counts], min_points=_min_series_points(f))
+    demand_forecast = _forecast_series(demand_series, 3, granularity=f.granularity) if demand_series is not None else None
     planning_pred_demand = (
         _empty("Insufficient data.")
         if not demand_forecast
@@ -957,10 +971,14 @@ def build_manager_role_analytics(
     driver_month: dict[str, set[int]] = defaultdict(set)
     for trip in _filtered_trips(ctx, f):
         if trip.driver_id and trip.completed_at:
-            driver_month[trip.completed_at.strftime("%Y-%m")].add(trip.driver_id)
+            p = period_key(trip.completed_at, f.granularity)
+            if p:
+                driver_month[p].add(trip.driver_id)
     workforce_counts = sorted((m, len(d)) for m, d in driver_month.items())
-    workforce_series = _monthly_series([(m, float(c)) for m, c in workforce_counts], min_points=3)
-    workforce_forecast = _forecast_series(workforce_series, 3) if workforce_series is not None else None
+    workforce_series = _period_series([(m, float(c)) for m, c in workforce_counts], min_points=_min_series_points(f))
+    workforce_forecast = (
+        _forecast_series(workforce_series, 3, granularity=f.granularity) if workforce_series is not None else None
+    )
     organizing_pred_workforce = (
         _empty("Insufficient data.")
         if not workforce_forecast

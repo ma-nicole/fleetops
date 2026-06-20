@@ -3,11 +3,11 @@
 export type TimeGranularity = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 
 export const TIME_GRANULARITY_OPTIONS: { id: TimeGranularity; label: string }[] = [
-  { id: "yearly", label: "Y" },
-  { id: "quarterly", label: "Q" },
-  { id: "monthly", label: "M" },
-  { id: "weekly", label: "W" },
-  { id: "daily", label: "D" },
+  { id: "yearly", label: "Year" },
+  { id: "quarterly", label: "Quarter" },
+  { id: "monthly", label: "Month" },
+  { id: "weekly", label: "Week" },
+  { id: "daily", label: "Day" },
 ];
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 export function TimeGranularityPicker({ value, onChange, disabled, className }: Props) {
   return (
     <div className={className ?? "filter-panel__granularity"}>
-      <span className="filter-panel__granularity-label">Time rollup</span>
+      <span className="filter-panel__granularity-label">Time rollup (Year → Quarter → Month → Week → Day)</span>
       <div className="tab-pill-row" role="group" aria-label="Time granularity">
         {TIME_GRANULARITY_OPTIONS.map((opt) => (
           <button

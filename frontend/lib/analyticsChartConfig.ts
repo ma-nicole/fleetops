@@ -2,7 +2,7 @@ import type { InferredChartMeta } from "@/lib/chartDrilldownUtils";
 
 export type AnalyticsChartKind = InferredChartMeta["kind"];
 
-const RICH_KINDS: AnalyticsChartKind[] = ["combo", "stackedBar", "area"];
+const RICH_KINDS: AnalyticsChartKind[] = ["combo", "stackedBar", "area", "horizontalBar"];
 
 export function inferPreferredChartKind(featureKey: string): AnalyticsChartKind | undefined {
   const key = featureKey.toLowerCase();
@@ -10,34 +10,52 @@ export function inferPreferredChartKind(featureKey: string): AnalyticsChartKind 
   if (key.includes("forecast") || key.includes("prediction") || key.includes("predict")) {
     return "line";
   }
+  if (key.includes("revenue") && (key.includes("track") || key.includes("trend"))) {
+    return "area";
+  }
+  if (key.includes("deliveries") || key.includes("volume") || key.includes("cumulative")) {
+    return "area";
+  }
   if (
     key.includes("trend") ||
     key.includes("history") ||
     key.includes("over_time") ||
-    key.includes("monthly") ||
     key.includes("timeline")
   ) {
     return "line";
+  }
+  if (key.includes("monthly") && !key.includes("expense")) {
+    return "area";
   }
   if (
     key.includes("expense") &&
     (key.includes("composition") || key.includes("breakdown") || key.includes("stack"))
   ) {
-    return "stackedBar";
+    return key.includes("monthly") || key.includes("month") ? "stackedBar" : "pie";
   }
-  if (key.includes("utilization") || key.includes("volume") || key.includes("cumulative")) {
-    return "area";
+  if (key.includes("utilization") || key.includes("ranking")) {
+    return "horizontalBar";
+  }
+  if (key.includes("distribution") && (key.includes("driver") || key.includes("delivery"))) {
+    return "stackedBar";
   }
   if (
     key.includes("distribution") ||
     key.includes("share") ||
-    key.includes("composition") ||
-    key.includes("status")
+    (key.includes("status") && !key.includes("over_time"))
   ) {
     return "pie";
   }
-  if (key.includes("ranking") || key.includes("comparison") || key.includes("compare")) {
-    return "bar";
+  if (
+    key.includes("comparison") ||
+    key.includes("compare") ||
+    key.includes("vs") ||
+    key.includes("variance")
+  ) {
+    return key.includes("revenue") || key.includes("expense") ? "combo" : "bar";
+  }
+  if (key.includes("route") || key.includes("client") || key.includes("truck") || key.includes("fuel")) {
+    return "horizontalBar";
   }
   return undefined;
 }
@@ -90,13 +108,19 @@ export function inferAnalyticsType(
   return "Descriptive";
 }
 
-/** Apply preferred kind without downgrading richer inferred kinds (combo/area/stackedBar). */
+/** Apply preferred kind without downgrading richer inferred kinds (combo/area/stackedBar/horizontalBar). */
 export function mergeChartKind(
   inferred: AnalyticsChartKind,
   preferred?: AnalyticsChartKind,
 ): AnalyticsChartKind {
   if (!preferred) return inferred;
   if (RICH_KINDS.includes(inferred) && !RICH_KINDS.includes(preferred)) {
+    return inferred;
+  }
+  if (inferred === "stackedBar" && preferred === "pie") {
+    return inferred;
+  }
+  if (inferred === "combo" && (preferred === "bar" || preferred === "line")) {
     return inferred;
   }
   return preferred;

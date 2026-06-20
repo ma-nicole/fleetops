@@ -6,6 +6,7 @@ import { EmptyChart } from "@/components/admin/AnalyticsCharts";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock } from "@/lib/analyticsApi";
 import { isPopulatedAnalyticsModule } from "@/lib/analyticsApi";
 import type { AnalyticsChartKind } from "@/lib/analyticsChartConfig";
+import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 
 type WidgetSpec = {
   id: string;
@@ -64,7 +65,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.drilldown ?? [],
       ),
       comp?.revenue,
-      { analyticsType: "Descriptive", analyticsMethod: "Time-series trend aggregation", preferredChartKind: "line" },
+      { analyticsType: "Descriptive", analyticsMethod: "Time-series trend aggregation", preferredChartKind: "area" },
     );
     add(
       "revenue-vs-expense",
@@ -82,7 +83,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.drilldown ?? [],
       ),
       comp?.expenses,
-      { analyticsType: "Diagnostic", analyticsMethod: "Revenue-cost variance analysis" },
+      { analyticsType: "Diagnostic", analyticsMethod: "Revenue-cost variance analysis", preferredChartKind: "combo" },
     );
     add(
       "profit-margin",
@@ -147,7 +148,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         "Monthly Deliveries",
         moduleBlock(ship.monthly_deliveries.map(withPeriod), ship.drilldown),
         comp?.deliveries,
-        { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "line" },
+        { analyticsType: "Descriptive", analyticsMethod: "Monthly trend aggregation", preferredChartKind: "area" },
       );
     }
     if (isPopulatedAnalyticsModule(data.drivers)) {
@@ -170,7 +171,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         "Driver Delivery Distribution",
         moduleBlock(drivers.distribution, drivers.drilldown),
         undefined,
-        { analyticsType: "Descriptive", analyticsMethod: "Distribution analysis", preferredChartKind: "pie" },
+        { analyticsType: "Descriptive", analyticsMethod: "Distribution analysis", preferredChartKind: "stackedBar" },
       );
     }
   }
@@ -189,7 +190,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           fleet.drilldown,
         ),
         undefined,
-        { analyticsType: "Descriptive", analyticsMethod: "Utilization ratio by asset", preferredChartKind: "bar" },
+        { analyticsType: "Descriptive", analyticsMethod: "Utilization ratio by asset", preferredChartKind: "horizontalBar" },
       );
     }
     if (isPopulatedAnalyticsModule(data.expenses) && data.expenses.fuel_by_truck?.length) {
@@ -201,7 +202,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           data.expenses.drilldown?.records ?? [],
         ),
         undefined,
-        { analyticsType: "Diagnostic", analyticsMethod: "Cost concentration by truck", preferredChartKind: "bar" },
+        { analyticsType: "Diagnostic", analyticsMethod: "Cost concentration by truck", preferredChartKind: "horizontalBar" },
       );
     }
   }
@@ -254,7 +255,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           routes.drilldown,
         ),
         undefined,
-        { analyticsType: "Descriptive", analyticsMethod: "Route throughput comparison", preferredChartKind: "bar" },
+        { analyticsType: "Descriptive", analyticsMethod: "Route throughput comparison", preferredChartKind: "horizontalBar" },
       );
       add(
         "route-cost",
@@ -267,7 +268,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           routes.drilldown,
         ),
         undefined,
-        { analyticsType: "Diagnostic", analyticsMethod: "Route cost variance analysis", preferredChartKind: "bar" },
+        { analyticsType: "Diagnostic", analyticsMethod: "Route cost variance analysis", preferredChartKind: "horizontalBar" },
       );
     }
     if (isPopulatedAnalyticsModule(data.toll_analytics)) {
@@ -283,7 +284,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           tolls.drilldown as unknown as Record<string, unknown>[],
         ),
         undefined,
-        { analyticsType: "Diagnostic", analyticsMethod: "Route toll outlier ranking", preferredChartKind: "bar" },
+        { analyticsType: "Diagnostic", analyticsMethod: "Route toll outlier ranking", preferredChartKind: "horizontalBar" },
       );
       add(
         "toll-trends",
@@ -300,7 +301,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           tolls.drilldown as unknown as Record<string, unknown>[],
         ),
         undefined,
-        { analyticsType: "Descriptive", analyticsMethod: "Estimated vs actual toll trend" },
+        { analyticsType: "Descriptive", analyticsMethod: "Estimated vs actual toll trend", preferredChartKind: "line" },
       );
     }
   }
@@ -312,7 +313,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
       "Bookings by Client",
       moduleBlock(clients.booking_distribution, clients.drilldown),
       undefined,
-      { analyticsType: "Descriptive", analyticsMethod: "Client frequency distribution", preferredChartKind: "bar" },
+      { analyticsType: "Descriptive", analyticsMethod: "Client frequency distribution", preferredChartKind: "horizontalBar" },
     );
     add(
       "client-revenue",
@@ -325,7 +326,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         clients.drilldown,
       ),
       comp?.revenue,
-      { analyticsType: "Diagnostic", analyticsMethod: "Revenue contribution analysis", preferredChartKind: "bar" },
+      { analyticsType: "Diagnostic", analyticsMethod: "Revenue contribution analysis", preferredChartKind: "horizontalBar" },
     );
   }
 
@@ -335,9 +336,13 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
 export function AdminOperationalBiGrid({
   data,
   category,
+  timeGranularity,
+  onPeriodDrillDown,
 }: {
   data: AdminAnalyticsPayload;
   category: AdminCategory;
+  timeGranularity?: TimeGranularity;
+  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
 }) {
   const widgets = useMemo(() => buildAdminWidgets(data, category), [data, category]);
   const groupedWidgets = useMemo(() => {
@@ -383,6 +388,8 @@ export function AdminOperationalBiGrid({
                   analyticsMethod={w.analyticsMethod}
                   riskLegend={w.riskLegend}
                   preferredChartKind={w.preferredChartKind}
+                  timeGranularity={timeGranularity}
+                  onPeriodDrillDown={onPeriodDrillDown}
                 />
               ))}
             </div>

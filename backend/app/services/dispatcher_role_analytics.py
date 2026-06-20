@@ -46,6 +46,7 @@ from app.services.manager_role_analytics import (
     _forecast_series,
     _monthly_series,
 )
+from app.services.time_bucket import period_key
 from app.services.prescriptive.assignment import recommend_assignment
 from app.services.schedule_timeline import build_timeline
 
@@ -128,6 +129,59 @@ def _dispatcher_for(booking_id: int, jobs: dict[int, JobOrder], names: dict[int,
     return "—"
 
 
+def _count_by_field(rows: list[dict], field: str, *, limit: int = 12) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        counts[str(row.get(field) or "unknown")] += 1
+    return [{field: label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
+
+
+def _period_count_chart(rows: list[dict], date_field: str, granularity: str, *, limit: int = 24) -> list[dict]:
+    buckets: dict[str, int] = defaultdict(int)
+    for row in rows:
+        raw = row.get(date_field)
+        if not raw or raw == "—":
+            continue
+        try:
+            ref = date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+        bucket = period_key(ref, granularity)
+        if bucket:
+            buckets[bucket] += 1
+    return [{"period": key, "count": value} for key, value in sorted(buckets.items())[-limit:]]
+
+
+def _capacity_snapshot_chart(*, pending: int, available: int, conflicts: int) -> list[dict]:
+    return [
+        {"category": "Pending assignment", "count": pending},
+        {"category": "Available trucks", "count": available},
+        {"category": "Schedule conflicts", "count": conflicts},
+    ]
+
+
+def _shortage_snapshot_chart(*, pending: int, available: int) -> list[dict]:
+    return [
+        {"category": "Pending bookings", "count": pending},
+        {"category": "Available trucks", "count": available},
+    ]
+
+
+def _conflict_cause_chart(conflicts: list[dict], *, limit: int = 12) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for conflict in conflicts:
+        for reason in conflict.get("reasons") or ["unknown"]:
+            counts[str(reason)] += 1
+    return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
+
+
+def _cause_count_chart(rows: list[dict], *, field: str = "cause", limit: int = 12) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        counts[str(row.get(field) or "unknown")] += 1
+    return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
+
+
 def _trip_row(trip: Trip, jobs: dict[int, JobOrder], names: dict[int, str], *, extra: dict | None = None) -> dict:
     booking = trip.booking
     ref = _activity_date(booking.scheduled_date if booking else trip.assigned_at)
@@ -189,6 +243,7 @@ def build_dispatcher_role_analytics(
     day_counts: dict[str, int] = defaultdict(int)
     week_counts: dict[str, int] = defaultdict(int)
     month_counts: dict[str, int] = defaultdict(int)
+    period_counts: dict[str, int] = defaultdict(int)
     for r in schedule_rows:
         sd = r.get("scheduled_date")
         if not sd or sd == "—":
@@ -197,6 +252,9 @@ def build_dispatcher_role_analytics(
         d = date.fromisoformat(sd)
         week_counts[d.strftime("%Y-W%W")] += 1
         month_counts[sd[:7]] += 1
+        p = period_key(d, f.granularity)
+        if p:
+            period_counts[p] += 1
 
     sched_desc_trips = (
         _empty("No data available yet.")
@@ -207,7 +265,7 @@ def build_dispatcher_role_analytics(
                 {"label": "Upcoming", "value": len(upcoming)},
                 {"label": "Today", "value": day_counts.get(today.isoformat(), 0)},
             ],
-            chart=[{"month": m, "count": c} for m, c in sorted(month_counts.items())[-12:]],
+            chart=[{"period": m, "count": c} for m, c in sorted(period_counts.items())[-24:]],
             drilldown=schedule_rows[:50],
             statistics=compute_statistics(list(day_counts.values()), min_samples=1) if day_counts else None,
         )
@@ -239,13 +297,17 @@ def build_dispatcher_role_analytics(
                 "dispatcher": _dispatcher_for(booking_id, jobs, dispatcher_names) if booking_id else "—",
             }
         )
+    dispatch_status_chart = _count_by_field(dispatch_log_rows, "status")
     sched_desc_dispatch = (
         _empty("No data available yet.")
         if not dispatch_log_rows
         else _block(
             kpis=[{"label": "Dispatch log entries", "value": len(dispatch_log_rows)}],
-            chart=[],
+            chart=dispatch_status_chart,
             drilldown=dispatch_log_rows[:50],
+            statistics=compute_statistics([row["count"] for row in dispatch_status_chart], min_samples=1)
+            if dispatch_status_chart
+            else None,
         )
     )
 
@@ -255,13 +317,28 @@ def build_dispatcher_role_analytics(
         if t.status == TripStatus.COMPLETED
     ]
     delivery_rows.sort(key=lambda r: r.get("completed_at", ""), reverse=True)
+    delivery_period_counts: dict[str, int] = defaultdict(int)
+    for row in delivery_rows:
+        completed_at = row.get("completed_at")
+        if not completed_at or completed_at == "—":
+            continue
+        try:
+            ref = date.fromisoformat(str(completed_at)[:10])
+        except ValueError:
+            continue
+        bucket = period_key(ref, f.granularity)
+        if bucket:
+            delivery_period_counts[bucket] += 1
     sched_desc_delivery = (
         _empty("No data available yet.")
         if not delivery_rows
         else _block(
             kpis=[{"label": "Completed deliveries", "value": len(delivery_rows)}],
-            chart=[{"week": w, "count": c} for w, c in sorted(week_counts.items())[-8:]],
+            chart=[{"period": key, "count": value} for key, value in sorted(delivery_period_counts.items())[-24:]],
             drilldown=delivery_rows[:50],
+            statistics=compute_statistics(list(delivery_period_counts.values()), min_samples=1)
+            if delivery_period_counts
+            else None,
         )
     )
 
@@ -293,20 +370,26 @@ def build_dispatcher_role_analytics(
             {"label": "Available trucks", "value": available_trucks},
             {"label": "Schedule conflicts (week)", "value": len(conflicts)},
         ],
-        chart=[],
+        chart=_capacity_snapshot_chart(
+            pending=pending_assign,
+            available=available_trucks,
+            conflicts=len(conflicts),
+        ),
         drilldown=conflict_drilldown[:50],
         note="Capacity gap and detected timeline overlaps for the current week.",
     )
 
-    trip_day_series = _monthly_series([(m, float(c)) for m, c in sorted(month_counts.items())], min_points=2)
-    workload_forecast = _forecast_series(trip_day_series, 3) if trip_day_series is not None else None
+    trip_period_series = _monthly_series([(m, float(c)) for m, c in sorted(period_counts.items())], min_points=2)
+    workload_forecast = (
+        _forecast_series(trip_period_series, 3, granularity=f.granularity) if trip_period_series is not None else None
+    )
     sched_pred_workload = (
         _empty_predict()
         if not workload_forecast
         else _block(
             kpis=[{"label": "Next period trips (est.)", "value": workload_forecast[0]["value"]}],
             chart=_combine_forecast_chart(
-                [(m, float(c)) for m, c in sorted(month_counts.items())],
+                [(m, float(c)) for m, c in sorted(period_counts.items())],
                 workload_forecast,
                 actual_key="actual_trips",
                 forecast_key="forecast_trips",
@@ -338,6 +421,7 @@ def build_dispatcher_role_analytics(
 
     travel_rows: list[dict] = []
     travel_hours: list[float] = []
+    travel_by_period: dict[str, list[float]] = defaultdict(list)
     for trip in filtered_trips:
         if trip.status != TripStatus.COMPLETED:
             continue
@@ -354,6 +438,16 @@ def build_dispatcher_role_analytics(
                 extra={"travel_hours": round(hours, 2)},
             )
         )
+        ref = trip.completed_at or trip.assigned_at
+        if ref is not None:
+            ref_date = ref.date() if isinstance(ref, datetime) else ref
+            bucket = period_key(ref_date, f.granularity)
+            if bucket:
+                travel_by_period[bucket].append(hours)
+    travel_chart = [
+        {"period": key, "avg_hours": round(sum(values) / len(values), 2)}
+        for key, values in sorted(travel_by_period.items())[-24:]
+    ]
     route_desc_travel = (
         _empty("No data available yet.")
         if not travel_rows
@@ -362,7 +456,7 @@ def build_dispatcher_role_analytics(
                 {"label": "Records", "value": len(travel_rows)},
                 {"label": "Avg travel (hrs)", "value": round(sum(travel_hours) / len(travel_hours), 2)},
             ],
-            chart=travel_rows[:12],
+            chart=travel_chart,
             drilldown=travel_rows[:50],
             statistics=compute_statistics(travel_hours, min_samples=1),
         )
@@ -387,7 +481,14 @@ def build_dispatcher_role_analytics(
                 {"label": "Fastest route", "value": route_summary.get("fastest_route", "—")},
                 {"label": "Most delayed", "value": route_summary.get("most_delayed_route", "—")},
             ],
-            chart=perf_log_rows[:12],
+            chart=[
+                {
+                    "route": row["route"],
+                    "avg_delivery_hours": row.get("avg_delivery_hours"),
+                    "delayed_count": row.get("delayed_count"),
+                }
+                for row in perf_log_rows[:12]
+            ],
             drilldown=perf_log_rows,
         )
     )
@@ -401,7 +502,10 @@ def build_dispatcher_role_analytics(
         if not route_eff
         else _block(
             kpis=[{"label": "Recommended route (fastest avg)", "value": route_eff[0].get("route", "—")}],
-            chart=route_eff[:12],
+            chart=[
+                {"route": row.get("route"), "avg_delivery_hours": row.get("avg_delivery_hours")}
+                for row in route_eff[:12]
+            ],
             drilldown=route_eff,
             note="Based on historical average delivery hours per route.",
         )
@@ -426,6 +530,7 @@ def build_dispatcher_role_analytics(
         delay_drill.append(
             _trip_row(trip, jobs, dispatcher_names, extra={"cause": reason, "status": "delayed"})
         )
+    delay_cause_chart = _cause_count_chart(delay_drill)
     route_pred_traffic = (
         _empty_predict()
         if not delay_drill
@@ -454,6 +559,10 @@ def build_dispatcher_role_analytics(
                 "date": today.isoformat(),
             }
         )
+    truck_avail_chart = sorted(
+        [{"truck": row["truck"], "trip_count": row["trip_count"]} for row in truck_avail_rows],
+        key=lambda item: -int(item["trip_count"] or 0),
+    )[:12]
     truck_desc_availability = (
         _empty("No data available yet.")
         if not truck_avail_rows
@@ -462,8 +571,9 @@ def build_dispatcher_role_analytics(
                 {"label": "Fleet size", "value": len(truck_avail_rows)},
                 {"label": "Available now", "value": sum(1 for r in truck_avail_rows if r["availability"] == "available")},
             ],
-            chart=truck_avail_rows[:12],
+            chart=truck_avail_chart,
             drilldown=truck_avail_rows,
+            statistics=compute_statistics([row["trip_count"] for row in truck_avail_rows], min_samples=1),
         )
     )
 
@@ -514,7 +624,10 @@ def build_dispatcher_role_analytics(
                 {"label": "Pending bookings", "value": len(pending_bookings)},
                 {"label": "Recommendations", "value": len(alloc_rows)},
             ],
-            chart=[],
+            chart=_shortage_snapshot_chart(
+                pending=len(pending_bookings),
+                available=sum(1 for row in truck_avail_rows if row["availability"] == "available"),
+            ),
             drilldown=alloc_rows or [
                 {
                     "booking_id": "—",
@@ -529,9 +642,13 @@ def build_dispatcher_role_analytics(
     truck_month: dict[str, int] = defaultdict(int)
     for trip in filtered_trips:
         if trip.truck_id and trip.completed_at:
-            truck_month[trip.completed_at.strftime("%Y-%m")] += 1
+            p = period_key(trip.completed_at, f.granularity)
+            if p:
+                truck_month[p] += 1
     truck_demand_series = _monthly_series([(m, float(c)) for m, c in sorted(truck_month.items())], min_points=2)
-    truck_demand_forecast = _forecast_series(truck_demand_series, 3) if truck_demand_series is not None else None
+    truck_demand_forecast = (
+        _forecast_series(truck_demand_series, 3, granularity=f.granularity) if truck_demand_series is not None else None
+    )
     truck_pred_demand = (
         _empty_predict()
         if not truck_demand_forecast
@@ -561,13 +678,17 @@ def build_dispatcher_role_analytics(
         driver_schedule_rows.append(_trip_row(trip, jobs, dispatcher_names))
     driver_schedule_rows.sort(key=lambda r: r["date"])
 
+    driver_schedule_chart = _period_count_chart(driver_schedule_rows, "date", f.granularity)
     driver_desc_schedules = (
         _empty("No data available yet.")
         if not driver_schedule_rows
         else _block(
             kpis=[{"label": "Driver schedule entries", "value": len(driver_schedule_rows)}],
-            chart=[],
+            chart=driver_schedule_chart,
             drilldown=driver_schedule_rows[:50],
+            statistics=compute_statistics([row["count"] for row in driver_schedule_chart], min_samples=1)
+            if driver_schedule_chart
+            else None,
         )
     )
 
@@ -583,13 +704,17 @@ def build_dispatcher_role_analytics(
     )
 
     completion_rows = delivery_rows.copy()
+    completion_chart = _period_count_chart(completion_rows, "completed_at", f.granularity)
     driver_desc_completion = (
         _empty("No data available yet.")
         if not completion_rows
         else _block(
             kpis=[{"label": "Completed trips", "value": len(completion_rows)}],
-            chart=[],
+            chart=completion_chart,
             drilldown=completion_rows[:50],
+            statistics=compute_statistics([row["count"] for row in completion_chart], min_samples=1)
+            if completion_chart
+            else None,
         )
     )
 
@@ -621,9 +746,13 @@ def build_dispatcher_role_analytics(
     driver_month: dict[str, set[int]] = defaultdict(set)
     for trip in filtered_trips:
         if trip.driver_id and trip.completed_at:
-            driver_month[trip.completed_at.strftime("%Y-%m")].add(trip.driver_id)
+            p = period_key(trip.completed_at, f.granularity)
+            if p:
+                driver_month[p].add(trip.driver_id)
     staffing_series = _monthly_series([(m, float(len(d))) for m, d in sorted(driver_month.items())], min_points=2)
-    staffing_forecast = _forecast_series(staffing_series, 3) if staffing_series is not None else None
+    staffing_forecast = (
+        _forecast_series(staffing_series, 3, granularity=f.granularity) if staffing_series is not None else None
+    )
     driver_pred_staffing = (
         _empty_predict()
         if not staffing_forecast
@@ -659,13 +788,17 @@ def build_dispatcher_role_analytics(
                 "dispatcher": _dispatcher_for(booking.id, jobs, dispatcher_names),
             }
         )
+    order_status_chart = _count_by_field(order_rows, "status")
     order_desc_details = (
         _empty("No data available yet.")
         if not order_rows
         else _block(
             kpis=[{"label": "Orders", "value": len(order_rows)}],
-            chart=[],
+            chart=order_status_chart,
             drilldown=order_rows[:50],
+            statistics=compute_statistics([row["count"] for row in order_status_chart], min_samples=1)
+            if order_status_chart
+            else None,
         )
     )
 
@@ -690,13 +823,17 @@ def build_dispatcher_role_analytics(
         for t in filtered_trips
         if _status_str(t.status) in {s.value for s in ACTIVE_TRIP}
     ]
+    progress_status_chart = _count_by_field(progress_rows, "status")
     order_desc_progress = (
         _empty("No data available yet.")
         if not progress_rows
         else _block(
             kpis=[{"label": "Active shipments", "value": len(progress_rows)}],
-            chart=[],
+            chart=progress_status_chart,
             drilldown=progress_rows,
+            statistics=compute_statistics([row["count"] for row in progress_status_chart], min_samples=1)
+            if progress_status_chart
+            else None,
         )
     )
 
@@ -713,15 +850,18 @@ def build_dispatcher_role_analytics(
                     "value": round((delayed / total_ship) * 100, 1) if total_ship else "Insufficient data",
                 },
             ],
-            chart=delay_chart,
+            chart=delay_cause_chart,
             drilldown=delay_drill[:50],
+            note="Delay causes from operational logs — distinct from route-level delay counts.",
         )
     )
 
     monthly_del = shipments.get("monthly_deliveries") or []
     del_actuals = [(str(m.get("period") or m["month"]), float(m["count"])) for m in monthly_del]
     del_series = _monthly_series(del_actuals, min_points=2)
-    completion_forecast = _forecast_series(del_series, 3) if del_series is not None else None
+    completion_forecast = (
+        _forecast_series(del_series, 3, granularity=f.granularity) if del_series is not None else None
+    )
     order_pred_completion = (
         _empty_predict()
         if not completion_forecast
@@ -752,13 +892,17 @@ def build_dispatcher_role_analytics(
                 "dispatcher": _dispatcher_for(booking.id, jobs, dispatcher_names),
             }
         )
+    dispatch_record_chart = _count_by_field(dispatch_record_rows, "status")
     ops_desc_dispatch = (
         _empty("No data available yet.")
         if not dispatch_record_rows
         else _block(
             kpis=[{"label": "Dispatch records", "value": len(dispatch_record_rows)}],
-            chart=[],
+            chart=dispatch_record_chart,
             drilldown=dispatch_record_rows[:50],
+            statistics=compute_statistics([row["count"] for row in dispatch_record_chart], min_samples=1)
+            if dispatch_record_chart
+            else None,
         )
     )
 
@@ -810,25 +954,26 @@ def build_dispatcher_role_analytics(
         if not conflicts
         else _block(
             kpis=[{"label": "Schedule conflicts", "value": len(conflicts)}],
-            chart=[],
+            chart=_conflict_cause_chart(conflicts),
             drilldown=conflict_drilldown[:50],
             note="Overlapping truck/driver slots detected on the weekly schedule board.",
         )
     )
 
-    shortage = max(0, len(pending_bookings) - sum(1 for r in truck_avail_rows if r["availability"] == "available"))
+    available_truck_count = sum(1 for row in truck_avail_rows if row["availability"] == "available")
+    shortage = max(0, len(pending_bookings) - available_truck_count)
     ops_pred_shortage = _block(
         kpis=[
             {"label": "Pending bookings", "value": len(pending_bookings)},
-            {"label": "Available trucks", "value": sum(1 for r in truck_avail_rows if r["availability"] == "available")},
+            {"label": "Available trucks", "value": available_truck_count},
             {"label": "Predicted shortage", "value": shortage},
         ],
-        chart=[],
+        chart=_shortage_snapshot_chart(pending=len(pending_bookings), available=available_truck_count),
         drilldown=alloc_rows[:20] if alloc_rows else truck_avail_rows[:20],
         note="Compares pending assignment queue against currently available trucks.",
     )
 
-    issue_month: dict[str, int] = defaultdict(int)
+    issue_period: dict[str, int] = defaultdict(int)
     issue_sources: list[dict] = []
     for issue in _query_if_table(
         db,
@@ -840,7 +985,9 @@ def build_dispatcher_role_analytics(
         trip = next((t for t in ctx["trips"] if t.id == issue.trip_id), None)
         ref = _activity_date(issue.created_at)
         if ref:
-            issue_month[ref.strftime("%Y-%m")] += 1
+            p = period_key(ref, f.granularity)
+            if p:
+                issue_period[p] += 1
         if trip:
             issue_sources.append(_trip_row(trip, jobs, dispatcher_names, extra={"cause": issue.issue_type}))
     for vir in _query_if_table(
@@ -852,15 +999,30 @@ def build_dispatcher_role_analytics(
             continue
         ref = _activity_date(vir.created_at)
         if ref:
-            issue_month[ref.strftime("%Y-%m")] += 1
+            p = period_key(ref, f.granularity)
+            if p:
+                issue_period[p] += 1
         trip = next((t for t in ctx["trips"] if t.id == vir.trip_id), None)
         if trip:
             issue_sources.append(_trip_row(trip, jobs, dispatcher_names, extra={"cause": vir.issue_type}))
-    issue_series = _monthly_series([(m, float(c)) for m, c in sorted(issue_month.items())], min_points=2)
-    issue_forecast = _forecast_series(issue_series, 3) if issue_series is not None else None
+    issue_series = _monthly_series([(m, float(c)) for m, c in sorted(issue_period.items())], min_points=2)
+    issue_forecast = (
+        _forecast_series(issue_series, 3, granularity=f.granularity) if issue_series is not None else None
+    )
+    issue_actual_chart = [{"period": key, "count": value} for key, value in sorted(issue_period.items())[-24:]]
+    issue_chart = (
+        _combine_forecast_chart(
+            [(key, float(value)) for key, value in sorted(issue_period.items())],
+            issue_forecast,
+            actual_key="actual_issues",
+            forecast_key="forecast_issues",
+        )
+        if issue_forecast
+        else issue_actual_chart
+    )
     ops_pred_issues = (
         _empty_predict()
-        if not issue_sources and not issue_forecast
+        if not issue_sources and not issue_actual_chart
         else _block(
             kpis=[
                 {"label": "Open issue signals", "value": len(issue_sources)},
@@ -869,14 +1031,7 @@ def build_dispatcher_role_analytics(
                     "value": issue_forecast[0]["value"] if issue_forecast else "Insufficient data",
                 },
             ],
-            chart=_combine_forecast_chart(
-                [(m, float(c)) for m, c in sorted(issue_month.items())],
-                issue_forecast,
-                actual_key="actual_issues",
-                forecast_key="forecast_issues",
-            )
-            if issue_forecast
-            else [],
+            chart=issue_chart,
             drilldown=issue_sources[:50],
             note="Trip issues and vehicle issue reports with monthly trend when sufficient history exists.",
         )

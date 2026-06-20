@@ -1,7 +1,9 @@
 "use client";
 
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
-import type { DispatcherRoleAnalyticsPayload } from "@/lib/analyticsApi";
+import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
+import type { AdminAnalyticsPayload, DispatcherRoleAnalyticsPayload } from "@/lib/analyticsApi";
+import { dispatcherPreferredChartKind } from "@/lib/dispatcherAnalyticsChartConfig";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   trip_scheduling: {
@@ -57,13 +59,27 @@ const CATEGORY_TABS: AnalyticsCategoryTab[] = [
   { id: "operational-support", label: "Operational Support", include: [{ pillar: "operational_support" }] },
 ];
 
-export default function DispatcherRoleAnalyticsTabs({ data }: { data: DispatcherRoleAnalyticsPayload }) {
+export default function DispatcherRoleAnalyticsTabs({
+  data,
+  filterOptions,
+  timeGranularity,
+  onPeriodDrillDown,
+}: {
+  data: DispatcherRoleAnalyticsPayload;
+  filterOptions?: AdminAnalyticsPayload["filter_options"];
+  timeGranularity?: TimeGranularity;
+  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+}) {
   return (
     <RoleAnalyticsGrid
       dashboardTitle="Dispatcher Analytics"
       categoryTabs={CATEGORY_TABS}
       featureLabels={FEATURE_LABELS}
       data={data}
+      filterOptions={filterOptions}
+      timeGranularity={timeGranularity}
+      onPeriodDrillDown={onPeriodDrillDown}
+      resolvePreferredChartKind={dispatcherPreferredChartKind}
     />
   );
 }

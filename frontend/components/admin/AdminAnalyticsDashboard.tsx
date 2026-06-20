@@ -86,6 +86,15 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
     }
   }, [dateRangeError, buildAdminQuery, router]);
 
+  const handlePeriodDrillDown = useCallback(
+    (next: { granularity: typeof granularity; dateFrom: string; dateTo: string }) => {
+      setGranularity(next.granularity);
+      setDateFrom(next.dateFrom);
+      setDateTo(next.dateTo);
+    },
+    [setGranularity, setDateFrom, setDateTo],
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -228,11 +237,21 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
                 </p>
               </div>
             </header>
-            <AdminOperationalBiGrid data={data} category={gridCategory} />
+            <AdminOperationalBiGrid
+              data={data}
+              category={gridCategory}
+              timeGranularity={granularity}
+              onPeriodDrillDown={handlePeriodDrillDown}
+            />
           </section>
 
           {data.role_analytics && (
-            <ManagerRoleAnalyticsTabs data={data.role_analytics} filterOptions={data.filter_options} />
+            <ManagerRoleAnalyticsTabs
+              data={data.role_analytics}
+              filterOptions={data.filter_options}
+              timeGranularity={granularity}
+              onPeriodDrillDown={handlePeriodDrillDown}
+            />
           )}
         </>
       )}

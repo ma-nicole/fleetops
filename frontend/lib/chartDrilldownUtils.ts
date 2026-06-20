@@ -82,6 +82,7 @@ export function inferDrilldownFieldKeys(
     "record_type",
     "issue_type",
     "severity",
+    "cause",
   ];
   const unique = new Set<string>();
   for (const key of candidates) {
@@ -93,7 +94,7 @@ export function inferDrilldownFieldKeys(
 }
 
 export type InferredChartMeta = {
-  kind: "pie" | "line" | "bar" | "area" | "stackedBar" | "combo";
+  kind: "pie" | "line" | "bar" | "horizontalBar" | "area" | "stackedBar" | "combo";
   labelKey: string;
   valueKey: string;
   xKey?: string;
@@ -204,6 +205,17 @@ export function inferChartMeta(
       monthFromX: true,
     };
   }
+  if (keys.includes("period") && keys.includes("avg_hours")) {
+    return {
+      kind: "line",
+      labelKey: "period",
+      valueKey: "avg_hours",
+      xKey: "period",
+      yKey: "avg_hours",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
   if (keys.includes("period") && keys.some((k) => k.startsWith("actual_")) && keys.some((k) => k.startsWith("forecast_"))) {
     const actualKey = keys.find((k) => k.startsWith("actual_"))!;
     const forecastKey = keys.find((k) => k.startsWith("forecast_"))!;
@@ -214,6 +226,17 @@ export function inferChartMeta(
       xKey: "period",
       yKey: actualKey,
       seriesKeys: [actualKey, forecastKey],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("period") && keys.includes("revenue_php") && !keys.includes("expense_php")) {
+    return {
+      kind: "area",
+      labelKey: "period",
+      valueKey: "revenue_php",
+      xKey: "period",
+      yKey: "revenue_php",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
       monthFromX: true,
     };
@@ -233,7 +256,7 @@ export function inferChartMeta(
   }
   if (keys.includes("period") && keys.includes("estimated_toll_php") && keys.includes("actual_toll_php")) {
     return {
-      kind: "area",
+      kind: "line",
       labelKey: "period",
       valueKey: "actual_toll_php",
       xKey: "period",
@@ -263,6 +286,22 @@ export function inferChartMeta(
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "status"),
     };
   }
+  if (keys.includes("cause") && keys.includes("count")) {
+    return {
+      kind: "pie",
+      labelKey: "cause",
+      valueKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "cause"),
+    };
+  }
+  if (keys.includes("category") && keys.includes("count")) {
+    return {
+      kind: "bar",
+      labelKey: "category",
+      valueKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "category"),
+    };
+  }
   if (keys.includes("month") && keys.includes("count")) {
     return {
       kind: "line",
@@ -276,7 +315,7 @@ export function inferChartMeta(
   }
   if (keys.includes("month") && keys.includes("revenue_php") && !keys.includes("expense_php")) {
     return {
-      kind: "line",
+      kind: "area",
       labelKey: "month",
       valueKey: "revenue_php",
       xKey: "month",
@@ -300,7 +339,7 @@ export function inferChartMeta(
   }
   if (keys.includes("month") && keys.includes("estimated_toll_php") && keys.includes("actual_toll_php")) {
     return {
-      kind: "area",
+      kind: "line",
       labelKey: "month",
       valueKey: "actual_toll_php",
       xKey: "month",
@@ -345,25 +384,33 @@ export function inferChartMeta(
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
     };
   }
-  if (keys.includes("client_name") && keys.includes("revenue_php")) {
-    return {
-      kind: "bar",
-      labelKey: "client_name",
-      valueKey: "revenue_php",
-      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "client_name"),
-    };
-  }
   if (keys.includes("category") && keys.includes("amount_php")) {
     return {
-      kind: "bar",
+      kind: "pie",
       labelKey: "category",
       valueKey: "amount_php",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "category"),
     };
   }
+  if (keys.includes("client_name") && keys.includes("bookings")) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "client_name",
+      valueKey: "bookings",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "client_name"),
+    };
+  }
+  if (keys.includes("client_name") && keys.includes("revenue_php")) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "client_name",
+      valueKey: "revenue_php",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "client_name"),
+    };
+  }
   if (keys.includes("truck_code") && keys.includes("trip_count")) {
     return {
-      kind: "bar",
+      kind: "horizontalBar",
       labelKey: "truck_code",
       valueKey: "trip_count",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "truck_code"),
@@ -371,10 +418,18 @@ export function inferChartMeta(
   }
   if (keys.includes("truck_code") && keys.includes("fuel_php")) {
     return {
-      kind: "bar",
+      kind: "horizontalBar",
       labelKey: "truck_code",
       valueKey: "fuel_php",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "truck_code"),
+    };
+  }
+  if (keys.includes("truck") && keys.includes("trip_count")) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "truck",
+      valueKey: "trip_count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "truck"),
     };
   }
   if (keys.includes("truck") && (keys.includes("liters") || keys.includes("risk_score"))) {
@@ -389,15 +444,32 @@ export function inferChartMeta(
   if (keys.includes("route")) {
     const valueKey =
       keys.find((k) => k !== "route" && isNumericField(row, k)) ??
-      keys.find((k) => k.endsWith("_php") || k.endsWith("_score") || k === "count");
+      keys.find((k) => k.endsWith("_php") || k.endsWith("_score") || k === "count" || k === "deliveries");
     if (valueKey) {
       return {
-        kind: "bar",
+        kind: "horizontalBar",
         labelKey: "route",
         valueKey,
         fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "route"),
       };
     }
+  }
+  if (keys.includes("driver") && keys.includes("active_trips")) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "driver",
+      valueKey: "active_trips",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "driver"),
+    };
+  }
+  if (keys.includes("driver_name") && keys.includes("completed") && keys.includes("delayed")) {
+    return {
+      kind: "stackedBar",
+      labelKey: "driver_name",
+      valueKey: "completed",
+      seriesKeys: ["completed", "delayed"],
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "driver_name"),
+    };
   }
   if (keys.includes("driver_name") && keys.includes("completed")) {
     return {

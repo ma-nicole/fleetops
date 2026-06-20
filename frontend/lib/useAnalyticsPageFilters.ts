@@ -21,7 +21,7 @@ export function useAnalyticsPageFilters(initial?: Partial<AnalyticsPageFiltersSt
   const [truckId, setTruckId] = useState(initial?.truckId ?? "");
   const [route, setRoute] = useState(initial?.route ?? "");
   const [shipmentStatus, setShipmentStatus] = useState(initial?.shipmentStatus ?? "");
-  const [granularity, setGranularity] = useState<TimeGranularity>(initial?.granularity ?? "monthly");
+  const [granularity, setGranularity] = useState<TimeGranularity>(initial?.granularity ?? "yearly");
 
   const dateRangeError = useMemo(() => {
     if (dateFrom && dateTo && dateFrom > dateTo) {
