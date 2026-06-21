@@ -230,7 +230,8 @@ export function BiChartWidget({
       featureKey === "vehicle_usage_logs" ||
       featureKey === "maintenance_need_prediction" ||
       featureKey === "breakdown_risk_prediction" ||
-      featureKey === "shipment_records";
+      featureKey === "shipment_records" ||
+      featureKey === "schedule_conflict_prediction";
     if (!rows.length && drilldown.length && !skipSynthesis) {
       const synthesized = synthesizeFromDrilldown(drilldown);
       if (synthesized?.items.length) rows = synthesized.items;

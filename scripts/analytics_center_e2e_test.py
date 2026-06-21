@@ -220,6 +220,18 @@ def main() -> int:
             fail("6b Dispatcher role blocks", disp_errors[0])
         else:
             ok("6b Dispatcher role blocks", f"features={disp_count}")
+        conflict_block = (
+            (d.get("dispatcher_role_analytics") or {})
+            .get("operational_support", {})
+            .get("predictive", {})
+            .get("schedule_conflict_prediction")
+        )
+        if isinstance(conflict_block, dict) and conflict_block.get("empty"):
+            fail("6d Schedule conflict prediction", "still empty_predict")
+        elif isinstance(conflict_block, dict) and not conflict_block.get("chart"):
+            fail("6d Schedule conflict prediction", "missing chart rows")
+        else:
+            ok("6d Schedule conflict prediction", "chart populated")
 
     # ── Manager role_analytics block audit ──
     mgr_count, mgr_errors = audit_role_analytics_tree(payload, "role_analytics")

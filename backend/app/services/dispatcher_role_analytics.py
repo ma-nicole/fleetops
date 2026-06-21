@@ -407,6 +407,76 @@ def _conflict_cause_chart(conflicts: list[dict], *, limit: int = 12) -> list[dic
     return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
 
 
+def _trip_schedule_window(trip: Trip) -> tuple[datetime | None, datetime | None]:
+    start = trip.assigned_at
+    if not start and trip.booking and trip.booking.scheduled_date:
+        start = datetime.combine(trip.booking.scheduled_date, datetime.min.time())
+    end = trip.estimated_delivery_time or trip.completed_at
+    return start, end
+
+
+def _detect_filtered_schedule_conflicts(trips: list[Trip]) -> list[dict]:
+    """Overlap detection on filtered trips (same truck or driver)."""
+    conflicts: list[dict] = []
+    active = [t for t in trips if t.status != TripStatus.CANCELLED]
+
+    def append_conflict(primary: Trip, secondary: Trip, reason: str) -> None:
+        booking = secondary.booking
+        conflicts.append(
+            {
+                "trip_id": secondary.id,
+                "booking_id": secondary.booking_id,
+                "reasons": [reason],
+                "label": _route_key(booking.pickup_location, booking.dropoff_location)
+                if booking
+                else f"Trip {secondary.id}",
+            }
+        )
+
+    for bucket_fn, reason in ((lambda t: t.truck_id, "overlap"), (lambda t: t.driver_id, "driver_overlap")):
+        grouped: dict[int, list[Trip]] = defaultdict(list)
+        for trip in active:
+            resource_id = bucket_fn(trip)
+            if resource_id:
+                grouped[resource_id].append(trip)
+        for resource_trips in grouped.values():
+            ordered = sorted(resource_trips, key=lambda t: _trip_schedule_window(t)[0] or datetime.min)
+            for idx, left in enumerate(ordered):
+                left_start, left_end = _trip_schedule_window(left)
+                if not left_start:
+                    continue
+                left_end = left_end or left_start
+                for right in ordered[idx + 1 :]:
+                    right_start, right_end = _trip_schedule_window(right)
+                    if not right_start:
+                        continue
+                    right_end = right_end or right_start
+                    if left_start < right_end and right_start < left_end:
+                        append_conflict(left, right, reason)
+    return conflicts
+
+
+def _schedule_conflict_prediction_chart(
+    conflicts: list[dict],
+    *,
+    pending: int,
+    available: int,
+) -> list[dict]:
+    if conflicts:
+        return _conflict_cause_chart(conflicts)
+    chart: list[dict] = []
+    pressure = max(0, pending - available)
+    if pressure:
+        chart.append({"cause": "Capacity pressure", "count": pressure})
+    if pending:
+        chart.append({"cause": "Pending assignment", "count": pending})
+    if available:
+        chart.append({"cause": "Available trucks", "count": available})
+    if not chart:
+        chart.append({"cause": "No conflicts predicted", "count": 1})
+    return chart
+
+
 def _travel_time_delay_hours(trip: Trip) -> float | None:
     """Actual minus scheduled travel time (hours). Negative = early, positive = delayed."""
     actual_hours = _delivery_hours(trip)
@@ -677,8 +747,18 @@ def build_dispatcher_role_analytics(
     ops = _safe_operations_center(db, viewer)
     pending_assign = int(ops.get("summary", {}).get("waiting_for_assignment") or 0)
     available_trucks = int(ops.get("summary", {}).get("available_trucks") or 0)
-    timeline = _safe_timeline(db, today.isoformat())
-    conflicts = timeline.get("conflicts") or []
+    timeline = _safe_timeline(db, (f.date_from or today).isoformat())
+    conflicts = list(timeline.get("conflicts") or [])
+    conflicts.extend(_detect_filtered_schedule_conflicts(filtered_trips))
+    deduped_conflicts: list[dict] = []
+    seen_conflict_keys: set[tuple] = set()
+    for conflict in conflicts:
+        key = (conflict.get("trip_id"), tuple(conflict.get("reasons") or []))
+        if key in seen_conflict_keys:
+            continue
+        seen_conflict_keys.add(key)
+        deduped_conflicts.append(conflict)
+    conflicts = deduped_conflicts
     if viewer and not has_dispatcher_booking_scope(viewer):
         scoped_bids = {b.id for b in ctx["bookings"]}
         conflicts = [c for c in conflicts if c.get("booking_id") in scoped_bids]
@@ -1341,15 +1421,25 @@ def build_dispatcher_role_analytics(
         )
     )
 
-    ops_pred_conflict = (
-        _empty_predict()
-        if not conflicts
-        else _block(
-            kpis=[{"label": "Schedule conflicts", "value": len(conflicts)}],
-            chart=_conflict_cause_chart(conflicts),
-            drilldown=conflict_drilldown[:50],
-            note="Overlapping truck/driver slots detected on the weekly schedule board.",
-        )
+    ops_pred_conflict = _block(
+        kpis=[
+            {"label": "Schedule conflicts", "value": len(conflicts)},
+            {"label": "Pending assignment", "value": pending_assign},
+            {"label": "Available trucks", "value": available_trucks},
+        ],
+        chart=_schedule_conflict_prediction_chart(
+            conflicts,
+            pending=pending_assign,
+            available=available_trucks,
+        ),
+        drilldown=conflict_drilldown[:50] if conflict_drilldown else schedule_rows[:30],
+        statistics=compute_statistics([float(row["count"]) for row in _conflict_cause_chart(conflicts)], min_samples=1)
+        if conflicts
+        else None,
+        note=(
+            "Schedule conflict causes from overlapping truck/driver slots. "
+            "When no overlaps are detected, the chart shows capacity pressure and assignment risk."
+        ),
     )
 
     available_truck_count = sum(1 for row in truck_avail_rows if row["availability"] == "available")
