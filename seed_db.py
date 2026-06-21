@@ -411,11 +411,47 @@ def seed_database(*, force: bool = False) -> None:
         print(f"[OK] Historical toll records: {len(toll_history)}")
 
         # ----------- Maintenance -----------
-        db.add_all([
-            MaintenanceRecord(truck_id=trucks[0].id, reported_issue="Tire wear detected", severity="low", predicted_risk_score=0.3, status=MaintenanceStatus.LOW_RISK, scheduled_date=today + timedelta(days=14)),
-            MaintenanceRecord(truck_id=trucks[2].id, reported_issue="Engine oil change", severity="medium", predicted_risk_score=0.55, status=MaintenanceStatus.IN_SERVICE, estimated_cost=4500, scheduled_date=today),
-            MaintenanceRecord(truck_id=trucks[3].id, reported_issue="Brake fluid leak", severity="high", predicted_risk_score=0.92, status=MaintenanceStatus.HIGH_RISK, estimated_cost=12000, scheduled_date=today),
-        ])
+        pareto_demo_issues = [
+            "Engine overheating",
+            "Engine failure",
+            "Engine misfire",
+            "Engine oil leak",
+            "Engine stall",
+            "Engine knocking",
+            "Engine malfunction",
+            "Tire puncture",
+            "Tire blowout",
+            "Tire wear detected",
+            "Tire flat",
+            "Tire damage",
+            "Tire replacement",
+            "Brake failure",
+            "Brake fluid leak",
+            "Brake pad worn",
+            "Electrical fault",
+            "Electrical wiring issue",
+            "Battery electrical issue",
+            "Suspension problem",
+            "Suspension noise",
+            "Suspension worn",
+            "Coolant fluid leak",
+            "Hydraulic fluid leak",
+            "Oil fluid leak",
+        ]
+        db.add_all(
+            [
+                MaintenanceRecord(
+                    truck_id=trucks[idx % len(trucks)].id,
+                    reported_issue=issue,
+                    severity="high" if idx % 5 == 0 else "medium" if idx % 2 == 0 else "low",
+                    predicted_risk_score=round(0.25 + (idx % 7) * 0.1, 2),
+                    status=MaintenanceStatus.HIGH_RISK if idx % 6 == 0 else MaintenanceStatus.IN_SERVICE if idx % 3 == 0 else MaintenanceStatus.LOW_RISK,
+                    estimated_cost=2500 + (idx * 350),
+                    created_at=datetime.utcnow() - timedelta(days=idx * 3),
+                )
+                for idx, issue in enumerate(pareto_demo_issues)
+            ]
+        )
 
         # ----------- Attendance -----------
         attendance = [

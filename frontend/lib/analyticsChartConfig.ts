@@ -2,7 +2,7 @@ import type { InferredChartMeta } from "@/lib/chartDrilldownUtils";
 
 export type AnalyticsChartKind = InferredChartMeta["kind"];
 
-const RICH_KINDS: AnalyticsChartKind[] = ["combo", "stackedBar", "area", "horizontalBar"];
+const RICH_KINDS: AnalyticsChartKind[] = ["combo", "stackedBar", "groupedBar", "area", "horizontalBar", "heatmap", "pareto", "scatter"];
 
 export function inferPreferredChartKind(featureKey: string): AnalyticsChartKind | undefined {
   const key = featureKey.toLowerCase();

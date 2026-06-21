@@ -2,6 +2,7 @@
 
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
 import type { CustomerRoleAnalyticsPayload } from "@/lib/analyticsApi";
+import { customerChartUnit, customerFeatureNote, customerPreferredChartKind, customerResolveChartMeta, normalizeCustomerFeatureChart } from "@/lib/customerAnalyticsChartConfig";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   account_management: {
@@ -25,6 +26,7 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
     cancellation_risk: "Cancellation Risk Prediction",
   },
   shipment_tracking: {
+    delivery_performance: "Delivery Performance Reports",
     payment_records: "Payment Records",
     transaction_history: "Transaction History",
     receipts: "Receipts",
@@ -54,7 +56,9 @@ const CATEGORY_TABS: AnalyticsCategoryTab[] = [
   {
     id: "shipment-tracking",
     label: "Shipment Tracking",
-    include: [{ pillar: "shipment_tracking", features: ["payment_records", "transaction_history", "receipts"] }],
+    include: [
+      { pillar: "shipment_tracking", features: ["delivery_performance", "payment_records", "transaction_history", "receipts"] },
+    ],
   },
 ];
 
@@ -65,6 +69,11 @@ export default function CustomerRoleAnalyticsTabs({ data }: { data: CustomerRole
       categoryTabs={CATEGORY_TABS}
       featureLabels={FEATURE_LABELS}
       data={data}
+      resolvePreferredChartKind={customerPreferredChartKind}
+      resolveChartUnit={customerChartUnit}
+      resolveFeatureChartMeta={customerResolveChartMeta}
+      normalizeFeatureChart={normalizeCustomerFeatureChart}
+      resolveFeatureNote={customerFeatureNote}
     />
   );
 }

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+import math
+import statistics
 from typing import Any
 
 from sqlalchemy import inspect
@@ -11,12 +13,14 @@ from sqlalchemy.orm import Session
 from app.models.entities import (
     Booking,
     BookingStatus,
+    FuelLog,
     GeneralOperationalReport,
     JobOrder,
     OperationalLog,
     Trip,
     TripIssue,
     TripStatus,
+    TripStatusUpdate,
     Truck,
     User,
     UserRole,
@@ -242,6 +246,144 @@ def _fleet_availability_chart(rows: list[dict]) -> list[dict]:
     ]
 
 
+_DISPATCH_EVENT_ORDER = ("Pickup", "Dropoff", "Refuel", "Break", "Maintenance")
+
+_PICKUP_EVENT_TOKENS = frozenset(
+    {
+        "for_pickup",
+        "picked_up",
+        "pickup",
+        "loading_unloading_issue",
+        "route_change",
+        "route_deviation",
+        "loading",
+    }
+)
+_DROPOFF_EVENT_TOKENS = frozenset(
+    {
+        "dropped_off",
+        "dropoff",
+        "drop_off",
+        "completed",
+        "delivery",
+        "customs_hold",
+        "customer_coordination_issue",
+        "delivery_issue",
+        "trip_completion",
+    }
+)
+_REFUEL_EVENT_TOKENS = frozenset({"fuel_log", "fuel", "refuel", "fuel_toll_issue"})
+_BREAK_EVENT_TOKENS = frozenset(
+    {
+        "break",
+        "on_break",
+        "rest",
+        "delay",
+        "traffic",
+        "delivery_delay",
+        "driver_helper_concern",
+        "other_incident",
+        "incident_report",
+        "general_operational_update",
+    }
+)
+_MAINTENANCE_EVENT_TOKENS = frozenset(
+    {
+        "maintenance",
+        "maintenance_concern",
+        "vehicle_concern",
+        "breakdown",
+        "mechanical",
+        "warning_light",
+        "extra_cost",
+    }
+)
+
+
+def _classify_dispatch_event(raw: str) -> str | None:
+    token = (raw or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not token:
+        return None
+    if token in _PICKUP_EVENT_TOKENS or "pickup" in token or token.startswith("load"):
+        return "Pickup"
+    if token in _DROPOFF_EVENT_TOKENS or "drop" in token or "deliver" in token:
+        return "Dropoff"
+    if token in _REFUEL_EVENT_TOKENS or "fuel" in token:
+        return "Refuel"
+    if token in _MAINTENANCE_EVENT_TOKENS or "maint" in token or "vehicle" in token:
+        return "Maintenance"
+    if token in _BREAK_EVENT_TOKENS:
+        return "Break"
+    return "Break"
+
+
+def _dispatch_event_distribution_chart(
+    db: Session,
+    *,
+    filtered_ids: set[int],
+    dispatch_log_rows: list[dict],
+) -> list[dict[str, Any]]:
+    """Aggregate dispatcher-facing events into pickup / dropoff / refuel / break / maintenance slices."""
+    counts: dict[str, int] = defaultdict(int)
+
+    for row in dispatch_log_rows:
+        event = _classify_dispatch_event(str(row.get("status") or row.get("report_type") or ""))
+        if event:
+            counts[event] += 1
+
+    if filtered_ids:
+        for tsu in _query_if_table(
+            db,
+            "trip_status_updates",
+            lambda: db.query(TripStatusUpdate).filter(TripStatusUpdate.trip_id.in_(filtered_ids)).all(),
+        ):
+            event = _classify_dispatch_event(tsu.status)
+            if event:
+                counts[event] += 1
+
+        for _fuel in _query_if_table(
+            db,
+            "fuel_logs",
+            lambda: db.query(FuelLog).filter(FuelLog.trip_id.in_(filtered_ids)).all(),
+        ):
+            counts["Refuel"] += 1
+
+        for rep in _query_if_table(
+            db,
+            "general_operational_reports",
+            lambda: db.query(GeneralOperationalReport).filter(GeneralOperationalReport.trip_id.in_(filtered_ids)).all(),
+        ):
+            event = _classify_dispatch_event(str(rep.category or rep.status or ""))
+            if event:
+                counts[event] += 1
+
+        for _issue in _query_if_table(
+            db,
+            "vehicle_issue_reports",
+            lambda: db.query(VehicleIssueReport).filter(VehicleIssueReport.trip_id.in_(filtered_ids)).all(),
+        ):
+            counts["Maintenance"] += 1
+
+    total = sum(counts.values())
+    if total <= 0:
+        return []
+
+    chart: list[dict[str, Any]] = []
+    for label in _DISPATCH_EVENT_ORDER:
+        count = int(counts.get(label, 0))
+        if count <= 0:
+            continue
+        chart.append(
+            {
+                "dispatch_event": label,
+                "count": count,
+                "share_pct": round((count / total) * 100, 1),
+            }
+        )
+    chart.sort(key=lambda row: -int(row["count"]))
+    return chart
+
+
 def _capacity_snapshot_chart(*, pending: int, available: int, conflicts: int) -> list[dict]:
     return [
         {"category": "Pending assignment", "count": pending},
@@ -263,6 +405,78 @@ def _conflict_cause_chart(conflicts: list[dict], *, limit: int = 12) -> list[dic
         for reason in conflict.get("reasons") or ["unknown"]:
             counts[str(reason)] += 1
     return [{"cause": label, "count": value} for label, value in sorted(counts.items(), key=lambda x: -x[1])[:limit]]
+
+
+def _travel_time_delay_hours(trip: Trip) -> float | None:
+    """Actual minus scheduled travel time (hours). Negative = early, positive = delayed."""
+    actual_hours = _delivery_hours(trip)
+    scheduled_hours = float(trip.predicted_duration_hours or trip.duration_hours or 0)
+    if actual_hours is not None and scheduled_hours > 0:
+        return round(actual_hours - scheduled_hours, 1)
+
+    actual_end = trip.completed_at or trip.arrival_delivery_time
+    if actual_end and trip.estimated_delivery_time:
+        return round((actual_end - trip.estimated_delivery_time).total_seconds() / 3600, 1)
+
+    if actual_end and trip.departure_time and scheduled_hours > 0:
+        scheduled_end = trip.departure_time + timedelta(hours=scheduled_hours)
+        return round((actual_end - scheduled_end).total_seconds() / 3600, 1)
+    return None
+
+
+def _gaussian_kde(grid: list[float], samples: list[float]) -> list[float]:
+    n = len(samples)
+    if n == 0 or not grid:
+        return [0.0] * len(grid)
+    if n == 1:
+        return [1.0 if abs(g - samples[0]) < 0.01 else 0.0 for g in grid]
+    spread = statistics.pstdev(samples) if n > 1 else abs(samples[0]) * 0.15
+    if spread <= 0:
+        spread = max(abs(samples[0]), 1.0) * 0.15
+    bandwidth = max(1.06 * spread * (n**-0.2), 0.75)
+    norm = n * bandwidth * math.sqrt(2 * math.pi)
+    return [
+        sum(math.exp(-0.5 * ((g - sample) / bandwidth) ** 2) for sample in samples) / norm
+        for g in grid
+    ]
+
+
+def _travel_delay_histogram(delays: list[float], *, bin_width: float = 4.0) -> list[dict[str, Any]]:
+    if len(delays) < 2:
+        return []
+    lo = min(min(delays), 0.0)
+    hi = max(max(delays), 0.0)
+    lo = math.floor(lo / bin_width) * bin_width - bin_width / 2
+    hi = math.ceil(hi / bin_width) * bin_width + bin_width / 2
+    if hi - lo < bin_width * 2:
+        lo -= bin_width
+        hi += bin_width
+
+    bin_centers: list[float] = []
+    center = lo + bin_width / 2
+    while center <= hi + 0.001:
+        bin_centers.append(round(center, 1))
+        center += bin_width
+
+    counts = [0] * len(bin_centers)
+    for delay in delays:
+        idx = int((delay - lo) / bin_width)
+        idx = max(0, min(len(bin_centers) - 1, idx))
+        counts[idx] += 1
+
+    density_raw = _gaussian_kde(bin_centers, delays)
+    max_count = max(counts) if counts else 1
+    max_density = max(density_raw) if density_raw else 1.0
+    scale = max_count / max_density if max_density > 0 else 1.0
+
+    return [
+        {
+            "delay_hours": bin_center,
+            "trip_count": count,
+            "density_curve": round(density * scale, 2),
+        }
+        for bin_center, count, density in zip(bin_centers, counts, density_raw)
+    ]
 
 
 def _trip_row(trip: Trip, jobs: dict[int, JobOrder], names: dict[int, str], *, extra: dict | None = None) -> dict:
@@ -322,36 +536,46 @@ def build_dispatcher_role_analytics(
         )
     schedule_rows.sort(key=lambda r: (r.get("scheduled_date", ""), r["trip_id"]))
 
-    upcoming = [r for r in schedule_rows if r.get("scheduled_date", "") >= today.isoformat()]
-    day_counts: dict[str, int] = defaultdict(int)
-    week_counts: dict[str, int] = defaultdict(int)
-    month_counts: dict[str, int] = defaultdict(int)
     period_counts: dict[str, int] = defaultdict(int)
     for r in schedule_rows:
         sd = r.get("scheduled_date")
         if not sd or sd == "—":
             continue
-        day_counts[sd] += 1
         d = date.fromisoformat(sd)
-        week_counts[d.strftime("%Y-W%W")] += 1
-        month_counts[sd[:7]] += 1
         p = period_key(d, f.granularity)
         if p:
             period_counts[p] += 1
 
+    driver_trip_counts: dict[str, int] = defaultdict(int)
+    for trip in filtered_trips:
+        driver_name = trip.driver.full_name if trip.driver else "Unassigned"
+        driver_trip_counts[driver_name] += 1
+    driver_trip_chart = [
+        {"driver": driver, "trip_count": count}
+        for driver, count in sorted(driver_trip_counts.items(), key=lambda item: -item[1])
+    ]
+
     sched_desc_trips = (
         _empty("No data available for the selected filters.")
-        if not schedule_rows
+        if not filtered_trips
         else _block(
             kpis=[
-                {"label": "Scheduled trips", "value": len(schedule_rows)},
-                {"label": "Upcoming", "value": len(upcoming)},
-                {"label": "Today", "value": day_counts.get(today.isoformat(), 0)},
+                {"label": "Total trips", "value": len(filtered_trips)},
+                {"label": "Drivers with trips", "value": len(driver_trip_counts)},
+                {
+                    "label": "Most trips (driver)",
+                    "value": driver_trip_chart[0]["driver"] if driver_trip_chart else "—",
+                },
             ],
-            chart=rollup_count_series(period_counts, f.granularity),
-            drilldown=schedule_rows[:50],
-            statistics=compute_statistics(list(period_counts.values()), min_samples=1) if period_counts else None,
-            note=_period_note("Scheduled trip volume", f.granularity),
+            chart=driver_trip_chart,
+            drilldown=schedule_rows[:50] if schedule_rows else [_trip_row(t, jobs, dispatcher_names) for t in filtered_trips[:50]],
+            statistics=compute_statistics([row["trip_count"] for row in driver_trip_chart], min_samples=1)
+            if driver_trip_chart
+            else None,
+            note=(
+                "Number of Trips per Driver. Horizontal bar chart showing how scheduled and assigned trips "
+                "are distributed across drivers in the selected period — sorted highest to lowest."
+            ),
         )
     )
 
@@ -378,53 +602,75 @@ def build_dispatcher_role_analytics(
                 else "—",
                 "date": _activity_date(log.created_at).isoformat() if log.created_at else "—",
                 "status": log.report_type,
+                "report_type": log.report_type,
+                "dispatch_event": _classify_dispatch_event(log.report_type),
                 "dispatcher": _dispatcher_for(booking_id, jobs, dispatcher_names) if booking_id else "—",
             }
         )
-    dispatch_log_chart = _period_count_chart(dispatch_log_rows, "date", f.granularity)
+    dispatch_event_chart = _dispatch_event_distribution_chart(
+        db,
+        filtered_ids=filtered_ids,
+        dispatch_log_rows=dispatch_log_rows,
+    )
     sched_desc_dispatch = (
         _empty("No data available for the selected filters.")
-        if not dispatch_log_rows
+        if not dispatch_event_chart
         else _block(
-            kpis=[{"label": "Dispatch log entries", "value": len(dispatch_log_rows)}],
-            chart=dispatch_log_chart,
+            kpis=[
+                {"label": "Total dispatch events", "value": sum(int(row["count"]) for row in dispatch_event_chart)},
+                {"label": "Top activity", "value": dispatch_event_chart[0]["dispatch_event"]},
+                {"label": "Share (top)", "value": f"{dispatch_event_chart[0]['share_pct']}%"},
+            ],
+            chart=dispatch_event_chart,
             drilldown=dispatch_log_rows[:50],
-            statistics=compute_statistics([row["count"] for row in dispatch_log_chart], min_samples=1)
-            if dispatch_log_chart
-            else None,
-            note=_period_note("Dispatch log activity", f.granularity),
+            statistics=compute_statistics([row["count"] for row in dispatch_event_chart], min_samples=1),
+            note=(
+                "Distribution of Dispatch Events. Pie chart detailing the share of pickups, drop-offs, refuels, "
+                "breaks, and maintenance activities logged during dispatcher operations."
+            ),
         )
     )
 
-    delivery_rows = [
-        _trip_row(t, jobs, dispatcher_names, extra={"completed_at": t.completed_at.isoformat() if t.completed_at else "—"})
-        for t in filtered_trips
-        if t.status == TripStatus.COMPLETED
-    ]
+    delivery_rows: list[dict] = []
+    delay_samples: list[float] = []
+    for trip in filtered_trips:
+        if trip.status != TripStatus.COMPLETED:
+            continue
+        delay_hours = _travel_time_delay_hours(trip)
+        row = _trip_row(
+            trip,
+            jobs,
+            dispatcher_names,
+            extra={
+                "completed_at": trip.completed_at.isoformat() if trip.completed_at else "—",
+                "delay_hours": delay_hours,
+            },
+        )
+        delivery_rows.append(row)
+        if delay_hours is not None:
+            delay_samples.append(float(delay_hours))
     delivery_rows.sort(key=lambda r: r.get("completed_at", ""), reverse=True)
-    delivery_period_counts: dict[str, int] = defaultdict(int)
-    for row in delivery_rows:
-        completed_at = row.get("completed_at")
-        if not completed_at or completed_at == "—":
-            continue
-        try:
-            ref = date.fromisoformat(str(completed_at)[:10])
-        except ValueError:
-            continue
-        bucket = period_key(ref, f.granularity)
-        if bucket:
-            delivery_period_counts[bucket] += 1
+    travel_delay_chart = _travel_delay_histogram(delay_samples)
+    on_time = sum(1 for value in delay_samples if abs(value) <= 1.0)
     sched_desc_delivery = (
-        _empty("No data available for the selected filters.")
-        if not delivery_rows
+        _empty("No completed trips with travel-time delay samples for the selected filters.")
+        if not travel_delay_chart
         else _block(
-            kpis=[{"label": "Completed deliveries", "value": len(delivery_rows)}],
-            chart=rollup_count_series(delivery_period_counts, f.granularity),
+            kpis=[
+                {"label": "Completed trips", "value": len(delivery_rows)},
+                {"label": "Delay samples", "value": len(delay_samples)},
+                {
+                    "label": "On-time (±1 hr)",
+                    "value": on_time,
+                },
+            ],
+            chart=travel_delay_chart,
             drilldown=delivery_rows[:50],
-            statistics=compute_statistics(list(delivery_period_counts.values()), min_samples=1)
-            if delivery_period_counts
-            else None,
-            note=_period_note("Completed delivery volume", f.granularity),
+            statistics=compute_statistics(delay_samples, min_samples=1) if delay_samples else None,
+            note=(
+                "Distribution of Travel Time Delays (Actual − Scheduled). Histogram of trip-level delay "
+                "in hours with a smoothed density curve — negative values are early arrivals, positive are late."
+            ),
         )
     )
 

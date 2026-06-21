@@ -108,6 +108,9 @@ export function RoleAnalyticsGrid({
   onPeriodDrillDown,
   resolvePreferredChartKind,
   resolveChartUnit,
+  resolveFeatureChartMeta,
+  normalizeFeatureChart,
+  resolveFeatureNote,
 }: {
   categoryTabs?: AnalyticsCategoryTab[];
   pillarTabs?: { id: string; label: string }[];
@@ -119,6 +122,16 @@ export function RoleAnalyticsGrid({
   onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
   resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined;
   resolveChartUnit?: (featureKey: string) => string | undefined;
+  resolveFeatureChartMeta?: (
+    featureKey: string,
+    chart: Record<string, unknown>[],
+  ) => import("@/lib/chartDrilldownUtils").InferredChartMeta | null;
+  normalizeFeatureChart?: (
+    featureKey: string,
+    chart: Record<string, unknown>[],
+    drilldown: Record<string, unknown>[],
+  ) => Record<string, unknown>[];
+  resolveFeatureNote?: (featureKey: string, blockNote?: string | null) => string | undefined;
 }) {
   const tabs = categoryTabs ?? pillarTabs ?? [];
   const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? "");
@@ -186,12 +199,16 @@ export function RoleAnalyticsGrid({
                       key={w.id}
                       widgetId={w.id}
                       title={w.title}
+                      featureKey={w.featureKey}
                       block={w.block}
                       filterOptions={filterOptions}
                       analyticsType={w.analyticsType}
                       analyticsMethod={w.analyticsMethod}
                       preferredChartKind={w.preferredChartKind}
                       valueUnit={resolveChartUnit?.(w.featureKey)}
+                      resolveFeatureChartMeta={resolveFeatureChartMeta}
+                      normalizeFeatureChart={normalizeFeatureChart}
+                      resolveFeatureNote={resolveFeatureNote}
                       timeGranularity={timeGranularity}
                       onPeriodDrillDown={onPeriodDrillDown}
                     />

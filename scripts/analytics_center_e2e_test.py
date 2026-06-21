@@ -44,6 +44,48 @@ def module_state(payload: dict, key: str) -> str:
     return "ok"
 
 
+def validate_feature_block(block: object, *, path: str) -> str | None:
+    if not isinstance(block, dict):
+        return f"{path}: not an object"
+    if block.get("empty"):
+        if "message" not in block:
+            return f"{path}: empty block missing message"
+        return None
+    if "chart" not in block:
+        return f"{path}: missing chart key"
+    chart = block.get("chart")
+    if chart is not None and not isinstance(chart, list):
+        return f"{path}: chart is not a list"
+    if chart is None:
+        return f"{path}: chart is null"
+    return None
+
+
+def audit_role_analytics_tree(payload: dict, root_key: str) -> tuple[int, list[str]]:
+    """Walk pillar -> descriptive|predictive -> feature blocks."""
+    errors: list[str] = []
+    count = 0
+    root = payload.get(root_key)
+    if root is None:
+        return 0, [f"{root_key} is null"]
+    if not isinstance(root, dict):
+        return 0, [f"{root_key} is not an object"]
+    for pillar, sections in root.items():
+        if not isinstance(sections, dict):
+            errors.append(f"{root_key}.{pillar}: not an object")
+            continue
+        for section, features in sections.items():
+            if not isinstance(features, dict):
+                errors.append(f"{root_key}.{pillar}.{section}: not an object")
+                continue
+            for feature_key, block in features.items():
+                count += 1
+                err = validate_feature_block(block, path=f"{root_key}.{pillar}.{section}.{feature_key}")
+                if err:
+                    errors.append(err)
+    return count, errors
+
+
 def main() -> int:
     print("Analytics Center E2E test\n")
     apply_runtime_schema_fixes()
@@ -65,6 +107,7 @@ def main() -> int:
     manager_h = {"Authorization": f"Bearer {login(client, 'manager@fleetops.com')}"}
     dispatcher_h = {"Authorization": f"Bearer {login(client, 'dispatcher@fleetops.com')}"}
     customer_h = {"Authorization": f"Bearer {login(client, 'customer1@fleetops.com')}"}
+    driver_h = {"Authorization": f"Bearer {login(client, 'driver1@fleetops.com')}"}
 
     r = client.get("/api/admin/analytics", headers=customer_h)
     if r.status_code != 403:
@@ -172,6 +215,74 @@ def main() -> int:
             fail("6 Dispatcher analytics", "dispatcher_role_analytics should be populated")
         else:
             ok("6 Dispatcher analytics", "financial/clients excluded, dispatcher_role_analytics present")
+        disp_count, disp_errors = audit_role_analytics_tree(d, "dispatcher_role_analytics")
+        if disp_errors:
+            fail("6b Dispatcher role blocks", disp_errors[0])
+        else:
+            ok("6b Dispatcher role blocks", f"features={disp_count}")
+
+    # ── Manager role_analytics block audit ──
+    mgr_count, mgr_errors = audit_role_analytics_tree(payload, "role_analytics")
+    if mgr_errors:
+        fail("6c Manager role blocks", mgr_errors[0])
+    else:
+        ok("6c Manager role blocks", f"features={mgr_count}")
+
+    # ── Driver analytics ──
+    r = client.get("/api/driver/analytics", headers=driver_h)
+    if r.status_code != 200:
+        fail("9 Driver analytics", f"status={r.status_code} body={r.text[:400]}")
+    else:
+        try:
+            driver_payload = r.json()
+            json.dumps(driver_payload)
+        except Exception as exc:
+            fail("9 Driver analytics JSON", str(exc))
+        else:
+            drv_count, drv_errors = audit_role_analytics_tree(driver_payload, "driver_role_analytics")
+            if drv_errors:
+                fail("9 Driver role blocks", drv_errors[0])
+            else:
+                ok("9 Driver analytics", f"features={drv_count}")
+            priority = (
+                (driver_payload.get("driver_role_analytics") or {})
+                .get("delivery_reporting", {})
+                .get("predictive", {})
+                .get("completion_time_prediction")
+            )
+            if isinstance(priority, dict) and not priority.get("empty") and not priority.get("chart"):
+                fail("9b Driver completion_time_prediction", "block has no chart rows")
+            else:
+                ok("9b Driver completion_time_prediction", "chart ok or empty")
+
+    r = client.get("/api/driver/analytics", headers=customer_h)
+    if r.status_code != 403:
+        fail("9c Driver denied for customer", f"status={r.status_code}")
+    else:
+        ok("9c Driver denied for customer")
+
+    # ── Customer analytics ──
+    r = client.get("/api/customer/analytics", headers=customer_h)
+    if r.status_code != 200:
+        fail("10 Customer analytics", f"status={r.status_code} body={r.text[:400]}")
+    else:
+        try:
+            customer_payload = r.json()
+            json.dumps(customer_payload)
+        except Exception as exc:
+            fail("10 Customer analytics JSON", str(exc))
+        else:
+            cust_count, cust_errors = audit_role_analytics_tree(customer_payload, "customer_role_analytics")
+            if cust_errors:
+                fail("10 Customer role blocks", cust_errors[0])
+            else:
+                ok("10 Customer analytics", f"features={cust_count}")
+
+    r = client.get("/api/customer/analytics", headers=driver_h)
+    if r.status_code != 403:
+        fail("10b Customer denied for driver", f"status={r.status_code}")
+    else:
+        ok("10b Customer denied for driver")
 
     # ── AI interpretation endpoints ──
     r = client.post(

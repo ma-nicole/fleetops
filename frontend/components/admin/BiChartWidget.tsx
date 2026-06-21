@@ -20,7 +20,7 @@ import {
 } from "@/lib/chartDrilldownUtils";
 import { mergeChartKind } from "@/lib/analyticsChartConfig";
 import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
-import { drillDownFromPeriod } from "@/lib/timePeriodDrilldown";
+import { dateRangeForPeriod, drillDownFromPeriod } from "@/lib/timePeriodDrilldown";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -50,12 +50,28 @@ function inferColumns(rows: Record<string, unknown>[]) {
 }
 
 function buildSelection(meta: ReturnType<typeof inferChartMeta>, payload: ChartClickPayload): ChartSelection {
+  const raw = payload.raw;
+  if (raw.day != null && raw.hour != null) {
+    const day = String(raw.day);
+    const hour = Number(raw.hour);
+    const count = raw.count != null ? Number(raw.count) : 0;
+    return {
+      label: `${day}|${hour}`,
+      displayLabel: `${day} · ${String(hour).padStart(2, "0")}:00 (${count} events)`,
+      fieldKeys: ["day_of_week", "hour"],
+    };
+  }
   if (!meta) return { label: payload.label, displayLabel: payload.label, fieldKeys: [] };
-  const label = String(payload.raw[meta.labelKey] ?? payload.label);
+  const label = String(
+    payload.raw[meta.labelKey] ?? (payload.raw as Record<string, unknown>).name ?? payload.label,
+  );
   let displayLabel = label;
   if (meta.labelKey === "status") displayLabel = formatStatusLabel(label);
   else if (meta.monthFromX) displayLabel = `Records for ${label}`;
-  return { label, displayLabel, fieldKeys: meta.fieldKeys, monthKey: meta.monthFromX ? label : undefined };
+  const monthKey = meta.monthFromX
+    ? String((payload.raw.month_cohort as string | undefined) ?? label)
+    : undefined;
+  return { label, displayLabel, fieldKeys: meta.fieldKeys, monthKey };
 }
 
 function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): SynthesizedChart | null {
@@ -63,12 +79,16 @@ function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): Synthesi
 }
 
 function toChartKind(kind: InferredChartMeta["kind"]): AnalyticsChartKind {
+  if (kind === "pareto") return "pareto";
+  if (kind === "heatmap") return "heatmap";
+  if (kind === "groupedBar") return "groupedBar";
   if (kind === "pie") return "pie";
   if (kind === "line") return "line";
   if (kind === "area") return "area";
   if (kind === "stackedBar") return "stackedBar";
   if (kind === "combo") return "combo";
   if (kind === "horizontalBar") return "horizontalBar";
+  if (kind === "scatter") return "scatter";
   return "bar";
 }
 
@@ -126,11 +146,15 @@ export function BiChartWidget({
   filterOptions,
   comparative,
   widgetId,
+  featureKey,
   analyticsType = "Descriptive",
   analyticsMethod = "Comparative aggregation",
   riskLegend,
   preferredChartKind,
   valueUnit,
+  resolveFeatureChartMeta,
+  normalizeFeatureChart,
+  resolveFeatureNote,
   loading = false,
   timeGranularity,
   onPeriodDrillDown,
@@ -140,11 +164,22 @@ export function BiChartWidget({
   filterOptions?: AdminAnalyticsPayload["filter_options"];
   comparative?: ComparativeMetric | null;
   widgetId?: string;
+  featureKey?: string;
   analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
   analyticsMethod?: string;
   riskLegend?: Array<{ label: string; color: string }>;
   preferredChartKind?: AnalyticsChartKind;
   valueUnit?: string;
+  resolveFeatureChartMeta?: (
+    featureKey: string,
+    chart: Record<string, unknown>[],
+  ) => InferredChartMeta | null;
+  normalizeFeatureChart?: (
+    featureKey: string,
+    chart: Record<string, unknown>[],
+    drilldown: Record<string, unknown>[],
+  ) => Record<string, unknown>[];
+  resolveFeatureNote?: (featureKey: string, blockNote?: string | null) => string | undefined;
   loading?: boolean;
   timeGranularity?: TimeGranularity;
   onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
@@ -159,25 +194,96 @@ export function BiChartWidget({
   const chart = useMemo(() => {
     if (empty) return [];
     let rows = (block.chart ?? []) as Record<string, unknown>[];
-    if (!rows.length && drilldown.length) {
+    if (featureKey && normalizeFeatureChart) {
+      rows = normalizeFeatureChart(featureKey, rows, drilldown);
+    }
+    const skipSynthesis =
+      featureKey === "booking_history" ||
+      featureKey === "account_activity_logs" ||
+      featureKey === "truck_preference_records" ||
+      featureKey === "delivery_success" ||
+      featureKey === "performance_reports" ||
+      featureKey === "fuel_efficiency" ||
+      featureKey === "maintenance_frequency" ||
+      featureKey === "fleet_performance_trend" ||
+      featureKey === "maintenance_issue_logs" ||
+      featureKey === "efficiency_improvement" ||
+      featureKey === "breakdown_reports" ||
+      featureKey === "cost_fluctuation" ||
+      featureKey === "maintenance_failure" ||
+      featureKey === "operational_disruption" ||
+      featureKey === "cost_overrun" ||
+      featureKey === "trip_schedules" ||
+      featureKey === "dispatch_logs" ||
+      featureKey === "delivery_records" ||
+      featureKey === "trip_logs" ||
+      featureKey === "completed_deliveries" ||
+      featureKey === "travel_time_reports" ||
+      featureKey === "delivery_confirmation_logs" ||
+      featureKey === "completion_time_prediction" ||
+      featureKey === "fuel_usage_prediction" ||
+      featureKey === "travel_time_estimation" ||
+      featureKey === "maintenance_records" ||
+      featureKey === "delay_records" ||
+      featureKey === "trip_progress_updates" ||
+      featureKey === "delay_likelihood_prediction" ||
+      featureKey === "vehicle_usage_logs" ||
+      featureKey === "maintenance_need_prediction" ||
+      featureKey === "breakdown_risk_prediction" ||
+      featureKey === "shipment_records";
+    if (!rows.length && drilldown.length && !skipSynthesis) {
       const synthesized = synthesizeFromDrilldown(drilldown);
       if (synthesized?.items.length) rows = synthesized.items;
     }
     return rows;
-  }, [block, drilldown, empty]);
+  }, [block, drilldown, empty, featureKey, normalizeFeatureChart]);
 
-  const meta = useMemo(() => inferChartMeta(chart, drilldown), [chart, drilldown]);
+  const meta = useMemo(() => {
+    const featureMeta = featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, chart) : null;
+    return featureMeta ?? inferChartMeta(chart, drilldown);
+  }, [chart, drilldown, featureKey, resolveFeatureChartMeta]);
+  const explicitFeatureMeta = useMemo(
+    () => (featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, chart) : null),
+    [chart, featureKey, resolveFeatureChartMeta],
+  );
   const resolvedMeta = useMemo<InferredChartMeta | null>(() => {
     if (!meta) return null;
-    if (!preferredChartKind) return meta;
-    return { ...meta, kind: mergeChartKind(meta.kind, preferredChartKind) };
-  }, [meta, preferredChartKind]);
+    const truckSeries = ["Cold Chain", "Express Delivery", "Standard Delivery", "Heavy Cargo"].filter(
+      (key) => chart.length > 0 && key in chart[0],
+    );
+    const mergedKind = explicitFeatureMeta
+      ? (preferredChartKind ?? explicitFeatureMeta.kind)
+      : mergeChartKind(meta.kind, preferredChartKind);
+    const groupedTruck =
+      mergedKind === "groupedBar" &&
+      chart.length > 0 &&
+      chart[0].truck_type != null &&
+      truckSeries.length >= 2;
+    if (!groupedTruck) {
+      return { ...meta, kind: mergedKind };
+    }
+    return {
+      ...meta,
+      kind: "groupedBar" as const,
+      labelKey: "truck_type",
+      valueKey: truckSeries[0],
+      xKey: "truck_type",
+      yKey: truckSeries[0],
+      seriesKeys: truckSeries,
+      fieldKeys: meta.fieldKeys.includes("truck_type") ? meta.fieldKeys : ["truck_type", "service_sector"],
+    };
+  }, [meta, preferredChartKind, chart, explicitFeatureMeta]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);
 
   const stats = useMemo(() => {
     if (empty) return null;
-    const preferFields = resolvedMeta?.valueKey ? [resolvedMeta.valueKey] : undefined;
+    const preferFields =
+      resolvedMeta?.seriesKeys?.length && resolvedMeta.seriesKeys.length > 1
+        ? resolvedMeta.seriesKeys
+        : resolvedMeta?.valueKey
+          ? [resolvedMeta.valueKey]
+          : undefined;
     const blockStats = "statistics" in block ? block.statistics : null;
     if (blockStats) return blockStats;
     const chartStats = chart.length
@@ -185,7 +291,7 @@ export function BiChartWidget({
       : null;
     if (chartStats) return chartStats;
     return computeRowStatistics(drilldown, preferFields);
-  }, [block, chart, drilldown, empty, resolvedMeta?.valueKey]);
+  }, [block, chart, drilldown, empty, resolvedMeta?.seriesKeys, resolvedMeta?.valueKey]);
   const legendLabel = valueUnit ?? resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
 
   const quarterCompare = useMemo(() => {
@@ -211,7 +317,14 @@ export function BiChartWidget({
   const openDrill = (payload: ChartClickPayload) => {
     if (resolvedMeta?.monthFromX && timeGranularity && onPeriodDrillDown) {
       const next = drillDownFromPeriod(payload.label, timeGranularity);
-      if (next) onPeriodDrillDown(next);
+      if (next) {
+        onPeriodDrillDown(next);
+      } else if (timeGranularity === "daily") {
+        const range = dateRangeForPeriod(payload.label, "daily");
+        if (range) {
+          onPeriodDrillDown({ granularity: "daily", dateFrom: range.from, dateTo: range.to });
+        }
+      }
     }
     setSelection(resolvedMeta ? buildSelection(resolvedMeta, payload) : { label: payload.label, displayLabel: payload.label, fieldKeys: [] });
     setModalOpen(true);
@@ -313,6 +426,13 @@ export function BiChartWidget({
     return wrapChartVisual(<EmptyChart message="No data available for the selected filters." />, 0);
   };
 
+  const widgetNote =
+    featureKey && resolveFeatureNote
+      ? resolveFeatureNote(featureKey, "note" in block ? block.note : undefined)
+      : "note" in block
+        ? block.note
+        : undefined;
+
   if (empty) {
     return (
       <article className="bi-chart-widget" data-widget-id={widgetId}>
@@ -332,8 +452,8 @@ export function BiChartWidget({
           <span className="bi-badge bi-badge--type">{analyticsType}</span>
           <span className="bi-badge bi-badge--method">{analyticsMethod}</span>
         </div>
-        {"note" in block && block.note ? (
-          <p className="bi-chart-widget__subtitle">{block.note}</p>
+        {widgetNote ? (
+          <p className="bi-chart-widget__subtitle">{widgetNote}</p>
         ) : null}
         <p className="bi-chart-widget__hint">
           <span className="bi-chart-widget__hint-icon" aria-hidden>

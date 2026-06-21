@@ -7,9 +7,9 @@ import { dispatcherChartUnit, dispatcherPreferredChartKind } from "@/lib/dispatc
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   trip_scheduling: {
-    trip_schedules: "Trip Schedules",
-    dispatch_logs: "Dispatch Log",
-    delivery_records: "Delivery Records",
+    trip_schedules: "Number of Trips per Driver",
+    dispatch_logs: "Distribution of Dispatch Events",
+    delivery_records: "Distribution of Travel Time Delays",
     optimal_scheduling: "Optimal Scheduling Prediction",
     workload_forecasting: "Workload Forecasting",
   },

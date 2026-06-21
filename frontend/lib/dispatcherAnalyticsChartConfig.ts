@@ -2,9 +2,9 @@ import type { AnalyticsChartKind } from "@/lib/analyticsChartConfig";
 
 /** Descriptive analytics — explicit chart kinds matched to aggregated data shape. */
 export const DISPATCHER_DESCRIPTIVE_CHART_KINDS: Record<string, AnalyticsChartKind> = {
-  trip_schedules: "line",
-  dispatch_logs: "line",
-  delivery_records: "area",
+  trip_schedules: "horizontalBar",
+  dispatch_logs: "pie",
+  delivery_records: "bar",
   route_history: "horizontalBar",
   travel_time_records: "line",
   delivery_performance_logs: "stackedBar",
@@ -45,9 +45,9 @@ export const DISPATCHER_FEATURE_CHART_KINDS: Record<string, AnalyticsChartKind> 
 
 /** Y-axis / tooltip unit labels for descriptive widgets. */
 export const DISPATCHER_CHART_UNITS: Record<string, string> = {
-  trip_schedules: "trips",
-  dispatch_logs: "log entries",
-  delivery_records: "deliveries",
+  trip_schedules: "Number of Trips",
+  dispatch_logs: "Dispatch Events",
+  delivery_records: "Number of Trips",
   route_history: "deliveries",
   travel_time_records: "hours",
   delivery_performance_logs: "deliveries",

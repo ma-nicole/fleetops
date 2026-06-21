@@ -3425,6 +3425,128 @@ html {
   min-height: 260px;
 }
 
+.recharts-analytics-chart--grouped {
+  aspect-ratio: unset;
+  min-height: 340px;
+}
+
+.recharts-analytics-chart--operational-cost {
+  aspect-ratio: unset;
+  min-height: 320px;
+}
+
+.recharts-analytics-chart--heatmap {
+  aspect-ratio: unset;
+  min-height: 320px;
+  padding: 0.25rem 0.5rem 0.5rem;
+}
+
+.activity-heatmap {
+  display: grid;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.activity-heatmap__legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.activity-heatmap__legend-bar {
+  display: flex;
+  height: 0.55rem;
+  width: 8rem;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.activity-heatmap__legend-bar span {
+  flex: 1;
+}
+
+.activity-heatmap__body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.45rem 0.55rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.activity-heatmap__y-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.72rem;
+  color: #64748b;
+  text-align: center;
+  justify-self: center;
+  align-self: center;
+}
+
+.activity-heatmap__matrix {
+  display: grid;
+  grid-template-columns: 2.5rem repeat(14, minmax(0, 1fr));
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+}
+
+.activity-heatmap__corner {
+  display: block;
+  min-height: 0;
+}
+
+.activity-heatmap__hour-label {
+  font-size: 0.68rem;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.2;
+  padding-bottom: 0.1rem;
+}
+
+.activity-heatmap__day-label {
+  font-size: 0.68rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 0.35rem;
+}
+
+.activity-heatmap__cell {
+  border: none;
+  width: 100%;
+  min-height: 1.35rem;
+  aspect-ratio: 1.15;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.activity-heatmap__cell:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
+  z-index: 1;
+}
+
+.activity-heatmap__cell--selected {
+  box-shadow: 0 0 0 2px #1b4332;
+  z-index: 2;
+}
+
+.activity-heatmap__x-title {
+  grid-column: 2 / -1;
+  text-align: center;
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 0.15rem;
+}
+
 .recharts-analytics-chart--horizontal .recharts-cartesian-axis-tick text {
   font-size: 11px;
 }
@@ -3456,6 +3578,18 @@ html {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+.recharts-analytics-tooltip--line {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.recharts-analytics-tooltip__row--plain {
+  display: block;
+  margin: 0.1rem 0;
+  white-space: nowrap;
 }
 
 .recharts-analytics-tooltip__swatch {

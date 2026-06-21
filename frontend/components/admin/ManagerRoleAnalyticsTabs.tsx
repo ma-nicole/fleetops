@@ -3,6 +3,7 @@
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
 import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import type { AdminAnalyticsPayload, ManagerRoleAnalyticsPayload } from "@/lib/analyticsApi";
+import { managerChartUnit, managerFeatureNote, managerPreferredChartKind, managerResolveChartMeta, normalizeManagerFeatureChart } from "@/lib/managerAnalyticsChartConfig";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
   planning: {
@@ -42,11 +43,11 @@ const FEATURE_LABELS: Record<string, Record<string, string>> = {
     efficiency_improvement: "Efficiency Improvement Forecasting",
   },
   risk_management: {
-    maintenance_issue_logs: "Maintenance Issue Logs",
-    breakdown_reports: "Breakdown Reports",
-    cost_fluctuation: "Cost Fluctuations Analysis",
-    maintenance_failure: "Maintenance Failure Prediction",
-    operational_disruption: "Operational Disruption Prediction",
+    maintenance_issue_logs: "Pareto Chart of Maintenance Issues",
+    breakdown_reports: "Total Breakdown Count per Vehicle",
+    cost_fluctuation: "Operational Cost Fluctuation Analysis",
+    maintenance_failure: "Maintenance Risk Score Trends by Vehicle",
+    operational_disruption: "Operational Disruption Risk Forecast",
   },
 };
 
@@ -79,6 +80,11 @@ export default function ManagerRoleAnalyticsTabs({
       filterOptions={filterOptions}
       timeGranularity={timeGranularity}
       onPeriodDrillDown={onPeriodDrillDown}
+      resolvePreferredChartKind={managerPreferredChartKind}
+      resolveChartUnit={managerChartUnit}
+      resolveFeatureChartMeta={managerResolveChartMeta}
+      normalizeFeatureChart={normalizeManagerFeatureChart}
+      resolveFeatureNote={managerFeatureNote}
     />
   );
 }

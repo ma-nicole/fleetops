@@ -30,7 +30,11 @@ export default function DriverAnalyticsDashboard() {
     setGranularity,
     dateRangeError,
     buildRoleQuery,
-  } = useAnalyticsPageFilters();
+  } = useAnalyticsPageFilters({
+    dateFrom: "2025-01-01",
+    dateTo: "2025-12-31",
+    granularity: "yearly",
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +53,15 @@ export default function DriverAnalyticsDashboard() {
       setLoading(false);
     }
   }, [dateRangeError, buildRoleQuery]);
+
+  const handlePeriodDrillDown = useCallback(
+    (next: { granularity: typeof granularity; dateFrom: string; dateTo: string }) => {
+      setGranularity(next.granularity);
+      setDateFrom(next.dateFrom);
+      setDateTo(next.dateTo);
+    },
+    [setGranularity, setDateFrom, setDateTo],
+  );
 
   useEffect(() => {
     void load();
@@ -119,7 +132,11 @@ export default function DriverAnalyticsDashboard() {
       {error && !loading && <ErrorState message={error} onRetry={() => void load()} />}
 
       {data && !loading && !error && data.driver_role_analytics && (
-        <DriverRoleAnalyticsTabs data={data.driver_role_analytics} />
+        <DriverRoleAnalyticsTabs
+          data={data.driver_role_analytics}
+          timeGranularity={granularity}
+          onPeriodDrillDown={handlePeriodDrillDown}
+        />
       )}
 
       {data && !loading && !error && !data.driver_role_analytics && (
