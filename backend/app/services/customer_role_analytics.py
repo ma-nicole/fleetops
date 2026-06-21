@@ -13,7 +13,7 @@ from app.services.admin_analytics import (
     AnalyticsFilters,
     _activity_date,
     _booking_in_filters,
-    _load_context,
+    _load_customer_context,
     _primary_trip,
     _route_key,
     _shipment_category,
@@ -799,7 +799,7 @@ def build_customer_role_analytics(
     *,
     customer: User,
 ) -> dict[str, Any]:
-    ctx = _load_context(db)
+    ctx = _load_customer_context(db, customer.id)
     bookings = _customer_bookings(ctx, f, customer.id)
     booking_ids = {b.id for b in bookings}
     trips_by_booking = {bid: _primary_trip(ctx, bid) for bid in booking_ids}

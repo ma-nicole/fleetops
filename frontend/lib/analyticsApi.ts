@@ -3,7 +3,7 @@
  * (paper §3.2.8 + §3.2.9). Each function pairs with a backend route registered
  * under `/api/analytics`.
  */
-import { apiGet, apiPost, ApiError, parseApiDetail } from "./api";
+import { ANALYTICS_API_TIMEOUT_MS, apiGet, apiPost, ApiError, parseApiDetail } from "./api";
 import {
   ERROR_ANALYTICS_PERMISSION,
   ERROR_ANALYTICS_SERVICE,
@@ -660,7 +660,7 @@ export const AnalyticsApi = {
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
     if (query.granularity) params.set("granularity", query.granularity);
     const qs = params.toString();
-    return apiGet<AdminAnalyticsPayload>(`/admin/analytics${qs ? `?${qs}` : ""}`);
+    return apiGet<AdminAnalyticsPayload>(`/admin/analytics${qs ? `?${qs}` : ""}`, ANALYTICS_API_TIMEOUT_MS);
   },
   driverAnalytics: (query: DriverAnalyticsQuery = {}) => {
     const params = new URLSearchParams();
@@ -671,7 +671,7 @@ export const AnalyticsApi = {
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
     if (query.granularity) params.set("granularity", query.granularity);
     const qs = params.toString();
-    return apiGet<DriverAnalyticsPayload>(`/driver/analytics${qs ? `?${qs}` : ""}`);
+    return apiGet<DriverAnalyticsPayload>(`/driver/analytics${qs ? `?${qs}` : ""}`, ANALYTICS_API_TIMEOUT_MS);
   },
   customerAnalytics: (query: DriverAnalyticsQuery = {}) => {
     const params = new URLSearchParams();
@@ -682,10 +682,10 @@ export const AnalyticsApi = {
     if (query.shipment_status) params.set("shipment_status", query.shipment_status);
     if (query.granularity) params.set("granularity", query.granularity);
     const qs = params.toString();
-    return apiGet<CustomerAnalyticsPayload>(`/customer/analytics${qs ? `?${qs}` : ""}`);
+    return apiGet<CustomerAnalyticsPayload>(`/customer/analytics${qs ? `?${qs}` : ""}`, ANALYTICS_API_TIMEOUT_MS);
   },
   expenseInterpretation: (req: ExpenseInterpretationRequest) =>
-    apiPost<ExpenseInterpretationResponse>("/admin/analytics/expense-interpretation", req),
+    apiPost<ExpenseInterpretationResponse>("/admin/analytics/expense-interpretation", req, ANALYTICS_API_TIMEOUT_MS),
   chartInterpretation: (req: ChartInterpretationRequest) =>
-    apiPost<ChartInterpretationResponse>("/admin/analytics/chart-interpretation", req),
+    apiPost<ChartInterpretationResponse>("/admin/analytics/chart-interpretation", req, ANALYTICS_API_TIMEOUT_MS),
 };

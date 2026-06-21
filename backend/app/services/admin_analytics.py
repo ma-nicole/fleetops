@@ -210,45 +210,57 @@ def _shipment_category(booking: Booking, trip: Trip | None, delay_logs: dict[int
     return "pending"
 
 
-def _load_context(db: Session) -> dict[str, Any]:
-    bookings = db.query(Booking).options(joinedload(Booking.customer)).all()
-    trips = (
-        db.query(Trip)
-        .options(
-            joinedload(Trip.booking),
-            joinedload(Trip.truck),
-            joinedload(Trip.driver),
-            joinedload(Trip.helper),
-        )
-        .all()
+def _trip_load_options():
+    return (
+        joinedload(Trip.booking),
+        joinedload(Trip.truck),
+        joinedload(Trip.driver),
+        joinedload(Trip.helper),
     )
+
+
+def _build_trip_context_maps(
+    db: Session,
+    trips: list[Trip],
+    *,
+    table_names: set[str] | None = None,
+) -> dict[str, Any]:
+    if table_names is None:
+        table_names = {t for t in inspect(db.get_bind()).get_table_names()}
+
+    trip_ids = {t.id for t in trips}
     trips_by_booking: dict[int, list[Trip]] = defaultdict(list)
     for t in trips:
         trips_by_booking[t.booking_id].append(t)
 
     delay_logs: dict[int, str] = {}
-    for row in db.query(OperationalLog).filter(OperationalLog.report_type == "delivery_delay").all():
-        delay_logs[row.trip_id] = (row.operational_details or "Delivery delay")[:500]
-    for row in db.query(GeneralOperationalReport).filter(
-        GeneralOperationalReport.category == "delay_report"
-    ).all():
-        if row.trip_id and row.trip_id not in delay_logs:
-            delay_logs[row.trip_id] = (row.description or "Delay report")[:500]
+    if trip_ids:
+        for row in (
+            db.query(OperationalLog)
+            .filter(OperationalLog.report_type == "delivery_delay", OperationalLog.trip_id.in_(trip_ids))
+            .all()
+        ):
+            delay_logs[row.trip_id] = (row.operational_details or "Delivery delay")[:500]
+        for row in (
+            db.query(GeneralOperationalReport)
+            .filter(GeneralOperationalReport.category == "delay_report", GeneralOperationalReport.trip_id.in_(trip_ids))
+            .all()
+        ):
+            if row.trip_id and row.trip_id not in delay_logs:
+                delay_logs[row.trip_id] = (row.description or "Delay report")[:500]
 
-    fuel_logs = db.query(FuelLog).all()
-    toll_logs = db.query(TollLog).all()
-    table_names = {t for t in inspect(db.get_bind()).get_table_names()}
+    fuel_logs = db.query(FuelLog).filter(FuelLog.trip_id.in_(trip_ids)).all() if trip_ids else []
+    toll_logs = db.query(TollLog).filter(TollLog.trip_id.in_(trip_ids)).all() if trip_ids else []
     shoulder = (
-        db.query(TripShoulderCostEntry).all()
-        if "trip_shoulder_cost_entries" in table_names
+        db.query(TripShoulderCostEntry).filter(TripShoulderCostEntry.trip_id.in_(trip_ids)).all()
+        if trip_ids and "trip_shoulder_cost_entries" in table_names
         else []
     )
-    maintenance = db.query(MaintenanceRecord).all()
-    payments = db.query(Payment).all()
-    trucks = db.query(Truck).all()
-    drivers = db.query(User).filter(User.role == UserRole.DRIVER).all()
-    customers = db.query(User).filter(User.role == UserRole.CUSTOMER).all()
-    attendance = db.query(AttendanceRecord).all()
+
+    truck_ids = {t.truck_id for t in trips if t.truck_id}
+    maintenance = (
+        db.query(MaintenanceRecord).filter(MaintenanceRecord.truck_id.in_(truck_ids)).all() if truck_ids else []
+    )
 
     fuel_by_trip: dict[int, float] = defaultdict(float)
     for fl in fuel_logs:
@@ -259,7 +271,6 @@ def _load_context(db: Session) -> dict[str, Any]:
         toll_by_trip[tl.trip_id] += float(tl.amount or 0)
 
     return {
-        "bookings": bookings,
         "trips": trips,
         "trips_by_booking": trips_by_booking,
         "delay_logs": delay_logs,
@@ -269,11 +280,94 @@ def _load_context(db: Session) -> dict[str, Any]:
         "toll_by_trip": toll_by_trip,
         "shoulder": shoulder,
         "maintenance": maintenance,
+    }
+
+
+def _load_context(db: Session, f: AnalyticsFilters | None = None) -> dict[str, Any]:
+    table_names = {t for t in inspect(db.get_bind()).get_table_names()}
+    bookings = db.query(Booking).options(joinedload(Booking.customer)).all()
+    trips = db.query(Trip).options(*_trip_load_options()).all()
+    scoped = _build_trip_context_maps(db, trips, table_names=table_names)
+
+    payments = db.query(Payment).all()
+    trucks = db.query(Truck).all()
+    drivers = db.query(User).filter(User.role == UserRole.DRIVER).all()
+    customers = db.query(User).filter(User.role == UserRole.CUSTOMER).all()
+    attendance = db.query(AttendanceRecord).all()
+
+    return {
+        "bookings": bookings,
+        **scoped,
         "payments": payments,
         "trucks": trucks,
         "drivers": drivers,
         "customers": customers,
         "attendance": attendance,
+    }
+
+
+def _load_driver_context(db: Session, driver_id: int) -> dict[str, Any]:
+    """Driver-scoped context — avoids loading the full fleet for one analytics request."""
+    table_names = {t for t in inspect(db.get_bind()).get_table_names()}
+    trips = (
+        db.query(Trip)
+        .filter(Trip.driver_id == driver_id)
+        .options(*_trip_load_options())
+        .all()
+    )
+    booking_ids = {t.booking_id for t in trips}
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.id.in_(booking_ids))
+        .options(joinedload(Booking.customer))
+        .all()
+        if booking_ids
+        else []
+    )
+    scoped = _build_trip_context_maps(db, trips, table_names=table_names)
+    return {
+        "bookings": bookings,
+        **scoped,
+        "payments": [],
+        "trucks": [],
+        "drivers": [],
+        "customers": [],
+        "attendance": [],
+    }
+
+
+def _load_customer_context(db: Session, customer_id: int) -> dict[str, Any]:
+    """Customer-scoped context for customer role analytics."""
+    table_names = {t for t in inspect(db.get_bind()).get_table_names()}
+    bookings = (
+        db.query(Booking)
+        .filter(Booking.customer_id == customer_id)
+        .options(joinedload(Booking.customer))
+        .all()
+    )
+    booking_ids = {b.id for b in bookings}
+    trips = (
+        db.query(Trip)
+        .filter(Trip.booking_id.in_(booking_ids))
+        .options(*_trip_load_options())
+        .all()
+        if booking_ids
+        else []
+    )
+    scoped = _build_trip_context_maps(db, trips, table_names=table_names)
+    payments = (
+        db.query(Payment).filter(Payment.customer_id == customer_id, Payment.booking_id.in_(booking_ids)).all()
+        if booking_ids
+        else []
+    )
+    return {
+        "bookings": bookings,
+        **scoped,
+        "payments": payments,
+        "trucks": [],
+        "drivers": [],
+        "customers": [],
+        "attendance": [],
     }
 
 

@@ -156,17 +156,28 @@ async function handle<T>(response: Response, options: HandleOptions = {}): Promi
   return (await response.json()) as T;
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = buildHeaders(init);
+/** Default fetch timeout (ms). Analytics uses {@link ANALYTICS_API_TIMEOUT_MS}. */
+export const DEFAULT_API_TIMEOUT_MS = 30_000;
+
+/** Role analytics dashboards can exceed 30s on remote DB + predictive blocks. */
+export const ANALYTICS_API_TIMEOUT_MS = 120_000;
+
+export type ApiFetchOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+export async function apiFetch<T>(path: string, init?: ApiFetchOptions): Promise<T> {
+  const { timeoutMs = DEFAULT_API_TIMEOUT_MS, ...requestInit } = init ?? {};
+  const headers = buildHeaders(requestInit);
   const hadAuth = Boolean(
     (headers as Record<string, string>).Authorization ||
-      (init?.headers as Record<string, string> | undefined)?.Authorization,
+      (requestInit?.headers as Record<string, string> | undefined)?.Authorization,
   );
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(apiFullUrl(path), {
-      ...init,
+      ...requestInit,
       headers,
       cache: "no-store",
       signal: controller.signal,
@@ -183,14 +194,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  return apiFetch<T>(path, { method: "GET" });
+export async function apiGet<T>(path: string, timeoutMs?: number): Promise<T> {
+  return apiFetch<T>(path, { method: "GET", timeoutMs });
 }
 
-export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+export async function apiPost<T>(path: string, body?: unknown, timeoutMs?: number): Promise<T> {
   return apiFetch<T>(path, {
     method: "POST",
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    timeoutMs,
   });
 }
 

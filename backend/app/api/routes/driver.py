@@ -645,7 +645,7 @@ def driver_analytics(
     granularity: str | None = Query(default="monthly"),
 ):
     """Driver-scoped descriptive and predictive analytics from real trip records."""
-    from app.services.admin_analytics import AnalyticsFilters, _load_context, _route_key
+    from app.services.admin_analytics import AnalyticsFilters, _load_driver_context, _route_key
     from app.services.driver_role_analytics import build_driver_role_analytics
     from app.services.time_bucket import GRANULARITY_OPTIONS
 
@@ -665,7 +665,7 @@ def driver_analytics(
         shipment_status=shipment_status.strip().lower() if shipment_status else None,
         granularity=gran,  # type: ignore[arg-type]
     )
-    ctx = _load_context(db)
+    ctx = _load_driver_context(db, user.id)
     driver_trips = [t for t in ctx["trips"] if t.driver_id == user.id]
     trucks = sorted({(t.truck.id, t.truck.code) for t in driver_trips if t.truck}, key=lambda x: x[1])
     routes = sorted(
