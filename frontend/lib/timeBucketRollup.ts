@@ -141,8 +141,12 @@ function aggregateValues(values: number[], valueKey: string): number {
 function resolveDrilldownMetric(row: Record<string, unknown>, valueKey: string): number | null {
   let val = numericDrilldownValue(row, valueKey);
   if (val != null) return val;
-  if (valueKey === "avg_travel_hours") {
+  if (valueKey === "actual_completion_hours" || valueKey === "avg_travel_hours") {
     val = numericDrilldownValue(row, "travel_time_hours");
+    if (val != null) return val;
+  }
+  if (valueKey === "predicted_completion_hours") {
+    val = numericDrilldownValue(row, "predicted_duration_hours");
     if (val != null) return val;
   }
   if (valueKey === "maintenance_risk_score") {
@@ -291,6 +295,44 @@ function rollupChartFromExistingPeriods(
   });
 }
 
+function rollupCompletionHoursFromDrilldown(
+  drilldown: Record<string, unknown>[],
+  granularity: TimeGranularity,
+  limit: number,
+): Record<string, unknown>[] | null {
+  const dateField = detectDrilldownDateField(drilldown);
+  if (!dateField) return null;
+  const nested: Record<string, Record<string, number[]>> = {};
+  for (const row of drilldown) {
+    const date = parseDateToken(row[dateField]);
+    if (!date) continue;
+    const period = periodKeyFromDate(date, granularity);
+    nested[period] ??= {};
+    const actual = resolveDrilldownMetric(row, "actual_completion_hours");
+    const predicted = resolveDrilldownMetric(row, "predicted_completion_hours");
+    if (actual != null) {
+      nested[period].actual_completion_hours ??= [];
+      nested[period].actual_completion_hours.push(actual);
+    }
+    if (predicted != null) {
+      nested[period].predicted_completion_hours ??= [];
+      nested[period].predicted_completion_hours.push(predicted);
+    }
+  }
+  const keys = sortPeriodKeys(Object.keys(nested), granularity).slice(-limit);
+  if (!keys.length) return null;
+  return keys.map((period) => {
+    const bucket = nested[period];
+    const fields: Record<string, number> = {};
+    for (const key of ["actual_completion_hours", "predicted_completion_hours"] as const) {
+      const values = bucket[key];
+      if (!values?.length) continue;
+      fields[key] = Math.round(aggregateValues(values, key) * 100) / 100;
+    }
+    return periodChartRow(period, fields);
+  });
+}
+
 export function rollupDrilldownToChart({
   drilldown,
   chart,
@@ -308,6 +350,22 @@ export function rollupDrilldownToChart({
   const valueKey = meta.valueKey;
   const seriesKeys = meta.seriesKeys?.length ? meta.seriesKeys : null;
   const categoryField = resolveSeriesCategoryField(drilldown, seriesKeys ?? undefined);
+  const axisKey = meta.xKey ?? meta.labelKey;
+
+  if (chart.length && (axisKey === "period" || axisKey === "month")) {
+    const fromChart = rollupChartFromExistingPeriods(chart, granularity, meta, limit);
+    if (fromChart?.length) return fromChart;
+  }
+
+  if (
+    valueKey === "actual_completion_hours" &&
+    seriesKeys?.includes("actual_completion_hours") &&
+    seriesKeys.includes("predicted_completion_hours") &&
+    drilldown.length
+  ) {
+    const completion = rollupCompletionHoursFromDrilldown(drilldown, granularity, limit);
+    if (completion?.length) return completion;
+  }
 
   if (valueKey.includes("delivery_success_rate") && drilldown.length) {
     const weighted = rollupDeliverySuccessRateFromDrilldown(drilldown, granularity, limit);
@@ -336,26 +394,31 @@ export function rollupDrilldownToChart({
   }
 
   if (seriesKeys && seriesKeys.length > 1) {
-    const nested: Record<string, Record<string, number>> = {};
+    const nested: Record<string, Record<string, number[]>> = {};
     for (const row of drilldown) {
       const date = parseDateToken(row[dateField]);
       if (!date) continue;
       const period = periodKeyFromDate(date, granularity);
       nested[period] ??= {};
       for (const key of seriesKeys) {
-        if (key.startsWith("predicted_") || key.startsWith("forecast_")) continue;
-        const val = numericDrilldownValue(row, key);
+        if (key.startsWith("forecast_")) continue;
+        const val = resolveDrilldownMetric(row, key);
         if (val == null) continue;
-        nested[period][key] = (nested[period][key] ?? 0) + val;
+        nested[period][key] ??= [];
+        nested[period][key].push(val);
       }
     }
     const keys = sortPeriodKeys(Object.keys(nested), granularity).slice(-limit);
     if (!keys.length) return null;
     return keys.map((period) => {
       const bucket = nested[period];
-      const rounded: Record<string, number> = {};
-      for (const [k, v] of Object.entries(bucket)) rounded[k] = Math.round(v * 100) / 100;
-      return periodChartRow(period, rounded);
+      const fields: Record<string, number> = {};
+      for (const key of seriesKeys) {
+        const values = bucket[key];
+        if (!values?.length) continue;
+        fields[key] = Math.round(aggregateValues(values, key) * 100) / 100;
+      }
+      return periodChartRow(period, fields);
     });
   }
 

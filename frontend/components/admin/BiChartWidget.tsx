@@ -192,7 +192,9 @@ export function BiChartWidget({
     featureKey === "completed_deliveries" ||
     featureKey === "shipment_records" ||
     featureKey === "performance_reports" ||
-    featureKey === "delivery_success"
+    featureKey === "delivery_success" ||
+    featureKey === "completion_time_prediction" ||
+    featureKey === "delay_likelihood_prediction"
       ? "yearly"
       : "monthly",
   );

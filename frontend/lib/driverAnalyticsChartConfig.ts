@@ -189,7 +189,7 @@ export function driverResolveChartMeta(
       xKey: "period",
       yKey: "actual_completion_hours",
       seriesKeys: ["actual_completion_hours", "predicted_completion_hours"],
-      fieldKeys: ["period", "delivery_date", "travel_time_hours", "route", "trip_id"],
+      fieldKeys: ["period", "delivery_date", "travel_time_hours", "actual_completion_hours", "predicted_completion_hours", "route", "trip_id"],
       monthFromX: true,
     };
   }

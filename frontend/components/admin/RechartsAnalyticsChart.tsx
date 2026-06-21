@@ -543,7 +543,7 @@ function formatLineTooltipValue(value: unknown, dataKey?: string, name?: string)
     return n.toFixed(3);
   if (key.includes("maintenance_risk_score")) return n.toFixed(1);
   if (key.includes("km_per_liter") || key.includes("avg_km_per_liter")) return `${n.toFixed(2)} km/L`;
-  if (key.includes("travel_hours") || key.includes("avg_hours")) return `${n.toFixed(2)} hrs`;
+  if (key.includes("travel_hours") || key.includes("avg_hours") || key.includes("completion_hours")) return `${n.toFixed(2)} hrs`;
   if (key.includes("fuel_liters") || key.includes("predicted_fuel_liters")) return `${n.toFixed(2)} L`;
   if (key.includes("travel_duration_minutes") || key.includes("predicted_travel_minutes")) return `${n.toFixed(1)} min`;
   if (key.includes("_php") || key.includes("cost")) return formatPesoTooltipLabel(n);
@@ -838,6 +838,8 @@ function RechartsAnalyticsChartInner({
       lineKeys.length >= 2 && lineKeys.every((key) => String(key).toUpperCase().startsWith("TRK-"));
     const fuelEfficiencyTrend = valueKey === "avg_km_per_liter";
     const travelTimeTrend = valueKey === "avg_travel_hours" || valueKey === "avg_hours";
+    const completionTimeTrend =
+      lineKeys.includes("actual_completion_hours") && lineKeys.includes("predicted_completion_hours");
     const tripVolumeForecast =
       lineKeys.includes("actual_trips") && lineKeys.includes("forecast_trips");
     const periodLineChart =
@@ -908,6 +910,7 @@ function RechartsAnalyticsChartInner({
       maintenanceFailureByVehicle ||
       fuelEfficiencyTrend ||
       travelTimeTrend ||
+      completionTimeTrend ||
       tripVolumeForecast ||
       costOverrunForecast ||
       disruptionRiskForecast ||
@@ -984,18 +987,27 @@ function RechartsAnalyticsChartInner({
               ...yAxisProps,
               tickFormatter: (v: number) => formatNumber(v, { maximumFractionDigits: 0 }),
             }
-          : efficiencyForecastChart || fuelEfficiencyTrend || travelTimeTrend || tripVolumeForecast
+          : efficiencyForecastChart || fuelEfficiencyTrend || travelTimeTrend || completionTimeTrend || tripVolumeForecast
             ? {
                 ...yAxisProps,
-                allowDecimals: tripVolumeForecast ? false : undefined,
-                domain: tripVolumeForecast
+                allowDecimals: tripVolumeForecast ? false : true,
+                domain: completionTimeTrend
+                  ? ([
+                      (dataMin: number) => Math.max(0, Math.floor((dataMin - 0.5) * 2) / 2),
+                      (dataMax: number) => Math.ceil((dataMax + 0.5) * 2) / 2,
+                    ] as [(v: number) => number, (v: number) => number])
+                  : tripVolumeForecast
                   ? ([0, (dataMax: number) => Math.max(4, Math.ceil(dataMax * 1.2))] as [
                       number,
                       (v: number) => number,
                     ])
                   : undefined,
                 tickFormatter: (v: number) =>
-                  tripVolumeForecast ? String(Math.round(v)) : Number(v).toFixed(2),
+                  completionTimeTrend
+                    ? `${Number(v).toFixed(1)}h`
+                    : tripVolumeForecast
+                      ? String(Math.round(v))
+                      : Number(v).toFixed(2),
               }
             : yAxisProps;
     chartNode = disruptionRiskForecast ? (
@@ -1369,6 +1381,13 @@ function RechartsAnalyticsChartInner({
                           position: "insideLeft",
                           style: { fontSize: 10, fill: "#64748b" },
                         }
+                      : completionTimeTrend
+                        ? {
+                            value: yAxisLabel || "Completion Time (hours)",
+                            angle: -90,
+                            position: "insideLeft",
+                            style: { fontSize: 10, fill: "#64748b" },
+                          }
                       : efficiencyForecastChart
                   ? {
                       value: yAxisLabel || "Average Fuel Efficiency (KM per Liter)",
@@ -1380,7 +1399,7 @@ function RechartsAnalyticsChartInner({
           }
         />
         <Tooltip {...LINE_CHART_TOOLTIP_PROPS} />
-        {showLegend || lineKeys.length > 1 || maintenanceRiskTrend || maintenanceFailureByVehicle || deliverySuccessRateTrend || fuelEfficiencyTrend || travelTimeTrend || fleetPerformanceTrend || delayLikelihoodTrend || tripVolumeForecast || efficiencyForecastChart ? (
+        {showLegend || lineKeys.length > 1 || maintenanceRiskTrend || maintenanceFailureByVehicle || deliverySuccessRateTrend || fuelEfficiencyTrend || travelTimeTrend || completionTimeTrend || fleetPerformanceTrend || delayLikelihoodTrend || tripVolumeForecast || efficiencyForecastChart ? (
           <Legend formatter={renderLegendText} verticalAlign="top" />
         ) : null}
         {lineKeys.map((key, idx) => (

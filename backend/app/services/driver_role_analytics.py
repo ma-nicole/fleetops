@@ -970,6 +970,7 @@ def _trip_row(
     booking = trip.booking
     hours = _delivery_hours(trip)
     ref = _activity_date(trip.completed_at or trip.assigned_at or (booking.scheduled_date if booking else None))
+    predicted = float(trip.predicted_duration_hours or trip.duration_hours or 0)
     row = {
         "trip_id": trip.id,
         "booking_id": trip.booking_id,
@@ -977,6 +978,9 @@ def _trip_row(
         "truck": trip.truck.code if trip.truck else "—",
         "delivery_date": ref.isoformat() if ref else "—",
         "travel_time_hours": round(hours, 2) if hours is not None else "—",
+        "actual_completion_hours": round(hours, 2) if hours is not None else "—",
+        "predicted_completion_hours": round(predicted, 2) if predicted > 0 else "—",
+        "predicted_duration_hours": round(predicted, 2) if predicted > 0 else "—",
         "fuel_usage_liters": round(fuel_liters_by_trip.get(trip.id, 0), 2),
         "status": _status_str(trip.status),
         "trip_status": _driver_trip_status_category(trip),
