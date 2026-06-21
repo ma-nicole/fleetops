@@ -266,6 +266,34 @@ export function managerResolveChartMeta(
   chart: Record<string, unknown>[],
 ): InferredChartMeta | null {
   if (
+    featureKey === "historical_trip_costs" &&
+    chart.some((row) => row.month != null && row.total_cost_php != null)
+  ) {
+    return {
+      kind: "line",
+      labelKey: "month",
+      valueKey: "total_cost_php",
+      xKey: "month",
+      yKey: "total_cost_php",
+      seriesKeys: ["total_cost_php"],
+      fieldKeys: ["month", "date", "cost_php", "trip_id", "booking_id", "truck", "driver", "route"],
+      monthFromX: true,
+    };
+  }
+  if (
+    featureKey === "fuel_consumption" &&
+    chart.some((row) => row.truck != null && row.liters != null)
+  ) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "truck",
+      valueKey: "liters",
+      xKey: "truck",
+      yKey: "liters",
+      fieldKeys: ["truck", "date", "liters", "cost_php", "trip_id", "booking_id", "driver", "route"],
+    };
+  }
+  if (
     (featureKey === "performance_reports" || featureKey === "delivery_success") &&
     chart.length
   ) {

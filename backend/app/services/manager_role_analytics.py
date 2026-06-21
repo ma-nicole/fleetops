@@ -147,7 +147,7 @@ def _block(
     return out
 
 
-def _trip_cost_rows(ctx: dict, f: AnalyticsFilters, limit: int = 50) -> list[dict]:
+def _trip_cost_rows(ctx: dict, f: AnalyticsFilters, limit: int = 250) -> list[dict]:
     rows: list[dict] = []
     for trip in _filtered_trips(ctx, f):
         if trip.status == TripStatus.CANCELLED:
@@ -239,7 +239,7 @@ def _forecast_series(
     return points
 
 
-def _fuel_liters_rows(ctx: dict, f: AnalyticsFilters, limit: int = 50) -> list[dict]:
+def _fuel_liters_rows(ctx: dict, f: AnalyticsFilters, limit: int = 250) -> list[dict]:
     trip_by_id = {t.id: t for t in ctx["trips"]}
     filtered_ids = {t.id for t in _filtered_trips(ctx, f) if t.status != TripStatus.CANCELLED}
     rows: list[dict] = []

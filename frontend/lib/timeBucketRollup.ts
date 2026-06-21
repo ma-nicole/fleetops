@@ -35,7 +35,7 @@ const ROLLUP_EXCLUDED_FEATURES = new Set([
   "optimal_route_prediction",
 ]);
 
-function parseDateToken(raw: unknown): Date | null {
+export function parseDateToken(raw: unknown): Date | null {
   if (raw == null || raw === "" || raw === "—") return null;
   const token = String(raw).trim().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(token)) {

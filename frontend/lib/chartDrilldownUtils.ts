@@ -1,3 +1,5 @@
+import { dateRangeForPeriod, detectPeriodGranularity } from "@/lib/timePeriodDrilldown";
+
 export type ChartSelection = {
   label: string;
   displayLabel: string;
@@ -32,10 +34,16 @@ export function filterDrilldownRows(
 
     if (selection.monthKey) {
       const monthFields = ["month_cohort", "period", "month", "scheduled_month", "expense_date", "paid_at", "delivery_date", "date"];
+      const focusGran = detectPeriodGranularity(selection.monthKey);
+      const range = dateRangeForPeriod(selection.monthKey, focusGran ?? "monthly");
       const monthMatch = monthFields.some((field) => {
         const raw = row[field];
         if (raw == null) return false;
         const text = String(raw);
+        if (range && text.length >= 10) {
+          const iso = text.slice(0, 10);
+          return iso >= range.from && iso <= range.to;
+        }
         return text.startsWith(selection.monthKey!) || text.slice(0, 7) === selection.monthKey;
       });
       if (!monthMatch) return false;

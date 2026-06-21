@@ -21,7 +21,8 @@ import {
 import { mergeChartKind } from "@/lib/analyticsChartConfig";
 import { TimeGranularityPicker, type TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import { applyWidgetTimeRollup, augmentMetaForTimeRollup } from "@/lib/timeBucketRollup";
-import { dateRangeForPeriod, drillDownFromPeriod, nextGranularity } from "@/lib/timePeriodDrilldown";
+import { dateRangeForPeriod, detectPeriodGranularity, nextGranularity } from "@/lib/timePeriodDrilldown";
+import { filterChartRowsByFocusedPeriod, filterDrilldownByFocusedPeriod } from "@/lib/chartPeriodFocus";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -69,10 +70,21 @@ function buildSelection(meta: ReturnType<typeof inferChartMeta>, payload: ChartC
   let displayLabel = label;
   if (meta.labelKey === "status") displayLabel = formatStatusLabel(label);
   else if (meta.monthFromX) displayLabel = `Records for ${label}`;
+  const periodToken = String(
+    payload.raw[meta.xKey ?? ""] ??
+      payload.raw[meta.labelKey] ??
+      payload.raw.period ??
+      payload.raw.month ??
+      label,
+  );
   const monthKey = meta.monthFromX
-    ? String((payload.raw.month_cohort as string | undefined) ?? label)
+    ? periodToken.length >= 7
+      ? periodToken.slice(0, 7)
+      : periodToken.length === 4
+        ? periodToken
+        : String((payload.raw.month_cohort as string | undefined) ?? periodToken)
     : undefined;
-  return { label, displayLabel, fieldKeys: meta.fieldKeys, monthKey };
+  return { label: periodToken || label, displayLabel, fieldKeys: meta.fieldKeys, monthKey };
 }
 
 function synthesizeFromDrilldown(drilldown: Record<string, unknown>[]): SynthesizedChart | null {
@@ -194,10 +206,12 @@ export function BiChartWidget({
     featureKey === "performance_reports" ||
     featureKey === "delivery_success" ||
     featureKey === "completion_time_prediction" ||
-    featureKey === "delay_likelihood_prediction"
+    featureKey === "delay_likelihood_prediction" ||
+    featureKey === "historical_trip_costs"
       ? "yearly"
       : "monthly",
   );
+  const [focusedPeriod, setFocusedPeriod] = useState<string | null>(null);
 
   const empty = isEmptyBlock(block);
   const drilldown = empty ? [] : ((block.drilldown ?? []) as Record<string, unknown>[]);
@@ -256,10 +270,20 @@ export function BiChartWidget({
     return augmentMetaForTimeRollup(inferred, baseChart, drilldown, featureKey);
   }, [baseChart, drilldown, featureKey, resolveFeatureChartMeta]);
 
+  const scopedChartInput = useMemo(() => {
+    if (!focusedPeriod || !baseMeta?.monthFromX) return baseChart;
+    return filterChartRowsByFocusedPeriod(baseChart, focusedPeriod, baseMeta);
+  }, [baseChart, baseMeta, focusedPeriod]);
+
+  const scopedDrilldown = useMemo(() => {
+    if (!focusedPeriod || !baseMeta?.monthFromX) return drilldown;
+    return filterDrilldownByFocusedPeriod(drilldown, focusedPeriod);
+  }, [baseMeta?.monthFromX, drilldown, focusedPeriod]);
+
   const chart = useMemo(() => {
-    if (!baseMeta?.monthFromX) return baseChart;
-    return applyWidgetTimeRollup(baseChart, drilldown, widgetGranularity, baseMeta);
-  }, [baseChart, baseMeta, drilldown, widgetGranularity]);
+    if (!baseMeta?.monthFromX) return scopedChartInput;
+    return applyWidgetTimeRollup(scopedChartInput, scopedDrilldown, widgetGranularity, baseMeta);
+  }, [baseMeta, scopedChartInput, scopedDrilldown, widgetGranularity]);
   const explicitFeatureMeta = useMemo(
     () => (featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, chart) : null),
     [chart, featureKey, resolveFeatureChartMeta],
@@ -334,22 +358,47 @@ export function BiChartWidget({
   }, [chart, comparative, resolvedMeta]);
 
   const openDrill = (payload: ChartClickPayload) => {
-    if (resolvedMeta?.monthFromX && onPeriodDrillDown) {
-      const next = drillDownFromPeriod(payload.label, widgetGranularity);
-      if (next) {
-        setWidgetGranularity(next.granularity);
-        onPeriodDrillDown({ dateFrom: next.dateFrom, dateTo: next.dateTo });
-      } else if (widgetGranularity === "daily") {
-        const range = dateRangeForPeriod(payload.label, "daily");
-        if (range) {
-          onPeriodDrillDown({ dateFrom: range.from, dateTo: range.to });
-        }
-      } else {
+    if (resolvedMeta?.monthFromX) {
+      const periodLabel = String(
+        payload.raw[resolvedMeta.xKey ?? ""] ??
+          payload.raw[resolvedMeta.labelKey ?? ""] ??
+          payload.raw.period ??
+          payload.raw.month ??
+          payload.label,
+      );
+      if (widgetGranularity !== "daily") {
         const finer = nextGranularity(widgetGranularity);
-        if (finer) setWidgetGranularity(finer);
+        if (finer) {
+          setFocusedPeriod(periodLabel);
+          setWidgetGranularity(finer);
+          setSelection(
+            resolvedMeta
+              ? buildSelection(resolvedMeta, { ...payload, label: periodLabel })
+              : { label: periodLabel, displayLabel: periodLabel, fieldKeys: [] },
+          );
+          return;
+        }
       }
+      setSelection(
+        resolvedMeta
+          ? buildSelection(resolvedMeta, { ...payload, label: periodLabel })
+          : { label: periodLabel, displayLabel: periodLabel, fieldKeys: [] },
+      );
+      setModalOpen(true);
+      return;
     }
     setSelection(resolvedMeta ? buildSelection(resolvedMeta, payload) : { label: payload.label, displayLabel: payload.label, fieldKeys: [] });
+    setModalOpen(true);
+  };
+
+  const openLegendDrill = (label: string) => {
+    const labelKey = resolvedMeta?.labelKey ?? "label";
+    const match = items.find((item) => String(item[labelKey] ?? "") === label);
+    if (match) {
+      openDrill({ label, raw: match });
+      return;
+    }
+    setSelection({ label, displayLabel: label, fieldKeys: resolvedMeta?.fieldKeys ?? [] });
     setModalOpen(true);
   };
 
@@ -400,6 +449,7 @@ export function BiChartWidget({
         yAxisLabel={isHorizontal ? categoryLabel : axisLabel}
         legendLabel={axisLabel}
         onItemClick={openDrill}
+        onLegendClick={openLegendDrill}
         selectedLabel={selection?.label ?? null}
         loading={loading}
       />,
@@ -485,8 +535,20 @@ export function BiChartWidget({
           <TimeGranularityPicker
             variant="compact"
             value={widgetGranularity}
-            onChange={setWidgetGranularity}
+            onChange={(granularity) => {
+              setFocusedPeriod(null);
+              setWidgetGranularity(granularity);
+            }}
           />
+        ) : null}
+        {focusedPeriod ? (
+          <button
+            type="button"
+            className="bi-chart-widget__btn bi-chart-widget__btn--active"
+            onClick={() => setFocusedPeriod(null)}
+          >
+            Clear period focus ({focusedPeriod})
+          </button>
         ) : null}
         <p className="bi-chart-widget__hint">
           <span className="bi-chart-widget__hint-icon" aria-hidden>
@@ -551,7 +613,7 @@ export function BiChartWidget({
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         selection={selection ?? { label: title, displayLabel: title, fieldKeys: [] }}
-        allRows={drilldown}
+        allRows={scopedDrilldown.length ? scopedDrilldown : drilldown}
         columns={columns}
         filterOptions={filterOptions}
         context={{

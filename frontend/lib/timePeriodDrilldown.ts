@@ -86,3 +86,39 @@ export function granularityLabel(granularity: TimeGranularity): string {
   if (granularity === "weekly") return "Week";
   return "Day";
 }
+
+/** True when a chart period token falls inside a clicked parent period (e.g. 2024-Q2 within 2024). */
+export function periodWithinFocus(childPeriod: string, focusPeriod: string): boolean {
+  const child = String(childPeriod ?? "").trim();
+  const focus = String(focusPeriod ?? "").trim();
+  if (!child || !focus) return true;
+  if (child === focus) return true;
+  const focusGran = detectPeriodGranularity(focus);
+  if (focusGran === "yearly" && /^\d{4}$/.test(focus)) {
+    return child.startsWith(`${focus}-`) || child.startsWith(focus);
+  }
+  if (focusGran === "quarterly") {
+    const match = focus.match(/^(\d{4})-Q([1-4])$/i);
+    if (match) {
+      const year = match[1];
+      const quarter = Number(match[2]);
+      const monthMatch = child.match(/^(\d{4})-(\d{2})/);
+      if (monthMatch && monthMatch[1] === year) {
+        const month = Number(monthMatch[2]);
+        const childQuarter = Math.floor((month - 1) / 3) + 1;
+        return childQuarter === quarter;
+      }
+      return child.toUpperCase().startsWith(focus.toUpperCase());
+    }
+  }
+  if (focusGran === "monthly" && /^\d{4}-\d{2}$/.test(focus)) {
+    return child.startsWith(focus);
+  }
+  const range = dateRangeForPeriod(focus, focusGran ?? "monthly");
+  const childGran = detectPeriodGranularity(child);
+  const childRange = dateRangeForPeriod(child, childGran ?? "monthly");
+  if (range && childRange) {
+    return childRange.from >= range.from && childRange.to <= range.to;
+  }
+  return child.startsWith(focus);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, Fragment, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, Fragment, type ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -668,6 +668,7 @@ export type RechartsAnalyticsChartProps = {
   yAxisLabel?: string;
   legendLabel?: string;
   onItemClick?: (payload: ChartClickPayload) => void;
+  onLegendClick?: (label: string) => void;
   selectedLabel?: string | null;
   loading?: boolean;
 };
@@ -683,9 +684,38 @@ function RechartsAnalyticsChartInner({
   yAxisLabel,
   legendLabel,
   onItemClick,
+  onLegendClick,
   selectedLabel,
   loading = false,
 }: RechartsAnalyticsChartProps) {
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+
+  const legendProps = useMemo(
+    () => ({
+      formatter: renderLegendText,
+      verticalAlign: "top" as const,
+      wrapperStyle: { fontSize: 10, cursor: onLegendClick ? "pointer" : "default" },
+      onClick: onLegendClick
+        ? (data: { value?: string; dataKey?: unknown }) => {
+            const dataKey = typeof data?.dataKey === "string" || typeof data?.dataKey === "number" ? String(data.dataKey) : "";
+            const label = String(data?.value ?? dataKey);
+            if (!label && !dataKey) return;
+            if (seriesKeys && seriesKeys.length > 1 && kind === "line" && dataKey) {
+              setHiddenSeries((prev) => {
+                const next = new Set(prev);
+                if (next.has(dataKey)) next.delete(dataKey);
+                else next.add(dataKey);
+                return next;
+              });
+              return;
+            }
+            onLegendClick(label);
+          }
+        : undefined,
+    }),
+    [kind, onLegendClick, seriesKeys],
+  );
+
   const groupedSeriesKeys = useMemo(
     () => (kind === "groupedBar" ? deriveGroupedSeriesKeys(items, labelKey, seriesKeys) : seriesKeys),
     [items, kind, labelKey, seriesKeys],
@@ -805,7 +835,7 @@ function RechartsAnalyticsChartInner({
           ))}
         </Pie>
         <Tooltip content={<PieTooltip />} />
-        <Legend formatter={renderLegendText} wrapperStyle={{ fontSize: 10 }} />
+        <Legend {...legendProps} wrapperStyle={{ fontSize: 10, cursor: onLegendClick ? "pointer" : "default" }} />
       </PieChart>
     );
   } else if (kind === "line") {
@@ -1400,13 +1430,14 @@ function RechartsAnalyticsChartInner({
         />
         <Tooltip {...LINE_CHART_TOOLTIP_PROPS} />
         {showLegend || lineKeys.length > 1 || maintenanceRiskTrend || maintenanceFailureByVehicle || deliverySuccessRateTrend || fuelEfficiencyTrend || travelTimeTrend || completionTimeTrend || fleetPerformanceTrend || delayLikelihoodTrend || tripVolumeForecast || efficiencyForecastChart ? (
-          <Legend formatter={renderLegendText} verticalAlign="top" />
+          <Legend {...legendProps} />
         ) : null}
         {lineKeys.map((key, idx) => (
           <Line
             key={key}
             type="monotone"
             dataKey={key}
+            hide={hiddenSeries.has(key)}
             name={legendLabel && lineKeys.length === 1 ? legendLabel : seriesLabel(key)}
             stroke={lineSeriesStroke(key, idx)}
             strokeWidth={2.5}
