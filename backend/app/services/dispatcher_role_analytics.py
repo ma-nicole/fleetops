@@ -189,6 +189,32 @@ def _period_count_chart(rows: list[dict], date_field: str, granularity: str, *, 
     return rollup_count_series(buckets, granularity, limit)
 
 
+def _workload_forecast_chart(
+    schedule_rows: list[dict],
+    f: AnalyticsFilters,
+) -> tuple[list[dict], list[dict[str, float | str]] | None]:
+    """Trip volume actuals + forecast, capped for readable period axes."""
+    limit = 24 if f.granularity in ("daily", "weekly") else 36
+    period_rows = _period_count_chart(schedule_rows, "scheduled_date", f.granularity, limit=limit)
+    actuals = [
+        (str(row["period"]), float(row["count"]))
+        for row in period_rows
+        if row.get("period") is not None and row.get("count") is not None
+    ]
+    if not actuals:
+        return [], None
+    min_pts = 2 if f.granularity in ("yearly", "quarterly") else 3
+    series = _monthly_series(actuals, min_points=min_pts)
+    forecast = _forecast_series(series, 3, granularity=f.granularity) if series is not None else None
+    chart = _combine_forecast_chart(
+        actuals,
+        forecast,
+        actual_key="actual_trips",
+        forecast_key="forecast_trips",
+    )
+    return chart, forecast
+
+
 def _period_avg_chart(
     rows: list[dict],
     date_field: str,
@@ -606,16 +632,6 @@ def build_dispatcher_role_analytics(
         )
     schedule_rows.sort(key=lambda r: (r.get("scheduled_date", ""), r["trip_id"]))
 
-    period_counts: dict[str, int] = defaultdict(int)
-    for r in schedule_rows:
-        sd = r.get("scheduled_date")
-        if not sd or sd == "—":
-            continue
-        d = date.fromisoformat(sd)
-        p = period_key(d, f.granularity)
-        if p:
-            period_counts[p] += 1
-
     driver_trip_counts: dict[str, int] = defaultdict(int)
     for trip in filtered_trips:
         driver_name = trip.driver.full_name if trip.driver else "Unassigned"
@@ -791,23 +807,26 @@ def build_dispatcher_role_analytics(
         note="Capacity gap and detected timeline overlaps for the current week.",
     )
 
-    trip_period_series = _monthly_series([(m, float(c)) for m, c in sorted(period_counts.items())], min_points=2)
-    workload_forecast = (
-        _forecast_series(trip_period_series, 3, granularity=f.granularity) if trip_period_series is not None else None
-    )
+    workload_chart, workload_forecast = _workload_forecast_chart(schedule_rows, f)
     sched_pred_workload = (
         _empty_predict()
-        if not workload_forecast
+        if not workload_chart
         else _block(
-            kpis=[{"label": "Next period trips (est.)", "value": workload_forecast[0]["value"]}],
-            chart=_combine_forecast_chart(
-                [(m, float(c)) for m, c in sorted(period_counts.items())],
-                workload_forecast,
-                actual_key="actual_trips",
-                forecast_key="forecast_trips",
-            ),
+            kpis=[
+                {
+                    "label": "Next period trips (est.)",
+                    "value": workload_forecast[0]["value"] if workload_forecast else "—",
+                }
+            ],
+            chart=workload_chart,
             drilldown=schedule_rows[:30],
-            note="Trip volume forecast from scheduled trip counts by month.",
+            statistics=compute_statistics(
+                [float(row["actual_trips"]) for row in workload_chart if row.get("actual_trips") is not None],
+                min_samples=1,
+            )
+            if any(row.get("actual_trips") is not None for row in workload_chart)
+            else None,
+            note=_period_note("Trip volume forecast", f.granularity),
         )
     )
 

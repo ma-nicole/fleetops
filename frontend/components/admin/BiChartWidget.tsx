@@ -231,7 +231,8 @@ export function BiChartWidget({
       featureKey === "maintenance_need_prediction" ||
       featureKey === "breakdown_risk_prediction" ||
       featureKey === "shipment_records" ||
-      featureKey === "schedule_conflict_prediction";
+      featureKey === "schedule_conflict_prediction" ||
+      featureKey === "workload_forecasting";
     if (!rows.length && drilldown.length && !skipSynthesis) {
       const synthesized = synthesizeFromDrilldown(drilldown);
       if (synthesized?.items.length) rows = synthesized.items;

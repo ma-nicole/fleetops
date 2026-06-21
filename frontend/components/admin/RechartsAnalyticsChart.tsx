@@ -183,6 +183,40 @@ function truncateLabel(text: unknown, maxLen = LABEL_TRUNCATE): string {
   return `${value.slice(0, maxLen - 1)}…`;
 }
 
+function formatPeriodAxisLabel(text: unknown): string {
+  const value = String(text ?? "").trim();
+  if (!value) return "";
+  const daily = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (daily) {
+    const month = Number(daily[2]) - 1;
+    const day = Number(daily[3]);
+    const date = new Date(Number(daily[1]), month, day);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }
+  }
+  const monthly = value.match(/^(\d{4})-(\d{2})$/);
+  if (monthly) {
+    const month = Number(monthly[2]) - 1;
+    const date = new Date(Number(monthly[1]), month, 1);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+    }
+  }
+  const quarterly = value.match(/^(\d{4})-Q([1-4])$/i);
+  if (quarterly) return `Q${quarterly[2]} '${quarterly[1].slice(-2)}`;
+  const weekly = value.match(/^(\d{4})-W(\d{1,2})$/i);
+  if (weekly) return `W${weekly[2]}`;
+  if (/^\d{4}$/.test(value)) return value;
+  return truncateLabel(value, 14);
+}
+
+function lineChartTickInterval(pointCount: number): number | "preserveStartEnd" {
+  if (pointCount <= 10) return 0;
+  if (pointCount <= 16) return 1;
+  return Math.max(1, Math.ceil(pointCount / 10) - 1);
+}
+
 function longestLabel(items: Array<Record<string, string | number>>, labelKey: string): number {
   return items.reduce((max, item) => Math.max(max, String(item[labelKey] ?? "").length), 0);
 }
@@ -211,11 +245,14 @@ function RotatedCategoryAxisTick({
   x,
   y,
   payload,
+  formatPeriod = false,
 }: {
   x?: number;
   y?: number;
   payload?: { value?: string };
+  formatPeriod?: boolean;
 }) {
+  const label = formatPeriod ? formatPeriodAxisLabel(payload?.value) : truncateLabel(payload?.value, 18);
   return (
     <text
       x={x}
@@ -227,7 +264,7 @@ function RotatedCategoryAxisTick({
       fill="#64748b"
       fontSize={10}
     >
-      {truncateLabel(payload?.value, 18)}
+      {label}
     </text>
   );
 }
@@ -333,6 +370,8 @@ function seriesLabel(key: string): string {
     predicted_completion_hours: "Predicted Completion Time",
     actual_delay_rate_pct: "Historical Delay Rate",
     forecast_delay_rate_pct: "Forecast Delay Rate",
+    actual_trips: "Actual Trips",
+    forecast_trips: "Forecast Trips",
     daily_operational_cost_php: "Daily Operational Cost",
     rolling_mean_7d_php: "Rolling Mean (7-day)",
     total_operational_cost_php: "Total Operational Cost",
@@ -363,6 +402,8 @@ function lineSeriesStroke(key: string, idx: number): string {
   if (key === "predicted_completion_hours") return "#E76F51";
   if (key === "actual_delay_rate_pct") return COST_OVERRUN_ACTUAL;
   if (key === "forecast_delay_rate_pct") return COST_OVERRUN_FORECAST;
+  if (key === "actual_trips") return COST_OVERRUN_ACTUAL;
+  if (key === "forecast_trips") return COST_OVERRUN_FORECAST;
   if (key.startsWith("forecast_")) return "#4CAF50";
   if (key.startsWith("actual_")) return ENTERPRISE_LINE;
   return idx === 0 ? ENTERPRISE_LINE : "#E76F51";
@@ -779,6 +820,12 @@ function RechartsAnalyticsChartInner({
       lineKeys.length >= 2 && lineKeys.every((key) => String(key).toUpperCase().startsWith("TRK-"));
     const fuelEfficiencyTrend = valueKey === "avg_km_per_liter";
     const travelTimeTrend = valueKey === "avg_travel_hours" || valueKey === "avg_hours";
+    const tripVolumeForecast =
+      lineKeys.includes("actual_trips") && lineKeys.includes("forecast_trips");
+    const periodLineChart =
+      labelKey === "period" ||
+      items.some((item) => Object.prototype.hasOwnProperty.call(item, "period"));
+    const densePeriodLine = periodLineChart && rows.length > 10;
     const costOverrunForecast =
       lineKeys.includes("actual_daily_cost_php") && lineKeys.includes("predicted_daily_cost_php");
     const costFluctuationChart = items.some(
@@ -843,6 +890,7 @@ function RechartsAnalyticsChartInner({
       maintenanceFailureByVehicle ||
       fuelEfficiencyTrend ||
       travelTimeTrend ||
+      tripVolumeForecast ||
       costOverrunForecast ||
       disruptionRiskForecast ||
       costFluctuationChart
@@ -850,6 +898,13 @@ function RechartsAnalyticsChartInner({
         : commonMargin;
     const lineXAxisProps = {
       ...xAxisProps,
+      interval: densePeriodLine ? lineChartTickInterval(rows.length) : xAxisProps.interval,
+      tick: periodLineChart
+        ? (props: { x?: number; y?: number; payload?: { value?: string } }) => (
+            <RotatedCategoryAxisTick {...props} formatPeriod />
+          )
+        : xAxisProps.tick,
+      height: densePeriodLine ? 72 : xAxisProps.height,
       label: bookingVolumeTrend
         ? {
             value: "Timeline / Operational Period",
@@ -857,6 +912,13 @@ function RechartsAnalyticsChartInner({
             offset: -52,
             style: { fontSize: 10, fill: "#64748b" },
           }
+        : tripVolumeForecast || periodLineChart
+          ? {
+              value: xAxisLabel || "Period",
+              position: "insideBottom" as const,
+              offset: -52,
+              style: { fontSize: 10, fill: "#64748b" },
+            }
         : efficiencyForecastChart ||
             fleetPerformanceTrend ||
             deliverySuccessRateTrend ||
@@ -904,10 +966,18 @@ function RechartsAnalyticsChartInner({
               ...yAxisProps,
               tickFormatter: (v: number) => formatNumber(v, { maximumFractionDigits: 0 }),
             }
-          : efficiencyForecastChart || fuelEfficiencyTrend || travelTimeTrend
+          : efficiencyForecastChart || fuelEfficiencyTrend || travelTimeTrend || tripVolumeForecast
             ? {
                 ...yAxisProps,
-                tickFormatter: (v: number) => Number(v).toFixed(2),
+                allowDecimals: tripVolumeForecast ? false : undefined,
+                domain: tripVolumeForecast
+                  ? ([0, (dataMax: number) => Math.max(4, Math.ceil(dataMax * 1.2))] as [
+                      number,
+                      (v: number) => number,
+                    ])
+                  : undefined,
+                tickFormatter: (v: number) =>
+                  tripVolumeForecast ? String(Math.round(v)) : Number(v).toFixed(2),
               }
             : yAxisProps;
     chartNode = disruptionRiskForecast ? (
@@ -1292,7 +1362,7 @@ function RechartsAnalyticsChartInner({
           }
         />
         <Tooltip {...LINE_CHART_TOOLTIP_PROPS} />
-        {showLegend || lineKeys.length > 1 || maintenanceRiskTrend || maintenanceFailureByVehicle || deliverySuccessRateTrend || fuelEfficiencyTrend || travelTimeTrend || fleetPerformanceTrend || delayLikelihoodTrend || efficiencyForecastChart ? (
+        {showLegend || lineKeys.length > 1 || maintenanceRiskTrend || maintenanceFailureByVehicle || deliverySuccessRateTrend || fuelEfficiencyTrend || travelTimeTrend || fleetPerformanceTrend || delayLikelihoodTrend || tripVolumeForecast || efficiencyForecastChart ? (
           <Legend formatter={renderLegendText} verticalAlign="top" />
         ) : null}
         {lineKeys.map((key, idx) => (
