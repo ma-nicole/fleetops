@@ -204,13 +204,17 @@ def _forecast_series(
     *,
     granularity: str = "monthly",
 ) -> list[dict[str, float | str]] | None:
-    if series is None or len(series) < 3:
+    if series is None or len(series) < 2:
         return None
+    tail_n = min(3, len(series))
     try:
-        model = ExponentialSmoothing(series.values, trend="add").fit()
-        prediction = model.forecast(periods)
+        if len(series) >= 3:
+            model = ExponentialSmoothing(series.values, trend="add").fit()
+            prediction = model.forecast(periods)
+        else:
+            prediction = [float(series.mean())] * periods
     except Exception:
-        avg = float(series.tail(3).mean())
+        avg = float(series.tail(tail_n).mean())
         prediction = [avg] * periods
     def _safe_float(value: Any, fallback: float) -> float:
         try:
@@ -222,7 +226,7 @@ def _forecast_series(
         return round(number, 2)
 
     last_period = str(series.index[-1] if len(series.index) else "")
-    fallback = float(series.tail(3).mean())
+    fallback = float(series.tail(tail_n).mean())
     points: list[dict[str, float | str]] = []
     for idx, pred in enumerate(prediction):
         period_label = advance_period(last_period, granularity, idx + 1) if last_period else str(idx + 1)
@@ -852,7 +856,7 @@ def _cost_fluctuation_analysis_block(expenses: dict, f: AnalyticsFilters) -> dic
     else:
         actuals = _operational_cost_actual_series(expenses, f)
         window = 7
-        min_points = 3
+        min_points = 2
 
     if len(actuals) < min_points:
         return _empty(expenses.get("message", "Insufficient data."))
@@ -861,8 +865,9 @@ def _cost_fluctuation_analysis_block(expenses: dict, f: AnalyticsFilters) -> dic
     trimmed = actuals[-history_limit:]
     periods = [period for period, _ in trimmed]
     values = pd.Series([value for _, value in trimmed], index=periods, dtype=float)
-    rolling_mean = values.rolling(window=window, min_periods=1).mean()
-    rolling_std = values.rolling(window=window, min_periods=2).std().fillna(0.0)
+    rolling_window = min(window, len(periods))
+    rolling_mean = values.rolling(window=rolling_window, min_periods=1).mean()
+    rolling_std = values.rolling(window=rolling_window, min_periods=min(2, len(periods))).std().fillna(0.0)
 
     chart: list[dict[str, Any]] = []
     for period in periods:
@@ -926,7 +931,12 @@ def _cost_overrun_prediction_block(
     horizon = _FORECAST_HORIZON.get(gran, 6)
     forecast = _forecast_series(series, periods=horizon, granularity=gran)
     if not forecast:
-        return _empty_predict("Insufficient data for cost overrun forecast.")
+        stabilized = round(sum(float(v) for _, v in actuals) / len(actuals), 2)
+        last_period = actuals[-1][0]
+        forecast = [
+            {"period": advance_period(last_period, gran, step), "value": stabilized}
+            for step in range(1, horizon + 1)
+        ]
 
     values = [float(value) for _, value in actuals]
     std = float(pd.Series(values).std()) if len(values) > 1 else max(abs(values[-1]) * 0.08, 1.0)

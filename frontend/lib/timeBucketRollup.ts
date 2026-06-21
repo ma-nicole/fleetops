@@ -178,6 +178,36 @@ function resolveSeriesCategoryField(
   return null;
 }
 
+function rollupDeliverySuccessRateFromDrilldown(
+  drilldown: Record<string, unknown>[],
+  granularity: TimeGranularity,
+  limit: number,
+): Record<string, unknown>[] | null {
+  const dateField = detectDrilldownDateField(drilldown);
+  if (!dateField) return null;
+  const buckets: Record<string, { total: number; delivered: number }> = {};
+  for (const row of drilldown) {
+    const date = parseDateToken(row[dateField]);
+    if (!date) continue;
+    const period = periodKeyFromDate(date, granularity);
+    buckets[period] ??= { total: 0, delivered: 0 };
+    buckets[period].total += 1;
+    const status = String(row.delivery_status ?? row.status ?? "").toLowerCase();
+    if (status === "delivered") buckets[period].delivered += 1;
+  }
+  const keys = sortPeriodKeys(Object.keys(buckets), granularity).slice(-limit);
+  if (!keys.length) return null;
+  return keys.map((period) => {
+    const bucket = buckets[period];
+    const rate = bucket.total ? Math.round((bucket.delivered / bucket.total) * 1000) / 1000 : 0;
+    return periodChartRow(period, {
+      delivery_success_rate: rate,
+      delivered: bucket.delivered,
+      total: bucket.total,
+    });
+  });
+}
+
 function rollupChartFromExistingPeriods(
   chart: Record<string, unknown>[],
   granularity: TimeGranularity,
@@ -189,6 +219,39 @@ function rollupChartFromExistingPeriods(
 
   const valueKey = meta.valueKey;
   const seriesKeys = meta.seriesKeys?.length ? meta.seriesKeys : [valueKey];
+
+  if (valueKey.includes("delivery_success_rate") && chart.some((row) => row.delivered != null && row.total != null)) {
+    const nested: Record<string, { delivered: number; total: number }> = {};
+    for (const row of chart) {
+      const label = String(row[axisKey] ?? "");
+      if (!label) continue;
+      let date = parseDateToken(label.length === 7 ? `${label}-01` : label.length === 4 ? `${label}-01-01` : label);
+      if (!date && /^\d{4}-Q[1-4]$/.test(label)) {
+        const [, y, q] = label.match(/^(\d{4})-Q([1-4])$/) ?? [];
+        if (y && q) date = new Date(Date.UTC(Number(y), (Number(q) - 1) * 3, 1));
+      }
+      if (!date && /^\d{4}-W\d{2}$/.test(label)) {
+        date = parseDateToken(`${label.slice(0, 4)}-01-04`);
+      }
+      if (!date) continue;
+      const bucket = periodKeyFromDate(date, granularity);
+      nested[bucket] ??= { delivered: 0, total: 0 };
+      nested[bucket].delivered += Number(row.delivered) || 0;
+      nested[bucket].total += Number(row.total) || 0;
+    }
+    const keys = sortPeriodKeys(Object.keys(nested), granularity).slice(-limit);
+    if (!keys.length) return null;
+    return keys.map((period) => {
+      const bucket = nested[period];
+      const rate = bucket.total ? Math.round((bucket.delivered / bucket.total) * 1000) / 1000 : 0;
+      return periodChartRow(period, {
+        delivery_success_rate: rate,
+        delivered: bucket.delivered,
+        total: bucket.total,
+      });
+    });
+  }
+
   const nested: Record<string, Record<string, number[]>> = {};
 
   for (const row of chart) {
@@ -245,6 +308,11 @@ export function rollupDrilldownToChart({
   const valueKey = meta.valueKey;
   const seriesKeys = meta.seriesKeys?.length ? meta.seriesKeys : null;
   const categoryField = resolveSeriesCategoryField(drilldown, seriesKeys ?? undefined);
+
+  if (valueKey.includes("delivery_success_rate") && drilldown.length) {
+    const weighted = rollupDeliverySuccessRateFromDrilldown(drilldown, granularity, limit);
+    if (weighted?.length) return weighted;
+  }
 
   if (!dateField && chart.length) {
     return rollupChartFromExistingPeriods(chart, granularity, meta, limit);

@@ -190,7 +190,9 @@ export function BiChartWidget({
   const [widgetGranularity, setWidgetGranularity] = useState<TimeGranularity>(() =>
     featureKey === "trip_logs" ||
     featureKey === "completed_deliveries" ||
-    featureKey === "shipment_records"
+    featureKey === "shipment_records" ||
+    featureKey === "performance_reports" ||
+    featureKey === "delivery_success"
       ? "yearly"
       : "monthly",
   );

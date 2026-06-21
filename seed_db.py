@@ -13,6 +13,7 @@ Usage:
   python seed_db.py --force --bookings 250 --interval-days 5
   python seed_db.py --repair-passwords # re-bcrypt every user as password "password" (local dev fix)
   python seed_db.py --resume           # fill missing tables after an interrupted seed (non-destructive)
+  python seed_db.py --append-history   # backfill fuel/toll/disruption analytics data (non-destructive)
 """
 from __future__ import annotations
 
@@ -275,6 +276,173 @@ def resume_seed_database() -> None:
 
     print("\n" + "=" * 60, flush=True)
     print("DONE: Resume seed completed successfully.", flush=True)
+    print("=" * 60, flush=True)
+
+
+def append_seed_history() -> None:
+    """Backfill analytics time-series data for existing trips — does not drop or duplicate core rows."""
+    if not settings.database_url or settings.database_url.startswith("sqlite"):
+        raise SystemExit("ERROR: Set DATABASE_URL to a MySQL connection string.")
+
+    engine = create_engine(settings.database_url, pool_pre_ping=True)
+    ISSUE_TYPES = ["traffic", "mechanical", "weather", "customs", "loading_delay"]
+    REPORT_TYPES = ["delay", "traffic", "route_deviation", "customs_hold"]
+
+    with Session(engine) as db:
+        users = db.query(User).all()
+        if not users:
+            raise SystemExit("[ERROR] No users found — run full seed first (python seed_db.py --force).")
+
+        trips = db.query(Trip).all()
+        bookings = {b.id: b for b in db.query(Booking).all()}
+        dispatcher = next((u for u in users if u.role == UserRole.DISPATCHER), None)
+        if not trips or not dispatcher:
+            raise SystemExit("[ERROR] No trips or dispatcher — run full seed first.")
+
+        fuel_trip_ids = {row.trip_id for row in db.query(FuelLog.trip_id).filter(FuelLog.trip_id.isnot(None)).all()}
+        toll_trip_ids = {row.trip_id for row in db.query(TollLog.trip_id).filter(TollLog.trip_id.isnot(None)).all()}
+        toll_hist_trip_ids = {
+            row.trip_id for row in db.query(HistoricalTollRecord.trip_id).filter(HistoricalTollRecord.trip_id.isnot(None)).all()
+        }
+        delay_log_trip_ids = {
+            row.trip_id
+            for row in db.query(OperationalLog.trip_id)
+            .filter(OperationalLog.trip_id.isnot(None), OperationalLog.report_type == "delay")
+            .all()
+        }
+        issue_trip_ids = {row.trip_id for row in db.query(TripIssue.trip_id).filter(TripIssue.trip_id.isnot(None)).all()}
+
+        fuel_logs: list[FuelLog] = []
+        toll_logs: list[TollLog] = []
+        toll_history: list[HistoricalTollRecord] = []
+        operational_logs: list[OperationalLog] = []
+        trip_issues: list[TripIssue] = []
+
+        completed = [t for t in trips if t.status == TripStatus.COMPLETED]
+        print(
+            f"[INFO] Append history — {len(trips)} trips ({len(completed)} completed), "
+            f"fuel={len(fuel_trip_ids)}, toll={len(toll_trip_ids)}, toll_hist={len(toll_hist_trip_ids)}",
+            flush=True,
+        )
+
+        for trip in completed:
+            recorded_at = trip.completed_at or datetime.utcnow()
+            if trip.id not in fuel_trip_ids:
+                fuel_logs.append(
+                    FuelLog(
+                        trip_id=trip.id,
+                        truck_id=trip.truck_id,
+                        driver_id=trip.driver_id,
+                        liters=round(float(trip.distance_km or 0) / 4.0, 2),
+                        cost=float(trip.fuel_cost or 0),
+                        odometer_km=float(trip.distance_km or 0),
+                        recorded_at=recorded_at,
+                    )
+                )
+            if trip.id not in toll_trip_ids:
+                toll_logs.append(
+                    TollLog(
+                        trip_id=trip.id,
+                        driver_id=trip.driver_id,
+                        location="NLEX/SCTEX",
+                        amount=float(trip.toll_cost or 0),
+                        recorded_at=recorded_at,
+                    )
+                )
+            if trip.id not in toll_hist_trip_ids and trip.completed_at:
+                booking = bookings.get(trip.booking_id)
+                estimated = float(trip.toll_cost or 0)
+                actual = round(estimated * (0.92 + (trip.id % 5) * 0.03), 2)
+                toll_history.append(
+                    HistoricalTollRecord(
+                        trip_id=trip.id,
+                        booking_id=trip.booking_id,
+                        route_label=(
+                            f"{booking.pickup_location} → {booking.dropoff_location}"
+                            if booking
+                            else f"Trip #{trip.id}"
+                        ),
+                        origin=booking.pickup_location if booking else None,
+                        destination=booking.dropoff_location if booking else None,
+                        estimated_toll=estimated,
+                        actual_toll=actual,
+                        toll_variance=round(actual - estimated, 2),
+                        completed_at=trip.completed_at,
+                    )
+                )
+
+        for idx, trip in enumerate(trips):
+            if trip.status == TripStatus.CANCELLED:
+                continue
+            ref_time = trip.completed_at or trip.departure_time or datetime.utcnow()
+            needs_delay = trip.id not in delay_log_trip_ids
+            if needs_delay and trip.status == TripStatus.COMPLETED and idx % 5 == 0:
+                operational_logs.append(
+                    OperationalLog(
+                        booking_id=trip.booking_id,
+                        trip_id=trip.id,
+                        dispatcher_id=dispatcher.id,
+                        report_type="delay",
+                        priority_level="high" if idx % 10 == 0 else "medium",
+                        operational_details="Delay logged from dispatcher operations center during monitoring.",
+                        created_at=ref_time - timedelta(hours=1),
+                    )
+                )
+                delay_log_trip_ids.add(trip.id)
+            elif needs_delay and trip.status != TripStatus.COMPLETED and idx % 8 == 0:
+                operational_logs.append(
+                    OperationalLog(
+                        booking_id=trip.booking_id,
+                        trip_id=trip.id,
+                        dispatcher_id=dispatcher.id,
+                        report_type="delay",
+                        priority_level="high",
+                        operational_details="Active trip past ETA — delay flagged from operations center.",
+                        created_at=datetime.utcnow() - timedelta(hours=1),
+                    )
+                )
+                delay_log_trip_ids.add(trip.id)
+            if trip.status == TripStatus.COMPLETED and trip.id not in issue_trip_ids and idx % 4 == 0:
+                issue_type = ISSUE_TYPES[idx % len(ISSUE_TYPES)]
+                trip_issues.append(
+                    TripIssue(
+                        trip_id=trip.id,
+                        reported_by_id=trip.driver_id,
+                        issue_type=issue_type,
+                        description=f"{issue_type.replace('_', ' ').title()} reported during trip execution",
+                        severity="high" if issue_type in ("mechanical", "weather") else "medium",
+                        resolved=idx % 8 != 0,
+                        created_at=(trip.completed_at or datetime.utcnow()) - timedelta(hours=2),
+                    )
+                )
+
+        if fuel_logs:
+            db.add_all(fuel_logs)
+            db.commit()
+        print(f"[OK] Fuel logs appended: {len(fuel_logs)}", flush=True)
+
+        if toll_logs:
+            db.add_all(toll_logs)
+            db.commit()
+        print(f"[OK] Toll logs appended: {len(toll_logs)}", flush=True)
+
+        if toll_history:
+            db.add_all(toll_history)
+            db.commit()
+        print(f"[OK] Historical toll records appended: {len(toll_history)}", flush=True)
+
+        if operational_logs:
+            db.add_all(operational_logs)
+            db.commit()
+        print(f"[OK] Operational delay logs appended: {len(operational_logs)}", flush=True)
+
+        if trip_issues:
+            db.add_all(trip_issues)
+            db.commit()
+        print(f"[OK] Trip issues appended: {len(trip_issues)}", flush=True)
+
+    print("\n" + "=" * 60, flush=True)
+    print("DONE: Append history completed successfully.", flush=True)
     print("=" * 60, flush=True)
 
 
@@ -779,6 +947,11 @@ if __name__ == "__main__":
         help="Drop all tables first (destructive), then recreate schema and seed.",
     )
     parser.add_argument(
+        "--append-history",
+        action="store_true",
+        help="Backfill fuel/toll/disruption analytics data for existing trips (non-destructive).",
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help="Fill missing tables after an interrupted seed (non-destructive).",
@@ -813,6 +986,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.repair_passwords:
         repair_user_password_hashes()
+    elif args.append_history:
+        append_seed_history()
     elif args.resume:
         resume_seed_database()
     else:

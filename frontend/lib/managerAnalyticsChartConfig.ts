@@ -1,5 +1,7 @@
 import type { AnalyticsChartKind } from "@/lib/analyticsChartConfig";
 import type { InferredChartMeta } from "@/lib/chartDrilldownUtils";
+import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
+import { periodKeyFromDate } from "@/lib/timeBucketRollup";
 
 export const MANAGER_FEATURE_CHART_KINDS: Record<string, AnalyticsChartKind> = {
   performance_reports: "line",
@@ -26,18 +28,37 @@ function isDeliverySuccessChartRow(row: Record<string, unknown>): boolean {
   return row.period != null && row.delivery_success_rate != null && row.status == null;
 }
 
+function parseDrilldownDateForSuccess(raw: unknown): Date | null {
+  if (raw == null || raw === "" || raw === "—") return null;
+  const token = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(token)) {
+    const d = new Date(`${token.slice(0, 10)}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (/^\d{4}-\d{2}$/.test(token)) {
+    const [y, m] = token.split("-");
+    return new Date(Date.UTC(Number(y), Number(m) - 1, 1));
+  }
+  if (/^\d{4}$/.test(token)) {
+    return new Date(Date.UTC(Number(token), 0, 1));
+  }
+  return null;
+}
+
 export function buildDeliverySuccessRateChart(
   chart: Record<string, unknown>[],
   drilldown: Record<string, unknown>[],
+  granularity: TimeGranularity = "yearly",
 ): Record<string, unknown>[] {
   const fromChart = chart.filter(isDeliverySuccessChartRow);
   if (fromChart.length) return fromChart;
 
   const buckets: Record<string, { total: number; delivered: number }> = {};
   for (const row of drilldown) {
-    const raw = String(row.date ?? row.delivery_date ?? row.scheduled_month ?? "").slice(0, 10);
-    if (raw.length < 10) continue;
-    const period = raw.slice(0, 7);
+    const raw = row.date ?? row.delivery_date ?? row.scheduled_month;
+    const parsed = parseDrilldownDateForSuccess(raw);
+    if (!parsed) continue;
+    const period = periodKeyFromDate(parsed, granularity);
     if (!buckets[period]) buckets[period] = { total: 0, delivered: 0 };
     buckets[period].total += 1;
     const status = String(row.delivery_status ?? row.status ?? "").toLowerCase();
@@ -255,7 +276,7 @@ export function managerResolveChartMeta(
       xKey: "period",
       yKey: "delivery_success_rate",
       seriesKeys: ["delivery_success_rate"],
-      fieldKeys: ["period", "delivery_status", "date"],
+      fieldKeys: ["period", "delivery_success_rate", "delivered", "total", "delivery_status", "date"],
       monthFromX: true,
     };
   }
