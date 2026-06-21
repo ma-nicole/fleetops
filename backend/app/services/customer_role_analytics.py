@@ -553,7 +553,8 @@ def _booking_records_block(bookings: list) -> dict[str, Any]:
     for month_key in sort_period_keys(list(buckets.keys()), "monthly")[-24:]:
         counts = buckets[month_key]
         row: dict[str, Any] = {
-            "period": _format_month_cohort_label(month_key),
+            "period": month_key,
+            "period_label": _format_month_cohort_label(month_key),
             "month_cohort": month_key,
         }
         for label in _BOOKING_FULFILLMENT_SERIES:
@@ -565,7 +566,10 @@ def _booking_records_block(bookings: list) -> dict[str, Any]:
     return _block(
         kpis=[
             {"label": "Logged orders", "value": total_orders},
-            {"label": "Peak month", "value": f"{peak['period']} ({peak['total']})"},
+            {
+                "label": "Peak month",
+                "value": f"{peak.get('period_label') or _format_month_cohort_label(str(peak.get('month_cohort') or peak.get('period') or ''))} ({peak['total']})",
+            },
         ],
         chart=chart,
         drilldown=drilldown[:80],

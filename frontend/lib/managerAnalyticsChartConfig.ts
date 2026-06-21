@@ -136,7 +136,9 @@ export function buildMaintenanceIssueParetoChart(
   drilldown: Record<string, unknown>[],
 ): Record<string, unknown>[] {
   const fromChart = chart.filter((row) => row.issue_type != null && row.frequency != null);
-  if (fromChart.length) return fromChart;
+  if (fromChart.length) {
+    return [...fromChart].sort((a, b) => Number(b.frequency) - Number(a.frequency));
+  }
 
   const counts: Record<string, number> = {};
   for (const row of drilldown) {

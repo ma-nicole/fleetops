@@ -187,33 +187,29 @@ export function RoleAnalyticsGrid({
               ["Predictive", "Predictive Analytics"],
               ["Prescriptive", "Prescriptive Analytics"],
             ] as const
-          ).map(([key, title]) => (
+          ).filter(([key]) => groupedWidgets[key].length > 0).map(([key, title]) => (
             <section key={key} className="analytics-structure__section">
               <h3 className="analytics-structure__section-title">{title}</h3>
-              {groupedWidgets[key].length ? (
-                <div className="bi-chart-grid">
-                  {groupedWidgets[key].map((w) => (
-                    <BiChartWidget
-                      key={w.id}
-                      widgetId={w.id}
-                      title={w.title}
-                      featureKey={w.featureKey}
-                      block={w.block}
-                      filterOptions={filterOptions}
-                      analyticsType={w.analyticsType}
-                      analyticsMethod={w.analyticsMethod}
-                      preferredChartKind={w.preferredChartKind}
-                      valueUnit={resolveChartUnit?.(w.featureKey)}
-                      resolveFeatureChartMeta={resolveFeatureChartMeta}
-                      normalizeFeatureChart={normalizeFeatureChart}
-                      resolveFeatureNote={resolveFeatureNote}
-                      onPeriodDrillDown={onPeriodDrillDown}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyChart message={`No ${title.toLowerCase()} data for this category yet.`} />
-              )}
+              <div className="bi-chart-grid">
+                {groupedWidgets[key].map((w) => (
+                  <BiChartWidget
+                    key={w.id}
+                    widgetId={w.id}
+                    title={w.title}
+                    featureKey={w.featureKey}
+                    block={w.block}
+                    filterOptions={filterOptions}
+                    analyticsType={w.analyticsType}
+                    analyticsMethod={w.analyticsMethod}
+                    preferredChartKind={w.preferredChartKind}
+                    valueUnit={resolveChartUnit?.(w.featureKey)}
+                    resolveFeatureChartMeta={resolveFeatureChartMeta}
+                    normalizeFeatureChart={normalizeFeatureChart}
+                    resolveFeatureNote={resolveFeatureNote}
+                    onPeriodDrillDown={onPeriodDrillDown}
+                  />
+                ))}
+              </div>
             </section>
           ))}
         </div>

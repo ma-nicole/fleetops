@@ -109,6 +109,9 @@ export function mergeChartKind(
   if (inferred === "stackedBar" && preferred === "pie") {
     return inferred;
   }
+  if ((inferred === "bar" || inferred === "line" || inferred === "area") && preferred === "pie") {
+    return inferred;
+  }
   if (inferred === "combo" && (preferred === "bar" || preferred === "line")) {
     return inferred;
   }

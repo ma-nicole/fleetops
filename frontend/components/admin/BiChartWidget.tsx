@@ -200,16 +200,18 @@ export function BiChartWidget({
   const [compareMode, setCompareMode] = useState<"none" | "quarter" | "yoy">("none");
   const [aiLoading, setAiLoading] = useState(false);
   const [widgetGranularity, setWidgetGranularity] = useState<TimeGranularity>(() =>
-    featureKey === "trip_logs" ||
-    featureKey === "completed_deliveries" ||
-    featureKey === "shipment_records" ||
-    featureKey === "performance_reports" ||
-    featureKey === "delivery_success" ||
-    featureKey === "completion_time_prediction" ||
-    featureKey === "delay_likelihood_prediction" ||
-    featureKey === "historical_trip_costs"
-      ? "yearly"
-      : "monthly",
+    featureKey === "login_history"
+      ? "quarterly"
+      : featureKey === "trip_logs" ||
+          featureKey === "completed_deliveries" ||
+          featureKey === "shipment_records" ||
+          featureKey === "performance_reports" ||
+          featureKey === "delivery_success" ||
+          featureKey === "completion_time_prediction" ||
+          featureKey === "delay_likelihood_prediction" ||
+          featureKey === "historical_trip_costs"
+        ? "yearly"
+        : "monthly",
   );
   const [focusedPeriod, setFocusedPeriod] = useState<string | null>(null);
 
@@ -224,6 +226,7 @@ export function BiChartWidget({
     const skipSynthesis =
       featureKey === "booking_history" ||
       featureKey === "account_activity_logs" ||
+      featureKey === "login_history" ||
       featureKey === "truck_preference_records" ||
       featureKey === "delivery_success" ||
       featureKey === "performance_reports" ||
@@ -305,8 +308,9 @@ export function BiChartWidget({
     if (!groupedTruck) {
       return { ...meta, kind: mergedKind };
     }
+    const { monthFromX: _omitPeriodRollup, ...metaWithoutPeriodRollup } = meta;
     return {
-      ...meta,
+      ...metaWithoutPeriodRollup,
       kind: "groupedBar" as const,
       labelKey: "truck_type",
       valueKey: truckSeries[0],
@@ -333,9 +337,26 @@ export function BiChartWidget({
       ? computeRowStatistics(chart as Record<string, unknown>[], preferFields)
       : null;
     if (chartStats) return chartStats;
+    if (chart.length && preferFields && preferFields.length > 1) {
+      const totalStats = computeRowStatistics(chart as Record<string, unknown>[], ["total"]);
+      if (totalStats) return totalStats;
+    }
     return computeRowStatistics(drilldown, preferFields);
   }, [block, chart, drilldown, empty, resolvedMeta?.seriesKeys, resolvedMeta?.valueKey]);
   const legendLabel = valueUnit ?? resolvedMeta?.valueKey?.replace(/_/g, " ") ?? "Value";
+  const timelineAxisLabel = useMemo(() => {
+    if (!resolvedMeta?.monthFromX) return undefined;
+    const labels: Record<TimeGranularity, string> = {
+      yearly: "Year",
+      quarterly: "Quarter",
+      monthly: "Month",
+      weekly: "Week",
+      daily: "Day",
+    };
+    return `Timeline (${labels[widgetGranularity]})`;
+  }, [resolvedMeta?.monthFromX, widgetGranularity]);
+  const isLoginActivityStack =
+    resolvedMeta?.seriesKeys?.includes("login") && resolvedMeta?.seriesKeys?.includes("logout");
 
   const quarterCompare = useMemo(() => {
     if (comparative?.comparisons?.quarterly?.length) {
@@ -434,8 +455,9 @@ export function BiChartWidget({
     valueKey: string,
     kind: AnalyticsChartKind = "bar",
     axisLabel = valueKey.replace(/_/g, " "),
+    xCategoryOverride?: string,
   ) => {
-    const categoryLabel = labelKey.replace(/_/g, " ");
+    const categoryLabel = xCategoryOverride ?? labelKey.replace(/_/g, " ");
     const isHorizontal = kind === "horizontalBar";
     return wrapChartVisual(
       <RechartsAnalyticsChart
@@ -466,12 +488,15 @@ export function BiChartWidget({
     }
 
     if (resolvedMeta && items.length) {
+      const yAxis = legendLabel;
+      const xAxis = isLoginActivityStack && timelineAxisLabel ? timelineAxisLabel : undefined;
       return renderChart(
         items,
         resolvedMeta.xKey ?? resolvedMeta.labelKey,
         resolvedMeta.yKey ?? resolvedMeta.valueKey,
         toChartKind(resolvedMeta.kind),
-        legendLabel,
+        yAxis,
+        xAxis,
       );
     }
 

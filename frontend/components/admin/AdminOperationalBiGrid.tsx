@@ -368,30 +368,26 @@ export function AdminOperationalBiGrid({
           ["Predictive", "Predictive Analytics"],
           ["Prescriptive", "Prescriptive Analytics"],
         ] as const
-      ).map(([key, title]) => (
+      ).filter(([key]) => groupedWidgets[key].length > 0).map(([key, title]) => (
         <section key={key} className="analytics-structure__section">
           <h3 className="analytics-structure__section-title">{title}</h3>
-          {groupedWidgets[key].length ? (
-            <div className="bi-chart-grid">
-              {groupedWidgets[key].map((w) => (
-                <BiChartWidget
-                  key={w.id}
-                  widgetId={w.id}
-                  title={w.title}
-                  block={w.block}
-                  filterOptions={data.filter_options}
-                  comparative={w.comparative}
-                  analyticsType={w.analyticsType}
-                  analyticsMethod={w.analyticsMethod}
-                  riskLegend={w.riskLegend}
-                  preferredChartKind={w.preferredChartKind}
-                  onPeriodDrillDown={onPeriodDrillDown}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyChart message={`No ${title.toLowerCase()} widgets in this category.`} />
-          )}
+          <div className="bi-chart-grid">
+            {groupedWidgets[key].map((w) => (
+              <BiChartWidget
+                key={w.id}
+                widgetId={w.id}
+                title={w.title}
+                block={w.block}
+                filterOptions={data.filter_options}
+                comparative={w.comparative}
+                analyticsType={w.analyticsType}
+                analyticsMethod={w.analyticsMethod}
+                riskLegend={w.riskLegend}
+                preferredChartKind={w.preferredChartKind}
+                onPeriodDrillDown={onPeriodDrillDown}
+              />
+            ))}
+          </div>
         </section>
       ))}
     </div>

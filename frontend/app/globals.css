@@ -1979,6 +1979,23 @@ html {
   gap: var(--space-2);
 }
 
+.tab-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: var(--space-2);
+  height: auto;
+}
+
+.tab-pill-row .tab-pill,
+.tab-pill-row .tab-pill--compact {
+  flex: 0 0 auto;
+  align-self: center;
+  height: auto;
+  min-height: 0;
+}
+
 .tab-pill {
   padding: var(--space-2) var(--space-3);
   border-radius: 999px;
@@ -3057,6 +3074,7 @@ html {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
+  align-items: start;
 }
 
 .bi-chart-widget {
@@ -3064,15 +3082,28 @@ html {
   border: 1px solid #d8e2dc;
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(27, 67, 50, 0.06);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
   display: grid;
-  gap: var(--space-2);
-  min-height: 380px;
+  gap: var(--space-3);
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  align-content: start;
 }
 
 .bi-chart-widget__header {
   display: grid;
   gap: 0.35rem;
+  align-content: start;
+  align-self: start;
+  height: auto;
+}
+
+.bi-chart-widget__header > * {
+  align-self: start;
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
 }
 
 .bi-chart-widget__title {
@@ -3098,19 +3129,33 @@ html {
 }
 
 .bi-badge-row {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
+  align-items: center;
+  align-self: start;
   gap: 0.35rem;
+  width: fit-content;
+  max-width: 100%;
+  height: auto;
+  max-height: none;
 }
 
 .bi-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  height: auto;
+  max-height: 2rem;
   min-height: 1.3rem;
-  padding: 0.1rem 0.45rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 999px;
   font-size: 0.66rem;
   font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
   letter-spacing: 0.02em;
   border: 1px solid transparent;
 }
@@ -3174,17 +3219,18 @@ html {
   background: #f8faf9;
   border: 1px solid #e5ebe8;
   border-radius: 8px;
-  padding: 0.75rem 1rem 1rem;
-  min-height: 250px;
+  padding: 0.75rem 1rem 1.25rem;
+  min-height: 0;
   overflow: visible;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .bi-chart-visual-root {
   width: 100%;
-  min-height: 160px;
+  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .bi-chart-widget__chart .bi-chart-visual-root,
@@ -3195,7 +3241,7 @@ html {
 .bi-chart-widget__chart > .bi-emergency-chart,
 .bi-chart-widget__chart .recharts-analytics-chart {
   width: 100%;
-  min-height: 140px;
+  min-height: 0;
 }
 
 .bi-emergency-chart {
@@ -3438,6 +3484,7 @@ html {
   min-height: 220px;
   aspect-ratio: 2.4 / 1;
   position: relative;
+  overflow: visible;
 }
 
 .recharts-analytics-chart--horizontal {
@@ -3448,6 +3495,7 @@ html {
 .recharts-analytics-chart--grouped {
   aspect-ratio: unset;
   min-height: 340px;
+  height: 340px;
 }
 
 .recharts-analytics-chart--operational-cost {
@@ -3620,14 +3668,72 @@ html {
 }
 
 .bi-chart-widget__chart .recharts-analytics-chart {
-  min-height: 200px;
+  min-height: 220px;
+  aspect-ratio: unset;
+  overflow: visible;
+}
+
+.bi-chart-widget__chart .recharts-analytics-chart.recharts-analytics-chart--horizontal {
+  min-height: 260px;
+}
+
+.bi-chart-widget__chart .recharts-analytics-chart.recharts-analytics-chart--period-line {
+  min-height: 320px;
+  height: 320px;
+}
+
+.bi-chart-widget__chart .recharts-analytics-chart.recharts-analytics-chart--period-line-dense {
+  min-height: 360px;
+  height: 360px;
+}
+
+.bi-chart-widget__chart .recharts-analytics-chart.recharts-analytics-chart--pareto {
+  min-height: 320px;
+  height: auto;
+}
+
+.bi-chart-widget__chart .recharts-analytics-chart.recharts-analytics-chart--pie {
+  min-height: 300px;
+}
+
+.recharts-analytics-chart--pie .recharts-legend-wrapper {
+  width: 100% !important;
+  left: 0 !important;
+  padding-inline: 0.25rem;
+}
+
+.recharts-analytics-chart--pie .recharts-legend-item {
+  margin-right: 0.65rem !important;
+  margin-bottom: 0.2rem !important;
+}
+
+/* Line / bar charts without a dedicated modifier — fixed viewport for ResponsiveContainer */
+.bi-chart-widget__chart
+  .recharts-analytics-chart:not(.recharts-analytics-chart--horizontal):not(.recharts-analytics-chart--pareto):not(
+    .recharts-analytics-chart--pie
+  ):not(.recharts-analytics-chart--period-line):not(.recharts-analytics-chart--period-line-dense):not(
+    .recharts-analytics-chart--grouped
+  ):not(.recharts-analytics-chart--operational-cost):not(.recharts-analytics-chart--heatmap) {
+  height: 280px;
 }
 
 .bi-chart-widget__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  align-self: start;
   gap: 0.5rem;
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
+  padding-bottom: 0.15rem;
+  height: auto;
+}
+
+.bi-chart-widget__actions .bi-chart-widget__btn {
+  flex: 0 0 auto;
+  align-self: center;
+  height: auto;
+  min-height: 0;
 }
 
 .bi-chart-widget__btn {

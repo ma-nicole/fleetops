@@ -534,6 +534,35 @@ function buildChartRows(
   });
 }
 
+function clampZeroOneRate(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(0, Math.min(1, n));
+}
+
+function clampZeroOneChartRow(row: ChartRow, keys: string[]): ChartRow {
+  const next = { ...row };
+  for (const key of keys) {
+    if (key in next) {
+      const clamped = clampZeroOneRate(next[key]);
+      if (clamped !== undefined) next[key] = clamped;
+    }
+  }
+  return next;
+}
+
+function withParetoCumulative(rows: ChartRow[], valueKey: string, cumulativeKey: string): ChartRow[] {
+  if (rows.some((row) => row[cumulativeKey] != null && Number(row[cumulativeKey]) > 0)) return rows;
+  const total = rows.reduce((sum, row) => sum + (Number(row[valueKey]) || 0), 0);
+  if (total <= 0) return rows;
+  let running = 0;
+  return rows.map((row) => {
+    running += Number(row[valueKey]) || 0;
+    return { ...row, [cumulativeKey]: Math.round((running / total) * 1000) / 10 };
+  });
+}
+
 function formatLineTooltipValue(value: unknown, dataKey?: string, name?: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value ?? "—");
@@ -753,7 +782,24 @@ function RechartsAnalyticsChartInner({
     kind === "scatter" ||
     (kind === "line" && Boolean(seriesKeys && seriesKeys.length > 1)) ||
     (kind === "area" && Boolean(seriesKeys && seriesKeys.length > 1));
-  const chartHeight = kind === "horizontalBar" ? horizontalChartHeight(rows.length) : undefined;
+  const periodLineChart =
+    kind === "line" &&
+    (labelKey === "period" || items.some((item) => Object.prototype.hasOwnProperty.call(item, "period")));
+  const densePeriodLine = periodLineChart && rows.length > 10;
+  const chartHeight =
+    kind === "horizontalBar"
+      ? horizontalChartHeight(rows.length)
+      : kind === "pareto"
+        ? Math.max(320, Math.min(420, 56 + rows.length * 34))
+      : kind === "pie"
+        ? Math.max(300, 260 + Math.min(rows.length, 12) * (rows.length > 6 ? 10 : 6))
+      : kind === "groupedBar"
+        ? 340
+      : periodLineChart
+        ? densePeriodLine
+          ? 360
+          : 320
+        : undefined;
 
   if (loading) {
     return (
@@ -807,21 +853,49 @@ function RechartsAnalyticsChartInner({
       rows.every((entry) => entry.name === "Delivered" || entry.name === "Pending" || entry.name === "Failed");
     const dispatchEventPie = labelKey === "dispatch_event" && valueKey === "count";
     const labeledDonut = profileStatusPie || receiptSettlementPie || deliveryConfirmationPie || dispatchEventPie;
+    const densePie = rows.length > 6;
+    const showSliceLabels = !densePie && (labeledDonut || rows.length <= 8);
+    const pieMargin = {
+      top: 16,
+      right: densePie ? 12 : 24,
+      bottom: densePie ? 8 : 16,
+      left: densePie ? 12 : 24,
+    };
+    const pieLegendProps = {
+      ...legendProps,
+      verticalAlign: "bottom" as const,
+      layout: (densePie ? "vertical" : "horizontal") as "vertical" | "horizontal",
+      align: "center" as const,
+      wrapperStyle: {
+        fontSize: 10,
+        cursor: onLegendClick ? "pointer" : "default",
+        paddingTop: 8,
+        lineHeight: 1.35,
+        maxHeight: densePie ? 108 : undefined,
+        overflowY: densePie ? ("auto" as const) : undefined,
+        width: "100%",
+      },
+    };
     chartNode = (
-      <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+      <PieChart margin={pieMargin}>
         <Pie
           data={rows}
           dataKey={valueKey}
           nameKey="name"
           cx="50%"
-          cy="50%"
-          innerRadius={dispatchEventPie ? "0%" : "28%"}
-          outerRadius="72%"
+          cy={densePie ? "42%" : "50%"}
+          innerRadius={dispatchEventPie ? "0%" : densePie ? "24%" : "28%"}
+          outerRadius={densePie ? "58%" : "72%"}
           paddingAngle={1}
-          label={({ percent }: { percent?: number }) =>
-            percent != null && percent >= 0.03 ? `${(percent * 100).toFixed(labeledDonut ? 1 : 0)}%` : ""
+          label={
+            showSliceLabels
+              ? ({ percent }: { percent?: number }) =>
+                  percent != null && percent >= (labeledDonut ? 0.02 : 0.04)
+                    ? `${(percent * 100).toFixed(labeledDonut ? 1 : 0)}%`
+                    : ""
+              : false
           }
-          labelLine={profileStatusPie || receiptSettlementPie || deliveryConfirmationPie}
+          labelLine={showSliceLabels && (profileStatusPie || receiptSettlementPie || deliveryConfirmationPie)}
           onClick={handlePieClick}
           style={{ cursor: onItemClick ? "pointer" : "default" }}
         >
@@ -835,7 +909,7 @@ function RechartsAnalyticsChartInner({
           ))}
         </Pie>
         <Tooltip content={<PieTooltip />} />
-        <Legend {...legendProps} wrapperStyle={{ fontSize: 10, cursor: onLegendClick ? "pointer" : "default" }} />
+        <Legend {...pieLegendProps} />
       </PieChart>
     );
   } else if (kind === "line") {
@@ -872,10 +946,10 @@ function RechartsAnalyticsChartInner({
       lineKeys.includes("actual_completion_hours") && lineKeys.includes("predicted_completion_hours");
     const tripVolumeForecast =
       lineKeys.includes("actual_trips") && lineKeys.includes("forecast_trips");
-    const periodLineChart =
-      labelKey === "period" ||
-      items.some((item) => Object.prototype.hasOwnProperty.call(item, "period"));
-    const densePeriodLine = periodLineChart && rows.length > 10;
+    const lineChartRows =
+      zeroOneRateTrend && lineKeys.length
+        ? rows.map((row) => clampZeroOneChartRow(row, lineKeys))
+        : rows;
     const costOverrunForecast =
       lineKeys.includes("actual_daily_cost_php") && lineKeys.includes("predicted_daily_cost_php");
     const costFluctuationChart = items.some(
@@ -945,7 +1019,7 @@ function RechartsAnalyticsChartInner({
       costOverrunForecast ||
       disruptionRiskForecast ||
       costFluctuationChart
-        ? { top: 36, right: 16, left: 12, bottom: 56 }
+        ? { top: 36, right: 16, left: 12, bottom: densePeriodLine ? 68 : 56 }
         : commonMargin;
     const lineXAxisProps = {
       ...xAxisProps,
@@ -1017,17 +1091,17 @@ function RechartsAnalyticsChartInner({
               ...yAxisProps,
               tickFormatter: (v: number) => formatNumber(v, { maximumFractionDigits: 0 }),
             }
-          : efficiencyForecastChart || fuelEfficiencyTrend || travelTimeTrend || completionTimeTrend || tripVolumeForecast
+          : efficiencyForecastChart || fuelEfficiencyTrend || travelTimeTrend || completionTimeTrend || tripVolumeForecast || bookingVolumeTrend
             ? {
                 ...yAxisProps,
-                allowDecimals: tripVolumeForecast ? false : true,
+                allowDecimals: tripVolumeForecast || bookingVolumeTrend ? false : true,
                 domain: completionTimeTrend
                   ? ([
                       (dataMin: number) => Math.max(0, Math.floor((dataMin - 0.5) * 2) / 2),
                       (dataMax: number) => Math.ceil((dataMax + 0.5) * 2) / 2,
                     ] as [(v: number) => number, (v: number) => number])
-                  : tripVolumeForecast
-                  ? ([0, (dataMax: number) => Math.max(4, Math.ceil(dataMax * 1.2))] as [
+                  : tripVolumeForecast || bookingVolumeTrend
+                  ? ([0, (dataMax: number) => Math.max(4, Math.ceil((dataMax || 0) * 1.15))] as [
                       number,
                       (v: number) => number,
                     ])
@@ -1035,7 +1109,7 @@ function RechartsAnalyticsChartInner({
                 tickFormatter: (v: number) =>
                   completionTimeTrend
                     ? `${Number(v).toFixed(1)}h`
-                    : tripVolumeForecast
+                    : tripVolumeForecast || bookingVolumeTrend
                       ? String(Math.round(v))
                       : Number(v).toFixed(2),
               }
@@ -1356,7 +1430,7 @@ function RechartsAnalyticsChartInner({
         />
       </ComposedChart>
     ) : (
-      <LineChart data={rows} margin={lineMargin}>
+      <LineChart data={lineChartRows} margin={lineMargin}>
         <CartesianGrid stroke={GRID_STROKE} vertical={false} />
         <XAxis {...lineXAxisProps} />
         <YAxis
@@ -1451,12 +1525,13 @@ function RechartsAnalyticsChartInner({
                     const name = rows[index]?.name ?? "";
                     const active = isSelected(name, selectedLabel);
                     const stroke = lineSeriesStroke(key, idx);
+                    const sparse = lineChartRows.length <= 3;
                     return (
                       <circle
                         key={`dot-${key}-${index}`}
                         cx={cx}
                         cy={cy}
-                        r={active ? 5 : 3.5}
+                        r={active ? (sparse ? 7 : 5) : sparse ? 6 : 3.5}
                         fill={active ? SELECTED_STROKE : stroke}
                         stroke="#fff"
                         strokeWidth={1}
@@ -1563,8 +1638,18 @@ function RechartsAnalyticsChartInner({
         : commonMargin;
     const stackXAxisProps = {
       ...xAxisProps,
+      tick: bookingFulfillmentStack
+        ? (props: Parameters<typeof RotatedCategoryAxisTick>[0]) => (
+            <RotatedCategoryAxisTick {...props} formatPeriod />
+          )
+        : xAxisProps.tick,
       label: loginActivityStack
-        ? { value: "Timeline (Quarters)", position: "insideBottom" as const, offset: -52, style: { fontSize: 10, fill: "#64748b" } }
+        ? {
+            value: xAxisLabel || "Timeline",
+            position: "insideBottom" as const,
+            offset: -52,
+            style: { fontSize: 10, fill: "#64748b" },
+          }
         : bookingFulfillmentStack
           ? {
               value: "Billing Cycle / Monthly Cohorts",
@@ -1580,6 +1665,12 @@ function RechartsAnalyticsChartInner({
         <XAxis {...stackXAxisProps} />
         <YAxis
           {...yAxisProps}
+          allowDecimals={false}
+          domain={
+            bookingFulfillmentStack
+              ? [0, (dataMax: number) => Math.max(4, Math.ceil((dataMax || 0) * 1.15))]
+              : undefined
+          }
           label={
             loginActivityStack
               ? {
@@ -1612,6 +1703,7 @@ function RechartsAnalyticsChartInner({
             name={seriesLabel(key)}
             stackId="stack"
             fill={seriesFill(key, idx)}
+            maxBarSize={bookingFulfillmentStack ? 72 : undefined}
             onClick={(_event: unknown, index: number) => handleBarClick(index)}
             style={{ cursor: onItemClick ? "pointer" : "default" }}
           />
@@ -1620,8 +1712,9 @@ function RechartsAnalyticsChartInner({
     );
   } else if (kind === "pareto") {
     const cumulativeKey = secondarySeriesKey ?? "cumulative_percent";
+    const paretoRows = withParetoCumulative(rows, valueKey, cumulativeKey);
     chartNode = (
-      <ComposedChart data={rows} margin={{ top: 36, right: 48, left: 12, bottom: 72 }}>
+      <ComposedChart data={paretoRows} margin={{ top: 36, right: 48, left: 12, bottom: 72 }}>
         <CartesianGrid stroke={GRID_STROKE} />
         <XAxis
           {...xAxisProps}
@@ -1636,6 +1729,7 @@ function RechartsAnalyticsChartInner({
           yAxisId="left"
           allowDecimals={false}
           tick={AXIS_TICK}
+          tickFormatter={yAxisProps.tickFormatter}
           domain={[0, (dataMax: number) => Math.max(dataMax + 1, 5)]}
           label={{
             value: yAxisLabel || "Frequency (Count)",
@@ -1681,11 +1775,12 @@ function RechartsAnalyticsChartInner({
           yAxisId="left"
           dataKey={valueKey}
           name="Frequency (Count)"
-          barSize={42}
+          barSize={Math.max(24, Math.min(42, Math.floor(280 / Math.max(paretoRows.length, 1))))}
+          isAnimationActive={false}
           onClick={(_event: unknown, index: number) => handleBarClick(index)}
           style={{ cursor: onItemClick ? "pointer" : "default" }}
         >
-          {rows.map((entry, i) => (
+          {paretoRows.map((entry, i) => (
             <Cell
               key={entry.name}
               fill={PARETO_BAR_COLORS[i % PARETO_BAR_COLORS.length]}
@@ -1702,6 +1797,7 @@ function RechartsAnalyticsChartInner({
           stroke={PARETO_CUMULATIVE_LINE}
           strokeWidth={2.5}
           strokeDasharray="6 4"
+          isAnimationActive={false}
           dot={{ r: 4, fill: PARETO_CUMULATIVE_LINE, stroke: "#fff", strokeWidth: 1 }}
           activeDot={{ r: 6, stroke: SELECTED_STROKE, strokeWidth: 2 }}
         >
@@ -1956,7 +2052,9 @@ function RechartsAnalyticsChartInner({
     const reportsPerTruckChart = labelKey === "truck" && valueKey === "report_count";
     const tripStatusChart = labelKey === "trip_status" && valueKey === "trip_count";
     const tripPeriodChart = labelKey === "period" && valueKey === "trip_count";
-    const truckTripChart = labelKey === "truck" && valueKey === "trip_count";
+    const truckTripChart =
+      (labelKey === "truck" || labelKey === "truck_code") && valueKey === "trip_count";
+    const fuelByTruckChart = labelKey === "truck_code" && valueKey === "fuel_php";
     const shipmentRegionChart = labelKey === "region" && valueKey === "trip_count";
     const regionDistanceChart = labelKey === "region" && valueKey === "distance_km";
     const delayCauseChart = labelKey === "delay_cause" && valueKey === "delay_count";
@@ -1964,6 +2062,7 @@ function RechartsAnalyticsChartInner({
       reportsPerTruckChart ||
       tripsPerDriverChart ||
       truckTripChart ||
+      fuelByTruckChart ||
       tripStatusChart ||
       tripPeriodChart ||
       shipmentRegionChart ||
@@ -2011,6 +2110,13 @@ function RechartsAnalyticsChartInner({
                     offset: -8,
                     style: { fontSize: 10, fill: "#64748b" },
                   }
+                : fuelByTruckChart
+                  ? {
+                      value: xAxisLabel || "Fuel Expense (PHP)",
+                      position: "insideBottom",
+                      offset: -8,
+                      style: { fontSize: 10, fill: "#64748b" },
+                    }
                 : reportsPerTruckChart
                   ? {
                       value: xAxisLabel || "Number of Reports",
@@ -2595,7 +2701,9 @@ function RechartsAnalyticsChartInner({
   return (
     <div
       className={`recharts-analytics-chart${
-        kind === "horizontalBar"
+        kind === "pie"
+          ? " recharts-analytics-chart--pie"
+          : kind === "horizontalBar"
           ? " recharts-analytics-chart--horizontal"
           : kind === "groupedBar"
             ? " recharts-analytics-chart--grouped"
@@ -2612,6 +2720,8 @@ function RechartsAnalyticsChartInner({
                 : valueKey === "trip_count" &&
                     items.some((item) => Object.prototype.hasOwnProperty.call(item, "density_curve"))
                   ? " recharts-analytics-chart--travel-delay-histogram"
+                  : periodLineChart
+                    ? ` recharts-analytics-chart--period-line${densePeriodLine ? " recharts-analytics-chart--period-line-dense" : ""}`
                   : ""
       }`}
       style={

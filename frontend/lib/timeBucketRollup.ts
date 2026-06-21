@@ -2,6 +2,7 @@ import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import type { InferredChartMeta } from "@/lib/chartDrilldownUtils";
 const DATE_FIELDS = [
   "date",
+  "timestamp",
   "scheduled_date",
   "delivery_date",
   "completed_at",
@@ -10,6 +11,9 @@ const DATE_FIELDS = [
   "period",
   "month",
 ] as const;
+
+const LOGIN_ACTIVITY_SERIES = ["login", "logout", "password_reset", "profile_update"] as const;
+const BOOKING_FULFILLMENT_SERIES = ["Approved", "Cancelled", "Completed", "Pending"] as const;
 
 const SERIES_CATEGORY_FIELDS = [
   "fulfillment_status",
@@ -23,6 +27,7 @@ const SERIES_CATEGORY_FIELDS = [
   "delay_cause",
   "dispatch_event",
   "cause",
+  "service_sector",
 ] as const;
 
 /** Charts that stay categorical (region/route/scatter) — no time rollup picker. */
@@ -33,6 +38,33 @@ const ROLLUP_EXCLUDED_FEATURES = new Set([
   "fuel_usage_prediction",
   "travel_time_estimation",
   "optimal_route_prediction",
+  "maintenance_issue_logs",
+  "breakdown_reports",
+  "operational_costs",
+  "truck_preference_records",
+  "service_selection_history",
+]);
+
+/** Category axes must not be converted into period rollups. */
+const CATEGORICAL_AXIS_KEYS = new Set([
+  "issue_type",
+  "vehicle_id",
+  "category",
+  "truck_type",
+  "truck",
+  "truck_code",
+  "client_name",
+  "route",
+  "region",
+  "driver",
+  "customer",
+  "confirmation_status",
+  "dispatch_event",
+  "breakdown_count",
+  "delay_cause",
+  "trip_status",
+  "service_category",
+  "cargo_classification",
 ]);
 
 export function parseDateToken(raw: unknown): Date | null {
@@ -176,10 +208,120 @@ function resolveSeriesCategoryField(
   if (!seriesKeys?.length) return null;
   for (const field of SERIES_CATEGORY_FIELDS) {
     if (!drilldown.some((row) => row[field] != null && String(row[field]).trim() !== "")) continue;
-    const values = new Set(drilldown.map((row) => String(row[field] ?? "")));
-    if (seriesKeys.every((key) => values.has(key))) return field;
+    const values = new Set(
+      drilldown
+        .map((row) => String(row[field] ?? "").trim())
+        .filter((value) => value.length > 0),
+    );
+    if (seriesKeys.some((key) => values.has(key))) return field;
   }
   return null;
+}
+
+function isLoginActivitySeries(seriesKeys?: string[] | null): boolean {
+  return Boolean(
+    seriesKeys?.length === LOGIN_ACTIVITY_SERIES.length &&
+      LOGIN_ACTIVITY_SERIES.every((key) => seriesKeys.includes(key)),
+  );
+}
+
+function isBookingFulfillmentSeries(seriesKeys?: string[] | null): boolean {
+  return Boolean(
+    seriesKeys?.length === BOOKING_FULFILLMENT_SERIES.length &&
+      BOOKING_FULFILLMENT_SERIES.every((key) => seriesKeys.includes(key)),
+  );
+}
+
+function rollupBookingFulfillmentFromDrilldown(
+  drilldown: Record<string, unknown>[],
+  granularity: TimeGranularity,
+  limit: number,
+): Record<string, unknown>[] | null {
+  const dateField = detectDrilldownDateField(drilldown);
+  if (!dateField) return null;
+
+  const nested: Record<string, Record<string, number>> = {};
+  for (const row of drilldown) {
+    const date = parseDateToken(row[dateField]);
+    if (!date) continue;
+    const period = periodKeyFromDate(date, granularity);
+    const rawStatus = String(row.fulfillment_status ?? row.status ?? "Pending");
+    const series = BOOKING_FULFILLMENT_SERIES.includes(
+      rawStatus as (typeof BOOKING_FULFILLMENT_SERIES)[number],
+    )
+      ? rawStatus
+      : "Pending";
+    nested[period] ??= Object.fromEntries(BOOKING_FULFILLMENT_SERIES.map((key) => [key, 0]));
+    nested[period][series] = (nested[period][series] ?? 0) + 1;
+  }
+
+  const keys = sortPeriodKeys(Object.keys(nested), granularity).slice(-limit);
+  if (!keys.length) return null;
+
+  return keys.map((period) => {
+    const counts = nested[period];
+    const fields = Object.fromEntries(
+      BOOKING_FULFILLMENT_SERIES.map((key) => [key, counts[key] ?? 0]),
+    ) as Record<string, number>;
+    fields.total = BOOKING_FULFILLMENT_SERIES.reduce((sum, key) => sum + (counts[key] ?? 0), 0);
+    return periodChartRow(period, fields);
+  });
+}
+
+function parsePeriodLabelDate(label: string): Date | null {
+  const trimmed = label.trim();
+  if (!trimmed) return null;
+  const spacedQuarter = trimmed.match(/^(\d{4})\s+Q([1-4])$/i);
+  if (spacedQuarter) {
+    return new Date(Date.UTC(Number(spacedQuarter[1]), (Number(spacedQuarter[2]) - 1) * 3, 1));
+  }
+  if (/^\d{4}-Q[1-4]$/.test(trimmed)) {
+    const [, y, q] = trimmed.match(/^(\d{4})-Q([1-4])$/) ?? [];
+    if (y && q) return new Date(Date.UTC(Number(y), (Number(q) - 1) * 3, 1));
+  }
+  if (trimmed.length === 7) return parseDateToken(`${trimmed}-01`);
+  if (trimmed.length === 4) return parseDateToken(`${trimmed}-01-01`);
+  const monthNameYear = trimmed.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
+  if (monthNameYear) {
+    const parsed = Date.parse(`${monthNameYear[1]} 1, ${monthNameYear[2]}`);
+    if (!Number.isNaN(parsed)) return new Date(parsed);
+  }
+  return parseDateToken(trimmed);
+}
+
+function rollupLoginActivityFromDrilldown(
+  drilldown: Record<string, unknown>[],
+  granularity: TimeGranularity,
+  limit: number,
+): Record<string, unknown>[] | null {
+  const dateField =
+    drilldown.some((row) => parseDateToken(row.timestamp) != null)
+      ? "timestamp"
+      : detectDrilldownDateField(drilldown);
+  if (!dateField) return null;
+
+  const nested: Record<string, Record<string, number>> = {};
+  for (const row of drilldown) {
+    const date = parseDateToken(row[dateField]);
+    if (!date) continue;
+    const period = periodKeyFromDate(date, granularity);
+    const activity = String(row.activity_type ?? "").toLowerCase();
+    if (!LOGIN_ACTIVITY_SERIES.includes(activity as (typeof LOGIN_ACTIVITY_SERIES)[number])) continue;
+    nested[period] ??= {};
+    nested[period][activity] = (nested[period][activity] ?? 0) + 1;
+  }
+
+  const keys = sortPeriodKeys(Object.keys(nested), granularity).slice(-limit);
+  if (!keys.length) return null;
+
+  return keys.map((period) =>
+    periodChartRow(period, {
+      login: nested[period].login ?? 0,
+      logout: nested[period].logout ?? 0,
+      password_reset: nested[period].password_reset ?? 0,
+      profile_update: nested[period].profile_update ?? 0,
+    }),
+  );
 }
 
 function rollupDeliverySuccessRateFromDrilldown(
@@ -261,13 +403,10 @@ function rollupChartFromExistingPeriods(
   for (const row of chart) {
     const label = String(row[axisKey] ?? "");
     if (!label) continue;
-    let date = parseDateToken(label.length === 7 ? `${label}-01` : label.length === 4 ? `${label}-01-01` : label);
-    if (!date && /^\d{4}-Q[1-4]$/.test(label)) {
-      const [, y, q] = label.match(/^(\d{4})-Q([1-4])$/) ?? [];
-      if (y && q) date = new Date(Date.UTC(Number(y), (Number(q) - 1) * 3, 1));
-    }
-    if (!date && /^\d{4}-W\d{2}$/.test(label)) {
-      date = parseDateToken(`${label.slice(0, 4)}-01-04`);
+    let date = parsePeriodLabelDate(label);
+    if (!date && row.month_cohort != null) {
+      const cohort = String(row.month_cohort).trim();
+      date = parseDateToken(cohort.length === 7 ? `${cohort}-01` : cohort);
     }
     if (!date) continue;
     const bucket = periodKeyFromDate(date, granularity);
@@ -352,8 +491,21 @@ export function rollupDrilldownToChart({
   const categoryField = resolveSeriesCategoryField(drilldown, seriesKeys ?? undefined);
   const axisKey = meta.xKey ?? meta.labelKey;
 
+  if (isLoginActivitySeries(seriesKeys) && drilldown.length) {
+    const loginRollup = rollupLoginActivityFromDrilldown(drilldown, granularity, limit);
+    if (loginRollup?.length) return loginRollup;
+  }
+
+  if (isBookingFulfillmentSeries(seriesKeys) && drilldown.length) {
+    const bookingRollup = rollupBookingFulfillmentFromDrilldown(drilldown, granularity, limit);
+    if (bookingRollup?.length) return bookingRollup;
+  }
+
   if (chart.length && (axisKey === "period" || axisKey === "month")) {
-    const fromChart = rollupChartFromExistingPeriods(chart, granularity, meta, limit);
+    const fromChart =
+      isLoginActivitySeries(seriesKeys)
+        ? null
+        : rollupChartFromExistingPeriods(chart, granularity, meta, limit);
     if (fromChart?.length) return fromChart;
   }
 
@@ -487,12 +639,21 @@ export function augmentMetaForTimeRollup(
 ): InferredChartMeta | null {
   if (!meta || meta.monthFromX) return meta;
   if (featureKey && ROLLUP_EXCLUDED_FEATURES.has(featureKey)) return meta;
-  if (meta.kind === "scatter") return meta;
+  if (
+    meta.kind === "scatter" ||
+    meta.kind === "pareto" ||
+    meta.kind === "heatmap" ||
+    meta.kind === "horizontalBar" ||
+    meta.kind === "groupedBar"
+  ) {
+    return meta;
+  }
 
   const axisKey = meta.xKey ?? meta.labelKey;
   if (axisKey === "period" || axisKey === "month") {
     return { ...meta, monthFromX: true, xKey: axisKey, labelKey: axisKey };
   }
+  if (CATEGORICAL_AXIS_KEYS.has(axisKey)) return meta;
 
   const dateField = detectDrilldownDateField(drilldown);
   if (!dateField || drilldown.length < 1) return meta;
@@ -517,13 +678,12 @@ export function augmentMetaForTimeRollup(
     }
   }
 
+  if (meta.kind === "pie") {
+    return meta;
+  }
+
   const valueKey = countLikeValueKey(meta.valueKey) ? meta.valueKey : "count";
-  const rollupKind =
-    meta.kind === "pie" || meta.kind === "pareto" || meta.kind === "heatmap"
-      ? "bar"
-      : meta.kind === "horizontalBar"
-        ? "bar"
-        : meta.kind;
+  const rollupKind = meta.kind;
 
   return {
     ...meta,
@@ -544,6 +704,16 @@ export function applyWidgetTimeRollup(
   meta: InferredChartMeta | null,
 ): Record<string, unknown>[] {
   if (!meta?.monthFromX) return chart;
+  if (
+    meta.kind === "pareto" ||
+    meta.kind === "heatmap" ||
+    meta.kind === "scatter" ||
+    meta.kind === "horizontalBar" ||
+    meta.kind === "groupedBar" ||
+    meta.kind === "pie"
+  ) {
+    return chart;
+  }
   const valueKey = meta.valueKey;
   const rolled = rollupDrilldownToChart({
     drilldown,
