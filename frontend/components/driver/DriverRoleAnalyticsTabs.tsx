@@ -1,13 +1,13 @@
 "use client";
 
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import type { DriverRoleAnalyticsPayload } from "@/lib/analyticsApi";
 import {
   driverChartUnit,
   driverFeatureNote,
   driverPreferredChartKind,
   driverResolveChartMeta,
+  normalizeDriverFeatureChart,
 } from "@/lib/driverAnalyticsChartConfig";
 
 const FEATURE_LABELS: Record<string, Record<string, string>> = {
@@ -53,12 +53,10 @@ const CATEGORY_TABS: AnalyticsCategoryTab[] = [
 
 export default function DriverRoleAnalyticsTabs({
   data,
-  timeGranularity,
   onPeriodDrillDown,
 }: {
   data: DriverRoleAnalyticsPayload;
-  timeGranularity?: TimeGranularity;
-  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
 }) {
   return (
     <RoleAnalyticsGrid
@@ -66,11 +64,11 @@ export default function DriverRoleAnalyticsTabs({
       categoryTabs={CATEGORY_TABS}
       featureLabels={FEATURE_LABELS}
       data={data}
-      timeGranularity={timeGranularity}
       onPeriodDrillDown={onPeriodDrillDown}
       resolvePreferredChartKind={driverPreferredChartKind}
       resolveChartUnit={driverChartUnit}
       resolveFeatureChartMeta={driverResolveChartMeta}
+      normalizeFeatureChart={normalizeDriverFeatureChart}
       resolveFeatureNote={driverFeatureNote}
     />
   );

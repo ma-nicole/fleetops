@@ -8,7 +8,6 @@ import LoadingMessage from "@/components/ui/LoadingMessage";
 import { SkeletonDashboard } from "@/components/Skeleton";
 import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { AnalyticsApi, type DriverAnalyticsPayload } from "@/lib/analyticsApi";
-import { TimeGranularityPicker } from "@/components/admin/TimeGranularityPicker";
 import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
 export default function DriverAnalyticsDashboard() {
@@ -26,14 +25,11 @@ export default function DriverAnalyticsDashboard() {
     setRoute,
     shipmentStatus,
     setShipmentStatus,
-    granularity,
-    setGranularity,
     dateRangeError,
     buildRoleQuery,
   } = useAnalyticsPageFilters({
     dateFrom: "2025-01-01",
     dateTo: "2025-12-31",
-    granularity: "yearly",
   });
 
   const load = useCallback(async () => {
@@ -55,12 +51,11 @@ export default function DriverAnalyticsDashboard() {
   }, [dateRangeError, buildRoleQuery]);
 
   const handlePeriodDrillDown = useCallback(
-    (next: { granularity: typeof granularity; dateFrom: string; dateTo: string }) => {
-      setGranularity(next.granularity);
+    (next: { dateFrom: string; dateTo: string }) => {
       setDateFrom(next.dateFrom);
       setDateTo(next.dateTo);
     },
-    [setGranularity, setDateFrom, setDateTo],
+    [setDateFrom, setDateTo],
   );
 
   useEffect(() => {
@@ -120,7 +115,6 @@ export default function DriverAnalyticsDashboard() {
             </select>
           </label>
         </div>
-        <TimeGranularityPicker value={granularity} onChange={setGranularity} />
       </section>
 
       {loading && (
@@ -134,7 +128,6 @@ export default function DriverAnalyticsDashboard() {
       {data && !loading && !error && data.driver_role_analytics && (
         <DriverRoleAnalyticsTabs
           data={data.driver_role_analytics}
-          timeGranularity={granularity}
           onPeriodDrillDown={handlePeriodDrillDown}
         />
       )}

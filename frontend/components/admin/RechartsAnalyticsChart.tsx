@@ -45,6 +45,11 @@ const SERIES_COLORS = {
 
 const AXIS_TICK = { fontSize: 11, fill: "#64748b" };
 const GRID_STROKE = "#e2e8f0";
+const HORIZONTAL_COUNT_AXIS_MIN = 10;
+
+function horizontalCountAxisMax(dataMax: number): number {
+  return Math.max(HORIZONTAL_COUNT_AXIS_MIN, Math.ceil((dataMax || 0) * 1.1));
+}
 const LABEL_TRUNCATE = 36;
 const HORIZONTAL_BAR_ROW_HEIGHT = 34;
 const HEATMAP_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -429,6 +434,12 @@ const RECEIPT_SETTLEMENT_COLORS: Record<string, string> = {
   Refunded: "#E53935",
 };
 
+const DELIVERY_CONFIRMATION_COLORS: Record<string, string> = {
+  Delivered: "#2D6A4F",
+  Pending: "#F4A261",
+  Failed: "#E53935",
+};
+
 const SERVICE_SECTOR_COLORS: Record<string, string> = {
   "Cold Chain": "#26A69A",
   "Express Delivery": "#FF9800",
@@ -465,6 +476,7 @@ const DISPATCH_EVENT_COLORS: Record<string, string> = {
 function pieSliceFill(name: string, idx: number): string {
   return (
     DISPATCH_EVENT_COLORS[name] ??
+    DELIVERY_CONFIRMATION_COLORS[name] ??
     RECEIPT_SETTLEMENT_COLORS[name] ??
     PROFILE_STATUS_COLORS[name] ??
     BAR_COLORS[idx % BAR_COLORS.length]
@@ -757,8 +769,12 @@ function RechartsAnalyticsChartInner({
     const receiptSettlementPie =
       rows.length <= 3 &&
       rows.every((entry) => entry.name === "Paid" || entry.name === "Pending" || entry.name === "Refunded");
+    const deliveryConfirmationPie =
+      labelKey === "confirmation_status" &&
+      valueKey === "count" &&
+      rows.every((entry) => entry.name === "Delivered" || entry.name === "Pending" || entry.name === "Failed");
     const dispatchEventPie = labelKey === "dispatch_event" && valueKey === "count";
-    const labeledDonut = profileStatusPie || receiptSettlementPie || dispatchEventPie;
+    const labeledDonut = profileStatusPie || receiptSettlementPie || deliveryConfirmationPie || dispatchEventPie;
     chartNode = (
       <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
         <Pie
@@ -773,7 +789,7 @@ function RechartsAnalyticsChartInner({
           label={({ percent }: { percent?: number }) =>
             percent != null && percent >= 0.03 ? `${(percent * 100).toFixed(labeledDonut ? 1 : 0)}%` : ""
           }
-          labelLine={profileStatusPie || receiptSettlementPie}
+          labelLine={profileStatusPie || receiptSettlementPie || deliveryConfirmationPie}
           onClick={handlePieClick}
           style={{ cursor: onItemClick ? "pointer" : "default" }}
         >
@@ -1890,17 +1906,21 @@ function RechartsAnalyticsChartInner({
     const tripPeriodChart = labelKey === "period" && valueKey === "trip_count";
     const truckTripChart = labelKey === "truck" && valueKey === "trip_count";
     const shipmentRegionChart = labelKey === "region" && valueKey === "trip_count";
+    const regionDistanceChart = labelKey === "region" && valueKey === "distance_km";
     const delayCauseChart = labelKey === "delay_cause" && valueKey === "delay_count";
+    const countHorizontalBar =
+      reportsPerTruckChart ||
+      tripsPerDriverChart ||
+      truckTripChart ||
+      tripStatusChart ||
+      tripPeriodChart ||
+      shipmentRegionChart ||
+      delayCauseChart;
     const horizontalAxisChart =
       serviceVolumeChart ||
       cargoOrderChart ||
-      tripsPerDriverChart ||
-      reportsPerTruckChart ||
-      tripStatusChart ||
-      tripPeriodChart ||
-      truckTripChart ||
-      shipmentRegionChart ||
-      delayCauseChart;
+      countHorizontalBar ||
+      regionDistanceChart;
     chartNode = (
       <BarChart
         data={rows}
@@ -1918,6 +1938,12 @@ function RechartsAnalyticsChartInner({
           type="number"
           tick={AXIS_TICK}
           tickFormatter={yAxisProps.tickFormatter}
+          allowDecimals={countHorizontalBar ? false : undefined}
+          domain={
+            countHorizontalBar
+              ? ([0, horizontalCountAxisMax] as [number, (dataMax: number) => number])
+              : undefined
+          }
           label={
             serviceVolumeChart || cargoOrderChart
               ? {
@@ -1943,6 +1969,13 @@ function RechartsAnalyticsChartInner({
                 : delayCauseChart
                   ? {
                       value: xAxisLabel || "Number of Delay Records",
+                      position: "insideBottom",
+                      offset: -8,
+                      style: { fontSize: 10, fill: "#64748b" },
+                    }
+                : regionDistanceChart
+                  ? {
+                      value: xAxisLabel || "Distance (km)",
                       position: "insideBottom",
                       offset: -8,
                       style: { fontSize: 10, fill: "#64748b" },
@@ -2006,7 +2039,7 @@ function RechartsAnalyticsChartInner({
                         position: "insideLeft",
                         style: { fontSize: 10, fill: "#64748b" },
                       }
-                    : shipmentRegionChart
+                    : shipmentRegionChart || regionDistanceChart
                       ? {
                           value: yAxisLabel || "Region",
                           angle: -90,
@@ -2529,7 +2562,13 @@ function RechartsAnalyticsChartInner({
                   ? " recharts-analytics-chart--travel-delay-histogram"
                   : ""
       }`}
-      style={chartHeight ? { minHeight: chartHeight, height: chartHeight, aspectRatio: "unset" } : undefined}
+      style={
+        chartHeight
+          ? { minHeight: chartHeight, height: chartHeight, aspectRatio: "unset" }
+          : valueKey === "total_operational_cost_php" || (valueKey === "amount_php" && kind === "horizontalBar")
+            ? { minHeight: 320, height: 320, aspectRatio: "unset" }
+            : undefined
+      }
       role="img"
       aria-label={`${kind} analytics chart`}
     >

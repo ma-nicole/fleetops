@@ -2,7 +2,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { AdminAnalyticsQuery, DriverAnalyticsQuery } from "@/lib/analyticsApi";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
+
+/** Fixed API fetch granularity; per-chart rollup is handled client-side in BiChartWidget. */
+const API_GRANULARITY = "monthly" as const;
 
 export type AnalyticsPageFiltersState = {
   dateFrom: string;
@@ -11,7 +13,6 @@ export type AnalyticsPageFiltersState = {
   truckId: string;
   route: string;
   shipmentStatus: string;
-  granularity: TimeGranularity;
 };
 
 export function useAnalyticsPageFilters(initial?: Partial<AnalyticsPageFiltersState>) {
@@ -21,7 +22,6 @@ export function useAnalyticsPageFilters(initial?: Partial<AnalyticsPageFiltersSt
   const [truckId, setTruckId] = useState(initial?.truckId ?? "");
   const [route, setRoute] = useState(initial?.route ?? "");
   const [shipmentStatus, setShipmentStatus] = useState(initial?.shipmentStatus ?? "");
-  const [granularity, setGranularity] = useState<TimeGranularity>(initial?.granularity ?? "yearly");
 
   const dateRangeError = useMemo(() => {
     if (dateFrom && dateTo && dateFrom > dateTo) {
@@ -38,9 +38,9 @@ export function useAnalyticsPageFilters(initial?: Partial<AnalyticsPageFiltersSt
       truck_id: truckId ? Number(truckId) : undefined,
       route: route || undefined,
       shipment_status: shipmentStatus || undefined,
-      granularity,
+      granularity: API_GRANULARITY,
     };
-  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus, granularity]);
+  }, [dateFrom, dateTo, driverId, truckId, route, shipmentStatus]);
 
   const buildRoleQuery = useCallback((): DriverAnalyticsQuery => {
     return {
@@ -49,9 +49,9 @@ export function useAnalyticsPageFilters(initial?: Partial<AnalyticsPageFiltersSt
       truck_id: truckId ? Number(truckId) : undefined,
       route: route || undefined,
       shipment_status: shipmentStatus || undefined,
-      granularity,
+      granularity: API_GRANULARITY,
     };
-  }, [dateFrom, dateTo, truckId, route, shipmentStatus, granularity]);
+  }, [dateFrom, dateTo, truckId, route, shipmentStatus]);
 
   return {
     dateFrom,
@@ -66,8 +66,6 @@ export function useAnalyticsPageFilters(initial?: Partial<AnalyticsPageFiltersSt
     setRoute,
     shipmentStatus,
     setShipmentStatus,
-    granularity,
-    setGranularity,
     dateRangeError,
     buildAdminQuery,
     buildRoleQuery,

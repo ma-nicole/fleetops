@@ -8,7 +8,6 @@ import LoadingMessage from "@/components/ui/LoadingMessage";
 import { SkeletonDashboard } from "@/components/Skeleton";
 import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { AnalyticsApi, type CustomerAnalyticsPayload } from "@/lib/analyticsApi";
-import { TimeGranularityPicker } from "@/components/admin/TimeGranularityPicker";
 import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
 export default function CustomerAnalyticsDashboard() {
@@ -24,8 +23,6 @@ export default function CustomerAnalyticsDashboard() {
     setRoute,
     shipmentStatus,
     setShipmentStatus,
-    granularity,
-    setGranularity,
     dateRangeError,
     buildRoleQuery,
   } = useAnalyticsPageFilters();
@@ -47,6 +44,14 @@ export default function CustomerAnalyticsDashboard() {
       setLoading(false);
     }
   }, [dateRangeError, buildRoleQuery]);
+
+  const handlePeriodDrillDown = useCallback(
+    (next: { dateFrom: string; dateTo: string }) => {
+      setDateFrom(next.dateFrom);
+      setDateTo(next.dateTo);
+    },
+    [setDateFrom, setDateTo],
+  );
 
   useEffect(() => {
     void load();
@@ -92,7 +97,6 @@ export default function CustomerAnalyticsDashboard() {
             </select>
           </label>
         </div>
-        <TimeGranularityPicker value={granularity} onChange={setGranularity} />
       </section>
 
       {loading && (
@@ -102,7 +106,12 @@ export default function CustomerAnalyticsDashboard() {
         </div>
       )}
       {error && !loading && <ErrorState message={error} onRetry={() => void load()} />}
-      {data && !loading && !error && <CustomerRoleAnalyticsTabs data={data.customer_role_analytics} />}
+      {data && !loading && !error && (
+        <CustomerRoleAnalyticsTabs
+          data={data.customer_role_analytics}
+          onPeriodDrillDown={handlePeriodDrillDown}
+        />
+      )}
     </div>
   );
 }

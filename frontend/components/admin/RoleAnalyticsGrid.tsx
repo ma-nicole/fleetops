@@ -10,7 +10,6 @@ import {
   inferPreferredChartKind,
   type AnalyticsChartKind,
 } from "@/lib/analyticsChartConfig";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 
 export type CategoryInclude = {
   pillar: string;
@@ -104,7 +103,6 @@ export function RoleAnalyticsGrid({
   data,
   filterOptions,
   dashboardTitle,
-  timeGranularity,
   onPeriodDrillDown,
   resolvePreferredChartKind,
   resolveChartUnit,
@@ -118,8 +116,7 @@ export function RoleAnalyticsGrid({
   data: Record<string, RoleAnalyticsPillar>;
   filterOptions?: AdminAnalyticsPayload["filter_options"];
   dashboardTitle: string;
-  timeGranularity?: TimeGranularity;
-  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
   resolvePreferredChartKind?: (featureKey: string) => AnalyticsChartKind | undefined;
   resolveChartUnit?: (featureKey: string) => string | undefined;
   resolveFeatureChartMeta?: (
@@ -209,7 +206,6 @@ export function RoleAnalyticsGrid({
                       resolveFeatureChartMeta={resolveFeatureChartMeta}
                       normalizeFeatureChart={normalizeFeatureChart}
                       resolveFeatureNote={resolveFeatureNote}
-                      timeGranularity={timeGranularity}
                       onPeriodDrillDown={onPeriodDrillDown}
                     />
                   ))}

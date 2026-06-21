@@ -20,7 +20,6 @@ import {
   type AdminAnalyticsPayload,
 } from "@/lib/analyticsApi";
 import { ApiError } from "@/lib/api";
-import { TimeGranularityPicker } from "@/components/admin/TimeGranularityPicker";
 import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
 type CategoryTab = "revenue" | "operations" | "fleet" | "expenses" | "routes" | "customers";
@@ -54,8 +53,6 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
     setRoute,
     shipmentStatus,
     setShipmentStatus,
-    granularity,
-    setGranularity,
     dateRangeError,
     buildAdminQuery,
   } = useAnalyticsPageFilters();
@@ -87,12 +84,11 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
   }, [dateRangeError, buildAdminQuery, router]);
 
   const handlePeriodDrillDown = useCallback(
-    (next: { granularity: typeof granularity; dateFrom: string; dateTo: string }) => {
-      setGranularity(next.granularity);
+    (next: { dateFrom: string; dateTo: string }) => {
       setDateFrom(next.dateFrom);
       setDateTo(next.dateTo);
     },
-    [setGranularity, setDateFrom, setDateTo],
+    [setDateFrom, setDateTo],
   );
 
   useEffect(() => {
@@ -182,7 +178,6 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
             </select>
           </label>
         </div>
-        <TimeGranularityPicker value={granularity} onChange={setGranularity} />
         <div className="tab-pills bi-category-tabs">
           {visibleTabs.map((tab) => (
             <button
@@ -240,7 +235,6 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
             <AdminOperationalBiGrid
               data={data}
               category={gridCategory}
-              timeGranularity={granularity}
               onPeriodDrillDown={handlePeriodDrillDown}
             />
           </section>
@@ -249,7 +243,6 @@ export default function AdminAnalyticsDashboard({ showFinancial = true }: { show
             <ManagerRoleAnalyticsTabs
               data={data.role_analytics}
               filterOptions={data.filter_options}
-              timeGranularity={granularity}
               onPeriodDrillDown={handlePeriodDrillDown}
             />
           )}

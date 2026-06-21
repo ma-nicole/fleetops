@@ -1,5 +1,7 @@
 import type { AnalyticsChartKind } from "@/lib/analyticsChartConfig";
 import type { InferredChartMeta } from "@/lib/chartDrilldownUtils";
+import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
+import { periodKeyFromDate } from "@/lib/timeBucketRollup";
 
 export const DRIVER_FEATURE_CHART_KINDS: Record<string, AnalyticsChartKind> = {
   trip_logs: "horizontalBar",
@@ -16,8 +18,8 @@ export const DRIVER_FEATURE_CHART_KINDS: Record<string, AnalyticsChartKind> = {
   maintenance_need_prediction: "bar",
   breakdown_risk_prediction: "horizontalBar",
   delay_records: "horizontalBar",
-  delivery_confirmation_logs: "line",
-  shipment_records: "horizontalBar",
+  delivery_confirmation_logs: "pie",
+  shipment_records: "bar",
   trip_progress_updates: "bar",
   completion_time_prediction: "line",
   delay_likelihood_prediction: "line",
@@ -49,16 +51,6 @@ export function driverChartUnit(featureKey: string): string | undefined {
 
 function resolveDriverTripChartMeta(chart: Record<string, unknown>[]): InferredChartMeta | null {
   if (!chart.length) return null;
-  if (chart.some((row) => row.trip_status != null && row.trip_count != null)) {
-    return {
-      kind: "horizontalBar",
-      labelKey: "trip_status",
-      valueKey: "trip_count",
-      xKey: "trip_status",
-      yKey: "trip_count",
-      fieldKeys: ["trip_status", "trip_id", "route", "delivery_date", "status", "truck"],
-    };
-  }
   if (chart.some((row) => row.period != null && row.trip_count != null)) {
     return {
       kind: "horizontalBar",
@@ -68,6 +60,16 @@ function resolveDriverTripChartMeta(chart: Record<string, unknown>[]): InferredC
       yKey: "trip_count",
       fieldKeys: ["period", "trip_id", "route", "delivery_date", "trip_status", "truck"],
       monthFromX: true,
+    };
+  }
+  if (chart.some((row) => row.trip_status != null && row.trip_count != null)) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "trip_status",
+      valueKey: "trip_count",
+      xKey: "trip_status",
+      yKey: "trip_count",
+      fieldKeys: ["trip_status", "trip_id", "route", "delivery_date", "status", "truck"],
     };
   }
   if (chart.some((row) => row.route != null && row.trip_count != null)) {
@@ -81,6 +83,62 @@ function resolveDriverTripChartMeta(chart: Record<string, unknown>[]): InferredC
     };
   }
   return null;
+}
+
+function parseDrilldownDate(raw: unknown): Date | null {
+  if (raw == null || raw === "" || raw === "—") return null;
+  const token = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(token)) {
+    const d = new Date(`${token.slice(0, 10)}T00:00:00Z`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (/^\d{4}-\d{2}$/.test(token)) {
+    const [y, m] = token.split("-");
+    return new Date(Date.UTC(Number(y), Number(m) - 1, 1));
+  }
+  if (/^\d{4}$/.test(token)) {
+    return new Date(Date.UTC(Number(token), 0, 1));
+  }
+  return null;
+}
+
+function buildTripPeriodChartFromDrilldown(
+  drilldown: Record<string, unknown>[],
+  granularity: TimeGranularity = "yearly",
+): Record<string, unknown>[] {
+  const counts: Record<string, number> = {};
+  for (const row of drilldown) {
+    const raw = row.delivery_date ?? row.date ?? row.scheduled_date ?? row.completed_at ?? row.assigned_at;
+    const parsed = parseDrilldownDate(raw);
+    if (!parsed) continue;
+    const period = periodKeyFromDate(parsed, granularity);
+    counts[period] = (counts[period] ?? 0) + 1;
+  }
+  return Object.entries(counts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([period, trip_count]) => ({ period, trip_count }));
+}
+
+export function normalizeDriverFeatureChart(
+  featureKey: string,
+  chart: Record<string, unknown>[],
+  drilldown: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  if (
+    featureKey !== "trip_logs" &&
+    featureKey !== "completed_deliveries" &&
+    featureKey !== "shipment_records"
+  ) {
+    return chart;
+  }
+  if (chart.some((row) => row.period != null && row.trip_count != null)) {
+    return chart;
+  }
+  if (drilldown.length) {
+    const fromDrilldown = buildTripPeriodChartFromDrilldown(drilldown, "yearly");
+    if (fromDrilldown.length) return fromDrilldown;
+  }
+  return chart;
 }
 
 export function driverResolveChartMeta(
@@ -107,16 +165,13 @@ export function driverResolveChartMeta(
   }
   if (
     featureKey === "delivery_confirmation_logs" &&
-    chart.some((row) => row.confirmed_delivery_count != null && row.period != null)
+    chart.some((row) => row.confirmation_status != null && row.count != null)
   ) {
     return {
-      kind: "line",
-      labelKey: "period",
-      valueKey: "confirmed_delivery_count",
-      xKey: "period",
-      yKey: "confirmed_delivery_count",
-      fieldKeys: ["period", "delivery_date", "route", "trip_id", "pod_confirmed", "truck"],
-      monthFromX: true,
+      kind: "pie",
+      labelKey: "confirmation_status",
+      valueKey: "count",
+      fieldKeys: ["confirmation_status", "delivery_date", "route", "trip_id", "pod_confirmed", "truck", "status"],
     };
   }
   if (
@@ -279,6 +334,46 @@ export function driverResolveChartMeta(
     };
   }
   if (
+    (featureKey === "route_history" || featureKey === "past_delivery_routes") &&
+    chart.some((row) => row.region != null && row.trip_count != null)
+  ) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "region",
+      valueKey: "trip_count",
+      xKey: "region",
+      yKey: "trip_count",
+      fieldKeys: ["region", "route", "trip_id", "delivery_date", "trip_status", "truck", "status"],
+    };
+  }
+  if (
+    featureKey === "distance_records" &&
+    chart.some((row) => row.region != null && row.distance_km != null)
+  ) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "region",
+      valueKey: "distance_km",
+      xKey: "region",
+      yKey: "distance_km",
+      fieldKeys: ["region", "route", "trip_id", "delivery_date", "distance_km", "truck"],
+    };
+  }
+  if (
+    featureKey === "shipment_records" &&
+    chart.some((row) => row.period != null && row.trip_count != null)
+  ) {
+    return {
+      kind: "bar",
+      labelKey: "period",
+      valueKey: "trip_count",
+      xKey: "period",
+      yKey: "trip_count",
+      fieldKeys: ["period", "route", "trip_id", "booking_id", "delivery_date", "region", "status", "truck"],
+      monthFromX: true,
+    };
+  }
+  if (
     featureKey === "shipment_records" &&
     chart.some((row) => row.region != null && row.trip_count != null)
   ) {
@@ -294,29 +389,30 @@ export function driverResolveChartMeta(
   return null;
 }
 
+const TRIP_LOGS_PERIOD_NOTE =
+  "Trips by time period (Year → Month → Week → Day). Use Time rollup to change granularity; click a bar to drill down to routes.";
+const COMPLETED_DELIVERIES_PERIOD_NOTE =
+  "Completed deliveries by time period. Use Time rollup and click bars to drill Year → Quarter → Month → Week → Day → Route.";
+
 export function driverFeatureNote(featureKey: string, blockNote?: string | null): string | undefined {
   if (featureKey === "trip_logs") {
-    return (
-      blockNote ??
-      "Trips by delivery status (Completed, Delayed, Ongoing). Use time granularity and click period bars to drill Year → Quarter → Month → Week → Day → Route."
-    );
+    if (blockNote?.toLowerCase().includes("by status")) return TRIP_LOGS_PERIOD_NOTE;
+    return blockNote ?? TRIP_LOGS_PERIOD_NOTE;
   }
   if (featureKey === "completed_deliveries") {
-    return (
-      blockNote ??
-      "Completed deliveries by status (Completed, Delayed, Ongoing). Click period bars to drill Year → Quarter → Month → Week → Day → Route."
-    );
+    if (blockNote?.toLowerCase().includes("by status")) return COMPLETED_DELIVERIES_PERIOD_NOTE;
+    return blockNote ?? COMPLETED_DELIVERIES_PERIOD_NOTE;
   }
   if (featureKey === "travel_time_reports") {
     return (
       blockNote ??
-      "Average travel time (hours) over the selected period. Start at Year view (e.g. 2025), then click points to drill down to Quarter → Month → Week → Day."
+      "Average travel time (hours) over the selected period. Use Time rollup (Month/Week/Day) for finer detail, or click points to drill down."
     );
   }
   if (featureKey === "delivery_confirmation_logs") {
     return (
       blockNote ??
-      "Number of confirmed deliveries over time. Use time granularity and click points to drill Year → Quarter → Month → Week → Day."
+      "Delivery confirmation breakdown (Delivered, Pending, Failed). Click a slice to drill down to matching trip records."
     );
   }
   if (featureKey === "completion_time_prediction") {
@@ -346,7 +442,7 @@ export function driverFeatureNote(featureKey: string, blockNote?: string | null)
   if (featureKey === "trip_progress_updates") {
     return (
       blockNote ??
-      "Trip progress grouped by status (Assigned, In Delivery, Completed, etc.). Click a bar to drill down to matching trips or status updates."
+      "Trip progress by status (En Route, Delayed, Completed, and other lifecycle stages). Click a bar to drill down to matching trips."
     );
   }
   if (featureKey === "delay_likelihood_prediction") {
@@ -379,10 +475,25 @@ export function driverFeatureNote(featureKey: string, blockNote?: string | null)
       "Predicted breakdown risk for each assigned truck. X-axis shows Low, Medium, or High risk."
     );
   }
-  if (featureKey === "shipment_records") {
+  if (featureKey === "route_history" || featureKey === "past_delivery_routes") {
     return (
       blockNote ??
-      "Shipments aggregated by Luzon region (North Luzon, Metro Manila, South Luzon). Click a bar to drill down to individual records."
+      "Trips aggregated by Luzon region (North Luzon, Metro Manila, South Luzon). Click a bar to drill down to individual routes."
+    );
+  }
+  if (featureKey === "distance_records") {
+    return (
+      blockNote ??
+      "Total distance (km) aggregated by Luzon region (North Luzon, Metro Manila, South Luzon). Click a bar to drill down to individual trips."
+    );
+  }
+  if (featureKey === "shipment_records") {
+    if (blockNote?.toLowerCase().includes("luzon region")) {
+      return "Shipments by time period (Year → Month → Week → Day). Use Time rollup to change granularity; click a bar to drill down to locations.";
+    }
+    return (
+      blockNote ??
+      "Shipments by time period (Year → Month → Week → Day). Use Time rollup to change granularity; click a bar to drill down to locations."
     );
   }
   return blockNote ?? undefined;

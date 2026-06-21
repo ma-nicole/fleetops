@@ -1,7 +1,6 @@
 "use client";
 
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import type { AdminAnalyticsPayload, ManagerRoleAnalyticsPayload } from "@/lib/analyticsApi";
 import { managerChartUnit, managerFeatureNote, managerPreferredChartKind, managerResolveChartMeta, normalizeManagerFeatureChart } from "@/lib/managerAnalyticsChartConfig";
 
@@ -63,13 +62,11 @@ const CATEGORY_TABS: AnalyticsCategoryTab[] = [
 export default function ManagerRoleAnalyticsTabs({
   data,
   filterOptions,
-  timeGranularity,
   onPeriodDrillDown,
 }: {
   data: ManagerRoleAnalyticsPayload;
   filterOptions?: AdminAnalyticsPayload["filter_options"];
-  timeGranularity?: TimeGranularity;
-  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
 }) {
   return (
     <RoleAnalyticsGrid
@@ -78,7 +75,6 @@ export default function ManagerRoleAnalyticsTabs({
       featureLabels={FEATURE_LABELS}
       data={data}
       filterOptions={filterOptions}
-      timeGranularity={timeGranularity}
       onPeriodDrillDown={onPeriodDrillDown}
       resolvePreferredChartKind={managerPreferredChartKind}
       resolveChartUnit={managerChartUnit}

@@ -1,7 +1,6 @@
 "use client";
 
 import { RoleAnalyticsGrid, type AnalyticsCategoryTab } from "@/components/admin/RoleAnalyticsGrid";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 import type { AdminAnalyticsPayload, DispatcherRoleAnalyticsPayload } from "@/lib/analyticsApi";
 import { dispatcherChartUnit, dispatcherPreferredChartKind } from "@/lib/dispatcherAnalyticsChartConfig";
 
@@ -62,13 +61,11 @@ const CATEGORY_TABS: AnalyticsCategoryTab[] = [
 export default function DispatcherRoleAnalyticsTabs({
   data,
   filterOptions,
-  timeGranularity,
   onPeriodDrillDown,
 }: {
   data: DispatcherRoleAnalyticsPayload;
   filterOptions?: AdminAnalyticsPayload["filter_options"];
-  timeGranularity?: TimeGranularity;
-  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
 }) {
   return (
     <RoleAnalyticsGrid
@@ -77,7 +74,6 @@ export default function DispatcherRoleAnalyticsTabs({
       featureLabels={FEATURE_LABELS}
       data={data}
       filterOptions={filterOptions}
-      timeGranularity={timeGranularity}
       onPeriodDrillDown={onPeriodDrillDown}
       resolvePreferredChartKind={dispatcherPreferredChartKind}
       resolveChartUnit={dispatcherChartUnit}

@@ -78,6 +78,10 @@ export function filterDrilldownRows(
       return String(row.settlement_status) === selection.label;
     }
 
+    if (selection.fieldKeys.includes("confirmation_status") && row.confirmation_status != null) {
+      return String(row.confirmation_status) === selection.label;
+    }
+
     if (selection.fieldKeys.includes("profile_updated") && row.profile_updated != null) {
       return String(row.profile_updated) === selection.label;
     }
@@ -519,6 +523,14 @@ export function inferChartMeta(
       monthFromX: true,
     };
   }
+  if (keys.includes("confirmation_status") && keys.includes("count")) {
+    return {
+      kind: "pie",
+      labelKey: "confirmation_status",
+      valueKey: "count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "confirmation_status"),
+    };
+  }
   if (keys.includes("settlement_status") && keys.includes("count")) {
     return {
       kind: "pie",
@@ -782,6 +794,25 @@ export function inferChartMeta(
       kind: "horizontalBar",
       labelKey: "region",
       valueKey: "trip_count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "region"),
+    };
+  }
+  if (keys.includes("period") && keys.includes("trip_count")) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "period",
+      valueKey: "trip_count",
+      xKey: "period",
+      yKey: "trip_count",
+      fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
+    };
+  }
+  if (keys.includes("region") && keys.includes("distance_km")) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "region",
+      valueKey: "distance_km",
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "region"),
     };
   }

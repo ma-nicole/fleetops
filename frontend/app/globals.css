@@ -3142,6 +3142,26 @@ html {
   flex-shrink: 0;
 }
 
+.bi-chart-widget__granularity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.bi-chart-widget__granularity-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.tab-pill--compact {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.68rem;
+}
+
 .bi-chart-widget__toolbar {
   display: flex;
   justify-content: flex-end;

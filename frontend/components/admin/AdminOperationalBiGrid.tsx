@@ -6,7 +6,6 @@ import { EmptyChart } from "@/components/admin/AnalyticsCharts";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock } from "@/lib/analyticsApi";
 import { isPopulatedAnalyticsModule } from "@/lib/analyticsApi";
 import type { AnalyticsChartKind } from "@/lib/analyticsChartConfig";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
 
 type WidgetSpec = {
   id: string;
@@ -336,13 +335,11 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
 export function AdminOperationalBiGrid({
   data,
   category,
-  timeGranularity,
   onPeriodDrillDown,
 }: {
   data: AdminAnalyticsPayload;
   category: AdminCategory;
-  timeGranularity?: TimeGranularity;
-  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
 }) {
   const widgets = useMemo(() => buildAdminWidgets(data, category), [data, category]);
   const groupedWidgets = useMemo(() => {
@@ -388,7 +385,6 @@ export function AdminOperationalBiGrid({
                   analyticsMethod={w.analyticsMethod}
                   riskLegend={w.riskLegend}
                   preferredChartKind={w.preferredChartKind}
-                  timeGranularity={timeGranularity}
                   onPeriodDrillDown={onPeriodDrillDown}
                 />
               ))}

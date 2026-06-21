@@ -5,7 +5,7 @@ export const MANAGER_FEATURE_CHART_KINDS: Record<string, AnalyticsChartKind> = {
   performance_reports: "line",
   delivery_success: "line",
   efficiency_improvement: "line",
-  operational_costs: "bar",
+  operational_costs: "horizontalBar",
   maintenance_risk: "line",
   cost_overrun: "line",
   fuel_efficiency: "line",
@@ -203,6 +203,20 @@ export function normalizeManagerFeatureChart(
         (row.historical_disruption_risk != null || row.forecast_disruption_risk != null),
     );
   }
+  if (featureKey === "operational_costs") {
+    const fromChart = chart.filter((row) => row.category != null && row.amount_php != null);
+    if (fromChart.length) return fromChart;
+    const totals: Record<string, number> = {};
+    for (const row of drilldown) {
+      const label = String(row.category ?? row.label ?? "Other").replace(/_/g, " ");
+      const amt = Number(row.amount_php ?? 0);
+      if (!Number.isFinite(amt) || amt <= 0) continue;
+      totals[label] = (totals[label] ?? 0) + amt;
+    }
+    return Object.entries(totals)
+      .sort(([, a], [, b]) => b - a)
+      .map(([category, amount_php]) => ({ category, amount_php: Math.round(amount_php * 100) / 100 }));
+  }
   return chart;
 }
 
@@ -243,6 +257,19 @@ export function managerResolveChartMeta(
       seriesKeys: ["delivery_success_rate"],
       fieldKeys: ["period", "delivery_status", "date"],
       monthFromX: true,
+    };
+  }
+  if (
+    featureKey === "operational_costs" &&
+    chart.some((row) => row.category != null && row.amount_php != null)
+  ) {
+    return {
+      kind: "horizontalBar",
+      labelKey: "category",
+      valueKey: "amount_php",
+      xKey: "category",
+      yKey: "amount_php",
+      fieldKeys: ["category", "amount_php", "expense_date"],
     };
   }
   if (
@@ -427,8 +454,8 @@ export function managerFeatureNote(featureKey: string, blockNote?: string | null
   }
   if (featureKey === "operational_costs") {
     return (
-      "Overall Total Operational Cost. This single-bar chart aggregates fuel, toll, maintenance, " +
-      "and allowance expenses into one macro view of total operational spend in Philippine Peso (PHP)."
+      "Operational cost breakdown by category (fuel, toll, maintenance, allowances). " +
+      "Shows how total operational spend is distributed in Philippine Peso (PHP)."
     );
   }
   if (featureKey === "maintenance_risk") {

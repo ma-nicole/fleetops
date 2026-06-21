@@ -19,8 +19,9 @@ import {
   type SynthesizedChart,
 } from "@/lib/chartDrilldownUtils";
 import { mergeChartKind } from "@/lib/analyticsChartConfig";
-import type { TimeGranularity } from "@/components/admin/TimeGranularityPicker";
-import { dateRangeForPeriod, drillDownFromPeriod } from "@/lib/timePeriodDrilldown";
+import { TimeGranularityPicker, type TimeGranularity } from "@/components/admin/TimeGranularityPicker";
+import { applyWidgetTimeRollup } from "@/lib/timeBucketRollup";
+import { dateRangeForPeriod, drillDownFromPeriod, nextGranularity } from "@/lib/timePeriodDrilldown";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
   return "empty" in block && block.empty === true;
@@ -156,7 +157,6 @@ export function BiChartWidget({
   normalizeFeatureChart,
   resolveFeatureNote,
   loading = false,
-  timeGranularity,
   onPeriodDrillDown,
 }: {
   title: string;
@@ -181,17 +181,23 @@ export function BiChartWidget({
   ) => Record<string, unknown>[];
   resolveFeatureNote?: (featureKey: string, blockNote?: string | null) => string | undefined;
   loading?: boolean;
-  timeGranularity?: TimeGranularity;
-  onPeriodDrillDown?: (next: { granularity: TimeGranularity; dateFrom: string; dateTo: string }) => void;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
 }) {
   const [selection, setSelection] = useState<ChartSelection | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [compareMode, setCompareMode] = useState<"none" | "quarter" | "yoy">("none");
   const [aiLoading, setAiLoading] = useState(false);
+  const [widgetGranularity, setWidgetGranularity] = useState<TimeGranularity>(() =>
+    featureKey === "trip_logs" ||
+    featureKey === "completed_deliveries" ||
+    featureKey === "shipment_records"
+      ? "yearly"
+      : "monthly",
+  );
 
   const empty = isEmptyBlock(block);
   const drilldown = empty ? [] : ((block.drilldown ?? []) as Record<string, unknown>[]);
-  const chart = useMemo(() => {
+  const baseChart = useMemo(() => {
     if (empty) return [];
     let rows = (block.chart ?? []) as Record<string, unknown>[];
     if (featureKey && normalizeFeatureChart) {
@@ -240,15 +246,21 @@ export function BiChartWidget({
     return rows;
   }, [block, drilldown, empty, featureKey, normalizeFeatureChart]);
 
-  const meta = useMemo(() => {
-    const featureMeta = featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, chart) : null;
-    return featureMeta ?? inferChartMeta(chart, drilldown);
-  }, [chart, drilldown, featureKey, resolveFeatureChartMeta]);
+  const baseMeta = useMemo(() => {
+    const featureMeta = featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, baseChart) : null;
+    return featureMeta ?? inferChartMeta(baseChart, drilldown);
+  }, [baseChart, drilldown, featureKey, resolveFeatureChartMeta]);
+
+  const chart = useMemo(() => {
+    if (!baseMeta?.monthFromX) return baseChart;
+    return applyWidgetTimeRollup(baseChart, drilldown, widgetGranularity, baseMeta);
+  }, [baseChart, baseMeta, drilldown, widgetGranularity]);
   const explicitFeatureMeta = useMemo(
     () => (featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, chart) : null),
     [chart, featureKey, resolveFeatureChartMeta],
   );
   const resolvedMeta = useMemo<InferredChartMeta | null>(() => {
+    const meta = explicitFeatureMeta ?? baseMeta;
     if (!meta) return null;
     const truckSeries = ["Cold Chain", "Express Delivery", "Standard Delivery", "Heavy Cargo"].filter(
       (key) => chart.length > 0 && key in chart[0],
@@ -274,7 +286,7 @@ export function BiChartWidget({
       seriesKeys: truckSeries,
       fieldKeys: meta.fieldKeys.includes("truck_type") ? meta.fieldKeys : ["truck_type", "service_sector"],
     };
-  }, [meta, preferredChartKind, chart, explicitFeatureMeta]);
+  }, [baseMeta, preferredChartKind, chart, explicitFeatureMeta]);
   const items = chartRows(chart);
   const columns = inferColumns(drilldown);
 
@@ -317,15 +329,19 @@ export function BiChartWidget({
   }, [chart, comparative, resolvedMeta]);
 
   const openDrill = (payload: ChartClickPayload) => {
-    if (resolvedMeta?.monthFromX && timeGranularity && onPeriodDrillDown) {
-      const next = drillDownFromPeriod(payload.label, timeGranularity);
+    if (resolvedMeta?.monthFromX && onPeriodDrillDown) {
+      const next = drillDownFromPeriod(payload.label, widgetGranularity);
       if (next) {
-        onPeriodDrillDown(next);
-      } else if (timeGranularity === "daily") {
+        setWidgetGranularity(next.granularity);
+        onPeriodDrillDown({ dateFrom: next.dateFrom, dateTo: next.dateTo });
+      } else if (widgetGranularity === "daily") {
         const range = dateRangeForPeriod(payload.label, "daily");
         if (range) {
-          onPeriodDrillDown({ granularity: "daily", dateFrom: range.from, dateTo: range.to });
+          onPeriodDrillDown({ dateFrom: range.from, dateTo: range.to });
         }
+      } else {
+        const finer = nextGranularity(widgetGranularity);
+        if (finer) setWidgetGranularity(finer);
       }
     }
     setSelection(resolvedMeta ? buildSelection(resolvedMeta, payload) : { label: payload.label, displayLabel: payload.label, fieldKeys: [] });
@@ -364,8 +380,10 @@ export function BiChartWidget({
     valueKey: string,
     kind: AnalyticsChartKind = "bar",
     axisLabel = valueKey.replace(/_/g, " "),
-  ) =>
-    wrapChartVisual(
+  ) => {
+    const categoryLabel = labelKey.replace(/_/g, " ");
+    const isHorizontal = kind === "horizontalBar";
+    return wrapChartVisual(
       <RechartsAnalyticsChart
         kind={kind}
         items={chartItems}
@@ -373,8 +391,8 @@ export function BiChartWidget({
         valueKey={valueKey}
         seriesKeys={resolvedMeta?.seriesKeys}
         secondarySeriesKey={resolvedMeta?.secondarySeriesKey}
-        xAxisLabel={labelKey.replace(/_/g, " ")}
-        yAxisLabel={axisLabel}
+        xAxisLabel={isHorizontal ? axisLabel : categoryLabel}
+        yAxisLabel={isHorizontal ? categoryLabel : axisLabel}
         legendLabel={axisLabel}
         onItemClick={openDrill}
         selectedLabel={selection?.label ?? null}
@@ -382,6 +400,7 @@ export function BiChartWidget({
       />,
       chartItems.length,
     );
+  };
 
   const buildChartVisual = () => {
     if (loading) {
@@ -456,6 +475,13 @@ export function BiChartWidget({
         </div>
         {widgetNote ? (
           <p className="bi-chart-widget__subtitle">{widgetNote}</p>
+        ) : null}
+        {resolvedMeta?.monthFromX ? (
+          <TimeGranularityPicker
+            variant="compact"
+            value={widgetGranularity}
+            onChange={setWidgetGranularity}
+          />
         ) : null}
         <p className="bi-chart-widget__hint">
           <span className="bi-chart-widget__hint-icon" aria-hidden>

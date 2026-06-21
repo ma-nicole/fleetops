@@ -14,7 +14,6 @@ import {
   type AdminAnalyticsPayload,
 } from "@/lib/analyticsApi";
 import { ApiError } from "@/lib/api";
-import { TimeGranularityPicker } from "@/components/admin/TimeGranularityPicker";
 import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
 export default function DispatcherAnalyticsDashboard() {
@@ -36,8 +35,6 @@ export default function DispatcherAnalyticsDashboard() {
     setRoute,
     shipmentStatus,
     setShipmentStatus,
-    granularity,
-    setGranularity,
     dateRangeError,
     buildAdminQuery,
   } = useAnalyticsPageFilters();
@@ -71,12 +68,11 @@ export default function DispatcherAnalyticsDashboard() {
   }, [dateRangeError, buildAdminQuery, router]);
 
   const handlePeriodDrillDown = useCallback(
-    (next: { granularity: typeof granularity; dateFrom: string; dateTo: string }) => {
-      setGranularity(next.granularity);
+    (next: { dateFrom: string; dateTo: string }) => {
       setDateFrom(next.dateFrom);
       setDateTo(next.dateTo);
     },
-    [setGranularity, setDateFrom, setDateTo],
+    [setDateFrom, setDateTo],
   );
 
   useEffect(() => {
@@ -147,7 +143,6 @@ export default function DispatcherAnalyticsDashboard() {
             </select>
           </label>
         </div>
-        <TimeGranularityPicker value={granularity} onChange={setGranularity} />
       </section>
 
       {loading && (
@@ -162,7 +157,6 @@ export default function DispatcherAnalyticsDashboard() {
         <DispatcherRoleAnalyticsTabs
           data={data.dispatcher_role_analytics}
           filterOptions={data.filter_options}
-          timeGranularity={granularity}
           onPeriodDrillDown={handlePeriodDrillDown}
         />
       )}

@@ -110,8 +110,9 @@ _TRIP_PROGRESS_STATUS_ORDER = (
     "Departed",
     "Loading",
     "Picked Up",
-    "In Delivery",
     "En Route",
+    "In Delivery",
+    "Delayed",
     "Dropped Off",
     "Completed",
     "Cancelled",
@@ -128,13 +129,38 @@ def _format_trip_progress_status(status: str) -> str:
         "departed": "Departed",
         "loading": "Loading",
         "picked_up": "Picked Up",
-        "in_delivery": "In Delivery",
+        "in_delivery": "En Route",
         "en_route": "En Route",
         "dropped_off": "Dropped Off",
         "completed": "Completed",
         "cancelled": "Cancelled",
+        "delayed": "Delayed",
     }
     return labels.get(normalized, normalized.replace("_", " ").title())
+
+
+def _resolve_trip_progress_status(trip: Trip, ctx: dict) -> str:
+    """Map each trip to a single progress bucket including Delayed and En Route."""
+    if trip.id in ctx.get("delay_logs", {}):
+        return "Delayed"
+    active_values = {s.value for s in ACTIVE_TRIP}
+    status_raw = _status_str(trip.status).lower().replace("-", "_")
+    is_active = status_raw in active_values or status_raw == "pending"
+
+    if is_active:
+        if _trip_is_delayed(trip):
+            return "Delayed"
+        if status_raw in {"in_delivery", "departed", "loading", "accepted", "en_route"}:
+            return "En Route"
+        return _format_trip_progress_status(status_raw)
+
+    if trip.status == TripStatus.COMPLETED:
+        if _trip_is_delayed(trip):
+            return "Delayed"
+        return "Completed"
+    if trip.status == TripStatus.CANCELLED:
+        return "Cancelled"
+    return _format_trip_progress_status(status_raw)
 
 
 def _trip_progress_status_chart(progress_rows: list[dict]) -> list[dict]:
@@ -142,6 +168,23 @@ def _trip_progress_status_chart(progress_rows: list[dict]) -> list[dict]:
     for row in progress_rows:
         status = _format_trip_progress_status(str(row.get("trip_status") or row.get("status") or "Unknown"))
         counts[status] += 1
+    chart: list[dict] = []
+    seen: set[str] = set()
+    for label in _TRIP_PROGRESS_STATUS_ORDER:
+        count = counts.get(label, 0)
+        if count > 0:
+            chart.append({"trip_status": label, "trip_count": count})
+            seen.add(label)
+    for label, count in sorted(counts.items(), key=lambda item: -item[1]):
+        if label not in seen:
+            chart.append({"trip_status": label, "trip_count": count})
+    return chart
+
+
+def _trip_progress_status_chart_from_trips(trips: list[Trip], ctx: dict) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for trip in trips:
+        counts[_resolve_trip_progress_status(trip, ctx)] += 1
     chart: list[dict] = []
     seen: set[str] = set()
     for label in _TRIP_PROGRESS_STATUS_ORDER:
@@ -267,6 +310,23 @@ def _driver_trip_status_category(trip: Trip) -> str:
     return "Ongoing"
 
 
+def _period_counts_from_log_rows(log_rows: list[dict], granularity: str) -> dict[str, int]:
+    """Count trips per period using drilldown delivery_date when ORM activity dates are missing."""
+    period_counts: dict[str, int] = defaultdict(int)
+    for row in log_rows:
+        raw = row.get("delivery_date")
+        if not raw or raw == "—":
+            continue
+        try:
+            ref = date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+        bucket = period_key(ref, granularity)
+        if bucket:
+            period_counts[bucket] += 1
+    return period_counts
+
+
 def _trip_logs_chart(
     trips: list[Trip],
     log_rows: list[dict],
@@ -274,7 +334,7 @@ def _trip_logs_chart(
     *,
     deliveries_only: bool = False,
 ) -> tuple[list[dict], str]:
-    """Status breakdown by default; period buckets for time drill-down; routes on single-day view."""
+    """Period buckets for time drill-down; routes on single-day view; status only when no dates exist."""
     status_order = ("Completed", "Delayed", "Ongoing")
     chart_trips = (
         [trip for trip in trips if trip.status == TripStatus.COMPLETED] if deliveries_only else trips
@@ -304,12 +364,22 @@ def _trip_logs_chart(
         if bucket:
             period_counts[bucket] += 1
 
-    if len(period_counts) >= 2:
+    if not period_counts and log_rows:
+        period_counts = _period_counts_from_log_rows(log_rows, f.granularity)
+
+    if period_counts:
         keys = sort_period_keys(list(period_counts.keys()), f.granularity)
+        if f.granularity == "yearly":
+            if f.date_from and f.date_to:
+                keys = [str(y) for y in range(f.date_from.year, f.date_to.year + 1)]
+            elif keys:
+                years = [int(k) for k in keys if str(k).isdigit()]
+                if years:
+                    keys = [str(y) for y in range(min(years), max(years) + 1)]
         gran_label = f.granularity.replace("_", " ")
         subject = "Completed deliveries" if deliveries_only else "Trips"
         return (
-            [{"period": key, "trip_count": period_counts[key]} for key in keys],
+            [{"period": key, "trip_count": period_counts.get(key, 0)} for key in keys],
             f"{subject} by {gran_label}. Click any bar to drill Year → Quarter → Month → Week → Day → Route.",
         )
 
@@ -413,58 +483,115 @@ def _trip_luzon_region(trip: Trip) -> str:
     return "North Luzon"
 
 
-def _shipment_records_chart(trips: list[Trip]) -> tuple[list[dict], str]:
-    region_counts: dict[str, int] = defaultdict(int)
-    for trip in trips:
-        region_counts[_trip_luzon_region(trip)] += 1
-    chart = [
-        {"region": region, "trip_count": region_counts[region]}
-        for region in LUZON_REGION_ORDER
-        if region_counts.get(region, 0) > 0
-    ]
-    note = (
-        "Shipments aggregated by Luzon region (North Luzon, Metro Manila, South Luzon). "
-        "Click any bar to drill down to individual shipment records."
-    )
-    return chart, note
-
-
-def _delivery_confirmation_chart(
-    confirmation_rows: list[dict],
+def _shipment_records_chart(
+    trips: list[Trip],
+    log_rows: list[dict],
     f: AnalyticsFilters,
 ) -> tuple[list[dict], str]:
-    """Confirmed deliveries per time bucket; respects selected granularity."""
-    today = date.today()
-    countable = [row for row in confirmation_rows if row.get("pod_confirmed")] or confirmation_rows
+    """Shipments per time period for Year → Quarter → Month → Week → Day drill-down."""
     period_counts: dict[str, int] = defaultdict(int)
-    for row in countable:
-        raw = row.get("delivery_date")
-        if not raw or raw == "—":
-            continue
-        try:
-            ref = date.fromisoformat(str(raw)[:10])
-        except ValueError:
-            continue
-        if ref > today:
+    for trip in trips:
+        booking = trip.booking
+        ref = _activity_date(trip.completed_at or trip.assigned_at or (booking.scheduled_date if booking else None))
+        if not ref:
             continue
         bucket = period_key(ref, f.granularity)
         if bucket:
             period_counts[bucket] += 1
 
-    keys = [
-        key
-        for key in sort_period_keys(list(period_counts.keys()), f.granularity)
-        if _period_within_filters(key, f.granularity, f, today=today)
-    ]
-    chart = [
-        {"period": key, "confirmed_delivery_count": period_counts[key]}
-        for key in keys
-        if period_counts[key] > 0
-    ]
+    if not period_counts and log_rows:
+        period_counts = _period_counts_from_log_rows(log_rows, f.granularity)
+
+    if not period_counts:
+        return [], "No shipment records for the selected filters."
+
+    keys = sort_period_keys(list(period_counts.keys()), f.granularity)
+    if f.granularity == "yearly":
+        if f.date_from and f.date_to:
+            keys = [str(y) for y in range(f.date_from.year, f.date_to.year + 1)]
+        elif keys:
+            years = [int(k) for k in keys if str(k).isdigit()]
+            if years:
+                keys = [str(y) for y in range(min(years), max(years) + 1)]
     gran_label = f.granularity.replace("_", " ")
+    chart = [{"period": key, "trip_count": period_counts.get(key, 0)} for key in keys]
     note = (
-        f"Number of confirmed deliveries by {gran_label}. "
-        "Click any point to drill Year → Quarter → Month → Week → Day."
+        f"Shipments by {gran_label}. Use Time rollup and click bars to drill "
+        "Year → Quarter → Month → Week → Day → Location."
+    )
+    return chart, note
+
+
+def _region_trip_count_chart(trips: list[Trip], *, subject: str) -> tuple[list[dict], str]:
+    region_counts: dict[str, int] = defaultdict(int)
+    for trip in trips:
+        region_counts[_trip_luzon_region(trip)] += 1
+    chart = [
+        {"region": region, "trip_count": region_counts.get(region, 0)}
+        for region in LUZON_REGION_ORDER
+    ]
+    note = (
+        f"{subject} aggregated by Luzon region (North Luzon, Metro Manila, South Luzon). "
+        "Click any bar to drill down to individual routes."
+    )
+    return chart, note
+
+
+def _region_distance_chart(trips: list[Trip]) -> tuple[list[dict], str]:
+    region_distance: dict[str, float] = defaultdict(float)
+    for trip in trips:
+        region_distance[_trip_luzon_region(trip)] += float(trip.distance_km or 0)
+    chart = [
+        {"region": region, "distance_km": round(region_distance.get(region, 0), 2)}
+        for region in LUZON_REGION_ORDER
+    ]
+    note = (
+        "Total distance (km) aggregated by Luzon region (North Luzon, Metro Manila, South Luzon). "
+        "Click any bar to drill down to individual trips."
+    )
+    return chart, note
+
+
+def _trip_rows_with_region(
+    trips: list[Trip],
+    ctx: dict,
+    *,
+    fuel_liters_by_trip: dict[int, float],
+    extra: dict | None = None,
+) -> list[dict]:
+    rows: list[dict] = []
+    for trip in trips:
+        row = _trip_row(trip, ctx, fuel_liters_by_trip=fuel_liters_by_trip, extra=extra)
+        row["region"] = _trip_luzon_region(trip)
+        rows.append(row)
+    rows.sort(key=lambda r: r["delivery_date"], reverse=True)
+    return rows
+
+
+_DELIVERY_CONFIRMATION_STATUS_ORDER = ("Delivered", "Pending", "Failed")
+
+
+def _delivery_confirmation_outcome(trip: Trip) -> str:
+    if trip.status == TripStatus.COMPLETED:
+        return "Delivered"
+    if trip.status == TripStatus.CANCELLED:
+        return "Failed"
+    return "Pending"
+
+
+def _delivery_confirmation_chart(trips: list[Trip]) -> tuple[list[dict], str]:
+    """Delivery outcomes for pie chart: Delivered, Pending, Failed."""
+    counts: dict[str, int] = defaultdict(int)
+    for trip in trips:
+        counts[_delivery_confirmation_outcome(trip)] += 1
+    chart = [
+        {"confirmation_status": status, "count": counts.get(status, 0)}
+        for status in _DELIVERY_CONFIRMATION_STATUS_ORDER
+        if counts.get(status, 0) > 0
+    ]
+    note = (
+        "Delivery confirmation breakdown (Delivered, Pending, Failed). "
+        "Click a slice to drill down to matching trip records."
     )
     return chart, note
 
@@ -1016,30 +1143,48 @@ def build_driver_role_analytics(
     ]
     route_rows.sort(key=lambda r: -int(r["trip_count"]))
     total_distance = round(sum(float(t.distance_km or 0) for t in trips), 2)
+    nav_drilldown = _trip_rows_with_region(trips, ctx, fuel_liters_by_trip=fuel_liters_by_trip)
+    history_chart, history_note = _region_trip_count_chart(trips, subject="Route history")
+    _, past_routes_note = _region_trip_count_chart(trips, subject="Past delivery routes")
+    nav_region_kpis = [
+        {"label": "Total trips", "value": len(trips)},
+        {
+            "label": "North Luzon",
+            "value": sum(1 for trip in trips if _trip_luzon_region(trip) == "North Luzon"),
+        },
+        {
+            "label": "Metro Manila",
+            "value": sum(1 for trip in trips if _trip_luzon_region(trip) == "Metro Manila"),
+        },
+    ]
+    nav_region_stats = (
+        compute_statistics([int(row["trip_count"]) for row in history_chart], min_samples=1)
+        if history_chart
+        else None
+    )
 
     nav_desc_history = (
         _empty("No data available yet.")
-        if not route_rows
+        if not trips
         else _block(
-            kpis=[
-                {"label": "Unique routes", "value": len(route_rows)},
-                {"label": "Most used", "value": route_rows[0]["route"][:48] if route_rows else "—"},
-            ],
-            chart=[{"route": row["route"], "trip_count": row["trip_count"]} for row in route_rows[:12]],
-            drilldown=route_rows[:50],
-            note="Route frequency ranked by number of trips driven.",
+            kpis=nav_region_kpis,
+            chart=history_chart,
+            drilldown=nav_drilldown[:50],
+            statistics=nav_region_stats,
+            note=history_note,
         )
     )
 
-    distance_chart = [
-        {"route": route, "distance_km": round(stats["distance_km"], 2)}
-        for route, stats in sorted(route_stats.items(), key=lambda item: -item[1]["distance_km"])[:12]
-    ]
+    distance_chart, distance_note = _region_distance_chart(trips)
     distance_rows = [
         _trip_row(t, ctx, fuel_liters_by_trip=fuel_liters_by_trip, extra={"distance_km": round(float(t.distance_km or 0), 2)})
         for t in trips
         if (t.distance_km or 0) > 0
     ]
+    for row in distance_rows:
+        trip = next((t for t in trips if t.id == row["trip_id"]), None)
+        if trip:
+            row["region"] = _trip_luzon_region(trip)
     nav_desc_distance = (
         _empty("No data available yet.")
         if not distance_rows
@@ -1048,11 +1193,21 @@ def build_driver_role_analytics(
             chart=distance_chart,
             drilldown=distance_rows[:50],
             statistics=compute_statistics([float(r["distance_km"]) for r in distance_rows], min_samples=1),
-            note="Total distance (km) aggregated per route.",
+            note=distance_note,
         )
     )
 
-    nav_desc_past_routes = nav_desc_history
+    nav_desc_past_routes = (
+        _empty("No data available yet.")
+        if not trips
+        else _block(
+            kpis=nav_region_kpis,
+            chart=history_chart,
+            drilldown=nav_drilldown[:50],
+            statistics=nav_region_stats,
+            note=past_routes_note,
+        )
+    )
 
     routes_with_hours = [r for r in route_rows if r["avg_travel_hours"] != "—"]
     routes_with_hours.sort(key=lambda r: float(r["avg_travel_hours"]))
@@ -1091,47 +1246,48 @@ def build_driver_role_analytics(
     # ------------------------------------------------------------------ #
     # 3. DELIVERY REPORTING
     # ------------------------------------------------------------------ #
-    confirmation_rows = []
-    for trip in completed:
-        booking = trip.booking
-        confirmation_rows.append(
+    confirmation_drilldown = []
+    for trip in trips:
+        confirmation_drilldown.append(
             _trip_row(
                 trip,
                 ctx,
                 fuel_liters_by_trip=fuel_liters_by_trip,
                 extra={
                     "pod_confirmed": bool(getattr(trip, "proof_of_delivery", None) or getattr(trip, "pod_notes", None)),
+                    "confirmation_status": _delivery_confirmation_outcome(trip),
                 },
             )
         )
-    confirm_chart, confirm_note = _delivery_confirmation_chart(confirmation_rows, f)
+    confirmation_drilldown.sort(key=lambda r: r["delivery_date"], reverse=True)
+    confirm_chart, confirm_note = _delivery_confirmation_chart(trips)
+    delivered_count = sum(1 for trip in trips if _delivery_confirmation_outcome(trip) == "Delivered")
+    pending_count = sum(1 for trip in trips if _delivery_confirmation_outcome(trip) == "Pending")
+    failed_count = sum(1 for trip in trips if _delivery_confirmation_outcome(trip) == "Failed")
     report_desc_confirm = (
         _empty("No data available yet.")
-        if not confirmation_rows
+        if not trips
         else _block(
             kpis=[
-                {"label": "Delivered", "value": len(confirmation_rows)},
-                {"label": "With POD", "value": sum(1 for r in confirmation_rows if r.get("pod_confirmed"))},
+                {"label": "Delivered", "value": delivered_count},
+                {"label": "Pending", "value": pending_count},
+                {"label": "Failed", "value": failed_count},
             ],
             chart=confirm_chart,
-            drilldown=confirmation_rows[:50],
-            statistics=compute_statistics(
-                [float(row["confirmed_delivery_count"]) for row in confirm_chart],
-                min_samples=1,
-            )
+            drilldown=confirmation_drilldown[:50],
+            statistics=compute_statistics([float(row["count"]) for row in confirm_chart], min_samples=1)
             if confirm_chart
             else None,
             note=confirm_note,
         )
     )
 
-    shipment_chart, shipment_note = _shipment_records_chart(trips)
-    shipment_drilldown = []
-    for trip in trips:
-        row = _trip_row(trip, ctx, fuel_liters_by_trip=fuel_liters_by_trip)
-        row["region"] = _trip_luzon_region(trip)
-        shipment_drilldown.append(row)
+    shipment_drilldown = [
+        _trip_row(t, ctx, fuel_liters_by_trip=fuel_liters_by_trip, extra={"region": _trip_luzon_region(t)})
+        for t in trips
+    ]
     shipment_drilldown.sort(key=lambda r: r["delivery_date"], reverse=True)
+    shipment_chart, shipment_note = _shipment_records_chart(trips, shipment_drilldown, f)
     report_desc_shipments = (
         _empty("No data available yet.")
         if not trips
@@ -1139,12 +1295,8 @@ def build_driver_role_analytics(
             kpis=[
                 {"label": "Total shipments", "value": len(trips)},
                 {
-                    "label": "Metro Manila",
-                    "value": sum(1 for trip in trips if _trip_luzon_region(trip) == "Metro Manila"),
-                },
-                {
-                    "label": "North Luzon",
-                    "value": sum(1 for trip in trips if _trip_luzon_region(trip) == "North Luzon"),
+                    "label": "Completed",
+                    "value": sum(1 for trip in trips if trip.status == TripStatus.COMPLETED),
                 },
             ],
             chart=shipment_chart,
@@ -1373,46 +1525,71 @@ def build_driver_role_analytics(
             if not trip:
                 continue
             ref = _activity_date(upd.created_at)
+            display_status = _format_trip_progress_status(upd.status)
             progress_rows.append(
                 _trip_row(
                     trip,
                     ctx,
                     fuel_liters_by_trip=fuel_liters_by_trip,
                     extra={
-                        "trip_status": _format_trip_progress_status(upd.status),
-                        "status": _format_trip_progress_status(upd.status),
+                        "trip_status": display_status,
+                        "status": display_status,
                         "update_at": ref.isoformat() if ref else "—",
                     },
                 )
             )
     if not progress_rows:
         for trip in trips:
+            display_status = _resolve_trip_progress_status(trip, ctx)
             progress_rows.append(
                 _trip_row(
                     trip,
                     ctx,
                     fuel_liters_by_trip=fuel_liters_by_trip,
                     extra={
-                        "trip_status": _format_trip_progress_status(_status_str(trip.status)),
+                        "trip_status": display_status,
+                        "status": display_status,
                     },
                 )
             )
-    progress_chart = _trip_progress_status_chart(progress_rows)
+    else:
+        trip_progress_drilldown = []
+        for trip in trips:
+            display_status = _resolve_trip_progress_status(trip, ctx)
+            trip_progress_drilldown.append(
+                _trip_row(
+                    trip,
+                    ctx,
+                    fuel_liters_by_trip=fuel_liters_by_trip,
+                    extra={
+                        "trip_status": display_status,
+                        "status": display_status,
+                    },
+                )
+            )
+        if trip_progress_drilldown:
+            progress_rows = trip_progress_drilldown + progress_rows
+
+    progress_chart = _trip_progress_status_chart_from_trips(trips, ctx)
 
     status_desc_progress = (
         _empty("No data available yet.")
         if not progress_rows
         else _block(
             kpis=[
-                {"label": "Status updates", "value": len(progress_rows)},
-                {"label": "Distinct statuses", "value": len(progress_chart)},
+                {"label": "Trips tracked", "value": len(trips)},
+                {"label": "Delayed", "value": sum(1 for trip in trips if _resolve_trip_progress_status(trip, ctx) == "Delayed")},
+                {"label": "En Route", "value": sum(1 for trip in trips if _resolve_trip_progress_status(trip, ctx) == "En Route")},
             ],
             chart=progress_chart,
             drilldown=progress_rows[:50],
             statistics=compute_statistics([float(r["trip_count"]) for r in progress_chart], min_samples=1)
             if progress_chart
             else None,
-            note="Trip progress grouped by status. Click a bar to drill down to matching trips or status updates.",
+            note=(
+                "Trip progress by status (En Route, Delayed, Completed, and other lifecycle stages). "
+                "Click a bar to drill down to matching trips or status updates."
+            ),
         )
     )
 

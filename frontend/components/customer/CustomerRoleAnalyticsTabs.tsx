@@ -62,13 +62,20 @@ const CATEGORY_TABS: AnalyticsCategoryTab[] = [
   },
 ];
 
-export default function CustomerRoleAnalyticsTabs({ data }: { data: CustomerRoleAnalyticsPayload }) {
+export default function CustomerRoleAnalyticsTabs({
+  data,
+  onPeriodDrillDown,
+}: {
+  data: CustomerRoleAnalyticsPayload;
+  onPeriodDrillDown?: (next: { dateFrom: string; dateTo: string }) => void;
+}) {
   return (
     <RoleAnalyticsGrid
       dashboardTitle="Customer Analytics"
       categoryTabs={CATEGORY_TABS}
       featureLabels={FEATURE_LABELS}
       data={data}
+      onPeriodDrillDown={onPeriodDrillDown}
       resolvePreferredChartKind={customerPreferredChartKind}
       resolveChartUnit={customerChartUnit}
       resolveFeatureChartMeta={customerResolveChartMeta}

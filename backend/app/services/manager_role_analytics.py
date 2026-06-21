@@ -2159,8 +2159,16 @@ def build_manager_role_analytics(
             ],
             chart=[
                 {
+                    "category": row["label"],
+                    "amount_php": round(float(row.get("amount_php") or 0), 2),
+                }
+                for row in (expenses.get("expense_breakdown") or [])
+                if float(row.get("amount_php") or 0) > 0
+            ]
+            or [
+                {
                     "category": "Total Operational Cost",
-                    "total_operational_cost_php": round(
+                    "amount_php": round(
                         float(expenses.get("summary", {}).get("total_operational_cost_php") or 0),
                         2,
                     ),
@@ -2168,8 +2176,8 @@ def build_manager_role_analytics(
             ],
             drilldown=(expenses.get("drilldown") or {}).get("records") or [],
             note=(
-                "Overall Total Operational Cost. This single-bar chart aggregates fuel, toll, maintenance, "
-                "and allowance expenses into one macro view of total operational spend (PHP)."
+                "Operational cost breakdown by category (fuel, toll, maintenance, allowances). "
+                "Aggregates trip and maintenance expenses into a readable category view (PHP)."
             ),
         )
     )
