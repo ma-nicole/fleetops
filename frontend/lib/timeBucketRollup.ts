@@ -19,7 +19,21 @@ const SERIES_CATEGORY_FIELDS = [
   "activity_type",
   "category",
   "record_type",
+  "confirmation_status",
+  "delay_cause",
+  "dispatch_event",
+  "cause",
 ] as const;
+
+/** Charts that stay categorical (region/route/scatter) — no time rollup picker. */
+const ROLLUP_EXCLUDED_FEATURES = new Set([
+  "route_history",
+  "distance_records",
+  "past_delivery_routes",
+  "fuel_usage_prediction",
+  "travel_time_estimation",
+  "optimal_route_prediction",
+]);
 
 function parseDateToken(raw: unknown): Date | null {
   if (raw == null || raw === "" || raw === "—") return null;
@@ -320,6 +334,76 @@ function fillYearRange(
     filled.push(byYear.get(key) ?? periodChartRow(key, { [valueKey]: 0 }));
   }
   return filled;
+}
+
+function countLikeValueKey(valueKey: string): boolean {
+  return (
+    valueKey === "count" ||
+    valueKey.endsWith("_count") ||
+    valueKey === "trip_count" ||
+    valueKey === "frequency" ||
+    valueKey === "report_count" ||
+    valueKey === "deliveries"
+  );
+}
+
+/** Enable per-widget time rollup when chart or drilldown supports period bucketing. */
+export function augmentMetaForTimeRollup(
+  meta: InferredChartMeta | null,
+  chart: Record<string, unknown>[],
+  drilldown: Record<string, unknown>[],
+  featureKey?: string,
+): InferredChartMeta | null {
+  if (!meta || meta.monthFromX) return meta;
+  if (featureKey && ROLLUP_EXCLUDED_FEATURES.has(featureKey)) return meta;
+  if (meta.kind === "scatter") return meta;
+
+  const axisKey = meta.xKey ?? meta.labelKey;
+  if (axisKey === "period" || axisKey === "month") {
+    return { ...meta, monthFromX: true, xKey: axisKey, labelKey: axisKey };
+  }
+
+  const dateField = detectDrilldownDateField(drilldown);
+  if (!dateField || drilldown.length < 1) return meta;
+
+  if (meta.kind === "pie" && meta.labelKey && meta.valueKey === "count" && chart.length >= 2) {
+    const categoryKey = meta.labelKey;
+    const categories = chart
+      .map((row) => String(row[categoryKey] ?? ""))
+      .filter((label) => label.length > 0);
+    if (categories.length >= 2) {
+      return {
+        ...meta,
+        kind: "stackedBar",
+        monthFromX: true,
+        xKey: "period",
+        labelKey: "period",
+        yKey: categories[0],
+        valueKey: categories[0],
+        seriesKeys: categories,
+        fieldKeys: meta.fieldKeys.includes(dateField) ? meta.fieldKeys : [...meta.fieldKeys, dateField],
+      };
+    }
+  }
+
+  const valueKey = countLikeValueKey(meta.valueKey) ? meta.valueKey : "count";
+  const rollupKind =
+    meta.kind === "pie" || meta.kind === "pareto" || meta.kind === "heatmap"
+      ? "bar"
+      : meta.kind === "horizontalBar"
+        ? "bar"
+        : meta.kind;
+
+  return {
+    ...meta,
+    kind: rollupKind,
+    monthFromX: true,
+    xKey: "period",
+    labelKey: "period",
+    yKey: valueKey,
+    valueKey,
+    fieldKeys: meta.fieldKeys.includes(dateField) ? meta.fieldKeys : [...meta.fieldKeys, dateField],
+  };
 }
 
 export function applyWidgetTimeRollup(

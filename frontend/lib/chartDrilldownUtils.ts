@@ -323,6 +323,7 @@ export function inferChartMeta(
       yKey: "login",
       seriesKeys: ["login", "logout", "password_reset", "profile_update"],
       fieldKeys: ["period", "activity_type"],
+      monthFromX: true,
     };
   }
 
@@ -700,6 +701,7 @@ export function inferChartMeta(
       xKey: "period",
       yKey,
       fieldKeys: inferDrilldownFieldKeys(chart, drilldown, "period"),
+      monthFromX: true,
     };
   }
   if (keys.includes("category") && keys.includes("amount_php")) {

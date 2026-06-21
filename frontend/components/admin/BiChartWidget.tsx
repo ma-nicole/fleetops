@@ -20,7 +20,7 @@ import {
 } from "@/lib/chartDrilldownUtils";
 import { mergeChartKind } from "@/lib/analyticsChartConfig";
 import { TimeGranularityPicker, type TimeGranularity } from "@/components/admin/TimeGranularityPicker";
-import { applyWidgetTimeRollup } from "@/lib/timeBucketRollup";
+import { applyWidgetTimeRollup, augmentMetaForTimeRollup } from "@/lib/timeBucketRollup";
 import { dateRangeForPeriod, drillDownFromPeriod, nextGranularity } from "@/lib/timePeriodDrilldown";
 
 function isEmptyBlock(block: RoleAnalyticsFeatureBlock): block is { empty: true; message: string } {
@@ -248,7 +248,8 @@ export function BiChartWidget({
 
   const baseMeta = useMemo(() => {
     const featureMeta = featureKey && resolveFeatureChartMeta ? resolveFeatureChartMeta(featureKey, baseChart) : null;
-    return featureMeta ?? inferChartMeta(baseChart, drilldown);
+    const inferred = featureMeta ?? inferChartMeta(baseChart, drilldown);
+    return augmentMetaForTimeRollup(inferred, baseChart, drilldown, featureKey);
   }, [baseChart, drilldown, featureKey, resolveFeatureChartMeta]);
 
   const chart = useMemo(() => {
