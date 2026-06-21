@@ -9,7 +9,10 @@ the time-series model prefers 12 months).
 Usage:
   python seed_db.py                    # seed only if DB has no users
   python seed_db.py --force            # drop all tables, recreate, then seed (destructive)
+  python seed_db.py --force --history-start 2023-01-01
+  python seed_db.py --force --bookings 250 --interval-days 5
   python seed_db.py --repair-passwords # re-bcrypt every user as password "password" (local dev fix)
+  python seed_db.py --resume           # fill missing tables after an interrupted seed (non-destructive)
 """
 from __future__ import annotations
 
@@ -59,6 +62,15 @@ from app.models.entities import (  # noqa: E402
     VehicleIssueReport,
     VehicleIssueReportStatus,
 )
+from app.services.seed_data_generator import (  # noqa: E402
+    SeedHistoryConfig,
+    booking_count_for_span,
+    booking_status_for,
+    days_ago_for_seq,
+    maintenance_days_ago,
+    parse_seed_date,
+    scheduled_date_for_seq,
+)
 
 
 def repair_user_password_hashes() -> None:
@@ -80,7 +92,200 @@ def repair_user_password_hashes() -> None:
         print(f"[OK] Re-hashed passwords for {len(users)} user(s). All use password: password")
 
 
-def seed_database(*, force: bool = False) -> None:
+def _table_count(db: Session, model) -> int:
+    return db.query(model).count()
+
+
+def resume_seed_database() -> None:
+    """Fill tables left empty by an interrupted seed — does not drop existing data."""
+    if not settings.database_url or settings.database_url.startswith("sqlite"):
+        raise SystemExit("ERROR: Set DATABASE_URL to a MySQL connection string.")
+
+    engine = create_engine(settings.database_url, pool_pre_ping=True)
+    history_config = SeedHistoryConfig(history_start=date(2023, 1, 1), history_end=date.today())
+
+    with Session(engine) as db:
+        users = db.query(User).all()
+        if not users:
+            raise SystemExit("[ERROR] No users found — run full seed first (python seed_db.py --force).")
+
+        bookings = db.query(Booking).all()
+        trips = db.query(Trip).all()
+        trucks = db.query(Truck).all()
+        drivers = [u for u in users if u.role == UserRole.DRIVER]
+        manager = next((u for u in users if u.role == UserRole.MANAGER), None)
+        if not bookings or not trips or not trucks or not manager:
+            raise SystemExit("[ERROR] Incomplete core data — run full seed with --force instead.")
+
+        print(f"[INFO] Resuming seed — users={len(users)}, bookings={len(bookings)}, trips={len(trips)}", flush=True)
+
+        if _table_count(db, HistoricalTollRecord) == 0:
+            toll_history: list[HistoricalTollRecord] = []
+            for trip in trips:
+                if trip.status != TripStatus.COMPLETED or not trip.completed_at:
+                    continue
+                booking = next(b for b in bookings if b.id == trip.booking_id)
+                estimated = float(trip.toll_cost or 0)
+                actual = round(estimated * (0.92 + (trip.id % 5) * 0.03), 2)
+                toll_history.append(
+                    HistoricalTollRecord(
+                        trip_id=trip.id,
+                        booking_id=trip.booking_id,
+                        route_label=f"{booking.pickup_location} → {booking.dropoff_location}",
+                        origin=booking.pickup_location,
+                        destination=booking.dropoff_location,
+                        estimated_toll=estimated,
+                        actual_toll=actual,
+                        toll_variance=round(actual - estimated, 2),
+                        completed_at=trip.completed_at,
+                    )
+                )
+            db.add_all(toll_history)
+            db.commit()
+            print(f"[OK] Historical toll records: {len(toll_history)}", flush=True)
+        else:
+            print("[SKIP] Historical toll records already present", flush=True)
+
+        if _table_count(db, MaintenanceRecord) == 0:
+            pareto_demo_issues = [
+                "Engine overheating", "Engine failure", "Engine misfire", "Engine oil leak",
+                "Engine stall", "Engine knocking", "Engine malfunction", "Tire puncture",
+                "Tire blowout", "Tire wear detected", "Tire flat", "Tire damage", "Tire replacement",
+                "Brake failure", "Brake fluid leak", "Brake pad worn", "Electrical fault",
+                "Electrical wiring issue", "Battery electrical issue", "Suspension problem",
+                "Suspension noise", "Suspension worn", "Coolant fluid leak", "Hydraulic fluid leak",
+                "Oil fluid leak",
+            ]
+            db.add_all(
+                [
+                    MaintenanceRecord(
+                        truck_id=trucks[idx % len(trucks)].id,
+                        reported_issue=issue,
+                        severity="high" if idx % 5 == 0 else "medium" if idx % 2 == 0 else "low",
+                        predicted_risk_score=round(0.25 + (idx % 7) * 0.1, 2),
+                        status=(
+                            MaintenanceStatus.HIGH_RISK
+                            if idx % 6 == 0
+                            else MaintenanceStatus.IN_SERVICE
+                            if idx % 3 == 0
+                            else MaintenanceStatus.LOW_RISK
+                        ),
+                        estimated_cost=2500 + (idx * 350),
+                        created_at=datetime.utcnow()
+                        - timedelta(days=maintenance_days_ago(idx, len(pareto_demo_issues), history_config)),
+                    )
+                    for idx, issue in enumerate(pareto_demo_issues)
+                ]
+            )
+            db.commit()
+            print(f"[OK] Maintenance records: {len(pareto_demo_issues)}", flush=True)
+        else:
+            print("[SKIP] Maintenance records already present", flush=True)
+
+        if _table_count(db, AttendanceRecord) == 0:
+            attendance = [
+                AttendanceRecord(
+                    user_id=driver.id,
+                    check_in_time=datetime.utcnow() - timedelta(days=day, hours=2),
+                    status="present",
+                )
+                for driver in drivers
+                for day in range(5)
+            ]
+            db.add_all(attendance)
+            db.commit()
+            print(f"[OK] Attendance records: {len(attendance)}", flush=True)
+        else:
+            print("[SKIP] Attendance records already present", flush=True)
+
+        if _table_count(db, Transaction) == 0:
+            transactions: list[Transaction] = []
+            for booking in bookings:
+                if booking.status in (BookingStatus.PENDING_APPROVAL, BookingStatus.REJECTED):
+                    continue
+                transactions.append(
+                    Transaction(
+                        booking_id=booking.id,
+                        customer_id=booking.customer_id,
+                        type="booking",
+                        amount=booking.estimated_cost,
+                    )
+                )
+            db.add_all(transactions)
+            db.flush()
+            print(f"[OK] Transactions: {len(transactions)}", flush=True)
+
+            payments: list[Payment] = []
+            for tx in transactions:
+                booking = next(b for b in bookings if b.id == tx.booking_id)
+                trip = next((t for t in trips if t.booking_id == booking.id), None)
+                paid = booking.status == BookingStatus.COMPLETED
+                paid_at = trip.completed_at if paid and trip and trip.completed_at else None
+                payments.append(
+                    Payment(
+                        booking_id=booking.id,
+                        transaction_id=tx.id,
+                        customer_id=booking.customer_id,
+                        method="gcash" if tx.id % 2 == 0 else "bank_transfer",
+                        amount=booking.estimated_cost,
+                        status=PaymentStatus.VERIFIED if paid else PaymentStatus.FOR_VERIFICATION,
+                        reference=f"PAY-{1000 + booking.id}",
+                        paid_at=paid_at,
+                    )
+                )
+            db.add_all(payments)
+            db.commit()
+            print(f"[OK] Payments: {len(payments)}", flush=True)
+        else:
+            print("[SKIP] Transactions/payments already present", flush=True)
+
+        if _table_count(db, Feedback) == 0:
+            feedback = [
+                Feedback(
+                    booking_id=booking.id,
+                    customer_id=booking.customer_id,
+                    category="service",
+                    rating=5 if booking.id % 3 != 0 else 4,
+                    message="Smooth delivery, thanks!",
+                )
+                for booking in bookings
+                if booking.status == BookingStatus.COMPLETED
+            ]
+            db.add_all(feedback)
+            db.commit()
+            print(f"[OK] Feedback: {len(feedback)}", flush=True)
+        else:
+            print("[SKIP] Feedback already present", flush=True)
+
+        if _table_count(db, JobOrder) == 0:
+            job_orders = [
+                JobOrder(
+                    booking_id=booking.id,
+                    issued_by_manager_id=manager.id,
+                    instructions="Standard handling",
+                )
+                for booking in bookings
+                if booking.status in (BookingStatus.APPROVED, BookingStatus.ASSIGNED)
+            ]
+            db.add_all(job_orders)
+            db.commit()
+            print(f"[OK] Job orders: {len(job_orders)}", flush=True)
+        else:
+            print("[SKIP] Job orders already present", flush=True)
+
+    print("\n" + "=" * 60, flush=True)
+    print("DONE: Resume seed completed successfully.", flush=True)
+    print("=" * 60, flush=True)
+
+
+def seed_database(
+    *,
+    force: bool = False,
+    history_start: date | None = None,
+    history_end: date | None = None,
+    interval_days: int = 6,
+    booking_count: int | None = None,
+) -> None:
     if not settings.database_url or settings.database_url.startswith("sqlite"):
         raise SystemExit(
             "ERROR: SQLite is not supported.\n"
@@ -169,37 +374,30 @@ def seed_database(*, force: bool = False) -> None:
             PricingConfig(service_type=ServiceType.CUSTOMIZED, base_rate=3500, labor_rate=180, helper_rate=120),
         ])
 
-        # ----------- Bookings & trips spread over 18 months -----------
-        today = date.today()
+        # ----------- Bookings & trips spread over configurable history span -----------
+        history_config = SeedHistoryConfig(
+            history_start=history_start or date(2023, 1, 1),
+            history_end=history_end or date.today(),
+            interval_days=interval_days,
+        )
+        anchor = history_config.history_end
+        total_bookings = booking_count if booking_count is not None else booking_count_for_span(history_config)
+        print(
+            f"[INFO] History span: {history_config.history_start.isoformat()} -> "
+            f"{history_config.history_end.isoformat()} ({total_bookings} bookings, "
+            f"every {history_config.interval_days}d)"
+        )
         bookings: list[Booking] = []
         trips: list[Trip] = []
         ISSUE_TYPES = ["traffic", "mechanical", "weather", "customs", "loading_delay"]
         REPORT_TYPES = ["delay", "traffic", "route_deviation", "customs_hold"]
-        total_bookings = 96
 
         for seq in range(total_bookings):
             customer = customers[seq % len(customers)]
-            days_ago = 14 + (seq * 6)
-            scheduled = today - timedelta(days=days_ago)
+            days_ago = days_ago_for_seq(seq, total_bookings, history_config)
+            scheduled = scheduled_date_for_seq(seq, total_bookings, history_config)
             route = routes[seq % len(routes)]
-
-            if days_ago > 45:
-                status = BookingStatus.COMPLETED
-            elif days_ago > 14:
-                status = BookingStatus.COMPLETED if seq % 6 != 0 else BookingStatus.ASSIGNED
-            elif seq % 4 == 0:
-                status = BookingStatus.OUT_FOR_DELIVERY
-            elif seq % 4 == 1:
-                status = BookingStatus.LOADING
-            elif seq % 4 == 2:
-                status = BookingStatus.ASSIGNED
-            elif seq % 4 == 3:
-                status = BookingStatus.APPROVED
-            else:
-                status = BookingStatus.PENDING_APPROVAL
-
-            if seq >= total_bookings - 2:
-                status = BookingStatus.PENDING_APPROVAL
+            status = booking_status_for(seq, days_ago, total_bookings)
 
             booking = Booking(
                 customer_id=customer.id,
@@ -239,7 +437,7 @@ def seed_database(*, force: bool = False) -> None:
                 if booking.status == BookingStatus.LOADING
                 else TripStatus.ASSIGNED
             )
-            days_ago = (today - booking.scheduled_date).days if booking.scheduled_date else idx + 1
+            days_ago = (anchor - booking.scheduled_date).days if booking.scheduled_date else idx + 1
             completed_at = (
                 datetime.utcnow() - timedelta(days=max(days_ago - 1, 1), hours=idx % 8)
                 if trip_status == TripStatus.COMPLETED
@@ -254,6 +452,19 @@ def seed_database(*, force: bool = False) -> None:
             toll_cost = round(distance_km * 1.5, 2)
             labor_cost = round((distance_km / 50) * 120, 2)
             predicted_total = round(fuel_cost + toll_cost + labor_cost + (idx * 12), 2)
+
+            helper_progress: str | None = None
+            estimated_delivery: datetime | None = None
+            if trip_status == TripStatus.IN_DELIVERY:
+                helper_progress = "en_route"
+                estimated_delivery = (
+                    datetime.utcnow() - timedelta(hours=2)
+                    if idx % 8 == 0
+                    else datetime.utcnow() + timedelta(hours=3)
+                )
+            elif trip_status in (TripStatus.LOADING, TripStatus.ASSIGNED, TripStatus.ACCEPTED):
+                helper_progress = "for_pickup"
+                estimated_delivery = datetime.utcnow() + timedelta(hours=5)
 
             trip = Trip(
                 booking_id=booking.id,
@@ -281,60 +492,77 @@ def seed_database(*, force: bool = False) -> None:
                 arrival_delivery_time=completed_at,
                 completed_at=completed_at,
                 proof_of_delivery=f"https://podstore.example.com/pods/{idx}.png" if completed_at else None,
+                helper_progress_status=helper_progress,
+                estimated_delivery_time=estimated_delivery,
             )
             trips.append(trip)
 
         db.add_all(trips)
         db.flush()
-        print(f"[OK] Trips: {len(trips)}")
+        print(f"[OK] Trips: {len(trips)}", flush=True)
+        db.commit()
+        print("[OK] Committed core booking/trip data", flush=True)
 
         for idx, trip in enumerate(trips):
-            if trip.status != TripStatus.COMPLETED or not trip.completed_at:
-                continue
-            if idx % 4 == 0:
-                issue_type = ISSUE_TYPES[idx % len(ISSUE_TYPES)]
-                trip_issues.append(
-                    TripIssue(
-                        trip_id=trip.id,
-                        reported_by_id=trip.driver_id,
-                        issue_type=issue_type,
-                        description=f"{issue_type.replace('_', ' ').title()} reported during trip execution",
-                        severity="high" if issue_type in ("mechanical", "weather") else "medium",
-                        resolved=idx % 8 != 0,
-                        created_at=trip.completed_at - timedelta(hours=2),
+            if trip.status == TripStatus.COMPLETED and trip.completed_at:
+                if idx % 4 == 0:
+                    issue_type = ISSUE_TYPES[idx % len(ISSUE_TYPES)]
+                    trip_issues.append(
+                        TripIssue(
+                            trip_id=trip.id,
+                            reported_by_id=trip.driver_id,
+                            issue_type=issue_type,
+                            description=f"{issue_type.replace('_', ' ').title()} reported during trip execution",
+                            severity="high" if issue_type in ("mechanical", "weather") else "medium",
+                            resolved=idx % 8 != 0,
+                            created_at=trip.completed_at - timedelta(hours=2),
+                        )
                     )
-                )
-            if idx % 5 == 0:
+                if idx % 5 == 0:
+                    operational_logs.append(
+                        OperationalLog(
+                            booking_id=trip.booking_id,
+                            trip_id=trip.id,
+                            dispatcher_id=dispatcher.id,
+                            report_type=REPORT_TYPES[idx % len(REPORT_TYPES)],
+                            priority_level="high" if idx % 10 == 0 else "medium",
+                            operational_details="Delay logged from dispatcher operations center during monitoring.",
+                            created_at=trip.completed_at - timedelta(hours=1),
+                        )
+                    )
+                if idx % 7 == 0:
+                    vehicle_issues.append(
+                        VehicleIssueReport(
+                            booking_id=trip.booking_id,
+                            trip_id=trip.id,
+                            truck_id=trip.truck_id,
+                            driver_id=trip.driver_id,
+                            helper_id=trip.helper_id,
+                            issue_type="breakdown" if idx % 14 == 0 else "warning_light",
+                            priority="high" if idx % 14 == 0 else "medium",
+                            description="Vehicle issue observed during or after trip completion.",
+                            status=VehicleIssueReportStatus.RESOLVED if idx % 3 == 0 else VehicleIssueReportStatus.SUBMITTED,
+                        )
+                    )
+            elif trip.status != TripStatus.CANCELLED and idx % 8 == 0:
                 operational_logs.append(
                     OperationalLog(
                         booking_id=trip.booking_id,
                         trip_id=trip.id,
                         dispatcher_id=dispatcher.id,
-                        report_type=REPORT_TYPES[idx % len(REPORT_TYPES)],
-                        priority_level="high" if idx % 10 == 0 else "medium",
-                        operational_details="Delay logged from dispatcher operations center during monitoring.",
-                        created_at=trip.completed_at - timedelta(hours=1),
-                    )
-                )
-            if idx % 7 == 0:
-                vehicle_issues.append(
-                    VehicleIssueReport(
-                        booking_id=trip.booking_id,
-                        trip_id=trip.id,
-                        truck_id=trip.truck_id,
-                        driver_id=trip.driver_id,
-                        helper_id=trip.helper_id,
-                        issue_type="breakdown" if idx % 14 == 0 else "warning_light",
-                        priority="high" if idx % 14 == 0 else "medium",
-                        description="Vehicle issue observed during or after trip completion.",
-                        status=VehicleIssueReportStatus.RESOLVED if idx % 3 == 0 else VehicleIssueReportStatus.SUBMITTED,
+                        report_type="delay",
+                        priority_level="high",
+                        operational_details="Active trip past ETA — delay flagged from operations center.",
+                        created_at=datetime.utcnow() - timedelta(hours=1),
                     )
                 )
 
         db.add_all(operational_logs)
         db.add_all(trip_issues)
         db.add_all(vehicle_issues)
-        print(f"[OK] Operational logs: {len(operational_logs)}, trip issues: {len(trip_issues)}, vehicle issues: {len(vehicle_issues)}")
+        print(f"[OK] Operational logs: {len(operational_logs)}, trip issues: {len(trip_issues)}, vehicle issues: {len(vehicle_issues)}", flush=True)
+        db.commit()
+        print("[OK] Committed operational logs", flush=True)
 
         # ----------- Fuel & toll logs for completed trips -----------
         fuel_logs: list[FuelLog] = []
@@ -386,6 +614,8 @@ def seed_database(*, force: bool = False) -> None:
         db.add_all(toll_logs)
         db.add_all(completion_reports)
         db.add_all(prediction_feedback)
+        db.commit()
+        print(f"[OK] Fuel/toll/completion records: {len(fuel_logs)}", flush=True)
 
         toll_history: list[HistoricalTollRecord] = []
         for trip in trips:
@@ -408,7 +638,8 @@ def seed_database(*, force: bool = False) -> None:
                 )
             )
         db.add_all(toll_history)
-        print(f"[OK] Historical toll records: {len(toll_history)}")
+        print(f"[OK] Historical toll records: {len(toll_history)}", flush=True)
+        db.commit()
 
         # ----------- Maintenance -----------
         pareto_demo_issues = [
@@ -438,6 +669,7 @@ def seed_database(*, force: bool = False) -> None:
             "Hydraulic fluid leak",
             "Oil fluid leak",
         ]
+        maintenance_count = len(pareto_demo_issues)
         db.add_all(
             [
                 MaintenanceRecord(
@@ -447,11 +679,14 @@ def seed_database(*, force: bool = False) -> None:
                     predicted_risk_score=round(0.25 + (idx % 7) * 0.1, 2),
                     status=MaintenanceStatus.HIGH_RISK if idx % 6 == 0 else MaintenanceStatus.IN_SERVICE if idx % 3 == 0 else MaintenanceStatus.LOW_RISK,
                     estimated_cost=2500 + (idx * 350),
-                    created_at=datetime.utcnow() - timedelta(days=idx * 3),
+                    created_at=datetime.utcnow()
+                    - timedelta(days=maintenance_days_ago(idx, maintenance_count, history_config)),
                 )
                 for idx, issue in enumerate(pareto_demo_issues)
             ]
         )
+        db.commit()
+        print(f"[OK] Maintenance records: {maintenance_count}", flush=True)
 
         # ----------- Attendance -----------
         attendance = [
@@ -460,6 +695,8 @@ def seed_database(*, force: bool = False) -> None:
             for day in range(5)
         ]
         db.add_all(attendance)
+        db.commit()
+        print("[OK] Committed fuel, toll, maintenance, and attendance", flush=True)
 
         # ----------- Transactions + Payments -----------
         transactions: list[Transaction] = []
@@ -493,7 +730,9 @@ def seed_database(*, force: bool = False) -> None:
                 paid_at=paid_at,
             ))
         db.add_all(payments)
-        print(f"[OK] Payments: {len(payments)}")
+        print(f"[OK] Payments: {len(payments)}", flush=True)
+        db.commit()
+        print("[OK] Committed payments", flush=True)
 
         # ----------- Feedback -----------
         feedback = []
@@ -540,12 +779,47 @@ if __name__ == "__main__":
         help="Drop all tables first (destructive), then recreate schema and seed.",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Fill missing tables after an interrupted seed (non-destructive).",
+    )
+    parser.add_argument(
         "--repair-passwords",
         action="store_true",
         help="Re-bcrypt every user's password as 'password' (fixes UnknownHashError / plain-text legacy rows).",
     )
+    parser.add_argument(
+        "--history-start",
+        default="2023-01-01",
+        help="Earliest scheduled booking date (ISO, default: 2023-01-01).",
+    )
+    parser.add_argument(
+        "--history-end",
+        default=None,
+        help="History anchor date / 'today' (ISO, default: today).",
+    )
+    parser.add_argument(
+        "--interval-days",
+        type=int,
+        default=6,
+        help="Days between procedurally generated bookings (default: 6).",
+    )
+    parser.add_argument(
+        "--bookings",
+        type=int,
+        default=None,
+        help="Override auto-computed booking count for the history span.",
+    )
     args = parser.parse_args()
     if args.repair_passwords:
         repair_user_password_hashes()
+    elif args.resume:
+        resume_seed_database()
     else:
-        seed_database(force=args.force)
+        seed_database(
+            force=args.force,
+            history_start=parse_seed_date(args.history_start),
+            history_end=parse_seed_date(args.history_end) if args.history_end else None,
+            interval_days=args.interval_days,
+            booking_count=args.bookings,
+        )

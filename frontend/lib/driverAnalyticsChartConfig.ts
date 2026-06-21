@@ -412,7 +412,7 @@ export function driverFeatureNote(featureKey: string, blockNote?: string | null)
   if (featureKey === "delivery_confirmation_logs") {
     return (
       blockNote ??
-      "Delivery confirmation breakdown (Delivered, Pending, Failed). Click a slice to drill down to matching trip records."
+      "Delivery confirmation breakdown (Delivered, For Pick Up, En Route, Delayed, Failed). Click a slice to drill down to matching trip records."
     );
   }
   if (featureKey === "completion_time_prediction") {

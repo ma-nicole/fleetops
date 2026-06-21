@@ -436,7 +436,9 @@ const RECEIPT_SETTLEMENT_COLORS: Record<string, string> = {
 
 const DELIVERY_CONFIRMATION_COLORS: Record<string, string> = {
   Delivered: "#2D6A4F",
-  Pending: "#F4A261",
+  "For Pick Up": "#42A5F5",
+  "En Route": "#7E57C2",
+  Delayed: "#FF7043",
   Failed: "#E53935",
 };
 

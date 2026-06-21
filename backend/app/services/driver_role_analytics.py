@@ -568,29 +568,54 @@ def _trip_rows_with_region(
     return rows
 
 
-_DELIVERY_CONFIRMATION_STATUS_ORDER = ("Delivered", "Pending", "Failed")
+_DELIVERY_CONFIRMATION_STATUS_ORDER = (
+    "Delivered",
+    "For Pick Up",
+    "En Route",
+    "Delayed",
+    "Failed",
+)
 
 
-def _delivery_confirmation_outcome(trip: Trip) -> str:
-    if trip.status == TripStatus.COMPLETED:
-        return "Delivered"
+def _delivery_confirmation_outcome(trip: Trip, ctx: dict | None = None) -> str:
+    """Map each trip to a delivery confirmation bucket for the pie chart."""
+    ctx = ctx or {}
     if trip.status == TripStatus.CANCELLED:
         return "Failed"
-    return "Pending"
+    if trip.id in ctx.get("delay_logs", {}):
+        return "Delayed"
+    if trip.status == TripStatus.COMPLETED:
+        return "Delivered"
+    if _trip_is_delayed(trip):
+        return "Delayed"
+
+    helper_progress = (trip.helper_progress_status or "").strip().lower().replace("-", "_")
+    if helper_progress == "en_route":
+        return "En Route"
+    if helper_progress in {"for_pickup", "picked_up"}:
+        return "For Pick Up"
+
+    status_raw = _status_str(trip.status).lower().replace("-", "_")
+    if status_raw in {"in_delivery", "departed", "en_route"}:
+        return "En Route"
+    if status_raw in {"accepted", "assigned", "loading", "for_pickup", "picked_up", "pending"}:
+        return "For Pick Up"
+    return "For Pick Up"
 
 
-def _delivery_confirmation_chart(trips: list[Trip]) -> tuple[list[dict], str]:
-    """Delivery outcomes for pie chart: Delivered, Pending, Failed."""
+def _delivery_confirmation_chart(trips: list[Trip], ctx: dict | None = None) -> tuple[list[dict], str]:
+    """Delivery outcomes for pie chart across the full trip lifecycle."""
+    ctx = ctx or {}
     counts: dict[str, int] = defaultdict(int)
     for trip in trips:
-        counts[_delivery_confirmation_outcome(trip)] += 1
+        counts[_delivery_confirmation_outcome(trip, ctx)] += 1
     chart = [
         {"confirmation_status": status, "count": counts.get(status, 0)}
         for status in _DELIVERY_CONFIRMATION_STATUS_ORDER
         if counts.get(status, 0) > 0
     ]
     note = (
-        "Delivery confirmation breakdown (Delivered, Pending, Failed). "
+        "Delivery confirmation breakdown (Delivered, For Pick Up, En Route, Delayed, Failed). "
         "Click a slice to drill down to matching trip records."
     )
     return chart, note
@@ -1255,24 +1280,25 @@ def build_driver_role_analytics(
                 fuel_liters_by_trip=fuel_liters_by_trip,
                 extra={
                     "pod_confirmed": bool(getattr(trip, "proof_of_delivery", None) or getattr(trip, "pod_notes", None)),
-                    "confirmation_status": _delivery_confirmation_outcome(trip),
+                    "confirmation_status": _delivery_confirmation_outcome(trip, ctx),
                 },
             )
         )
     confirmation_drilldown.sort(key=lambda r: r["delivery_date"], reverse=True)
-    confirm_chart, confirm_note = _delivery_confirmation_chart(trips)
-    delivered_count = sum(1 for trip in trips if _delivery_confirmation_outcome(trip) == "Delivered")
-    pending_count = sum(1 for trip in trips if _delivery_confirmation_outcome(trip) == "Pending")
-    failed_count = sum(1 for trip in trips if _delivery_confirmation_outcome(trip) == "Failed")
+    confirm_counts: dict[str, int] = defaultdict(int)
+    for trip in trips:
+        confirm_counts[_delivery_confirmation_outcome(trip, ctx)] += 1
+    confirm_chart, confirm_note = _delivery_confirmation_chart(trips, ctx)
+    confirm_kpis = [
+        {"label": label, "value": confirm_counts[label]}
+        for label in _DELIVERY_CONFIRMATION_STATUS_ORDER
+        if confirm_counts.get(label, 0) > 0
+    ]
     report_desc_confirm = (
         _empty("No data available yet.")
         if not trips
         else _block(
-            kpis=[
-                {"label": "Delivered", "value": delivered_count},
-                {"label": "Pending", "value": pending_count},
-                {"label": "Failed", "value": failed_count},
-            ],
+            kpis=confirm_kpis,
             chart=confirm_chart,
             drilldown=confirmation_drilldown[:50],
             statistics=compute_statistics([float(row["count"]) for row in confirm_chart], min_samples=1)

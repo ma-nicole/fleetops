@@ -10,6 +10,10 @@ import { ERROR_LOAD_DATA } from "@/lib/loadingMessages";
 import { AnalyticsApi, type DriverAnalyticsPayload } from "@/lib/analyticsApi";
 import { useAnalyticsPageFilters } from "@/lib/useAnalyticsPageFilters";
 
+function endOfCurrentYear(): string {
+  return `${new Date().getFullYear()}-12-31`;
+}
+
 export default function DriverAnalyticsDashboard() {
   const [data, setData] = useState<DriverAnalyticsPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,8 +32,8 @@ export default function DriverAnalyticsDashboard() {
     dateRangeError,
     buildRoleQuery,
   } = useAnalyticsPageFilters({
-    dateFrom: "2025-01-01",
-    dateTo: "2025-12-31",
+    dateFrom: "2023-01-01",
+    dateTo: endOfCurrentYear(),
   });
 
   const load = useCallback(async () => {
