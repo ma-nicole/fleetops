@@ -94,17 +94,6 @@ export function inferAnalyticsType(
     }
     return "Predictive";
   }
-  if (
-    key.includes("risk") ||
-    key.includes("variance") ||
-    key.includes("overrun") ||
-    key.includes("fluctuation") ||
-    key.includes("issue") ||
-    key.includes("breakdown") ||
-    key.includes("delay")
-  ) {
-    return "Diagnostic";
-  }
   return "Descriptive";
 }
 

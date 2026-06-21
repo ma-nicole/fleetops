@@ -146,13 +146,15 @@ export function RoleAnalyticsGrid({
   }, [activeTab, categoryTabs, data, featureLabels, resolvePreferredChartKind]);
 
   const groupedWidgets = useMemo(() => {
-    const buckets: Record<WidgetDef["analyticsType"], WidgetDef[]> = {
+    const buckets: Record<Exclude<WidgetDef["analyticsType"], "Diagnostic">, WidgetDef[]> = {
       Descriptive: [],
-      Diagnostic: [],
       Predictive: [],
       Prescriptive: [],
     };
-    for (const w of widgets) buckets[w.analyticsType].push(w);
+    for (const w of widgets) {
+      const bucket = w.analyticsType === "Diagnostic" ? "Descriptive" : w.analyticsType;
+      buckets[bucket].push(w);
+    }
     return buckets;
   }, [widgets]);
 
@@ -182,7 +184,6 @@ export function RoleAnalyticsGrid({
           {(
             [
               ["Descriptive", "Descriptive Analytics"],
-              ["Diagnostic", "Diagnostic Analytics"],
               ["Predictive", "Predictive Analytics"],
               ["Prescriptive", "Prescriptive Analytics"],
             ] as const

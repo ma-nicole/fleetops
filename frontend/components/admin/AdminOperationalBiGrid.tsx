@@ -82,7 +82,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.drilldown ?? [],
       ),
       comp?.expenses,
-      { analyticsType: "Diagnostic", analyticsMethod: "Revenue-cost variance analysis", preferredChartKind: "combo" },
+      { analyticsType: "Descriptive", analyticsMethod: "Revenue-cost variance analysis", preferredChartKind: "combo" },
     );
     add(
       "profit-margin",
@@ -92,7 +92,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         fin.drilldown ?? [],
       ),
       comp?.revenue,
-      { analyticsType: "Diagnostic", analyticsMethod: "Margin trend analysis", preferredChartKind: "line" },
+      { analyticsType: "Descriptive", analyticsMethod: "Margin trend analysis", preferredChartKind: "line" },
     );
     if (fin.revenue_per_client?.length) {
       add(
@@ -201,7 +201,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           data.expenses.drilldown?.records ?? [],
         ),
         undefined,
-        { analyticsType: "Diagnostic", analyticsMethod: "Cost concentration by truck", preferredChartKind: "horizontalBar" },
+        { analyticsType: "Descriptive", analyticsMethod: "Cost concentration by truck", preferredChartKind: "horizontalBar" },
       );
     }
   }
@@ -267,7 +267,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           routes.drilldown,
         ),
         undefined,
-        { analyticsType: "Diagnostic", analyticsMethod: "Route cost variance analysis", preferredChartKind: "horizontalBar" },
+        { analyticsType: "Descriptive", analyticsMethod: "Route cost variance analysis", preferredChartKind: "horizontalBar" },
       );
     }
     if (isPopulatedAnalyticsModule(data.toll_analytics)) {
@@ -283,7 +283,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
           tolls.drilldown as unknown as Record<string, unknown>[],
         ),
         undefined,
-        { analyticsType: "Diagnostic", analyticsMethod: "Route toll outlier ranking", preferredChartKind: "horizontalBar" },
+        { analyticsType: "Descriptive", analyticsMethod: "Route toll outlier ranking", preferredChartKind: "horizontalBar" },
       );
       add(
         "toll-trends",
@@ -325,7 +325,7 @@ function buildAdminWidgets(data: AdminAnalyticsPayload, category: AdminCategory)
         clients.drilldown,
       ),
       comp?.revenue,
-      { analyticsType: "Diagnostic", analyticsMethod: "Revenue contribution analysis", preferredChartKind: "horizontalBar" },
+      { analyticsType: "Descriptive", analyticsMethod: "Revenue contribution analysis", preferredChartKind: "horizontalBar" },
     );
   }
 
@@ -343,14 +343,15 @@ export function AdminOperationalBiGrid({
 }) {
   const widgets = useMemo(() => buildAdminWidgets(data, category), [data, category]);
   const groupedWidgets = useMemo(() => {
-    const buckets: Record<NonNullable<WidgetSpec["analyticsType"]>, WidgetSpec[]> = {
+    const buckets: Record<Exclude<NonNullable<WidgetSpec["analyticsType"]>, "Diagnostic">, WidgetSpec[]> = {
       Descriptive: [],
-      Diagnostic: [],
       Predictive: [],
       Prescriptive: [],
     };
     for (const widget of widgets) {
-      buckets[widget.analyticsType ?? "Descriptive"].push(widget);
+      const type = widget.analyticsType ?? "Descriptive";
+      const bucket = type === "Diagnostic" ? "Descriptive" : type;
+      buckets[bucket].push(widget);
     }
     return buckets;
   }, [widgets]);
@@ -364,7 +365,6 @@ export function AdminOperationalBiGrid({
       {(
         [
           ["Descriptive", "Descriptive Analytics"],
-          ["Diagnostic", "Diagnostic Analytics"],
           ["Predictive", "Predictive Analytics"],
           ["Prescriptive", "Prescriptive Analytics"],
         ] as const
