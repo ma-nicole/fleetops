@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ApiError, apiResetPassword } from "@/lib/api";
-import { validateConfirmPassword, validateCustomerPassword } from "@/lib/formValidation";
+import PasswordRequirements from "@/components/auth/PasswordRequirements";
+import {
+  AUTH_PASSWORD_MAX_LENGTH,
+  sanitizeAuthPassword,
+  validateConfirmPassword,
+  validateCustomerPassword,
+} from "@/lib/formValidation";
 
 function ResetPasswordForm() {
   const params = useSearchParams();
@@ -13,6 +19,7 @@ function ResetPasswordForm() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ newPassword?: string; confirmPassword?: string }>({});
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -21,30 +28,32 @@ function ResetPasswordForm() {
     setError(null);
     setMessage(null);
 
-    if (!token) {
+    const nextFieldErrors: { newPassword?: string; confirmPassword?: string } = {};
+
+    if (!token.trim()) {
       setError("Reset token is missing. Open the reset link from your email.");
       return;
     }
-    const pwErr = validateCustomerPassword(newPassword);
-    if (pwErr) {
-      setError(pwErr);
-      return;
-    }
-    const confirmErr = validateConfirmPassword(newPassword, confirmPassword);
-    if (confirmErr) {
-      setError(confirmErr);
-      return;
-    }
+
+    const safePassword = sanitizeAuthPassword(newPassword);
+    const pwErr = validateCustomerPassword(safePassword);
+    if (pwErr) nextFieldErrors.newPassword = pwErr;
+
+    const confirmErr = validateConfirmPassword(safePassword, sanitizeAuthPassword(confirmPassword));
+    if (confirmErr) nextFieldErrors.confirmPassword = confirmErr;
+
+    setFieldErrors(nextFieldErrors);
+    if (Object.keys(nextFieldErrors).length > 0) return;
 
     setIsSubmitting(true);
     try {
-      const res = await apiResetPassword(token, newPassword);
+      const res = await apiResetPassword(token.trim(), safePassword);
       setMessage(res.message || "Password updated successfully.");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      if (err instanceof ApiError) setError(err.message || "Unable to reset password.");
-      else setError("Unable to reset password.");
+      if (err instanceof ApiError) setError(err.message || "Unable to reset password. Please try again.");
+      else setError("Unable to reset password. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -53,6 +62,7 @@ function ResetPasswordForm() {
   return (
     <form
       onSubmit={submit}
+      noValidate
       style={{
         maxWidth: "460px",
         margin: "0 auto",
@@ -74,21 +84,53 @@ function ResetPasswordForm() {
         <input
           type="password"
           value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="At least 8 characters"
-          style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
+          maxLength={AUTH_PASSWORD_MAX_LENGTH}
+          autoComplete="new-password"
+          aria-invalid={!!fieldErrors.newPassword}
+          onChange={(e) => {
+            setNewPassword(sanitizeAuthPassword(e.target.value));
+            if (fieldErrors.newPassword) setFieldErrors((prev) => ({ ...prev, newPassword: undefined }));
+          }}
+          placeholder="Create a strong password"
+          style={{
+            padding: "0.7rem",
+            border: fieldErrors.newPassword ? "1px solid #DC2626" : "1px solid #D1D5DB",
+            borderRadius: "6px",
+          }}
         />
+        {fieldErrors.newPassword ? (
+          <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
+            {fieldErrors.newPassword}
+          </span>
+        ) : null}
       </label>
+
+      <PasswordRequirements password={newPassword} />
 
       <label style={{ display: "grid", gap: "0.35rem" }}>
         <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Confirm password</span>
         <input
           type="password"
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          maxLength={AUTH_PASSWORD_MAX_LENGTH}
+          autoComplete="new-password"
+          aria-invalid={!!fieldErrors.confirmPassword}
+          onChange={(e) => {
+            setConfirmPassword(sanitizeAuthPassword(e.target.value));
+            if (fieldErrors.confirmPassword) setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+          }}
           placeholder="Repeat your new password"
-          style={{ padding: "0.7rem", border: "1px solid #D1D5DB", borderRadius: "6px" }}
+          style={{
+            padding: "0.7rem",
+            border: fieldErrors.confirmPassword ? "1px solid #DC2626" : "1px solid #D1D5DB",
+            borderRadius: "6px",
+          }}
         />
+        {fieldErrors.confirmPassword ? (
+          <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
+            {fieldErrors.confirmPassword}
+          </span>
+        ) : null}
       </label>
 
       {error ? (

@@ -557,7 +557,26 @@ export type Payment = {
   proof_uploaded_at?: string | null;
   proof_file_url?: string | null;
   reviewed_at?: string | null;
+  xendit_qr_id?: string | null;
+  xendit_payment_id?: string | null;
+  xendit_invoice_id?: string | null;
+  xendit_external_id?: string | null;
+  xendit_status?: "PENDING" | "PAID" | "EXPIRED" | "FAILED" | string | null;
+  xendit_qr_string?: string | null;
+  xendit_expires_at?: string | null;
+  xendit_paid_at?: string | null;
   created_at: string;
+};
+
+export type XenditConfig = {
+  enabled: boolean;
+  public_key: string | null;
+};
+
+export type XenditPaymentSession = {
+  payment: Payment;
+  qr_string: string | null;
+  xendit_status: string | null;
 };
 
 export type ScheduleTimelineResource = {
@@ -978,6 +997,10 @@ export const WorkflowApi = {
   refundPayment: (payment_id: number, reason?: string) =>
     apiPost<Payment>(`/payments/${payment_id}/refund`, { reason }),
   bookingPayments: (booking_id: number) => apiGet<Payment[]>(`/payments/booking/${booking_id}`),
+  xenditConfig: () => apiGet<XenditConfig>("/payments/xendit/config"),
+  createXenditSession: (booking_id: number) =>
+    apiPost<XenditPaymentSession>(`/payments/xendit/session/${booking_id}`, {}),
+  getXenditSession: (booking_id: number) => apiGet<XenditPaymentSession>(`/payments/xendit/session/${booking_id}`),
 
   // Feedback
   submitFeedback: (payload: {

@@ -199,6 +199,14 @@ def apply_runtime_schema_fixes() -> None:
             ("proof_uploaded_at", dt_null),
             ("reviewed_at", dt_null),
             ("reviewed_by_id", int_null),
+            ("xendit_qr_id", "VARCHAR(64) NULL"),
+            ("xendit_payment_id", "VARCHAR(64) NULL"),
+            ("xendit_invoice_id", "VARCHAR(64) NULL"),
+            ("xendit_external_id", "VARCHAR(128) NULL"),
+            ("xendit_status", "VARCHAR(32) NULL"),
+            ("xendit_qr_string", "VARCHAR(2048) NULL"),
+            ("xendit_expires_at", dt_null),
+            ("xendit_paid_at", dt_null),
         ]
         for col, ddl_suffix in additions:
             if col not in pay_cols:

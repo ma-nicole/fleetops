@@ -3,38 +3,41 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ApiError, apiForgotPassword } from "@/lib/api";
-import { isValidEmail } from "@/lib/formValidation";
+import {
+  AUTH_EMAIL_MAX_LENGTH,
+  sanitizeAuthEmail,
+  validateForgotPasswordEmail,
+} from "@/lib/formValidation";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setFieldError(null);
     setMessage(null);
 
-    const mail = email.trim();
-    if (!mail) {
-      setError("Email is required.");
-      return;
-    }
-    if (!isValidEmail(mail)) {
-      setError("Enter a valid email address.");
+    const emailErr = validateForgotPasswordEmail(email);
+    if (emailErr) {
+      setFieldError(emailErr);
       return;
     }
 
+    const mail = sanitizeAuthEmail(email);
     setIsSubmitting(true);
     try {
       const res = await apiForgotPassword(mail);
       setMessage(res.message || "If the email exists, a password reset link has been sent.");
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message || "Unable to reset password.");
+        setError(err.message || "Unable to send reset link. Please try again.");
       } else {
-        setError("Unable to reset password.");
+        setError("Unable to send reset link. Please try again.");
       }
     } finally {
       setIsSubmitting(false);
@@ -45,6 +48,7 @@ export default function ForgotPasswordPage() {
     <main style={{ minHeight: "100vh", background: "#FAFAFA", padding: "var(--page-main-padding)" }}>
       <form
         onSubmit={submit}
+        noValidate
         style={{
           maxWidth: "460px",
           margin: "0 auto",
@@ -66,14 +70,26 @@ export default function ForgotPasswordPage() {
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            maxLength={AUTH_EMAIL_MAX_LENGTH}
+            autoComplete="email"
+            inputMode="email"
+            aria-invalid={!!fieldError}
+            onChange={(e) => {
+              setEmail(sanitizeAuthEmail(e.target.value));
+              if (fieldError) setFieldError(null);
+            }}
             placeholder="you@example.com"
             style={{
               padding: "0.7rem",
-              border: "1px solid #D1D5DB",
+              border: fieldError ? "1px solid #DC2626" : "1px solid #D1D5DB",
               borderRadius: "6px",
             }}
           />
+          {fieldError ? (
+            <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
+              {fieldError}
+            </span>
+          ) : null}
         </label>
 
         {error ? (
@@ -109,4 +125,3 @@ export default function ForgotPasswordPage() {
     </main>
   );
 }
-

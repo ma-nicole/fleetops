@@ -11,9 +11,26 @@ type Props = {
   bookingId: number;
   total: number;
   gcashBlocked: boolean;
+  xenditEnabled?: boolean;
+  xenditQrString?: string | null;
+  xenditStatus?: string | null;
+  xenditLoading?: boolean;
+  xenditError?: string | null;
+  onRetryXendit?: () => void;
 };
 
-export default function PaymentMethodInstructions({ method, bookingId, total, gcashBlocked }: Props) {
+export default function PaymentMethodInstructions({
+  method,
+  bookingId,
+  total,
+  gcashBlocked,
+  xenditEnabled = false,
+  xenditQrString,
+  xenditStatus,
+  xenditLoading,
+  xenditError,
+  onRetryXendit,
+}: Props) {
   const option = getPaymentMethodOption(method);
 
   const panelStyle: CSSProperties = {
@@ -27,11 +44,20 @@ export default function PaymentMethodInstructions({ method, bookingId, total, gc
   if (method === "gcash" && !gcashBlocked) {
     return (
       <div style={{ display: "grid", gap: "1rem" }}>
-        <GcashQrPaymentSection bookingId={bookingId} total={total} />
+        <GcashQrPaymentSection
+          bookingId={bookingId}
+          total={total}
+          xenditQrString={xenditEnabled ? xenditQrString : null}
+          xenditStatus={xenditEnabled ? xenditStatus : null}
+          xenditLoading={xenditEnabled ? xenditLoading : false}
+          xenditError={xenditEnabled ? xenditError : null}
+          onRetryXendit={xenditEnabled ? onRetryXendit : undefined}
+        />
         <div style={panelStyle}>
           <p style={{ color: "#666666", margin: 0, fontSize: "0.9rem" }}>
-            Use only the official FleetOps GCash merchant account. Do not send payment to numbers from unofficial
-            channels.
+            {xenditEnabled
+              ? "Payments are processed securely through Xendit. Your booking is confirmed automatically once GCash payment succeeds."
+              : "Use only the official FleetOps GCash merchant account. Do not send payment to numbers from unofficial channels."}
           </p>
         </div>
       </div>

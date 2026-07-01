@@ -822,6 +822,14 @@ class Payment(Base):
     proof_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    xendit_qr_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    xendit_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    xendit_invoice_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    xendit_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    xendit_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    xendit_qr_string: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    xendit_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    xendit_paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     @property

@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.password_policy import MAX_PASSWORD_LENGTH
 from app.core.security import (
     create_access_token,
     get_current_user,
@@ -105,6 +106,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             status_code=423,
             detail=f"Account locked. Try again in {int(delta.total_seconds() // 60) + 1} minutes",
         )
+
+    if len(form_data.password or "") > MAX_PASSWORD_LENGTH:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not verify_password(form_data.password, user.password_hash or ""):
         user.failed_login_count = (user.failed_login_count or 0) + 1

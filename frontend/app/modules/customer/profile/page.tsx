@@ -11,7 +11,10 @@ import { DEFAULT_DIAL_CODE } from "@/lib/dialCodes";
 import {
   buildInternationalPhone,
   isValidEmail,
+  sanitizeAuthPassword,
   splitInternationalPhone,
+  validateConfirmPassword,
+  validateCustomerPassword,
   validateFullName,
   validateOptionalInternationalPhone,
 } from "@/lib/formValidation";
@@ -144,25 +147,31 @@ export default function CustomerProfilePage() {
   const handleChangePassword = async () => {
     setPwError(null);
     setPwSuccess(null);
-    if (!currentPassword.trim()) {
+    const safeCurrent = sanitizeAuthPassword(currentPassword);
+    const safeNew = sanitizeAuthPassword(newPassword);
+    const safeConfirm = sanitizeAuthPassword(confirmPassword);
+
+    if (!safeCurrent.trim()) {
       setPwError("Enter your current password.");
       return;
     }
-    if (!newPassword || newPassword.length < 8) {
-      setPwError("New password must be at least 8 characters.");
+    const pwErr = validateCustomerPassword(safeNew);
+    if (pwErr) {
+      setPwError(pwErr);
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setPwError("New password and confirmation do not match.");
+    const confirmErr = validateConfirmPassword(safeNew, safeConfirm);
+    if (confirmErr) {
+      setPwError(confirmErr);
       return;
     }
-    if (currentPassword === newPassword) {
+    if (safeCurrent === safeNew) {
       setPwError("Choose a new password that is different from your current one.");
       return;
     }
     setPwSubmitting(true);
     try {
-      const res = await apiChangePassword(currentPassword, newPassword);
+      const res = await apiChangePassword(safeCurrent, safeNew);
       setPwSuccess(res.message || "Password updated.");
       setCurrentPassword("");
       setNewPassword("");
@@ -404,7 +413,7 @@ export default function CustomerProfilePage() {
         >
           <h3 style={{ color: "#1A1A1A", margin: "0 0 0.35rem 0" }}>Change password</h3>
           <p style={{ color: "#666666", fontSize: "0.9rem", margin: "0 0 1rem 0" }}>
-            For your security, enter your current password and choose a new one (at least 8 characters).
+            For your security, enter your current password and choose a new one that meets the strength requirements.
           </p>
           {pwSuccess && (
             <div role="status" style={{ background: "#D1FAE5", color: "#047857", padding: 12, borderRadius: 8, marginBottom: "1rem" }}>

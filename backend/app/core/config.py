@@ -149,6 +149,22 @@ class Settings(BaseSettings):
         description="Toll deduction ₱ per booking leg (admin Calculations tab).",
     )
 
+    # Xendit payments (GCash QR)
+    xendit_secret_key: str | None = Field(default=None, description="Xendit secret API key")
+    xendit_public_key: str | None = Field(default=None, description="Xendit public API key (optional, for client-side)")
+    xendit_webhook_token: str | None = Field(
+        default=None,
+        description="Xendit callback verification token (x-callback-token header).",
+    )
+    xendit_webhook_base_url: str | None = Field(
+        default=None,
+        description="Public HTTPS base URL for Xendit webhooks, e.g. https://api.example.com",
+    )
+    backend_public_url: str | None = Field(
+        default="http://127.0.0.1:8000",
+        description="Public backend URL used to build webhook callbacks when XENDIT_WEBHOOK_BASE_URL is unset.",
+    )
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -213,6 +229,10 @@ class Settings(BaseSettings):
                 "Set FRONTEND_URL and/or CORS_ORIGINS to your approved domains."
             )
         return self
+
+    @property
+    def xendit_enabled(self) -> bool:
+        return bool((self.xendit_secret_key or "").strip())
 
     @property
     def resolved_uploads_root(self) -> Path:

@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from app.services.upload_urls import media_type_for_path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -31,15 +31,21 @@ from app.constants.gcash_payment import (
 )
 from app.constants.payment_limits import GCASH_MAX_TRANSACTION_PHP
 from app.constants.payment_methods import ALLOWED_PAYMENT_METHODS, PROOF_OPTIONAL_METHODS
+from app.core.config import settings
 from app.core.paths import uploads_root, uploads_subdir
 from app.schemas.payment import (
     FinanceSummary,
     PaymentCreate,
     PaymentRead,
     PaymentRefundRequest,
+    XenditConfigRead,
+    XenditPaymentSessionRead,
 )
 from app.services.notifications import send_email_notification
 from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
+from app.services.payment_verification import mark_payment_and_booking_verified
+from app.services.xendit_client import xendit_configured
+from app.services.xendit_payment import create_xendit_gcash_session, handle_xendit_webhook, sync_xendit_payment_status
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -109,7 +115,10 @@ def _assert_payment_access(db: Session, user: User, payment: Payment) -> None:
 
 @router.get("/gcash-qr")
 def get_gcash_qr_image():
-    """Official FleetOps GCash merchant QR (upload to backend/uploads/payment_assets/gcash_qr.png)."""
+    """Official FleetOps GCash merchant QR (upload to backend/uploads/payment_assets/gcash_qr.png).
+
+    When Xendit is enabled, customers receive a dynamic QR from POST /payments/xendit/session/{booking_id}.
+    """
     path = _resolve_gcash_qr_path()
     if not path.is_file():
         raise HTTPException(status_code=404, detail="GCash QR image is not available.")
@@ -121,6 +130,132 @@ def get_gcash_qr_image():
         ".webp": "image/webp",
     }.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(path, media_type=media)
+
+
+@router.get("/xendit/config", response_model=XenditConfigRead)
+def get_xendit_config():
+    """Public config for the customer portal (no secrets)."""
+    return XenditConfigRead(
+        enabled=xendit_configured(),
+        public_key=(settings.xendit_public_key or "").strip() or None,
+    )
+
+
+@router.post("/xendit/session/{booking_id}", response_model=XenditPaymentSessionRead)
+def create_xendit_payment_session(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    """Create (or return) a Xendit dynamic GCash QR payment for a booking."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    payment = create_xendit_gcash_session(db, booking, user)
+    return XenditPaymentSessionRead(
+        payment=payment,
+        qr_string=payment.xendit_qr_string,
+        xendit_status=payment.xendit_status,
+    )
+
+
+@router.get("/xendit/session/{booking_id}", response_model=XenditPaymentSessionRead)
+def get_xendit_payment_session(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your booking")
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.booking_id == booking_id, Payment.xendit_external_id.isnot(None))
+        .order_by(Payment.id.desc())
+        .first()
+    )
+    if not payment:
+        raise HTTPException(status_code=404, detail="No Xendit payment session for this booking.")
+
+    payment = sync_xendit_payment_status(db, payment)
+    return XenditPaymentSessionRead(
+        payment=payment,
+        qr_string=payment.xendit_qr_string,
+        xendit_status=payment.xendit_status,
+    )
+
+
+@router.post("/xendit/webhook")
+async def xendit_webhook(request: Request, db: Session = Depends(get_db)):
+    """Xendit QR payment callback — verifies x-callback-token when configured."""
+    expected = (settings.xendit_webhook_token or "").strip()
+    if expected:
+        token = request.headers.get("x-callback-token", "")
+        if token != expected:
+            raise HTTPException(status_code=401, detail="Invalid Xendit callback token")
+
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+
+    handle_xendit_webhook(db, payload if isinstance(payload, dict) else {})
+    return {"received": True}
+
+
+@router.post("/xendit/simulate/{booking_id}", response_model=XenditPaymentSessionRead)
+def simulate_xendit_payment(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.MANAGER)),
+):
+    """Sandbox only — simulates QR payment completion when webhooks cannot reach localhost."""
+    if (settings.app_env or "").strip().lower() == "production":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    from app.services.xendit_client import XenditError, simulate_qr_payment
+
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your booking")
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.booking_id == booking_id, Payment.xendit_external_id.isnot(None))
+        .order_by(Payment.id.desc())
+        .first()
+    )
+    if not payment or not payment.xendit_external_id:
+        raise HTTPException(status_code=404, detail="No Xendit payment session for this booking.")
+
+    try:
+        simulate_qr_payment(external_id=payment.xendit_external_id, amount=payment.amount)
+    except XenditError:
+        # Sandbox/dev fallback when QR channel is not activated or simulate API is unavailable.
+        pass
+
+    handle_xendit_webhook(
+        db,
+        {
+            "event": "qr.payment",
+            "id": f"qrpy_sim_{payment.id}",
+            "amount": payment.amount,
+            "status": "COMPLETED",
+            "qr_code": {"external_id": payment.xendit_external_id},
+            "payment_detail": {"source": "GCASH"},
+        },
+    )
+    db.refresh(payment)
+    return XenditPaymentSessionRead(
+        payment=payment,
+        qr_string=payment.xendit_qr_string,
+        xendit_status=payment.xendit_status,
+    )
 
 
 @router.post("", response_model=PaymentRead)
@@ -212,6 +347,12 @@ async def submit_payment_proof(
     method = (method or "gcash").lower().strip()
     if method not in ALLOWED_PAYMENT_METHODS:
         raise HTTPException(status_code=400, detail="Invalid payment method")
+
+    if method == "gcash" and xendit_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="GCash payments are processed through Xendit. Scan the QR code on the payment page — proof upload is not required.",
+        )
 
     amount = round(float(booking.estimated_cost or 0), 2)
 
@@ -454,13 +595,9 @@ def verify_payment(
         raise HTTPException(status_code=404, detail="Payment not found")
     if payment.status != PaymentStatus.FOR_VERIFICATION:
         raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be approved")
-    if payment.method not in PROOF_OPTIONAL_METHODS and not payment.proof_storage_path:
+    xendit_paid = (payment.xendit_status or "").upper() == "PAID"
+    if payment.method not in PROOF_OPTIONAL_METHODS and not payment.proof_storage_path and not xendit_paid:
         raise HTTPException(status_code=400, detail="No proof uploaded for this payment")
-
-    payment.status = PaymentStatus.VERIFIED
-    payment.paid_at = datetime.utcnow()
-    payment.reviewed_at = datetime.utcnow()
-    payment.reviewed_by_id = reviewer.id
 
     book = db.query(Booking).filter(Booking.id == payment.booking_id).first()
     if book:
@@ -473,29 +610,10 @@ def verify_payment(
                     "Please ask the customer to resubmit payment proof."
                 ),
             )
-    if book and book.status in {
-        BookingStatus.PENDING_PAYMENT,
-        BookingStatus.PAYMENT_VERIFICATION,
-        BookingStatus.PENDING_APPROVAL,
-        BookingStatus.APPROVED,
-    }:
-        book.status = BookingStatus.PAYMENT_VERIFIED
-        book.approved_by_id = reviewer.id
-        book.approved_at = datetime.utcnow()
-        db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == book.id).update(
-            {"hold_status": TruckSlotHoldStatus.READY_FOR_ASSIGNMENT}
-        )
 
+    mark_payment_and_booking_verified(db, payment, book, reviewer_id=reviewer.id, notify_customer=True)
     db.commit()
     db.refresh(payment)
-
-    cust = db.query(User).filter(User.id == payment.customer_id).first()
-    if cust and cust.email:
-        send_email_notification(
-            to_email=cust.email,
-            subject=f"Payment verified for booking #{payment.booking_id}",
-            html_body=f"<p>Your payment ({payment.reference}) was verified. Booking #{payment.booking_id} is cleared for processing.</p>",
-        )
     return payment
 
 

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.core.password_policy import validate_password_strength
 from app.models.entities import UserRole
 
 
@@ -14,8 +15,7 @@ class UserCreate(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
-        if not v or len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
+        validate_password_strength(v)
         return v
 
     @field_validator("full_name")
@@ -122,8 +122,7 @@ class ResetPasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        if not v or len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
+        validate_password_strength(v)
         return v
 
 
@@ -145,8 +144,7 @@ class ChangePasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        if not v or len(v) < 8:
-            raise ValueError("New password must be at least 8 characters")
+        validate_password_strength(v)
         return v
 
 

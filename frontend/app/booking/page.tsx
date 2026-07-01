@@ -25,7 +25,9 @@ export default function BookingPage() {
         />
         <div id="booking-calculator" className="scroll-section">
           <h1 style={{ margin: "0 0 0.5rem 0", fontSize: "2rem" }}>Create Booking Request</h1>
-          <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>Fill in your shipment details below. The quoted amount updates in real time.</p>
+          <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>
+            Complete the four steps below — route, shipment, documents, and review. The quoted amount updates in real time.
+          </p>
         </div>
 
         <div className="booking-tip-grid">

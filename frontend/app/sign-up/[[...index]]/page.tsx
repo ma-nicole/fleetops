@@ -7,10 +7,17 @@ import { apiFullUrl } from "@/lib/api";
 import PhoneInputRow from "@/components/PhoneInputRow";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import FloatingField from "@/components/auth/FloatingField";
+import PasswordRequirements from "@/components/auth/PasswordRequirements";
 import SubmitButton from "@/components/ui/SubmitButton";
 import {
+  AUTH_COMPANY_MAX_LENGTH,
+  AUTH_EMAIL_MAX_LENGTH,
+  AUTH_NAME_MAX_LENGTH,
+  AUTH_PASSWORD_MAX_LENGTH,
   buildInternationalPhone,
-  isValidEmail,
+  sanitizeAuthEmail,
+  sanitizeAuthPassword,
+  sanitizeAuthText,
   validateCustomerPassword,
   validateCompanyName,
   validateConfirmPassword,
@@ -65,17 +72,19 @@ export default function SignUpPage() {
     const lnErr = validateLastName(lastName);
     if (lnErr) next.lastName = lnErr;
 
-    const mail = email.trim();
+    const mail = sanitizeAuthEmail(email);
     if (!mail) next.email = "Email is required.";
-    else if (!isValidEmail(mail)) next.email = "Enter a valid email address (e.g. you@example.com).";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) {
+      next.email = "Enter a valid email address (e.g. you@example.com).";
+    }
 
-    const coErr = validateCompanyName(companyName);
+    const coErr = validateCompanyName(sanitizeAuthText(companyName, AUTH_COMPANY_MAX_LENGTH));
     if (coErr) next.companyName = coErr;
 
     const pwErr = validateCustomerPassword(password);
     if (pwErr) next.password = pwErr;
 
-    const cpwErr = validateConfirmPassword(password, confirmPassword);
+    const cpwErr = validateConfirmPassword(sanitizeAuthPassword(password), sanitizeAuthPassword(confirmPassword));
     if (cpwErr) next.confirmPassword = cpwErr;
 
     const phoneErr = validateRequiredInternationalPhone(phoneDial, phoneNational);
@@ -96,9 +105,10 @@ export default function SignUpPage() {
     if (!validateFields()) return;
     setIsSubmitting(true);
 
-    const mail = email.trim();
+    const mail = sanitizeAuthEmail(email);
     const combinedPhone = buildInternationalPhone(phoneDial, phoneNational);
-    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    const fullName = sanitizeAuthText(`${firstName} ${lastName}`, AUTH_NAME_MAX_LENGTH);
+    const safePassword = sanitizeAuthPassword(password);
 
     try {
       const response = await fetch(apiFullUrl("/auth/register"), {
@@ -108,9 +118,9 @@ export default function SignUpPage() {
         },
         body: JSON.stringify({
           email: mail,
-          password,
+          password: safePassword,
           full_name: fullName,
-          company_name: companyName.trim(),
+          company_name: sanitizeAuthText(companyName, AUTH_COMPANY_MAX_LENGTH),
           phone: combinedPhone,
           role: "customer",
         }),
@@ -186,8 +196,9 @@ export default function SignUpPage() {
             label="First name"
             autoComplete="given-name"
             value={firstName}
+            maxLength={AUTH_NAME_MAX_LENGTH}
             onChange={(event) => {
-              setFirstName(event.target.value);
+              setFirstName(sanitizeAuthText(event.target.value, AUTH_NAME_MAX_LENGTH));
               if (fieldErrors.firstName) setFieldErrors((p) => ({ ...p, firstName: undefined }));
             }}
             error={fieldErrors.firstName}
@@ -197,8 +208,9 @@ export default function SignUpPage() {
             label="Last name"
             autoComplete="family-name"
             value={lastName}
+            maxLength={AUTH_NAME_MAX_LENGTH}
             onChange={(event) => {
-              setLastName(event.target.value);
+              setLastName(sanitizeAuthText(event.target.value, AUTH_NAME_MAX_LENGTH));
               if (fieldErrors.lastName) setFieldErrors((p) => ({ ...p, lastName: undefined }));
             }}
             error={fieldErrors.lastName}
@@ -212,8 +224,9 @@ export default function SignUpPage() {
           autoComplete="email"
           inputMode="email"
           value={email}
+          maxLength={AUTH_EMAIL_MAX_LENGTH}
           onChange={(event) => {
-            setEmail(event.target.value);
+            setEmail(sanitizeAuthEmail(event.target.value));
             if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
           }}
           error={fieldErrors.email}
@@ -225,8 +238,9 @@ export default function SignUpPage() {
           label="Company name"
           autoComplete="organization"
           value={companyName}
+          maxLength={AUTH_COMPANY_MAX_LENGTH}
           onChange={(event) => {
-            setCompanyName(event.target.value);
+            setCompanyName(sanitizeAuthText(event.target.value, AUTH_COMPANY_MAX_LENGTH));
             if (fieldErrors.companyName) setFieldErrors((p) => ({ ...p, companyName: undefined }));
           }}
           error={fieldErrors.companyName}
@@ -238,12 +252,13 @@ export default function SignUpPage() {
           type={showPassword ? "text" : "password"}
           autoComplete="new-password"
           value={password}
+          maxLength={AUTH_PASSWORD_MAX_LENGTH}
           onChange={(event) => {
-            setPassword(event.target.value);
+            setPassword(sanitizeAuthPassword(event.target.value));
             if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
           }}
           error={fieldErrors.password}
-          hint={!fieldErrors.password ? "At least 8 characters — avoid passwords you use elsewhere." : undefined}
+          aria-describedby={fieldErrors.password ? "signup-password-error password-requirements" : "password-requirements"}
           endSlot={
             <button
               type="button"
@@ -257,14 +272,17 @@ export default function SignUpPage() {
           }
         />
 
+        <PasswordRequirements password={password} />
+
         <FloatingField
           id="signup-confirm-password"
           label="Confirm password"
           type={showPassword ? "text" : "password"}
           autoComplete="new-password"
           value={confirmPassword}
+          maxLength={AUTH_PASSWORD_MAX_LENGTH}
           onChange={(event) => {
-            setConfirmPassword(event.target.value);
+            setConfirmPassword(sanitizeAuthPassword(event.target.value));
             if (fieldErrors.confirmPassword) setFieldErrors((p) => ({ ...p, confirmPassword: undefined }));
           }}
           error={fieldErrors.confirmPassword}

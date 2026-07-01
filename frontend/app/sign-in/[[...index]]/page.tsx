@@ -15,6 +15,14 @@ import { announce } from "@/lib/useAnnouncer";
 import AuthSplitLayout from "@/components/auth/AuthSplitLayout";
 import FloatingField from "@/components/auth/FloatingField";
 import SubmitButton from "@/components/ui/SubmitButton";
+import {
+  AUTH_EMAIL_MAX_LENGTH,
+  AUTH_PASSWORD_MAX_LENGTH,
+  sanitizeAuthEmail,
+  sanitizeAuthPassword,
+  validateLoginEmail,
+  validateLoginPassword,
+} from "@/lib/formValidation";
 
 const GENERIC_AUTH_ERROR = "Email or password is incorrect.";
 
@@ -35,21 +43,13 @@ export default function SignInPage() {
     }
   }, [error]);
 
-  const isValidEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-
   const validateForm = (): boolean => {
     const nextFieldErrors: { email?: string; password?: string } = {};
-    const cleanedEmail = email.trim();
+    const emailErr = validateLoginEmail(email);
+    if (emailErr) nextFieldErrors.email = emailErr;
 
-    if (!cleanedEmail) {
-      nextFieldErrors.email = "Email is required.";
-    } else if (!isValidEmail(cleanedEmail)) {
-      nextFieldErrors.email = "Enter a valid email address (e.g. you@example.com).";
-    }
-
-    if (!password.trim()) {
-      nextFieldErrors.password = "Password is required.";
-    }
+    const passwordErr = validateLoginPassword(password);
+    if (passwordErr) nextFieldErrors.password = passwordErr;
 
     setFieldErrors(nextFieldErrors);
     return Object.keys(nextFieldErrors).length === 0;
@@ -63,7 +63,7 @@ export default function SignInPage() {
     setIsSubmitting(true);
 
     try {
-      const data = await apiLogin(email.trim(), password).catch((err) => {
+      const data = await apiLogin(sanitizeAuthEmail(email), sanitizeAuthPassword(password)).catch((err) => {
         if (err instanceof ApiError) {
           if (err.status === 423) {
             throw new Error(err.message || "This account is temporarily locked. Please try again later.");
@@ -147,8 +147,9 @@ export default function SignInPage() {
           autoComplete="email"
           inputMode="email"
           value={email}
+          maxLength={AUTH_EMAIL_MAX_LENGTH}
           onChange={(event) => {
-            setEmail(event.target.value);
+            setEmail(sanitizeAuthEmail(event.target.value));
             if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
           }}
           error={fieldErrors.email}
@@ -162,8 +163,9 @@ export default function SignInPage() {
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             value={password}
+            maxLength={AUTH_PASSWORD_MAX_LENGTH}
             onChange={(event) => {
-              setPassword(event.target.value);
+              setPassword(sanitizeAuthPassword(event.target.value));
               if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
             }}
             error={fieldErrors.password}

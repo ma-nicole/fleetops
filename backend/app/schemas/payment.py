@@ -54,10 +54,29 @@ class PaymentRead(BaseModel):
     proof_file_url: str | None = None
     reviewed_at: datetime | None = None
     reviewed_by_id: int | None = None
+    xendit_qr_id: str | None = None
+    xendit_payment_id: str | None = None
+    xendit_invoice_id: str | None = None
+    xendit_external_id: str | None = None
+    xendit_status: str | None = None
+    xendit_qr_string: str | None = None
+    xendit_expires_at: datetime | None = None
+    xendit_paid_at: datetime | None = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class XenditConfigRead(BaseModel):
+    enabled: bool
+    public_key: str | None = None
+
+
+class XenditPaymentSessionRead(BaseModel):
+    payment: PaymentRead
+    qr_string: str | None = None
+    xendit_status: str | None = None
 
 
 class PaymentRefundRequest(BaseModel):

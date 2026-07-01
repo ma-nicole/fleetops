@@ -57,6 +57,11 @@ function BookingPaymentInner() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [xenditEnabled, setXenditEnabled] = useState(false);
+  const [xenditQrString, setXenditQrString] = useState<string | null>(null);
+  const [xenditStatus, setXenditStatus] = useState<string | null>(null);
+  const [xenditLoading, setXenditLoading] = useState(false);
+  const [xenditError, setXenditError] = useState<string | null>(null);
 
   const bookingId = bookingIdRaw ? Number.parseInt(bookingIdRaw, 10) : NaN;
 
@@ -95,15 +100,68 @@ function BookingPaymentInner() {
     }
   }, [bookingId]);
 
+  const total = booking?.estimated_cost ?? 0;
+  const gcashBlocked = gcashAmountExceedsLimit(total);
+  const requiresProof = paymentMethodRequiresProof(method) && !(method === "gcash" && xenditEnabled);
+  const canSubmit = canSubmitPayment && (requiresProof ? !!selectedFile : true);
+  const xenditGcashFlow = method === "gcash" && xenditEnabled && !gcashBlocked;
+  const xenditPaid = (xenditStatus || "").toUpperCase() === "PAID" || latestPayment?.status === "verified";
+
+  const refreshXenditSession = useCallback(async () => {
+    if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+    setXenditLoading(true);
+    setXenditError(null);
+    try {
+      const session = await WorkflowApi.createXenditSession(bookingId);
+      setXenditQrString(session.qr_string ?? session.payment.xendit_qr_string ?? null);
+      setXenditStatus(session.xendit_status ?? session.payment.xendit_status ?? "PENDING");
+      const pays = await WorkflowApi.bookingPayments(bookingId).catch(() => [] as Payment[]);
+      setExistingPayments(pays);
+    } catch (e) {
+      setXenditError(e instanceof Error ? e.message : "Unable to start Xendit payment.");
+    } finally {
+      setXenditLoading(false);
+    }
+  }, [bookingId]);
+
+  const pollXenditSession = useCallback(async () => {
+    if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+    try {
+      const session = await WorkflowApi.getXenditSession(bookingId);
+      setXenditQrString(session.qr_string ?? session.payment.xendit_qr_string ?? null);
+      setXenditStatus(session.xendit_status ?? session.payment.xendit_status ?? null);
+      const pays = await WorkflowApi.bookingPayments(bookingId).catch(() => [] as Payment[]);
+      setExistingPayments(pays);
+      if ((session.xendit_status || "").toUpperCase() === "PAID" || session.payment.status === "verified") {
+        setUploadSuccess(true);
+        setTimeout(() => router.push("/modules/customer/payment"), 1500);
+      }
+    } catch {
+      /* session may not exist yet */
+    }
+  }, [bookingId, router]);
+
   useEffect(() => {
     if (!ready || !allowed) return;
     void loadBooking();
+    void WorkflowApi.xenditConfig()
+      .then((cfg) => setXenditEnabled(cfg.enabled))
+      .catch(() => setXenditEnabled(false));
   }, [ready, allowed, loadBooking]);
 
-  const total = booking?.estimated_cost ?? 0;
-  const gcashBlocked = gcashAmountExceedsLimit(total);
-  const requiresProof = paymentMethodRequiresProof(method);
-  const canSubmit = canSubmitPayment && (requiresProof ? !!selectedFile : true);
+  useEffect(() => {
+    if (!xenditEnabled || method !== "gcash" || gcashBlocked || !booking || pageLoading) return;
+    if (latestPayment?.status === "verified") return;
+    void refreshXenditSession();
+  }, [xenditEnabled, method, gcashBlocked, booking, pageLoading, latestPayment?.status, refreshXenditSession]);
+
+  useEffect(() => {
+    if (!xenditGcashFlow || xenditPaid) return;
+    const timer = window.setInterval(() => {
+      void pollXenditSession();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [xenditGcashFlow, xenditPaid, pollXenditSession]);
 
   useEffect(() => {
     if (gcashBlocked && method === "gcash") {
@@ -229,7 +287,9 @@ function BookingPaymentInner() {
 
       <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>Pay for your booking</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
-        Use the details below, then upload proof of payment (JPEG, PNG, or PDF). An admin will verify your payment.
+        {xenditEnabled
+          ? "Pay with GCash using the secure Xendit QR below. Bank transfer and other methods still use proof upload where required."
+          : "Use the details below, then upload proof of payment (JPEG, PNG, or PDF). An admin will verify your payment."}
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "2rem" }}>
@@ -316,10 +376,44 @@ function BookingPaymentInner() {
               bookingId={booking.id}
               total={total}
               gcashBlocked={gcashBlocked}
+              xenditEnabled={xenditEnabled}
+              xenditQrString={xenditQrString}
+              xenditStatus={xenditStatus}
+              xenditLoading={xenditLoading}
+              xenditError={xenditError}
+              onRetryXendit={() => void refreshXenditSession()}
             />
           </section>
 
           <section style={{ padding: "1.5rem", border: "2px dashed var(--accent)", borderRadius: "8px", background: "#EFF6FF" }}>
+            {xenditGcashFlow ? (
+              <>
+                <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Step 2 — Complete GCash payment</h3>
+                <p style={{ color: "#666666", fontSize: "0.9rem", marginBottom: "1rem" }}>
+                  Scan the QR code above with GCash. This page updates automatically when payment is received — no
+                  screenshot upload is needed.
+                </p>
+                {uploadSuccess || xenditPaid ? (
+                  <div
+                    role="status"
+                    style={{
+                      padding: "0.75rem",
+                      background: "#D1FAE5",
+                      color: "#047857",
+                      borderRadius: "6px",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    ✓ Payment received. Redirecting to payment history…
+                  </div>
+                ) : (
+                  <p style={{ color: "#374151", fontSize: "0.9rem", margin: 0 }}>
+                    Waiting for payment… Status: <strong>{xenditStatus || "PENDING"}</strong>
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
             <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>
               {method === "gcash" && requiresProof
                 ? "Step 2 — Upload GCash payment proof"
@@ -449,6 +543,8 @@ function BookingPaymentInner() {
                 fontWeight: 600,
               }}
             />
+              </>
+            )}
           </section>
         </div>
 
@@ -472,7 +568,12 @@ function BookingPaymentInner() {
               </div>
             ) : null}
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.9rem" }}>
-              {method === "gcash" ? (
+              {xenditGcashFlow ? (
+                <>
+                  GCash payments through Xendit are confirmed automatically. Your booking moves to{" "}
+                  <strong>payment verified</strong> once paid.
+                </>
+              ) : method === "gcash" ? (
                 <>
                   After you upload GCash proof, status shows as <strong>for verification</strong> until an admin reviews
                   and approves it. Your booking is not marked paid until verification completes.

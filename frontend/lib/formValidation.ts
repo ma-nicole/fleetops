@@ -1,7 +1,94 @@
 import { DEFAULT_DIAL_CODE, DIAL_CODE_OPTIONS, getDialCodeOption } from "@/lib/dialCodes";
 
+export const AUTH_EMAIL_MAX_LENGTH = 254;
+export const AUTH_PASSWORD_MAX_LENGTH = 72;
+export const AUTH_NAME_MAX_LENGTH = 100;
+export const AUTH_COMPANY_MAX_LENGTH = 255;
+
+const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
+
+const COMMON_WEAK_PASSWORDS = new Set([
+  "password",
+  "password123",
+  "12345678",
+  "qwerty",
+  "admin123",
+]);
+
+export type PasswordRequirementCheck = {
+  id: string;
+  label: string;
+  met: boolean;
+};
+
+/** Strip control characters and trim; preserve inner spaces for names. */
+export function sanitizeAuthText(value: string, maxLength: number): string {
+  return value.replace(CONTROL_CHARS, "").trim().slice(0, maxLength);
+}
+
+/** Normalize email for auth forms: trim, lowercase, strip control chars, cap length. */
+export function sanitizeAuthEmail(value: string): string {
+  return value.replace(CONTROL_CHARS, "").trim().toLowerCase().slice(0, AUTH_EMAIL_MAX_LENGTH);
+}
+
+/** Remove control characters; cap length (bcrypt limit). Do not trim — spaces may be intentional. */
+export function sanitizeAuthPassword(value: string): string {
+  return value.replace(CONTROL_CHARS, "").slice(0, AUTH_PASSWORD_MAX_LENGTH);
+}
+
+function normalizedForWeakPasswordCheck(password: string): string {
+  return password.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isCommonWeakPassword(password: string): boolean {
+  const lowered = password.toLowerCase();
+  if (COMMON_WEAK_PASSWORDS.has(lowered)) return true;
+  return COMMON_WEAK_PASSWORDS.has(normalizedForWeakPasswordCheck(password));
+}
+
+export function getPasswordRequirementChecks(password: string): PasswordRequirementCheck[] {
+  return [
+    {
+      id: "length",
+      label: "At least 8 characters",
+      met: password.length >= 8,
+    },
+    {
+      id: "uppercase",
+      label: "At least one uppercase letter",
+      met: /[A-Z]/.test(password),
+    },
+    {
+      id: "lowercase",
+      label: "At least one lowercase letter",
+      met: /[a-z]/.test(password),
+    },
+    {
+      id: "number",
+      label: "At least one number",
+      met: /\d/.test(password),
+    },
+    {
+      id: "special",
+      label: "At least one special character",
+      met: /[^A-Za-z0-9]/.test(password),
+    },
+    {
+      id: "not-common",
+      label: "Not a commonly used password",
+      met: password.length > 0 && !isCommonWeakPassword(password),
+    },
+  ];
+}
+
+export function isStrongPassword(password: string): boolean {
+  return getPasswordRequirementChecks(password).every((check) => check.met);
+}
+
 export function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  const mail = sanitizeAuthEmail(value);
+  if (!mail || mail.length > AUTH_EMAIL_MAX_LENGTH) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail);
 }
 
 /** Matches backend customer self-registration (min 3). */
@@ -33,6 +120,26 @@ export function validateCompanyName(value: string): string | undefined {
   return undefined;
 }
 
+export function validateLoginEmail(value: string): string | undefined {
+  const mail = sanitizeAuthEmail(value);
+  if (!mail) return "Email is required.";
+  if (!isValidEmail(mail)) return "Enter a valid email address (e.g. you@example.com).";
+  return undefined;
+}
+
+export function validateLoginPassword(value: string): string | undefined {
+  const password = sanitizeAuthPassword(value);
+  if (!password) return "Password is required.";
+  if (password.length > AUTH_PASSWORD_MAX_LENGTH) {
+    return "Password must be at most 72 characters.";
+  }
+  return undefined;
+}
+
+export function validateForgotPasswordEmail(value: string): string | undefined {
+  return validateLoginEmail(value);
+}
+
 export function validateConfirmPassword(password: string, confirm: string): string | undefined {
   if (!confirm) return "Please confirm your password.";
   if (password !== confirm) return "Passwords do not match.";
@@ -47,10 +154,20 @@ export function validatePersonNameLoose(value: string): string | undefined {
   return undefined;
 }
 
-/** Backend `/auth/register` requires ≥ 8. */
+/** Backend `/auth/register` and password reset/change — strong policy. */
 export function validateCustomerPassword(value: string): string | undefined {
-  if (!value) return "Password is required.";
-  if (value.length < 8) return "Password must be at least 8 characters.";
+  const password = sanitizeAuthPassword(value);
+  if (!password) return "Password is required.";
+  if (password.length > AUTH_PASSWORD_MAX_LENGTH) {
+    return "Password must be at most 72 characters.";
+  }
+
+  const checks = getPasswordRequirementChecks(password);
+  const firstUnmet = checks.find((check) => !check.met);
+  if (firstUnmet?.id === "not-common") {
+    return "This password is too common. Please choose a stronger password.";
+  }
+  if (firstUnmet) return `Password must meet all requirements (${firstUnmet.label.toLowerCase()}).`;
   return undefined;
 }
 
