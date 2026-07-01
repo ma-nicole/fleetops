@@ -16,17 +16,11 @@ import {
 } from "@/lib/analyticsStatistics";
 import type { ChartSelection } from "@/lib/chartDrilldownUtils";
 import { filterDrilldownRows } from "@/lib/chartDrilldownUtils";
+import { downloadDrilldownReportPdf } from "@/lib/buildDrilldownReportExport";
 
-export type DrillDownModalContext = {
-  sectionTitle: string;
-  chartType: string;
-  chartItems: Array<Record<string, string | number>>;
-  valueField?: string;
-  analyticsType?: "Descriptive" | "Diagnostic" | "Predictive" | "Prescriptive";
-  analyticsMethod?: string;
-  xAxisLabel?: string;
-  yAxisLabel?: string;
-};
+import type { DrillDownModalContext } from "@/lib/drilldownReportTypes";
+
+export type { DrillDownModalContext } from "@/lib/drilldownReportTypes";
 
 type FilterOptions = AdminAnalyticsPayload["filter_options"];
 
@@ -243,6 +237,21 @@ export function DrillDownAnalyticsModal({
     a.download = `${context.sectionTitle.replace(/\s+/g, "_").toLowerCase()}_drilldown.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    if (!selection || !panelFiltered.length) return;
+    downloadDrilldownReportPdf({
+      context,
+      selection,
+      panelFilters,
+      panelFiltered,
+      chartFiltered,
+      columns,
+      statistics,
+      indicators,
+      interpretation,
+    });
   };
 
   return (
@@ -470,6 +479,9 @@ export function DrillDownAnalyticsModal({
               </button>
               <button type="button" className="quick-action-btn" onClick={exportCsv} disabled={!panelFiltered.length}>
                 Export filtered data (CSV)
+              </button>
+              <button type="button" className="quick-action-btn" onClick={exportPdf} disabled={!panelFiltered.length}>
+                Export professional report (PDF)
               </button>
             </div>
           </section>

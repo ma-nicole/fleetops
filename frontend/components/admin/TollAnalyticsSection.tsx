@@ -3,6 +3,7 @@
 import { DrilldownTable, EmptyChart, StatGrid, StatisticsTable } from "@/components/admin/AnalyticsCharts";
 import { formatPhp } from "@/lib/appLocale";
 import type { AdminAnalyticsEmpty, AdminAnalyticsPayload } from "@/lib/analyticsApi";
+import { downloadTollAnalyticsReportPdf } from "@/lib/tollAnalyticsReportPdf";
 
 type TollAnalytics = NonNullable<AdminAnalyticsPayload["toll_analytics"]>;
 
@@ -19,6 +20,15 @@ export default function TollAnalyticsSection({ data }: { data: TollAnalytics }) 
 
   return (
     <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.75rem" }}>
+        <button
+          type="button"
+          className="quick-action-btn"
+          onClick={() => downloadTollAnalyticsReportPdf(data)}
+        >
+          Export toll report (PDF)
+        </button>
+      </div>
       {data_sufficiency?.messages && data_sufficiency.messages.length > 0 && (
         <div
           role="status"
