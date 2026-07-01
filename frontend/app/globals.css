@@ -578,6 +578,168 @@ body {
     color: #2e7d32;
   }
 
+  .xendit-payment-card {
+    border: 1px solid #BFDBFE;
+    border-radius: 12px;
+    padding: 1.25rem 1.35rem;
+    background: linear-gradient(180deg, #EFF6FF 0%, #FFFFFF 55%);
+    display: grid;
+    gap: 1rem;
+  }
+
+  .xendit-payment-card__header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .xendit-payment-card__eyebrow {
+    margin: 0 0 0.2rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #1E40AF;
+  }
+
+  .xendit-payment-card__title {
+    margin: 0;
+    font-size: 1.35rem;
+    color: #1A1A1A;
+  }
+
+  .xendit-payment-card__status {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .xendit-payment-card__summary {
+    margin: 0;
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.85rem 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .xendit-payment-card__row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 38%) 1fr;
+    gap: 0.5rem 1rem;
+    font-size: 0.88rem;
+  }
+
+  .xendit-payment-card__row dt {
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .xendit-payment-card__row dd {
+    margin: 0;
+    color: var(--text-primary);
+    word-break: break-word;
+  }
+
+  .xendit-payment-card__row--amount dd {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #FF9800;
+  }
+
+  .xendit-payment-card__mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8rem;
+  }
+
+  .xendit-payment-card__steps {
+    margin: 0;
+    padding-left: 1.2rem;
+    font-size: 0.85rem;
+    color: #374151;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .xendit-payment-card__qr-wrap {
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: #fff;
+    border: 2px solid #007cff;
+    border-radius: 12px;
+    min-height: 260px;
+  }
+
+  .xendit-payment-card__qr-fallback {
+    margin: 0;
+    text-align: center;
+    font-size: 0.88rem;
+    color: #6B7280;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .xendit-payment-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+
+  .xendit-payment-card__gcash-btn {
+    flex: 1 1 auto;
+    min-width: min(100%, 10rem);
+  }
+
+  .xendit-payment-card__hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #64748B;
+    line-height: 1.45;
+  }
+
+  .xendit-payment-card__alert {
+    padding: 0.75rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .xendit-payment-card__alert--success {
+    background: #D1FAE5;
+    border: 1px solid #6EE7B7;
+    color: #047857;
+  }
+
+  .xendit-payment-card__alert--warn {
+    background: #FEF3C7;
+    border: 1px solid #FCD34D;
+    color: #92400E;
+  }
+
+  .xendit-payment-card__alert--error {
+    background: #FEE2E2;
+    border: 1px solid #FECACA;
+    color: #991B1B;
+  }
+
+  .xendit-payment-card__link-btn {
+    margin-left: 0.35rem;
+    font: inherit;
+    font-weight: 700;
+    color: inherit;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
   .field-help,
   .field-valid {
     width: 20px;
