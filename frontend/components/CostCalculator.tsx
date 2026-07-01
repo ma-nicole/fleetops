@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -68,6 +68,8 @@ export default function CostCalculator({
   const [cargoDeclaration, setCargoDeclaration] = useState<File | null>(null);
   const [termsAgreement, setTermsAgreement] = useState<File | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [quoteRefreshNonce, setQuoteRefreshNonce] = useState(0);
+  const prevStepRef = useRef<BookingWizardStep>("route");
   const today = new Date().toISOString().split("T")[0];
 
   const hasEnoughSites = sites.length >= MIN_BOOKING_SITES;
@@ -207,6 +209,95 @@ export default function CostCalculator({
     };
   }, [date, hasEnoughSites, pickup, dropoff, weight]);
 
+  const parsedWeight = parseFloat(weight);
+  const effectiveWeightTons = Number.isFinite(parsedWeight) && parsedWeight > 0 ? Math.min(168, parsedWeight) : 1;
+
+  const quoteMatchesWeight = useMemo(() => {
+    if (!freightLines || !Number.isFinite(parsedWeight) || parsedWeight <= 0) return false;
+    return Math.abs(freightLines.booking_weight_tons - parsedWeight) < 0.001;
+  }, [freightLines, parsedWeight]);
+
+  const quoteReady = Boolean(cost && quoteMatchesWeight && !loading && distanceConfirmed);
+
+  const applyRouteQuoteResponse = useCallback(
+    (data: RouteQuoteApiResponse) => {
+      setMessage("");
+      setMessageType("");
+      const live: LiveCostQuote = {
+        distance_km: data.distance_km,
+        total_trucks: data.total_trucks,
+        cargo_gross_php: data.cargo_gross_php,
+        diesel_cost_php: data.diesel_cost_php,
+        driver_share_php: data.driver_share_php,
+        helper_share_php: data.helper_share_php,
+        toll_fees_php: data.toll_fees_php,
+        additives_total_php: data.additives_total_php,
+        net_profit_total_php: data.net_profit_total_php,
+        quoted_total: data.quoted_total,
+        truck_loads: data.truck_loads,
+      };
+      setCost(live);
+      setRouteQuoteMeta({
+        pickup_resolution: data.pickup_resolution,
+        dropoff_resolution: data.dropoff_resolution,
+        pricing_tier: data.pricing_tier,
+        routing_method: data.routing_method,
+      });
+      setTollEstimateMeta({
+        matched: Boolean(data.toll_matrix_matched),
+        message: data.toll_estimate_message ?? null,
+        entryPoint: data.toll_entry_point ?? null,
+        exitPoint: data.toll_exit_point ?? null,
+        effectiveDate: data.toll_effective_date ?? null,
+        budgetPerTruck: data.estimated_toll_budget_per_truck ?? null,
+        budgetTotal: data.estimated_toll_budget_total ?? null,
+        plazaOptions: data.toll_plaza_options ?? [],
+        suggestedEntry: data.suggested_toll_entry_point ?? null,
+        suggestedExit: data.suggested_toll_exit_point ?? null,
+      });
+      setDistanceConfirmed(data.distance_confirmed !== false);
+      setDistanceWarning(data.distance_warning ?? null);
+      setQuoteStatus(data.quote_status ?? null);
+      setFreightLines(freightLinesFromPayload(data));
+      onQuotedBreakdown?.({
+        cargo_gross_php: live.cargo_gross_php,
+        toll_fees_php: live.toll_fees_php,
+        labor_freight_php: live.driver_share_php + live.helper_share_php,
+        quoted_total_php: live.quoted_total,
+      });
+    },
+    [onQuotedBreakdown],
+  );
+
+  const fetchRouteQuote = useCallback(
+    async (signal?: AbortSignal) => {
+      const data = await apiFetch<RouteQuoteApiResponse>("/customer/route-quote", {
+        method: "POST",
+        body: JSON.stringify({
+          pickup_location: pickup,
+          dropoff_location: dropoff,
+          weight_tons: effectiveWeightTons,
+          toll_entry_point: manualTollEntry.trim() || undefined,
+          toll_exit_point: manualTollExit.trim() || undefined,
+          vehicle_class: manualVehicleClass.trim() || undefined,
+          distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
+        }),
+        signal,
+      });
+      applyRouteQuoteResponse(data);
+    },
+    [
+      pickup,
+      dropoff,
+      effectiveWeightTons,
+      manualTollEntry,
+      manualTollExit,
+      manualVehicleClass,
+      manualDistanceKm,
+      applyRouteQuoteResponse,
+    ],
+  );
+
   useEffect(() => {
     if (!hasEnoughSites) {
       setCost(null);
@@ -219,7 +310,6 @@ export default function CostCalculator({
 
     const p = pickup.trim();
     const d = dropoff.trim();
-    const w = parseFloat(weight);
 
     if (!pickupId || !dropoffId || pickupId === dropoffId || p.length < 3 || d.length < 3 || p.toLowerCase() === d.toLowerCase()) {
       setCost(null);
@@ -230,92 +320,37 @@ export default function CostCalculator({
       return;
     }
 
-    const effW = Number.isFinite(w) && w > 0 ? Math.min(168, w) : 1;
-
     let cancelled = false;
     const ac = new AbortController();
     setLoading(true);
 
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const data = await apiFetch<RouteQuoteApiResponse>("/customer/route-quote", {
-            method: "POST",
-            body: JSON.stringify({
-              pickup_location: pickup,
-              dropoff_location: dropoff,
-              weight_tons: effW,
-              toll_entry_point: manualTollEntry.trim() || undefined,
-              toll_exit_point: manualTollExit.trim() || undefined,
-              vehicle_class: manualVehicleClass.trim() || undefined,
-              distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
-            }),
-            signal: ac.signal,
-          });
-          if (cancelled) return;
-          setMessage("");
-          setMessageType("");
-          const live: LiveCostQuote = {
-            distance_km: data.distance_km,
-            total_trucks: data.total_trucks,
-            cargo_gross_php: data.cargo_gross_php,
-            diesel_cost_php: data.diesel_cost_php,
-            driver_share_php: data.driver_share_php,
-            helper_share_php: data.helper_share_php,
-            toll_fees_php: data.toll_fees_php,
-            additives_total_php: data.additives_total_php,
-            net_profit_total_php: data.net_profit_total_php,
-            quoted_total: data.quoted_total,
-            truck_loads: data.truck_loads,
-          };
-          setCost(live);
-          setRouteQuoteMeta({
-            pickup_resolution: data.pickup_resolution,
-            dropoff_resolution: data.dropoff_resolution,
-            pricing_tier: data.pricing_tier,
-            routing_method: data.routing_method,
-          });
-          setTollEstimateMeta({
-            matched: Boolean(data.toll_matrix_matched),
-            message: data.toll_estimate_message ?? null,
-            entryPoint: data.toll_entry_point ?? null,
-            exitPoint: data.toll_exit_point ?? null,
-            effectiveDate: data.toll_effective_date ?? null,
-            budgetPerTruck: data.estimated_toll_budget_per_truck ?? null,
-            budgetTotal: data.estimated_toll_budget_total ?? null,
-            plazaOptions: data.toll_plaza_options ?? [],
-            suggestedEntry: data.suggested_toll_entry_point ?? null,
-            suggestedExit: data.suggested_toll_exit_point ?? null,
-          });
-          setDistanceConfirmed(data.distance_confirmed !== false);
-          setDistanceWarning(data.distance_warning ?? null);
-          setQuoteStatus(data.quote_status ?? null);
-          setFreightLines(freightLinesFromPayload(data));
-          onQuotedBreakdown?.({
-            cargo_gross_php: live.cargo_gross_php,
-            toll_fees_php: live.toll_fees_php,
-            labor_freight_php: live.driver_share_php + live.helper_share_php,
-            quoted_total_php: live.quoted_total,
-          });
-        } catch (e: unknown) {
-          if (cancelled) return;
-          if (e instanceof DOMException && e.name === "AbortError") return;
-          setCost(null);
-          setRouteQuoteMeta(null);
-          setTollEstimateMeta(null);
-          setFreightLines(null);
-          if (e instanceof ApiError) {
-            setMessage(e.message);
+    const immediate = currentStep === "review" || quoteRefreshNonce > 0;
+    const timer = window.setTimeout(
+      () => {
+        void (async () => {
+          try {
+            await fetchRouteQuote(ac.signal);
+          } catch (e: unknown) {
+            if (cancelled) return;
+            if (e instanceof DOMException && e.name === "AbortError") return;
+            setCost(null);
+            setRouteQuoteMeta(null);
+            setTollEstimateMeta(null);
+            setFreightLines(null);
+            if (e instanceof ApiError) {
+              setMessage(e.message);
+              setMessageType("error");
+              return;
+            }
+            setMessage("Could not compute road distance. Check your connection and that the API is running.");
             setMessageType("error");
-            return;
+          } finally {
+            if (!cancelled) setLoading(false);
           }
-          setMessage("Could not compute road distance. Check your connection and that the API is running.");
-          setMessageType("error");
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-      })();
-    }, 220);
+        })();
+      },
+      immediate ? 0 : 220,
+    );
 
     return () => {
       cancelled = true;
@@ -326,7 +361,6 @@ export default function CostCalculator({
     pickup,
     dropoff,
     weight,
-    onQuotedBreakdown,
     hasEnoughSites,
     pickupId,
     dropoffId,
@@ -334,7 +368,17 @@ export default function CostCalculator({
     manualTollExit,
     manualVehicleClass,
     manualDistanceKm,
+    fetchRouteQuote,
+    currentStep,
+    quoteRefreshNonce,
   ]);
+
+  useEffect(() => {
+    if (prevStepRef.current !== "review" && currentStep === "review") {
+      setQuoteRefreshNonce((n) => n + 1);
+    }
+    prevStepRef.current = currentStep;
+  }, [currentStep]);
 
   const bookingPricingHint = !hasEnoughSites
     ? `Save at least ${MIN_BOOKING_SITES} sites on your dashboard — booking is disabled until then.`
@@ -345,7 +389,7 @@ export default function CostCalculator({
 
   const canSubmit =
     hasEnoughSites &&
-    !!cost &&
+    quoteReady &&
     !isSubmitting &&
     !!pickedSlot &&
     slotAvailability[pickedSlot] !== false &&
@@ -359,10 +403,10 @@ export default function CostCalculator({
   const canGoNext = useMemo(() => {
     if (!isWizardStepComplete(currentStep, validationContext)) return false;
     if (currentStep === "route") {
-      return !!cost && !loading && distanceConfirmed;
+      return !loading && distanceConfirmed && !!cost?.distance_km;
     }
     return true;
-  }, [currentStep, validationContext, cost, loading, distanceConfirmed]);
+  }, [currentStep, validationContext, loading, distanceConfirmed, cost?.distance_km]);
 
   const currentStepIndex = STEP_ORDER.indexOf(currentStep);
   const isFirstStep = currentStepIndex === 0;
@@ -390,7 +434,7 @@ export default function CostCalculator({
     const stepErrors = validateWizardStep(currentStep, validationContext);
     setErrors(stepErrors);
     if (Object.keys(stepErrors).length > 0) return;
-    if (currentStep === "route" && (!cost || loading || !distanceConfirmed)) return;
+    if (currentStep === "route" && (loading || !distanceConfirmed || !cost?.distance_km)) return;
     if (!isLastStep) {
       setCurrentStep(STEP_ORDER[currentStepIndex + 1]);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -487,24 +531,16 @@ export default function CostCalculator({
             cost={cost}
             loading={loading}
             bookingPricingHint={bookingPricingHint}
-            freightLines={freightLines}
             routeQuoteMeta={routeQuoteMeta}
-            tollEstimateMeta={tollEstimateMeta}
             distanceWarning={distanceWarning}
             distanceConfirmed={distanceConfirmed}
             manualDistanceKm={manualDistanceKm}
-            manualTollEntry={manualTollEntry}
-            manualTollExit={manualTollExit}
-            manualVehicleClass={manualVehicleClass}
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
             onPickupIdChange={setPickupId}
             onDropoffIdChange={setDropoffId}
             onClearError={clearError}
             onManualDistanceKmChange={setManualDistanceKm}
-            onManualTollEntryChange={setManualTollEntry}
-            onManualTollExitChange={setManualTollExit}
-            onManualVehicleClassChange={setManualVehicleClass}
           />
         )}
 
@@ -565,9 +601,17 @@ export default function CostCalculator({
             manualVehicleClass={manualVehicleClass}
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
+            quoteLoading={loading || !quoteReady}
+            quoteReady={quoteReady}
             canSubmit={canSubmit}
             isSubmitting={isSubmitting}
             errors={errors}
+            hasEnoughSites={hasEnoughSites}
+            bookingPricingHint={bookingPricingHint}
+            onManualDistanceKmChange={setManualDistanceKm}
+            onManualTollEntryChange={setManualTollEntry}
+            onManualTollExitChange={setManualTollExit}
+            onManualVehicleClassChange={setManualVehicleClass}
           />
         )}
 

@@ -2,9 +2,9 @@
 
 import type { CustomerSite } from "@/lib/customerSites";
 import { MIN_BOOKING_SITES } from "@/lib/customerSites";
-import BookingQuoteCard from "./BookingQuoteCard";
+import RouteDistancePreview from "./RouteDistancePreview";
 import { siteMenuLabel } from "./bookingQuoteUtils";
-import type { FormErrors, FreightLineDetail, LiveCostQuote, QuoteGeoMeta, TollEstimateMeta } from "./wizardTypes";
+import type { FormErrors, LiveCostQuote, QuoteGeoMeta } from "./wizardTypes";
 
 type Props = {
   sites: CustomerSite[];
@@ -17,24 +17,16 @@ type Props = {
   cost: LiveCostQuote | null;
   loading: boolean;
   bookingPricingHint: string;
-  freightLines: FreightLineDetail | null;
   routeQuoteMeta: QuoteGeoMeta | null;
-  tollEstimateMeta: TollEstimateMeta | null;
   distanceWarning: string | null;
   distanceConfirmed: boolean;
   manualDistanceKm: string;
-  manualTollEntry: string;
-  manualTollExit: string;
-  manualVehicleClass: string;
   quoteStatus: string | null;
   showApproximateRoutingWarning: boolean;
   onPickupIdChange: (id: string) => void;
   onDropoffIdChange: (id: string) => void;
   onClearError: (key: string) => void;
   onManualDistanceKmChange: (value: string) => void;
-  onManualTollEntryChange: (value: string) => void;
-  onManualTollExitChange: (value: string) => void;
-  onManualVehicleClassChange: (value: string) => void;
 };
 
 export default function RouteStep({
@@ -48,24 +40,16 @@ export default function RouteStep({
   cost,
   loading,
   bookingPricingHint,
-  freightLines,
   routeQuoteMeta,
-  tollEstimateMeta,
   distanceWarning,
   distanceConfirmed,
   manualDistanceKm,
-  manualTollEntry,
-  manualTollExit,
-  manualVehicleClass,
   quoteStatus,
   showApproximateRoutingWarning,
   onPickupIdChange,
   onDropoffIdChange,
   onClearError,
   onManualDistanceKmChange,
-  onManualTollEntryChange,
-  onManualTollExitChange,
-  onManualVehicleClassChange,
 }: Props) {
   return (
     <div className="booking-wizard-step" style={{ display: "grid", gap: "1rem" }}>
@@ -159,26 +143,18 @@ export default function RouteStep({
         </div>
       </div>
 
-      <BookingQuoteCard
+      <RouteDistancePreview
         cost={cost}
         loading={loading}
         hasEnoughSites={hasEnoughSites}
         bookingPricingHint={bookingPricingHint}
-        freightLines={freightLines}
         routeQuoteMeta={routeQuoteMeta}
-        tollEstimateMeta={tollEstimateMeta}
         distanceWarning={distanceWarning}
         distanceConfirmed={distanceConfirmed}
         manualDistanceKm={manualDistanceKm}
-        manualTollEntry={manualTollEntry}
-        manualTollExit={manualTollExit}
-        manualVehicleClass={manualVehicleClass}
         quoteStatus={quoteStatus}
         showApproximateRoutingWarning={showApproximateRoutingWarning}
         onManualDistanceKmChange={onManualDistanceKmChange}
-        onManualTollEntryChange={onManualTollEntryChange}
-        onManualTollExitChange={onManualTollExitChange}
-        onManualVehicleClassChange={onManualVehicleClassChange}
       />
     </div>
   );

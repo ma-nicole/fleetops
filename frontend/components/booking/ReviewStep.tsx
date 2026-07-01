@@ -2,7 +2,9 @@
 
 import { formatPhp } from "@/lib/appLocale";
 import SubmitButton from "@/components/ui/SubmitButton";
+import LoadingMessage from "@/components/ui/LoadingMessage";
 import BookingQuoteCard from "./BookingQuoteCard";
+import BookingCostBreakdown from "./BookingCostBreakdown";
 import type {
   FormErrors,
   FreightLineDetail,
@@ -32,9 +34,17 @@ type Props = {
   manualVehicleClass: string;
   quoteStatus: string | null;
   showApproximateRoutingWarning: boolean;
+  quoteLoading: boolean;
+  quoteReady: boolean;
   canSubmit: boolean;
   isSubmitting: boolean;
   errors: FormErrors;
+  hasEnoughSites: boolean;
+  bookingPricingHint: string;
+  onManualDistanceKmChange: (value: string) => void;
+  onManualTollEntryChange: (value: string) => void;
+  onManualTollExitChange: (value: string) => void;
+  onManualVehicleClassChange: (value: string) => void;
 };
 
 function documentStatus(file: File | null): { label: string; ok: boolean } {
@@ -63,9 +73,17 @@ export default function ReviewStep({
   manualVehicleClass,
   quoteStatus,
   showApproximateRoutingWarning,
+  quoteLoading,
+  quoteReady,
   canSubmit,
   isSubmitting,
   errors,
+  hasEnoughSites,
+  bookingPricingHint,
+  onManualDistanceKmChange,
+  onManualTollEntryChange,
+  onManualTollExitChange,
+  onManualVehicleClassChange,
 }: Props) {
   const decl = documentStatus(cargoDeclaration);
   const terms = documentStatus(termsAgreement);
@@ -130,13 +148,16 @@ export default function ReviewStep({
         </dl>
       </div>
 
-      {cost ? (
+      {quoteLoading ? (
+        <LoadingMessage label="Calculating final quote for your shipment…" size="sm" />
+      ) : quoteReady && cost ? (
         <>
+          <BookingCostBreakdown cost={cost} freightLines={freightLines} />
           <BookingQuoteCard
             cost={cost}
             loading={false}
-            hasEnoughSites
-            bookingPricingHint=""
+            hasEnoughSites={hasEnoughSites}
+            bookingPricingHint={bookingPricingHint}
             freightLines={freightLines}
             routeQuoteMeta={routeQuoteMeta}
             tollEstimateMeta={tollEstimateMeta}
@@ -148,11 +169,12 @@ export default function ReviewStep({
             manualVehicleClass={manualVehicleClass}
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
-            compact
-            onManualDistanceKmChange={() => undefined}
-            onManualTollEntryChange={() => undefined}
-            onManualTollExitChange={() => undefined}
-            onManualVehicleClassChange={() => undefined}
+            readOnly
+            allowTollEdit
+            onManualDistanceKmChange={onManualDistanceKmChange}
+            onManualTollEntryChange={onManualTollEntryChange}
+            onManualTollExitChange={onManualTollExitChange}
+            onManualVehicleClassChange={onManualVehicleClassChange}
           />
           <div
             style={{
@@ -174,7 +196,12 @@ export default function ReviewStep({
             </span>
           </div>
         </>
-      ) : null}
+      ) : (
+        <div className="booking-placeholder" role="alert">
+          Could not load a quote for the entered shipment details. Check your connection and return to earlier steps if
+          needed.
+        </div>
+      )}
 
       {Object.keys(errors).length > 0 && (
         <div role="alert" className="booking-wizard-errors">

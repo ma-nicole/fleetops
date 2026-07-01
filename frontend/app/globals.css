@@ -522,6 +522,62 @@ body {
     color: #b91c1c;
   }
 
+  .booking-cost-breakdown {
+    border: 1px solid rgba(76, 175, 80, 0.35);
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+    background: rgba(76, 175, 80, 0.06);
+  }
+
+  .booking-cost-breakdown__title {
+    margin: 0 0 0.85rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .booking-cost-breakdown__list {
+    margin: 0;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .booking-cost-breakdown__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    font-size: 0.9rem;
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .booking-cost-breakdown__row dt {
+    margin: 0;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .booking-cost-breakdown__row dd {
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .booking-cost-breakdown__row--total {
+    border-bottom: none;
+    padding-top: 0.35rem;
+    margin-top: 0.15rem;
+    border-top: 2px solid rgba(76, 175, 80, 0.35);
+  }
+
+  .booking-cost-breakdown__row--total dt,
+  .booking-cost-breakdown__row--total dd {
+    font-size: 1rem;
+    color: #2e7d32;
+  }
+
   .field-help,
   .field-valid {
     width: 20px;

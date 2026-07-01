@@ -26,7 +26,8 @@ type Props = {
   manualVehicleClass: string;
   quoteStatus: string | null;
   showApproximateRoutingWarning: boolean;
-  compact?: boolean;
+  readOnly?: boolean;
+  allowTollEdit?: boolean;
   onManualDistanceKmChange: (value: string) => void;
   onManualTollEntryChange: (value: string) => void;
   onManualTollExitChange: (value: string) => void;
@@ -49,7 +50,8 @@ export default function BookingQuoteCard({
   manualVehicleClass,
   quoteStatus,
   showApproximateRoutingWarning,
-  compact = false,
+  readOnly = false,
+  allowTollEdit = true,
   onManualDistanceKmChange,
   onManualTollEntryChange,
   onManualTollExitChange,
@@ -84,21 +86,40 @@ export default function BookingQuoteCard({
         {" — "}
         <strong style={{ color: "var(--text-primary)" }}>{cost.total_trucks} truck(s)</strong>
         {cost.total_trucks > 1 ? " (42 t max per truck)" : ""}
+        {routeQuoteMeta?.routing_method === "google_directions" ||
+        routeQuoteMeta?.routing_method === "osrm" ||
+        routeQuoteMeta?.routing_method === "openrouteservice" ||
+        routeQuoteMeta?.routing_method === "openrouteservice_hgv" ||
+        routeQuoteMeta?.routing_method === "openrouteservice_car"
+          ? routeQuoteMeta?.routing_method === "google_directions"
+            ? " — same engine family as Google Maps driving distance."
+            : " — computed along the mapped driving route (OSM)."
+          : routeQuoteMeta?.routing_method === "same_location"
+            ? " — same map location."
+            : routeQuoteMeta?.routing_method === "haversine_road_factor"
+              ? " — legacy approximate mode."
+              : "."}
       </p>
-      {!compact && routeQuoteMeta?.routing_method ? (
+      {routeQuoteMeta?.routing_method ? (
         <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
           {routingDistanceNote(routeQuoteMeta.routing_method)}
         </p>
       ) : null}
-      {!compact && providerNote ? (
-        <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>{providerNote}</p>
+      {providerNote ? (
+        <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)", opacity: 0.92 }}>
+          {providerNote}
+        </p>
+      ) : !routeQuoteMeta ? (
+        <p style={{ margin: 0, fontSize: "0.78rem", color: "#b45309" }}>
+          Sign in with the API running to get routed road kilometers and pricing (no browser-only shortcut).
+        </p>
       ) : null}
-      {distanceWarning ? (
+      {distanceWarning && (
         <p role="alert" style={{ margin: 0, fontSize: "0.85rem", color: "#b45309", fontWeight: 600 }}>
           {distanceWarning}
         </p>
-      ) : null}
-      {!distanceConfirmed && !compact ? (
+      )}
+      {!distanceConfirmed && !readOnly && (
         <label style={{ display: "grid", gap: 4, fontSize: "0.85rem", maxWidth: "16rem" }}>
           <span>Confirm estimated distance (km)</span>
           <input
@@ -111,67 +132,179 @@ export default function BookingQuoteCard({
             style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
           />
         </label>
-      ) : null}
-      {!compact && freightLines ? (
-        <ul style={{ margin: 0, paddingLeft: "1.15rem", fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.55 }}>
-          <li>
-            Booking weight {freightLines.booking_weight_tons.toFixed(2)} t → {freightLines.total_trucks} truck load(s) — total
-            cargo gross {formatPhp(cost.cargo_gross_php)}
-          </li>
-          <li>
-            Fuel → {freightLines.diesel_liters.toFixed(2)} L @ ₱{freightLines.diesel_price_per_liter.toFixed(2)}/L →{" "}
-            {formatPhp(freightLines.diesel_cost_php)}
-          </li>
-          <li>Driver share → {formatPhp(freightLines.driver_share_php)}</li>
-          <li>Helper share → {formatPhp(freightLines.helper_share_php)}</li>
-          <li>Toll → {formatPhp(freightLines.toll_fees_php)}</li>
-          {tollEstimateMeta && !tollEstimateMeta.matched && tollEstimateMeta.plazaOptions.length > 0 ? (
-            <li style={{ listStyle: "none", marginTop: "0.5rem" }}>
-              <div style={{ display: "grid", gap: "0.5rem" }}>
-                <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
-                  <span>Entry toll plaza (manual)</span>
-                  <select
-                    value={manualTollEntry}
-                    onChange={(e) => onManualTollEntryChange(e.target.value)}
-                    style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
-                  >
-                    <option value="">— select entry plaza —</option>
-                    {tollEstimateMeta.plazaOptions.map((p) => (
-                      <option key={`e-${p}`} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
-                  <span>Exit toll plaza (manual)</span>
-                  <select
-                    value={manualTollExit}
-                    onChange={(e) => onManualTollExitChange(e.target.value)}
-                    style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
-                  >
-                    <option value="">— select exit plaza —</option>
-                    {tollEstimateMeta.plazaOptions.map((p) => (
-                      <option key={`x-${p}`} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
-                  <span>Vehicle class</span>
-                  <input
-                    value={manualVehicleClass}
-                    onChange={(e) => onManualVehicleClassChange(e.target.value)}
-                    style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
-                  />
-                </label>
-              </div>
+      )}
+      {freightLines ? (
+        <>
+          <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+            Admin sets only <strong>diesel ₱/L</strong> and <strong>toll per trip</strong> under Calculations. Cargo
+            rate (₱650/t), 4 km/L, and crew percentages are fixed in the app to match your formula.
+            Offline fallbacks: <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER</code>,{" "}
+            <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_TOLL_FEES_PHP_PER_TRIP</code>.
+          </p>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: "1.15rem",
+              fontSize: "0.8rem",
+              color: "var(--text-secondary)",
+              lineHeight: 1.55,
+            }}
+          >
+            <li>
+              Booking weight {freightLines.booking_weight_tons.toFixed(2)} t → {freightLines.total_trucks} truck load(s)
+              (≤42 t each) — total cargo gross {formatPhp(cost.cargo_gross_php)}
             </li>
+            <li>
+              Fuel (all trucks, route km ÷ 4 km/L) → {freightLines.diesel_liters.toFixed(2)} L @ ₱
+              {freightLines.diesel_price_per_liter.toFixed(2)}/L → {formatPhp(freightLines.diesel_cost_php)}
+            </li>
+            <li>
+              Driver share ({freightLines.driver_freight_share_pct.toFixed(2)}% of each truck&apos;s gross) →{" "}
+              {formatPhp(freightLines.driver_share_php)}
+            </li>
+            <li>
+              Helper share ({freightLines.helper_freight_share_pct.toFixed(2)}% of each truck&apos;s gross) →{" "}
+              {formatPhp(freightLines.helper_share_php)}
+            </li>
+            <li>Toll (per truck per trip) → {formatPhp(freightLines.toll_fees_php)}</li>
+            {tollEstimateMeta && (
+              <li style={{ listStyle: "none", marginTop: "0.5rem" }}>
+                <div
+                  style={{
+                    padding: "0.65rem 0.85rem",
+                    borderRadius: 8,
+                    background: tollEstimateMeta.matched ? "rgba(124, 58, 237, 0.08)" : "rgba(251, 191, 36, 0.12)",
+                    border: `1px solid ${tollEstimateMeta.matched ? "rgba(124, 58, 237, 0.25)" : "rgba(251, 191, 36, 0.35)"}`,
+                  }}
+                >
+                  {tollEstimateMeta.matched ? (
+                    <>
+                      <strong>Estimated Toll Budget</strong>
+                      {tollEstimateMeta.budgetPerTruck != null && (
+                        <span> — {formatPhp(tollEstimateMeta.budgetPerTruck)} per truck</span>
+                      )}
+                      {tollEstimateMeta.budgetTotal != null && freightLines.total_trucks > 1 && (
+                        <span> ({formatPhp(tollEstimateMeta.budgetTotal)} total)</span>
+                      )}
+                      {tollEstimateMeta.entryPoint && tollEstimateMeta.exitPoint && (
+                        <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                          {tollEstimateMeta.entryPoint} → {tollEstimateMeta.exitPoint}
+                          {tollEstimateMeta.effectiveDate ? ` (effective ${tollEstimateMeta.effectiveDate.slice(0, 10)})` : ""}
+                        </div>
+                      )}
+                      <div style={{ fontSize: "0.85rem", color: "#6B7280", marginTop: "0.25rem" }}>
+                        NLEX-SCTEX toll matrix fee (descriptive lookup, not live gate detection), included in quoted total.
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <strong>Toll estimate</strong>
+                      <div style={{ fontSize: "0.9rem", marginTop: "0.25rem" }}>
+                        {tollEstimateMeta.message ||
+                          "No toll plaza match found. Please select entry and exit toll manually."}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {allowTollEdit && !tollEstimateMeta.matched && tollEstimateMeta.plazaOptions.length > 0 && (
+                  <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.5rem" }}>
+                    <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
+                      <span>Entry toll plaza (manual)</span>
+                      <select
+                        value={manualTollEntry}
+                        onChange={(e) => onManualTollEntryChange(e.target.value)}
+                        style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                      >
+                        <option value="">— select entry plaza —</option>
+                        {tollEstimateMeta.plazaOptions.map((p) => (
+                          <option key={`e-${p}`} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
+                      <span>Exit toll plaza (manual)</span>
+                      <select
+                        value={manualTollExit}
+                        onChange={(e) => onManualTollExitChange(e.target.value)}
+                        style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                      >
+                        <option value="">— select exit plaza —</option>
+                        {tollEstimateMeta.plazaOptions.map((p) => (
+                          <option key={`x-${p}`} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {(tollEstimateMeta.suggestedEntry || tollEstimateMeta.suggestedExit) && (
+                      <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280" }}>
+                        Suggested: {tollEstimateMeta.suggestedEntry || "?"} → {tollEstimateMeta.suggestedExit || "?"}
+                      </p>
+                    )}
+                    <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
+                      <span>Vehicle class</span>
+                      <input
+                        value={manualVehicleClass}
+                        onChange={(e) => onManualVehicleClassChange(e.target.value)}
+                        style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </li>
+            )}
+            <li>
+              <strong>Model:</strong> net/truck = cargo gross + fuel + driver + helper + toll (additive).
+            </li>
+          </ul>
+          {freightLines.truck_loads.length > 0 ? (
+            <div style={{ marginTop: "0.75rem" }}>
+              <p style={{ margin: "0 0 0.5rem", fontWeight: 700, fontSize: "0.9rem" }}>Truck allocation breakdown</p>
+              <div style={{ display: "grid", gap: "0.65rem" }}>
+                {freightLines.truck_loads.map((t) => (
+                  <div
+                    key={t.truck_index}
+                    style={{
+                      border: "1px solid rgba(76, 175, 80, 0.25)",
+                      borderRadius: "8px",
+                      padding: "0.65rem 0.75rem",
+                      background: "rgba(255,255,255,0.5)",
+                    }}
+                  >
+                    <p style={{ margin: "0 0 0.35rem", fontWeight: 600, fontSize: "0.85rem" }}>Truck {t.truck_index}</p>
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft: "1.1rem",
+                        fontSize: "0.78rem",
+                        color: "var(--text-secondary)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <li>Weight: {t.weight_tons.toFixed(2)} t</li>
+                      <li>Distance: {t.distance_km.toFixed(2)} km</li>
+                      <li>Fuel cost: {formatPhp(t.diesel_cost_php)}</li>
+                      <li>Driver share: {formatPhp(t.driver_share_php)}</li>
+                      <li>Helper share: {formatPhp(t.helper_share_php)}</li>
+                      <li>Toll: {formatPhp(t.toll_fees_php)}</li>
+                      <li style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                        Net profit: {formatPhp(t.net_profit_php)}
+                      </li>
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin: "0.65rem 0 0", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
+                <strong>Final totals:</strong> {freightLines.total_trucks} truck(s) — total cargo gross{" "}
+                {formatPhp(cost.cargo_gross_php)} — combined net profit {formatPhp(cost.net_profit_total_php)}
+              </p>
+            </div>
           ) : null}
-        </ul>
+        </>
       ) : null}
-      {showApproximateRoutingWarning && !compact ? (
+      {showApproximateRoutingWarning && (
         <p
           style={{
             margin: 0,
@@ -184,36 +317,40 @@ export default function BookingQuoteCard({
           }}
         >
           Rough distance / pins — use clear saved site addresses so the server can geocode and route accurately.
+          Admin sets diesel and toll under Calculations.
         </p>
-      ) : null}
+      )}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: compact ? "1fr" : "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
           gap: "1rem",
         }}
       >
-        {!compact ? (
-          <>
-            <div>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Cargo gross</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                {formatPhp(cost.cargo_gross_php)}
-              </p>
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total additives</p>
-              <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
-                {formatPhp(cost.additives_total_php)}
-              </p>
-            </div>
-          </>
-        ) : null}
-        <div style={compact ? undefined : { borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
-          <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-            {compact ? "Quoted total" : "Combined net profit"}
+        <div>
+          <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Cargo gross</p>
+          <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+            ₱650/t × tons across all loads (≤42 t per truck)
           </p>
-          <p style={{ margin: "0.25rem 0 0 0", fontSize: compact ? "1.35rem" : "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
+          <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
+            {formatPhp(cost.cargo_gross_php)}
+          </p>
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Total additives</p>
+          <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+            fuel + driver + helper + toll (all trucks)
+          </p>
+          <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.2rem", fontWeight: 600, color: "#4CAF50" }}>
+            {formatPhp(cost.additives_total_php)}
+          </p>
+        </div>
+        <div style={{ borderLeft: "2px solid rgba(76, 175, 80, 0.3)", paddingLeft: "1rem" }}>
+          <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>Combined net profit</p>
+          <p style={{ margin: "0.08rem 0 0 0", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+            cargo gross + additives (per truck), summed
+          </p>
+          <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.4rem", fontWeight: 800, color: "#4CAF50" }}>
             {formatPhp(cost.quoted_total)}
           </p>
         </div>
