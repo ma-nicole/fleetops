@@ -22,7 +22,7 @@ export default function BookingWizardStepper({ currentStep }: Props) {
               aria-current={isCurrent ? "step" : undefined}
             >
               <span className="booking-wizard-stepper__marker" aria-hidden="true">
-                {isComplete ? "✓" : index + 1}
+                {isComplete ? "OK" : index + 1}
               </span>
               <span className="booking-wizard-stepper__label">{step.label}</span>
               {index < BOOKING_WIZARD_STEPS.length - 1 ? (

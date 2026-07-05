@@ -37,6 +37,9 @@ export default function BookingStatusPage() {
 
   const requestCancellation = () => {
     if (!booking || !cancelReason.trim()) return;
+    if (!window.confirm(`Request cancellation for booking ${booking.id}? A manager must approve before it is cancelled.`)) {
+      return;
+    }
     BookingService.requestCancellation(booking.id, userId, cancelReason);
     setCancelReason("");
     loadBookings();

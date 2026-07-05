@@ -108,13 +108,16 @@ export type TollEstimateMeta = {
   suggestedExit: string | null;
 };
 
-export type BookingWizardStep = "route" | "shipment" | "documents" | "review";
+export type BookingWizardStep = "route" | "shipment" | "schedule" | "documents" | "review" | "pricing" | "payment";
 
 export const BOOKING_WIZARD_STEPS: { id: BookingWizardStep; label: string }[] = [
-  { id: "route", label: "Route" },
-  { id: "shipment", label: "Shipment" },
-  { id: "documents", label: "Documents" },
-  { id: "review", label: "Review" },
+  { id: "route", label: "Pickup & Dropoff" },
+  { id: "shipment", label: "Cargo Information" },
+  { id: "schedule", label: "Schedule Selection" },
+  { id: "documents", label: "Required Documents" },
+  { id: "review", label: "Booking Review" },
+  { id: "pricing", label: "Pricing Breakdown" },
+  { id: "payment", label: "Payment" },
 ];
 
 export type BookingFormState = {

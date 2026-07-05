@@ -41,6 +41,9 @@ export default function BookingApprovalsPage() {
 
   const handleApprove = () => {
     if (!selectedBooking) return;
+    if (!window.confirm(`Approve booking ${selectedBooking.id}? This will move it forward for assignment.`)) {
+      return;
+    }
     BookingService.managerReviewBooking(selectedBooking.id, managerId, true, notes);
     setSelectedBooking(null);
     setNotes("");
@@ -49,6 +52,9 @@ export default function BookingApprovalsPage() {
 
   const handleReject = () => {
     if (!selectedBooking) return;
+    if (!window.confirm(`Reject booking ${selectedBooking.id}? The customer will see the rejection status.`)) {
+      return;
+    }
     BookingService.managerReviewBooking(selectedBooking.id, managerId, false, notes || "Rejected by manager");
     setSelectedBooking(null);
     setNotes("");
@@ -56,11 +62,17 @@ export default function BookingApprovalsPage() {
   };
 
   const handleCancellationApproval = (booking: Booking) => {
+    if (!window.confirm(`Approve cancellation for booking ${booking.id}? This cannot be undone.`)) {
+      return;
+    }
     BookingService.managerCancelBooking(booking.id, managerId, booking.cancellationReason || "Cancellation approved");
     refreshBookings();
   };
 
   const handleCloseJob = (booking: Booking) => {
+    if (!window.confirm(`Close completed job ${booking.id}? This marks manager review as complete.`)) {
+      return;
+    }
     BookingService.managerCloseJob(booking.id, managerId);
     refreshBookings();
   };

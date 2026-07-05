@@ -138,6 +138,14 @@ export default function CustomerDocumentReviewSection({
       return;
     }
 
+    if (
+      !window.confirm(
+        "Submit these revised documents for review? FleetOps will lock the previous revision request and notify reviewers immediately.",
+      )
+    ) {
+      return;
+    }
+
     setBusy(true);
     try {
       const updated = await WorkflowApi.resubmitBookingDocuments(booking.id, {

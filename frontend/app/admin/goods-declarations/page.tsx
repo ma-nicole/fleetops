@@ -24,6 +24,15 @@ import { WorkflowApi } from "@/lib/workflowApi";
 
 type StatusFilter = "all" | GoodsDeclarationReviewStatus;
 
+const REVIEW_CONFIRM_COPY: Record<"approved" | "rejected" | "revision_requested", string> = {
+  approved:
+    "Approve this goods declaration? FleetOps will mark the document as approved and continue the booking workflow.",
+  rejected:
+    "Reject this goods declaration? This closes document review for the booking and notifies the customer.",
+  revision_requested:
+    "Request document revision? Other review actions will stay locked until the customer resubmits corrected documents.",
+};
+
 function ReviewStatusBadge({ status }: { status: string | null }) {
   const s = goodsDeclarationReviewBadgeStyle(status);
   return (
@@ -129,6 +138,10 @@ export default function AdminGoodsDeclarationsPage() {
     });
 
     if (needsRemarks && !remarks) {
+      return;
+    }
+
+    if (!window.confirm(REVIEW_CONFIRM_COPY[status])) {
       return;
     }
 
@@ -239,8 +252,9 @@ export default function AdminGoodsDeclarationsPage() {
                   const remarks = remarksByBooking[row.booking_id] ?? storedRemarks;
                   const remarksReady = remarks.trim().length > 0;
                   const actionError = actionErrorByBooking[row.booking_id];
-                  const approveEnabled = canReview && !reviewBusy;
-                  const revisionRejectEnabled = canReview && remarksReady && !reviewBusy;
+                  const reviewLockedBySave = busyBookingId !== null;
+                  const approveEnabled = canReview && !reviewLockedBySave;
+                  const revisionRejectEnabled = canReview && remarksReady && !reviewLockedBySave;
 
                   return (
                     <tr key={row.booking_id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
@@ -334,9 +348,14 @@ export default function AdminGoodsDeclarationsPage() {
                             }}
                             maxLength={2000}
                             placeholder="Notes to customer or internal team"
-                            disabled={reviewBusy}
+                            disabled={reviewLockedBySave}
                           />
                         </div>
+                        ) : null}
+                        {reviewBusy ? (
+                          <p role="status" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#1E40AF" }}>
+                            Decision is being saved. Other actions are locked until this finishes.
+                          </p>
                         ) : null}
                         {canReview && !remarksReady && (
                           <p

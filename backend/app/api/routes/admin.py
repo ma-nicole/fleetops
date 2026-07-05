@@ -25,6 +25,7 @@ from app.services.goods_declaration_review import (
     effective_goods_declaration_review_status,
     goods_declaration_review_label,
 )
+from app.services.goods_declaration_notifications import notify_customer_document_review_decision
 from app.services.dispatcher_booking_assignment import assign_booking_dispatcher, job_order_assignment_map
 from app.models.entities import JobOrder
 from app.schemas.dispatcher_assignment import DispatcherBookingAssignRequest
@@ -483,6 +484,12 @@ def review_goods_declaration(
 
     db.commit()
     db.refresh(booking)
+    notify_customer_document_review_decision(
+        db,
+        booking,
+        status=payload.status,
+        remarks=payload.remarks,
+    )
     return _serialize_goods_declaration_row(booking)
 
 

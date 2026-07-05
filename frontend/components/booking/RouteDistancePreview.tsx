@@ -18,7 +18,7 @@ type Props = {
   onManualDistanceKmChange: (value: string) => void;
 };
 
-/** Route step: distance and routing preview only — no pricing totals until Review. */
+/** Route step: distance and routing preview only; no pricing totals until Pricing Breakdown. */
 export default function RouteDistancePreview({
   cost,
   loading,
@@ -35,7 +35,7 @@ export default function RouteDistancePreview({
   const providerNote = geocodeProviderNote(routeQuoteMeta);
 
   if (loading && hasEnoughSites) {
-    return <LoadingMessage label="Calculating road distance…" size="sm" />;
+    return <LoadingMessage label="Calculating road distance..." size="sm" />;
   }
 
   if (!cost) {
@@ -57,9 +57,9 @@ export default function RouteDistancePreview({
       <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)" }}>
         <strong style={{ color: "var(--text-primary)" }}>Road distance: {cost.distance_km} km</strong>
         {quoteStatus && quoteStatus !== "Confirmed" && (
-          <span style={{ color: "#b45309", fontWeight: 600 }}> · {quoteStatus}</span>
+          <span style={{ color: "#b45309", fontWeight: 600 }}> - {quoteStatus}</span>
         )}
-        {" — "}
+        {" - "}
         <strong style={{ color: "var(--text-primary)" }}>{cost.total_trucks} truck(s)</strong> estimated for routing
       </p>
       {routeQuoteMeta?.routing_method ? (
@@ -91,12 +91,13 @@ export default function RouteDistancePreview({
       )}
       {showApproximateRoutingWarning ? (
         <p style={{ margin: 0, fontSize: "0.82rem", color: "#92400E" }}>
-          Use clear saved site addresses so the server can geocode and route accurately. Full cost estimate appears on the
-          final Review step after shipment details are entered.
+          Use clear saved site addresses so the server can geocode and route accurately. The full cost estimate appears
+          on Pricing Breakdown after shipment details are entered.
         </p>
       ) : (
         <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-          Pricing is calculated from the server after you complete shipment details. The full breakdown appears on Review.
+          Pricing is calculated from the server after you complete shipment details. The full breakdown appears on
+          Pricing Breakdown.
         </p>
       )}
     </div>

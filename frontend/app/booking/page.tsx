@@ -26,18 +26,18 @@ export default function BookingPage() {
         <div id="booking-calculator" className="scroll-section">
           <h1 style={{ margin: "0 0 0.5rem 0", fontSize: "2rem" }}>Create Booking Request</h1>
           <p style={{ margin: 0, opacity: 0.8, fontSize: "0.95rem" }}>
-            Complete the four steps below — route, shipment, documents, and review. The quoted amount updates in real time.
+            Complete the guided steps below: route, cargo, schedule, documents, review, pricing, and payment.
           </p>
         </div>
 
         <div className="booking-tip-grid">
           <div className="booking-tip-card">
             <strong>Live quote</strong>
-            <span>Updates while you choose pickup, dropoff, and weight.</span>
+            <span>Calculates after the route, cargo, and schedule details are complete.</span>
           </div>
           <div className="booking-tip-card">
             <strong>Accurate pricing</strong>
-            <span>Pickup, dropoff, and tonnage drive the quoted total—fill them in carefully.</span>
+            <span>Pickup, dropoff, tonnage, tolls, and available fleet capacity drive the final quote.</span>
           </div>
         </div>
 
@@ -58,19 +58,19 @@ export default function BookingPage() {
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>
           <p style={{ margin: 0, fontSize: "1.1rem" }}>Real-Time Pricing</p>
           <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Our AI calculates the best price based on distance, weight, and demand.
+            FleetOps calculates price from distance, weight, tolls, labor, and vehicle needs.
           </p>
         </div>
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>
           <p style={{ margin: 0, fontSize: "1.1rem" }}>Transparent Costs</p>
           <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            See road distance, fuel/route charge, and driver fee (10%) before you pay.
+            Review the full pricing breakdown before proceeding to payment.
           </p>
         </div>
         <div className="card" style={{ display: "grid", gap: "0.5rem" }}>
-          <p style={{ margin: 0, fontSize: "1.1rem" }}>Instant Confirmation</p>
+          <p style={{ margin: 0, fontSize: "1.1rem" }}>Dispatch Readiness</p>
           <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Booking confirmed immediately with email notification.
+            Paid and verified bookings move forward for dispatcher assignment.
           </p>
         </div>
       </section>

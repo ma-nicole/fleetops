@@ -213,6 +213,18 @@ export default function AdminPaymentApprovalPage() {
   }, [rows, statusFilter]);
 
   const onApprove = async (id: number) => {
+    const payment = payments.find((p) => p.id === id);
+    if (!payment || payment.status !== "for_verification") {
+      window.alert("This payment is no longer awaiting verification.");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Approve this payment proof? The booking will be marked payment verified and cleared for dispatch readiness.",
+      )
+    ) {
+      return;
+    }
     setBusyId(id);
     try {
       await WorkflowApi.verifyPayment(id);
@@ -225,6 +237,18 @@ export default function AdminPaymentApprovalPage() {
   };
 
   const onReject = async (id: number) => {
+    const payment = payments.find((p) => p.id === id);
+    if (!payment || payment.status !== "for_verification") {
+      window.alert("This payment is no longer awaiting verification.");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Reject this payment proof? The customer will need to submit a corrected payment proof before dispatch can continue.",
+      )
+    ) {
+      return;
+    }
     setBusyId(id);
     try {
       await WorkflowApi.rejectPayment(id);
@@ -384,6 +408,7 @@ export default function AdminPaymentApprovalPage() {
                               busy={busyId === p.id}
                               busyLabel="Approving…"
                               label="Approve"
+                              disabled={busyId !== null}
                               onClick={() => void onApprove(p.id)}
                               style={{
                                 padding: "0.4rem 0.7rem",
@@ -401,6 +426,7 @@ export default function AdminPaymentApprovalPage() {
                               busy={busyId === p.id}
                               busyLabel="Rejecting…"
                               label="Reject"
+                              disabled={busyId !== null}
                               onClick={() => void onReject(p.id)}
                               style={{
                                 padding: "0.4rem 0.7rem",

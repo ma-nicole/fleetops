@@ -12,6 +12,7 @@ import { WorkflowApi } from "@/lib/workflowApi";
 import BookingWizardStepper from "@/components/booking/BookingWizardStepper";
 import RouteStep from "@/components/booking/RouteStep";
 import ShipmentStep from "@/components/booking/ShipmentStep";
+import ScheduleStep from "@/components/booking/ScheduleStep";
 import DocumentsStep from "@/components/booking/DocumentsStep";
 import ReviewStep from "@/components/booking/ReviewStep";
 import { freightLinesFromPayload } from "@/components/booking/bookingQuoteUtils";
@@ -324,7 +325,8 @@ export default function CostCalculator({
     const ac = new AbortController();
     setLoading(true);
 
-    const immediate = currentStep === "review" || quoteRefreshNonce > 0;
+    const quoteStepVisible = currentStep === "pricing" || currentStep === "payment";
+    const immediate = quoteStepVisible || quoteRefreshNonce > 0;
     const timer = window.setTimeout(
       () => {
         void (async () => {
@@ -374,7 +376,7 @@ export default function CostCalculator({
   ]);
 
   useEffect(() => {
-    if (prevStepRef.current !== "review" && currentStep === "review") {
+    if (prevStepRef.current !== "pricing" && currentStep === "pricing") {
       setQuoteRefreshNonce((n) => n + 1);
     }
     prevStepRef.current = currentStep;
@@ -405,8 +407,11 @@ export default function CostCalculator({
     if (currentStep === "route") {
       return !loading && distanceConfirmed && !!cost?.distance_km;
     }
+    if (currentStep === "pricing") {
+      return quoteReady;
+    }
     return true;
-  }, [currentStep, validationContext, loading, distanceConfirmed, cost?.distance_km]);
+  }, [currentStep, validationContext, loading, distanceConfirmed, cost?.distance_km, quoteReady]);
 
   const currentStepIndex = STEP_ORDER.indexOf(currentStep);
   const isFirstStep = currentStepIndex === 0;
@@ -457,6 +462,13 @@ export default function CostCalculator({
     setErrors(allErrors);
     if (Object.keys(allErrors).length > 0) return;
     if (!canSubmit) return;
+    if (
+      !window.confirm(
+        "Create this booking and proceed to payment? FleetOps will save the request, then open the payment page for verification.",
+      )
+    ) {
+      return;
+    }
 
     setIsSubmitting(true);
     setMessage("");
@@ -548,19 +560,25 @@ export default function CostCalculator({
           <ShipmentStep
             hasEnoughSites={hasEnoughSites}
             weight={weight}
+            errors={errors}
+            onWeightChange={setWeight}
+          />
+        )}
+
+        {currentStep === "schedule" && (
+          <ScheduleStep
+            hasEnoughSites={hasEnoughSites}
             date={date}
             today={today}
             pickedSlot={pickedSlot}
             slotsLoading={slotsLoading}
             slotsFetchError={slotsFetchError}
             slotAvailability={slotAvailability}
-            slotAvailableTrucks={slotAvailableTrucks}
             requiredTrucks={requiredTrucks}
             selectedAvailableTrucks={selectedAvailableTrucks}
-            errors={errors}
-            onWeightChange={setWeight}
             onDateChange={setDate}
             onPickedSlotChange={setPickedSlot}
+            errors={errors}
             onClearErrors={clearErrors}
           />
         )}
@@ -579,8 +597,9 @@ export default function CostCalculator({
           />
         )}
 
-        {currentStep === "review" && (
+        {(currentStep === "review" || currentStep === "pricing" || currentStep === "payment") && (
           <ReviewStep
+            mode={currentStep}
             pickup={pickup}
             dropoff={dropoff}
             weight={weight}
@@ -601,7 +620,7 @@ export default function CostCalculator({
             manualVehicleClass={manualVehicleClass}
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
-            quoteLoading={loading || !quoteReady}
+            quoteLoading={loading}
             quoteReady={quoteReady}
             canSubmit={canSubmit}
             isSubmitting={isSubmitting}

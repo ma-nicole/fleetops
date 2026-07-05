@@ -70,6 +70,14 @@ export default function TollPlazaAliasesPanel() {
     }
   };
 
+  const removePlaza = async (row: TollPlazaRow) => {
+    if (!window.confirm(`Delete toll plaza "${row.canonical_name}" and its aliases? This cannot be undone.`)) {
+      return;
+    }
+    await TollPlazaApi.remove(row.id);
+    await load();
+  };
+
   return (
     <div>
       <p style={{ color: "var(--text-secondary)", maxWidth: "48rem", marginBottom: "1rem" }}>
@@ -149,7 +157,7 @@ export default function TollPlazaAliasesPanel() {
               )}
               <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem" }}>
                 <button type="button" onClick={() => openEdit(row)} style={secondaryBtn}>Edit</button>
-                <button type="button" onClick={() => void TollPlazaApi.remove(row.id).then(load)} style={{ ...secondaryBtn, color: "#B91C1C" }}>Delete</button>
+                <button type="button" onClick={() => void removePlaza(row)} style={{ ...secondaryBtn, color: "#B91C1C" }}>Delete</button>
               </div>
             </div>
           ))}

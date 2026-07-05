@@ -14,6 +14,30 @@ const PHASES = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed
 type Phase = (typeof PHASES)[number];
 const PHOTO_REQUIRED = new Set<Phase>(["picked_up", "dropped_off"]);
 
+const PHASE_LABELS: Record<Phase, string> = {
+  for_pickup: "Accepted / en route to pickup",
+  picked_up: "Arrived pickup / loading",
+  en_route: "En route to destination",
+  dropped_off: "Arrived destination / proof submitted",
+  completed: "Completed",
+};
+
+const OPERATIONAL_FLOW_STEPS = [
+  "Assigned",
+  "Accepted",
+  "En Route to Pickup",
+  "Arrived Pickup",
+  "Loading",
+  "En Route to Destination",
+  "Arrived Destination",
+  "Proof Submission",
+  "Completed",
+];
+
+function phaseLabel(phase: Phase): string {
+  return PHASE_LABELS[phase] ?? phase.replace(/_/g, " ");
+}
+
 function mediaSrc(url: string): string {
   const u = url.trim();
   if (!u) return u;
@@ -107,6 +131,79 @@ function clearFileInput(ref: React.RefObject<HTMLInputElement | null>) {
 function progressNeedsWarning(r: CrewAssignedBookingRow, variant: "driver" | "helper" = "driver"): boolean {
   const slug = variant === "helper" ? workflowPhase(r, "helper") : operationalSlug(r);
   return slug === "en_route" && r.location_updates_submitted < r.required_location_updates;
+}
+
+function operationalStageIndex(r: CrewAssignedBookingRow, variant: "driver" | "helper"): number {
+  const raw = variant === "helper" ? workflowPhase(r, "helper") : operationalSlug(r);
+  if (raw === "assigned") return 0;
+  const phase = workflowPhase(r, variant);
+  switch (phase) {
+    case "for_pickup":
+      return 2;
+    case "picked_up":
+      return 4;
+    case "en_route":
+      return 5;
+    case "dropped_off":
+      return 7;
+    case "completed":
+      return 8;
+    default:
+      return 0;
+  }
+}
+
+function CrewFlowProgress({ row, variant }: { row: CrewAssignedBookingRow; variant: "driver" | "helper" }) {
+  const currentIndex = operationalStageIndex(row, variant);
+  return (
+    <div style={{ padding: "0.85rem 1rem", border: "1px solid #DBEAFE", borderRadius: 10, background: "#EFF6FF" }}>
+      <h3 style={{ ...sectionTitle, marginBottom: "0.75rem" }}>Operational progress</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.5rem" }}>
+        {OPERATIONAL_FLOW_STEPS.map((step, index) => {
+          const done = index < currentIndex || (index === currentIndex && step === "Completed");
+          const current = index === currentIndex && !done;
+          return (
+            <div
+              key={step}
+              style={{
+                minHeight: 44,
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.45rem 0.55rem",
+                borderRadius: 8,
+                border: `1px solid ${done ? "#86EFAC" : current ? "#93C5FD" : "#DBEAFE"}`,
+                background: done ? "#ECFDF5" : current ? "#DBEAFE" : "white",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  display: "inline-grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  background: done ? "#16A34A" : current ? "#2563EB" : "#E0F2FE",
+                  color: done || current ? "white" : "#1E40AF",
+                }}
+              >
+                {done ? "OK" : index + 1}
+              </span>
+              <span style={{ fontSize: "0.78rem", fontWeight: current ? 800 : 600, color: "#1E293B" }}>{step}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ margin: "0.7rem 0 0", color: "#1E40AF", fontSize: "0.8rem", lineHeight: 1.45 }}>
+        Only the next valid milestone can be submitted. Proof photos and receiving requirements stay visible before
+        completion.
+      </p>
+    </div>
+  );
 }
 
 const th: CSSProperties = {
@@ -224,6 +321,15 @@ export default function CrewAssignedBookingsScreen({
       setMsg("Upload receiving document, verify QR code, and capture digital signature before completing delivery.");
       return;
     }
+    if (
+      !window.confirm(
+        phase === "completed"
+          ? `Complete delivery for trip #${detail.trip_id}? This will close the leg after proof submission.`
+          : `Save the next milestone as "${phaseLabel(phase)}" for trip #${detail.trip_id}?`,
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setMsg(null);
     const tripId = detail.trip_id;
@@ -254,6 +360,9 @@ export default function CrewAssignedBookingsScreen({
     if (!detail || variant !== "helper") return;
     if (!locationName.trim()) {
       setMsg("Location name is required.");
+      return;
+    }
+    if (!window.confirm(`Submit this location update for trip #${detail.trip_id}?`)) {
       return;
     }
     setBusy(true);
@@ -617,6 +726,8 @@ export default function CrewAssignedBookingsScreen({
                 </div>
 
                 <h3 style={sectionTitle}>Helper updates timeline</h3>
+                <CrewFlowProgress row={detail} variant={variant} />
+                <div style={{ height: "0.75rem" }} />
                 <HelperUpdatesTimeline
                   events={detail.timeline_events}
                   operationalStatus={operationalSlug(detail)}
@@ -799,6 +910,10 @@ export default function CrewAssignedBookingsScreen({
                 </div>
               </div>
             </div>
+
+            <hr style={divider} />
+
+            <CrewFlowProgress row={detail} variant={variant} />
 
             <hr style={divider} />
 
@@ -1003,7 +1118,7 @@ export default function CrewAssignedBookingsScreen({
                               (p === "dropped_off" && detail.location_updates_submitted < detail.required_location_updates);
                             return (
                               <option key={p} value={p} disabled={disabled}>
-                                {p.replace(/_/g, " ")}
+                                {phaseLabel(p)}
                               </option>
                             );
                           })}

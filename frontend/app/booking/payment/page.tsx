@@ -55,6 +55,86 @@ function applyXenditSession(
   setters.setExistingPayments([session.payment]);
 }
 
+const PAYMENT_FLOW_STEPS = [
+  "Booking Created",
+  "Review Booking",
+  "Proceed to Payment",
+  "Xendit Payment",
+  "Payment Verification",
+  "Booking Cleared For Dispatch",
+];
+
+function paymentProgressIndex({
+  booking,
+  latestPayment,
+  xenditActive,
+  xenditStatus,
+}: {
+  booking: Booking | null;
+  latestPayment: Payment | null;
+  xenditActive: boolean;
+  xenditStatus: string | null;
+}): number {
+  if (!booking) return 0;
+  if (booking.status === "payment_verified" || latestPayment?.status === "verified") return 5;
+  if (xenditActive && (xenditStatus || "").toUpperCase() === "PENDING") return 3;
+  if (latestPayment?.status === "for_verification") return 4;
+  if (latestPayment?.status === "rejected") return 2;
+  if (xenditActive || latestPayment) return 3;
+  return 2;
+}
+
+function PaymentProgress({
+  booking,
+  latestPayment,
+  xenditActive,
+  xenditStatus,
+}: {
+  booking: Booking | null;
+  latestPayment: Payment | null;
+  xenditActive: boolean;
+  xenditStatus: string | null;
+}) {
+  const currentIndex = paymentProgressIndex({ booking, latestPayment, xenditActive, xenditStatus });
+  return (
+    <div style={{ padding: "1rem", border: "1px solid #DBEAFE", borderRadius: 8, background: "#EFF6FF" }}>
+      <h3 style={{ color: "#1A1A1A", margin: "0 0 0.75rem" }}>Payment progress</h3>
+      <div style={{ display: "grid", gap: "0.5rem" }}>
+        {PAYMENT_FLOW_STEPS.map((step, index) => {
+          const done = index < currentIndex || (currentIndex === PAYMENT_FLOW_STEPS.length - 1 && index === currentIndex);
+          const current = index === currentIndex && !done;
+          return (
+            <div key={step} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.86rem" }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  display: "inline-grid",
+                  placeItems: "center",
+                  flexShrink: 0,
+                  fontSize: "0.72rem",
+                  fontWeight: 800,
+                  background: done ? "#16A34A" : current ? "#2563EB" : "#DBEAFE",
+                  color: done || current ? "white" : "#1E40AF",
+                }}
+              >
+                {done ? "OK" : index + 1}
+              </span>
+              <span style={{ fontWeight: current ? 700 : 500, color: done ? "#166534" : "#1E3A8A" }}>{step}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p style={{ margin: "0.75rem 0 0", fontSize: "0.82rem", color: "#1E40AF", lineHeight: 1.45 }}>
+        Xendit payments verify automatically when the webhook/poll confirms payment. Alternate methods stay for
+        verification until an admin approves the proof.
+      </p>
+    </div>
+  );
+}
+
 function BookingPaymentInner() {
   const { ready, allowed } = useRoleGuard(["customer"]);
   const router = useRouter();
@@ -254,6 +334,13 @@ function BookingPaymentInner() {
     }
     if (requiresProof && !selectedFile) {
       setUploadError("Please upload a proof file for this payment method.");
+      return;
+    }
+
+    const confirmMessage = requiresProof
+      ? "Submit this payment proof for verification? You cannot submit another proof unless this one is rejected."
+      : "Confirm this COD request? FleetOps will send the payment request for admin review before dispatch.";
+    if (!window.confirm(confirmMessage)) {
       return;
     }
 
@@ -547,6 +634,13 @@ function BookingPaymentInner() {
         </div>
 
         <aside style={{ position: "sticky", top: "2rem", alignSelf: "start" }}>
+          <div style={{ display: "grid", gap: "1rem" }}>
+          <PaymentProgress
+            booking={booking}
+            latestPayment={xenditPayment ?? latestPayment}
+            xenditActive={xenditActive}
+            xenditStatus={xenditStatus}
+          />
           <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
             <h3 style={{ color: "#1A1A1A", marginTop: 0 }}>Status</h3>
             {(xenditPayment ?? latestPayment) ? (
@@ -586,6 +680,7 @@ function BookingPaymentInner() {
                 </>
               )}
             </p>
+          </div>
           </div>
         </aside>
       </div>

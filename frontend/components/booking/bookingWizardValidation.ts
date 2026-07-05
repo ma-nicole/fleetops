@@ -64,6 +64,11 @@ function validateShipmentFields(ctx: ValidationContext): FormErrors {
   if (!isValidBookingWeightTons(wTons)) {
     errors.cargo_weight_tons = bookingWeightValidationMessage();
   }
+  return errors;
+}
+
+function validateScheduleFields(ctx: ValidationContext): FormErrors {
+  const errors: FormErrors = {};
   if (!ctx.date) {
     errors.scheduled_date = "Schedule date required";
   } else {
@@ -106,10 +111,12 @@ function validateDocumentFields(ctx: ValidationContext): FormErrors {
 export function validateWizardStep(step: BookingWizardStep, ctx: ValidationContext): FormErrors {
   if (step === "route") return validateRouteFields(ctx);
   if (step === "shipment") return validateShipmentFields(ctx);
+  if (step === "schedule") return validateScheduleFields(ctx);
   if (step === "documents") return validateDocumentFields(ctx);
   return {
     ...validateRouteFields(ctx),
     ...validateShipmentFields(ctx),
+    ...validateScheduleFields(ctx),
     ...validateDocumentFields(ctx),
   };
 }
