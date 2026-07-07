@@ -646,8 +646,11 @@ function BookingPaymentInner() {
                 <p style={{ margin: 0 }}>
                   <strong>Status:</strong>{" "}
                   {xenditActive
-                    ? xenditStatus || formatPaymentStatus((xenditPayment ?? latestPayment)!.status)
-                    : formatPaymentStatus((xenditPayment ?? latestPayment)!.status)}
+                    ? (xenditPayment ?? latestPayment)?.display_status ||
+                      xenditStatus ||
+                      formatPaymentStatus((xenditPayment ?? latestPayment)!.status)
+                    : (xenditPayment ?? latestPayment)?.display_status ||
+                      formatPaymentStatus((xenditPayment ?? latestPayment)!.status)}
                 </p>
                 {(xenditPayment ?? latestPayment)?.xendit_external_id ? (
                   <p style={{ margin: 0, wordBreak: "break-all" }}>

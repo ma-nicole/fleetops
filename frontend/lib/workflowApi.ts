@@ -567,6 +567,10 @@ export type Payment = {
   xendit_expires_at?: string | null;
   xendit_paid_at?: string | null;
   created_at: string;
+  verification_mode?: "xendit_auto" | "manual" | string | null;
+  display_status?: string | null;
+  webhook_verified?: boolean | null;
+  webhook_status?: string | null;
 };
 
 export type XenditConfig = {

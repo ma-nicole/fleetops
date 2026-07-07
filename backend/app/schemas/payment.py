@@ -64,6 +64,10 @@ class PaymentRead(BaseModel):
     xendit_expires_at: datetime | None = None
     xendit_paid_at: datetime | None = None
     created_at: datetime
+    verification_mode: str | None = None
+    display_status: str | None = None
+    webhook_verified: bool | None = None
+    webhook_status: str | None = None
 
     class Config:
         from_attributes = True

@@ -132,6 +132,10 @@ def get_qr_code_by_external_id(external_id: str) -> dict[str, Any]:
     return _request("GET", f"/qr_codes/{external_id}")
 
 
+def get_invoice(invoice_id: str) -> dict[str, Any]:
+    return _request("GET", f"/v2/invoices/{invoice_id}")
+
+
 def simulate_qr_payment(*, external_id: str, amount: float) -> dict[str, Any]:
     """Sandbox-only helper to complete a dynamic QR payment."""
     return _json_request(

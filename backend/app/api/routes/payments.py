@@ -43,6 +43,7 @@ from app.schemas.payment import (
 )
 from app.services.notifications import send_email_notification
 from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
+from app.services.payment_read import payment_read_response
 from app.services.payment_verification import mark_payment_and_booking_verified
 from app.services.xendit_client import xendit_configured
 from app.services.xendit_payment import create_xendit_gcash_session, handle_xendit_webhook, sync_xendit_payment_status
@@ -152,8 +153,9 @@ def create_xendit_payment_session(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     payment = create_xendit_gcash_session(db, booking, user)
+    enriched = payment_read_response(db, payment)
     return XenditPaymentSessionRead(
-        payment=payment,
+        payment=enriched,
         qr_string=payment.xendit_qr_string,
         xendit_status=payment.xendit_status,
     )
@@ -181,8 +183,9 @@ def get_xendit_payment_session(
         raise HTTPException(status_code=404, detail="No Xendit payment session for this booking.")
 
     payment = sync_xendit_payment_status(db, payment)
+    enriched = payment_read_response(db, payment)
     return XenditPaymentSessionRead(
-        payment=payment,
+        payment=enriched,
         qr_string=payment.xendit_qr_string,
         xendit_status=payment.xendit_status,
     )
@@ -203,7 +206,7 @@ async def xendit_webhook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
 
     handle_xendit_webhook(db, payload if isinstance(payload, dict) else {})
-    return {"received": True}
+    return {"received": True, "status": "processed"}
 
 
 @router.post("/xendit/simulate/{booking_id}", response_model=XenditPaymentSessionRead)
@@ -251,8 +254,9 @@ def simulate_xendit_payment(
         },
     )
     db.refresh(payment)
+    enriched = payment_read_response(db, payment)
     return XenditPaymentSessionRead(
-        payment=payment,
+        payment=enriched,
         qr_string=payment.xendit_qr_string,
         xendit_status=payment.xendit_status,
     )
@@ -320,7 +324,7 @@ def create_payment(
     db.add(payment)
     db.commit()
     db.refresh(payment)
-    return payment
+    return payment_read_response(db, payment)
 
 
 @router.post("/submit-proof", response_model=PaymentRead)
@@ -462,7 +466,7 @@ async def submit_payment_proof(
     db.add(payment)
     db.commit()
     db.refresh(payment)
-    return payment
+    return payment_read_response(db, payment)
 
 
 @router.get("", response_model=list[PaymentRead])
@@ -491,8 +495,8 @@ def list_payments(
         query = query.filter(Payment.booking_id.in_(trip_booking_ids))
     elif user.role == UserRole.DISPATCHER:
         rows = query.order_by(Payment.created_at.desc()).all()
-        return [row for row in rows if not _deny_dispatcher_payment(db, user, row)]
-    return query.order_by(Payment.created_at.desc()).all()
+        return [payment_read_response(db, row) for row in rows if not _deny_dispatcher_payment(db, user, row)]
+    return [payment_read_response(db, row) for row in query.order_by(Payment.created_at.desc()).all()]
 
 
 def _deny_dispatcher_payment(db: Session, user: User, payment: Payment) -> bool:
@@ -521,7 +525,7 @@ def list_booking_payments(
     rows = db.query(Payment).filter(Payment.booking_id == booking_id).order_by(Payment.created_at.desc()).all()
     for row in rows:
         _assert_payment_access(db, user, row)
-    return rows
+    return [payment_read_response(db, row) for row in rows]
 
 
 @router.get("/finance/summary", response_model=FinanceSummary)
@@ -600,6 +604,11 @@ def verify_payment(
         raise HTTPException(status_code=404, detail="Payment not found")
     if payment.status != PaymentStatus.FOR_VERIFICATION:
         raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be approved")
+    if payment.xendit_external_id and (payment.xendit_status or "").upper() == "PENDING":
+        raise HTTPException(
+            status_code=400,
+            detail="This Xendit payment is still processing and will be verified automatically when Xendit confirms it.",
+        )
     xendit_paid = (payment.xendit_status or "").upper() == "PAID"
     if payment.method not in PROOF_OPTIONAL_METHODS and not payment.proof_storage_path and not xendit_paid:
         raise HTTPException(status_code=400, detail="No proof uploaded for this payment")
@@ -619,7 +628,7 @@ def verify_payment(
     mark_payment_and_booking_verified(db, payment, book, reviewer_id=reviewer.id, notify_customer=True)
     db.commit()
     db.refresh(payment)
-    return payment
+    return payment_read_response(db, payment)
 
 
 @router.post("/{payment_id}/reject", response_model=PaymentRead)
@@ -633,6 +642,11 @@ def reject_payment(
         raise HTTPException(status_code=404, detail="Payment not found")
     if payment.status != PaymentStatus.FOR_VERIFICATION:
         raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be rejected")
+    if payment.xendit_external_id and (payment.xendit_status or "").upper() in {"PENDING", "PAID"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Xendit online payments cannot be manually rejected while automatic verification is active.",
+        )
 
     payment.status = PaymentStatus.REJECTED
     payment.paid_at = None
@@ -657,7 +671,7 @@ def reject_payment(
                 "<p>Your payment was rejected. Your booking is marked payment rejected and the reserved truck slot has been released. You may submit a corrected proof from the payment flow.</p>"
             ),
         )
-    return payment
+    return payment_read_response(db, payment)
 
 
 @router.post("/{payment_id}/refund", response_model=PaymentRead)
@@ -677,4 +691,4 @@ def refund_payment(
     payment.refunded_at = datetime.utcnow()
     db.commit()
     db.refresh(payment)
-    return payment
+    return payment_read_response(db, payment)

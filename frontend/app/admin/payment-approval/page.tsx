@@ -15,8 +15,14 @@ import { apiFullUrl } from "@/lib/api";
 import { formatPhp, formatDateTime } from "@/lib/appLocale";
 import { FILE_NOT_FOUND_MESSAGE, isImageFilename, isPdfFilename } from "@/lib/documentFileTypes";
 import { useDocumentPreview } from "@/lib/useDocumentPreview";
-import type { Booking, Payment } from "@/lib/workflowApi";
-import { WorkflowApi } from "@/lib/workflowApi";
+import {
+  canManuallyApprove,
+  canManuallyReject,
+  isManualPayment,
+  isXenditPayment,
+  paymentDisplayStatus,
+} from "@/lib/paymentDisplayStatus";
+import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
 
 function tokenHeader(): HeadersInit {
   if (typeof window === "undefined") return {};
@@ -138,19 +144,8 @@ type Row = {
   bookingLabel: string;
 };
 
-function formatStatus(s: Payment["status"]): string {
-  switch (s) {
-    case "for_verification":
-      return "for verification";
-    case "verified":
-      return "verified";
-    case "rejected":
-      return "rejected";
-    case "refunded":
-      return "refunded";
-    default:
-      return s;
-  }
+function formatStatus(payment: Payment): string {
+  return paymentDisplayStatus(payment);
 }
 
 export default function AdminPaymentApprovalPage() {
@@ -260,7 +255,8 @@ export default function AdminPaymentApprovalPage() {
     }
   };
 
-  const statusBadge = (status: Payment["status"]) => {
+  const statusBadge = (payment: Payment) => {
+    const status = payment.status;
     const styles: Record<string, { bg: string; color: string }> = {
       for_verification: { bg: "#FEF3C7", color: "#92400E" },
       verified: { bg: "#DCFCE7", color: "#166534" },
@@ -281,7 +277,7 @@ export default function AdminPaymentApprovalPage() {
           textTransform: "none" as const,
         }}
       >
-        {formatStatus(status)}
+        {formatStatus(payment)}
       </span>
     );
   };
@@ -294,9 +290,10 @@ export default function AdminPaymentApprovalPage() {
             <Link href="/admin/dashboard" style={{ color: "#0EA5E9", textDecoration: "none" }}>
               ← Admin Dashboard
             </Link>
-            <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Payment approval</h1>
+            <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Payment monitoring</h1>
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.95rem" }}>
-              Approve or reject customer proof-of-payment uploads. Booking payment status follows these decisions.
+              Xendit online payments verify automatically via webhook. Manual review remains only for bank transfer,
+              COD, and legacy proof uploads.
             </p>
           </div>
           <Link
@@ -319,7 +316,7 @@ export default function AdminPaymentApprovalPage() {
         {loading ? (
           <div aria-busy="true" style={{ display: "grid", gap: "1rem" }}>
             <LoadingMessage label="Loading payments…" />
-            <SkeletonTable rows={6} cols={7} />
+            <SkeletonTable rows={6} cols={9} />
           </div>
         ) : (
         <>
@@ -366,41 +363,55 @@ export default function AdminPaymentApprovalPage() {
               <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E8E8E8" }}>
                 <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Reference</th>
                 <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Booking</th>
+                <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Method</th>
                 <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Amount</th>
-                <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Uploaded</th>
-                <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>File</th>
+                <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Paid at</th>
+                <th style={{ padding: "0.75rem", textAlign: "left", fontWeight: 600 }}>Transaction ID</th>
                 <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: 600 }}>Status</th>
+                <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: 600 }}>Verification</th>
                 <th style={{ padding: "0.75rem", textAlign: "center", fontWeight: 600 }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <TableEmptyRow colSpan={7} message="No payments match your filter." />
+                <TableEmptyRow colSpan={9} message="No payments match your filter." />
               ) : (
                 filtered.map((row) => {
                   const p = row.payment;
+                  const paidAt = p.xendit_paid_at || p.paid_at || p.proof_uploaded_at;
+                  const transactionId = p.xendit_payment_id || p.xendit_external_id || "—";
                   return (
                     <tr key={p.id} style={{ borderBottom: "1px solid #E8E8E8" }}>
                       <td style={{ padding: "0.75rem", fontWeight: 700, color: "#1F2937" }}>{p.reference}</td>
                       <td style={{ padding: "0.75rem", color: "#1F2937", fontSize: "0.85rem" }}>{row.bookingLabel}</td>
+                      <td style={{ padding: "0.75rem", fontSize: "0.85rem", color: "#374151", textTransform: "capitalize" }}>
+                        {isXenditPayment(p) ? "Xendit / GCash" : p.method}
+                      </td>
                       <td style={{ padding: "0.75rem", fontWeight: 600, color: "#10B981" }}>{formatPhp(p.amount)}</td>
                       <td style={{ padding: "0.75rem", fontSize: "0.85rem", color: "#6B7280" }}>
-                        {p.proof_uploaded_at ? formatDateTime(p.proof_uploaded_at) : "—"}
+                        {paidAt ? formatDateTime(paidAt) : "—"}
                       </td>
-                      <td style={{ padding: "0.75rem", fontSize: "0.85rem" }}>
-                        {p.proof_original_filename || p.proof_file_url ? (
-                          <ProofFileCell
-                            payment={p}
-                            busy={previewBusy}
-                            onView={() => openPaymentProof(p)}
-                          />
+                      <td style={{ padding: "0.75rem", fontSize: "0.78rem", color: "#4B5563", wordBreak: "break-all" }}>
+                        {transactionId}
+                      </td>
+                      <td style={{ padding: "0.75rem", textAlign: "center" }}>{statusBadge(p)}</td>
+                      <td style={{ padding: "0.75rem", textAlign: "center", fontSize: "0.8rem" }}>
+                        {p.webhook_verified || (isXenditPayment(p) && p.status === "verified") ? (
+                          <div style={{ display: "grid", gap: "0.25rem" }}>
+                            <span style={{ color: "#166534", fontWeight: 700 }}>Verified automatically via Xendit</span>
+                            <span style={{ color: "#6B7280" }}>Webhook: {p.webhook_status || p.xendit_status || "PAID"}</span>
+                          </div>
+                        ) : isXenditPayment(p) ? (
+                          <div style={{ display: "grid", gap: "0.25rem" }}>
+                            <span style={{ color: "#92400E", fontWeight: 600 }}>Awaiting Xendit webhook</span>
+                            <span style={{ color: "#6B7280" }}>Webhook: {p.webhook_status || p.xendit_status || "PENDING"}</span>
+                          </div>
                         ) : (
-                          <span style={{ color: "#B45309" }}>{FILE_NOT_FOUND_MESSAGE}</span>
+                          <span style={{ color: "#6B7280" }}>Manual proof review</span>
                         )}
                       </td>
-                      <td style={{ padding: "0.75rem", textAlign: "center" }}>{statusBadge(p.status)}</td>
                       <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                        {p.status === "for_verification" && p.proof_original_filename ? (
+                        {canManuallyApprove(p) ? (
                           <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center", flexWrap: "wrap" }}>
                             <SubmitButton
                               type="button"
@@ -420,29 +431,33 @@ export default function AdminPaymentApprovalPage() {
                                 fontSize: "0.8rem",
                               }}
                             />
-                            <SubmitButton
-                              type="button"
-                              className=""
-                              busy={busyId === p.id}
-                              busyLabel="Rejecting…"
-                              label="Reject"
-                              disabled={busyId !== null}
-                              onClick={() => void onReject(p.id)}
-                              style={{
-                                padding: "0.4rem 0.7rem",
-                                background: "#EF4444",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                fontWeight: 600,
-                                fontSize: "0.8rem",
-                              }}
-                            />
+                            {canManuallyReject(p) ? (
+                              <SubmitButton
+                                type="button"
+                                className=""
+                                busy={busyId === p.id}
+                                busyLabel="Rejecting…"
+                                label="Reject"
+                                disabled={busyId !== null}
+                                onClick={() => void onReject(p.id)}
+                                style={{
+                                  padding: "0.4rem 0.7rem",
+                                  background: "#EF4444",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  fontWeight: 600,
+                                  fontSize: "0.8rem",
+                                }}
+                              />
+                            ) : null}
                           </div>
-                        ) : p.status === "for_verification" && !p.proof_original_filename ? (
+                        ) : isManualPayment(p) && p.proof_original_filename ? (
+                          <ProofFileCell payment={p} busy={previewBusy} onView={() => openPaymentProof(p)} />
+                        ) : isManualPayment(p) && p.status === "for_verification" ? (
                           <span style={{ fontSize: "0.8rem", color: "#B45309" }}>Awaiting proof</span>
                         ) : (
-                          <span style={{ fontSize: "0.8rem", color: "#6B7280" }}>—</span>
+                          <span style={{ fontSize: "0.8rem", color: "#6B7280" }}>Monitor only</span>
                         )}
                       </td>
                     </tr>
