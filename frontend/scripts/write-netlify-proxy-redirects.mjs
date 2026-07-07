@@ -24,8 +24,8 @@ if (process.env.NODE_ENV === "production" && !backendOrigin.startsWith("https://
 
 fs.mkdirSync(publicDir, { recursive: true });
 const redirects = [
-  `/api-proxy/*  ${backendOrigin}/api/:splat  200`,
-  `/uploads/*  ${backendOrigin}/uploads/:splat  200`,
+  `/api-proxy/*  ${backendOrigin}/api/:splat  200!`,
+  `/uploads/*  ${backendOrigin}/uploads/:splat  200!`,
   "",
 ].join("\n");
 

@@ -27,6 +27,7 @@ if (isProd) {
 }
 
 const backendOrigin = process.env.BACKEND_ORIGIN || "http://127.0.0.1:8000";
+const isNetlify = process.env.NETLIFY === "true";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -35,6 +36,8 @@ const nextConfig = {
     root: monorepoRoot,
   },
   async rewrites() {
+    // Netlify edge redirects in netlify.toml proxy /api-proxy; Next rewrites conflict and 500.
+    if (isNetlify) return [];
     const origin = backendOrigin.replace(/\/+$/, "");
     return [
       {
