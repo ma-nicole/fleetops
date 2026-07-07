@@ -71,30 +71,31 @@ def generate_signed_terms_pdf(
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+    text_w = pdf.epw
     pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "FleetOpt Logistics Service Agreement", ln=True)
+    pdf.cell(text_w, 10, "FleetOpt Logistics Service Agreement", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 7, f"Version: {FLEETOPT_TERMS_VERSION}", ln=True)
-    pdf.cell(0, 7, f"Booking #{booking_id}", ln=True)
+    pdf.cell(text_w, 7, f"Version: {FLEETOPT_TERMS_VERSION}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(text_w, 7, f"Booking #{booking_id}", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     for title, paragraphs in TERMS_SECTIONS:
         pdf.set_font("Helvetica", "B", 11)
-        pdf.multi_cell(0, 6, title)
+        pdf.multi_cell(text_w, 6, title)
         pdf.set_font("Helvetica", "", 9)
         for para in paragraphs:
-            pdf.multi_cell(0, 5, para)
+            pdf.multi_cell(text_w, 5, para)
             pdf.ln(1)
         pdf.ln(2)
 
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 8, "Electronic Signature & Acceptance Record", ln=True)
+    pdf.cell(text_w, 8, "Electronic Signature & Acceptance Record", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 9)
-    pdf.cell(0, 6, f"Customer name: {customer_name}", ln=True)
-    pdf.cell(0, 6, f"User account ID: {user_account_id}", ln=True)
-    pdf.cell(0, 6, f"Signed at (UTC): {signed_at.isoformat(timespec='seconds')}", ln=True)
+    pdf.cell(text_w, 6, f"Customer name: {customer_name}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(text_w, 6, f"User account ID: {user_account_id}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(text_w, 6, f"Signed at (UTC): {signed_at.isoformat(timespec='seconds')}", new_x="LMARGIN", new_y="NEXT")
     if ip_address:
-        pdf.cell(0, 6, f"IP address: {ip_address}", ln=True)
+        pdf.cell(text_w, 6, f"IP address: {ip_address}", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(3)
 
     if signature_png_path.is_file():
@@ -102,7 +103,7 @@ def generate_signed_terms_pdf(
         pdf.ln(2)
 
     pdf.multi_cell(
-        0,
+        text_w,
         5,
         'The customer confirmed "I Agree" to these terms and provided the electronic signature shown above through the FleetOpt booking portal.',
     )

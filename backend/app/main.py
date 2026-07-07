@@ -62,6 +62,12 @@ async def precise_distance_unavailable_handler(request: Request, exc: PreciseDis
     return JSONResponse(status_code=400, content={"detail": exc.detail})
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Unhandled server error path=%s method=%s", request.url.path, request.method)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_cors_origins,

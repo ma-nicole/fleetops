@@ -347,15 +347,21 @@ async def create_booking_with_documents(
 
         abs_sig = resolve_booking_document_path(sig_path)
         pdf_abs = signed_terms_pdf_abs_path(booking.id)
-        generate_signed_terms_pdf(
-            booking_id=booking.id,
-            customer_name=signer_name,
-            user_account_id=user.id,
-            signed_at=signed_at,
-            ip_address=client_ip,
-            signature_png_path=abs_sig,
-            output_path=pdf_abs,
-        )
+        try:
+            generate_signed_terms_pdf(
+                booking_id=booking.id,
+                customer_name=signer_name,
+                user_account_id=user.id,
+                signed_at=signed_at,
+                ip_address=client_ip,
+                signature_png_path=abs_sig,
+                output_path=pdf_abs,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to generate the signed terms agreement PDF. Please try again.",
+            ) from exc
         booking.terms_agreement_original_filename = f"FleetOpt-Signed-Terms-Booking-{booking.id}.pdf"
         booking.terms_agreement_storage_path = signed_terms_pdf_relative_path(booking.id)
         booking.terms_agreement_uploaded_at = signed_at
@@ -363,9 +369,12 @@ async def create_booking_with_documents(
     except HTTPException:
         db.rollback()
         raise
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail="Booking could not be saved. Please try again.",
+        ) from exc
 
 
 @router.get("/{booking_id}/documents/cargo-declaration", response_class=FileResponse)
