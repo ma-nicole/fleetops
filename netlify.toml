@@ -1,7 +1,7 @@
 [build]
   base = "frontend"
   command = "npm ci --include=dev && npm run build"
-  publish = ".next"
+  # Do not set publish — Netlify OpenNext adapter deploys Next.js (SSR/App Router).
 
 [build.environment]
   NODE_VERSION = "20"
