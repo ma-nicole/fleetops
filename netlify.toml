@@ -1,5 +1,6 @@
 [build]
   base = "frontend"
+  # BACKEND_ORIGIN must be set in Netlify env before build (writes public/_redirects for API proxy).
   command = "npm ci && npm run build"
   publish = ".next"
 

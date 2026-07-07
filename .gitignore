@@ -16,6 +16,7 @@ node_modules/
 out/
 frontend/.env.local
 frontend/.env.*.local
+frontend/public/_redirects
 
 # Editor
 .vscode/

@@ -10,7 +10,7 @@
     "dev:web-only": "next dev -p 3000",
     "dev:only": "next dev -p 3000",
     "check:api": "node ../scripts/ensure-backend-health.mjs",
-    "build": "next build",
+    "build": "node scripts/write-netlify-proxy-redirects.mjs && next build",
     "start": "next start",
     "lint": "next lint"
   },
