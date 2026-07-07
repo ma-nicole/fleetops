@@ -46,12 +46,10 @@ from app.services.scheduler import find_available_driver, find_available_helper,
 from app.constants.fleet_capacity import FLEET_TRUCK_COUNT, trucks_required_for_cargo
 from app.core.paths import uploads_subdir
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
-from app.services.booking_schedule import (
-    booking_interval,
-    driver_free_for_booking,
-    helper_free_for_booking,
-    intervals_overlap,
-    truck_free_for_booking,
+from app.services.dispatch_resource_availability import (
+    build_booking_resource_availability,
+    mark_resources_assigned,
+    validate_resource_assignment,
 )
 from app.services.dispatch_assignment_readiness import (
     BookingNotReadyForDispatchError,
@@ -829,105 +827,8 @@ def _compute_weight_splits(total_weight: float, required: int) -> list[float]:
     return out
 
 
-def _active_overlap_assignment_rows(db: Session, booking: Booking):
-    ns, ne = booking_interval(booking)
-    rows = (
-        db.query(TruckAssignment, Booking)
-        .join(Booking, Booking.id == TruckAssignment.booking_id)
-        .filter(
-            Booking.scheduled_date == booking.scheduled_date,
-            TruckAssignment.assignment_status.in_(
-                [TruckAssignmentStatus.ASSIGNED, TruckAssignmentStatus.IN_PROGRESS]
-            ),
-            Booking.status.notin_([BookingStatus.CANCELLED, BookingStatus.REJECTED]),
-        )
-        .all()
-    )
-    out: list[tuple[TruckAssignment, Booking]] = []
-    for ta, b in rows:
-        if b.id == booking.id:
-            continue
-        s, e = booking_interval(b)
-        if intervals_overlap(ns, ne, s, e):
-            out.append((ta, b))
-    return out
-
-
 def _available_resources_for_booking(db: Session, booking: Booking) -> dict:
-    overlaps = _active_overlap_assignment_rows(db, booking)
-    blocked_trucks = {ta.truck_id for ta, _ in overlaps if ta.truck_id}
-    blocked_drivers = {ta.driver_id for ta, _ in overlaps if ta.driver_id}
-    blocked_helpers = {ta.helper_id for ta, _ in overlaps if ta.helper_id}
-    ns, ne = booking_interval(booking)
-    trip_rows = (
-        db.query(Trip, Booking)
-        .join(Booking, Booking.id == Trip.booking_id)
-        .filter(
-            Booking.scheduled_date == booking.scheduled_date,
-            Trip.status.in_(ACTIVE_TRIP_STATUSES),
-            Booking.status.notin_([BookingStatus.CANCELLED, BookingStatus.REJECTED]),
-        )
-        .all()
-    )
-    for tr, bk in trip_rows:
-        if bk.id == booking.id:
-            continue
-        s, e = booking_interval(bk)
-        if not intervals_overlap(ns, ne, s, e):
-            continue
-        if tr.truck_id:
-            blocked_trucks.add(tr.truck_id)
-        if tr.driver_id:
-            blocked_drivers.add(tr.driver_id)
-        if tr.helper_id:
-            blocked_helpers.add(tr.helper_id)
-
-    current_rows = (
-        db.query(TruckAssignment)
-        .filter(
-            TruckAssignment.booking_id == booking.id,
-            TruckAssignment.assignment_status.in_(
-                [TruckAssignmentStatus.ASSIGNED, TruckAssignmentStatus.IN_PROGRESS]
-            ),
-        )
-        .all()
-    )
-    for ta in current_rows:
-        if ta.truck_id:
-            blocked_trucks.add(ta.truck_id)
-        if ta.driver_id:
-            blocked_drivers.add(ta.driver_id)
-        if ta.helper_id:
-            blocked_helpers.add(ta.helper_id)
-
-    trucks = (
-        db.query(Truck)
-        .filter(func.lower(func.coalesce(Truck.status, "available")) == "available")
-        .order_by(Truck.id.asc())
-        .all()
-    )
-    drivers = (
-        db.query(User)
-        .filter(User.role == UserRole.DRIVER)
-        .order_by(User.full_name.asc(), User.id.asc())
-        .all()
-    )
-    helpers = (
-        db.query(User)
-        .filter(User.role == UserRole.HELPER)
-        .order_by(User.full_name.asc(), User.id.asc())
-        .all()
-    )
-
-    return {
-        "trucks": [
-            {"id": t.id, "code": t.code, "capacity_tons": float(t.capacity_tons or 0)}
-            for t in trucks
-            if t.id not in blocked_trucks
-        ],
-        "drivers": [{"id": u.id, "name": u.full_name} for u in drivers if u.id not in blocked_drivers],
-        "helpers": [{"id": u.id, "name": u.full_name} for u in helpers if u.id not in blocked_helpers],
-    }
+    return build_booking_resource_availability(db, booking)
 
 
 @router.get("/booking/{booking_id}/availability")
@@ -1101,10 +1002,29 @@ def assign_batch(
     if any(t not in available_trucks for t in t_ids) or any(d not in available_drivers for d in d_ids) or any(
         h not in available_helpers for h in h_ids
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="One or more selected trucks, drivers, or helpers are no longer available for this schedule.",
+        conflict_msgs: list[str] = []
+        truck_by_id = {r["id"]: r for r in availability.get("truck_roster", [])}
+        driver_by_id = {r["id"]: r for r in availability.get("driver_roster", [])}
+        helper_by_id = {r["id"]: r for r in availability.get("helper_roster", [])}
+        for t_id in t_ids:
+            if t_id not in available_trucks:
+                reason = truck_by_id.get(t_id, {}).get("conflict_reason")
+                if reason:
+                    conflict_msgs.append(reason)
+        for d_id in d_ids:
+            if d_id not in available_drivers:
+                reason = driver_by_id.get(d_id, {}).get("conflict_reason")
+                if reason:
+                    conflict_msgs.append(reason)
+        for h_id in h_ids:
+            if h_id not in available_helpers:
+                reason = helper_by_id.get(h_id, {}).get("conflict_reason")
+                if reason:
+                    conflict_msgs.append(reason)
+        detail = conflict_msgs[0] if conflict_msgs else (
+            "One or more selected trucks, drivers, or helpers are no longer available for this schedule."
         )
+        raise HTTPException(status_code=409, detail=detail)
 
     created_trip_ids: list[int] = []
     for item in rows:
@@ -1112,20 +1032,16 @@ def assign_batch(
         driver = db.query(User).filter(User.id == item.driver_id, User.role == UserRole.DRIVER).with_for_update().first()
         helper = db.query(User).filter(User.id == item.helper_id, User.role == UserRole.HELPER).with_for_update().first()
         if not truck or not driver or not helper:
-            raise HTTPException(
-                status_code=409,
-                detail="One or more selected trucks, drivers, or helpers are no longer available for this schedule.",
-            )
-        if not truck_free_for_booking(db, truck.id, booking):
-            raise HTTPException(
-                status_code=409,
-                detail="One or more selected trucks, drivers, or helpers are no longer available for this schedule.",
-            )
-        if not driver_free_for_booking(db, driver.id, booking) or not helper_free_for_booking(db, helper.id, booking):
-            raise HTTPException(
-                status_code=409,
-                detail="One or more selected trucks, drivers, or helpers are no longer available for this schedule.",
-            )
+            raise HTTPException(status_code=409, detail="One or more selected resources were not found.")
+        validation_error = validate_resource_assignment(
+            db,
+            booking,
+            truck_id=truck.id,
+            driver_id=driver.id,
+            helper_id=helper.id,
+        )
+        if validation_error:
+            raise HTTPException(status_code=409, detail=validation_error)
 
     route_ctx = resolve_dispatch_route(db, booking)
     distance = float(route_ctx["distance_km"])
@@ -1168,9 +1084,7 @@ def assign_batch(
             assigned_weight=float(item.assigned_weight),
             assignment_status=TruckAssignmentStatus.FOR_PICKUP,
         )
-        truck.availability_status = "assigned"
-        driver.availability_status = "assigned"
-        helper.availability_status = "assigned"
+        mark_resources_assigned(db, truck=truck, driver=driver, helper=helper)
         db.add(trip)
         db.add(ta)
         db.flush()
@@ -1262,12 +1176,15 @@ def assign_trip(
     if not truck or not driver:
         raise HTTPException(status_code=400, detail="No available truck/driver for this window")
 
-    if not truck_free_for_booking(db, truck.id, booking):
-        raise HTTPException(status_code=400, detail="Selected truck is already booked for an overlapping run")
-    if not driver_free_for_booking(db, driver.id, booking):
-        raise HTTPException(status_code=400, detail="Selected driver is already booked for an overlapping run")
-    if helper is not None and not helper_free_for_booking(db, helper.id, booking):
-        raise HTTPException(status_code=400, detail="Selected helper is already booked for an overlapping run")
+    validation_error = validate_resource_assignment(
+        db,
+        booking,
+        truck_id=truck.id,
+        driver_id=driver.id,
+        helper_id=helper.id if helper else None,
+    )
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
 
     geo_km = booking_pickup_dropoff_distance_km(booking)
     route_ctx = resolve_dispatch_route(db, booking)
@@ -1333,10 +1250,7 @@ def assign_trip(
             assignment_status=TruckAssignmentStatus.FOR_PICKUP,
         )
     )
-    truck.availability_status = "assigned"
-    driver.availability_status = "assigned"
-    if helper:
-        helper.availability_status = "assigned"
+    mark_resources_assigned(db, truck=truck, driver=driver, helper=helper)
     next_hold_status = (
         TruckSlotHoldStatus.ASSIGNED if active + 1 >= need else TruckSlotHoldStatus.READY_FOR_ASSIGNMENT
     )

@@ -63,6 +63,7 @@ from app.services.dispatch_assignment_readiness import (
     assert_booking_ready_for_dispatch_assignment,
     dispatch_assignment_readiness,
 )
+from app.services.dispatch_resource_availability import release_booking_trips, release_trip_resources
 from app.services.upload_urls import media_type_for_path
 from app.core.paths import uploads_root
 from app.schemas.analytics import CostPredictionRequest
@@ -767,10 +768,7 @@ def complete_delivery(
 
     finalize_trip_toll_on_completion(db, trip, booking)
 
-    # Mark truck as available
-    truck = db.query(Truck).filter(Truck.id == trip.truck_id).first()
-    if truck:
-        truck.status = "available"
+    release_trip_resources(db, trip)
 
     db.commit()
     db.refresh(trip)
@@ -893,13 +891,7 @@ def request_cancellation(
     if booking.status in [BookingStatus.COMPLETED, BookingStatus.CANCELLED]:
         raise HTTPException(status_code=400, detail="Cannot cancel completed or already cancelled booking")
 
-    # Find associated trip
-    trip = db.query(Trip).filter(Trip.booking_id == booking.id).first()
-    if trip:
-        trip.status = TripStatus.CANCELLED
-        truck = db.query(Truck).filter(Truck.id == trip.truck_id).first()
-        if truck:
-            truck.status = "available"
+    release_booking_trips(db, booking.id)
 
     booking.status = BookingStatus.CANCELLED
 

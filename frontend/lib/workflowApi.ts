@@ -712,6 +712,18 @@ export type DispatchTripMonitoringBoardResponse = {
   active_assignments: DispatchTripMonitoringAssignment[];
 };
 
+export type DispatchResourceAvailabilityRow = {
+  id: number;
+  name: string;
+  code?: string;
+  capacity_tons?: number;
+  status: "available" | "assigned" | "on_trip" | "unavailable";
+  status_label: string;
+  assignable: boolean;
+  conflict_reason?: string | null;
+  next_available_at?: string | null;
+};
+
 export const WorkflowApi = {
   // Bookings
   listBookings: () => apiGet<Booking[]>("/bookings"),
@@ -1072,9 +1084,14 @@ export const WorkflowApi = {
       required_truck_count: number;
       cargo_weight_tons: number;
       weight_splits: number[];
-      trucks: { id: number; code: string; capacity_tons: number }[];
-      drivers: { id: number; name: string }[];
-      helpers: { id: number; name: string }[];
+      schedule_window_start?: string;
+      schedule_window_end?: string;
+      trucks: { id: number; code: string; capacity_tons: number; status?: string; status_label?: string }[];
+      drivers: { id: number; name: string; status?: string; status_label?: string }[];
+      helpers: { id: number; name: string; status?: string; status_label?: string }[];
+      truck_roster: DispatchResourceAvailabilityRow[];
+      driver_roster: DispatchResourceAvailabilityRow[];
+      helper_roster: DispatchResourceAvailabilityRow[];
     }>(`/dispatch/booking/${booking_id}/availability`),
   dispatchAssignBatch: (
     booking_id: number,

@@ -55,6 +55,7 @@ from app.services.terms_agreement_pdf import (
     signed_terms_pdf_relative_path,
 )
 from app.services.upload_urls import media_type_for_path
+from app.services.dispatch_resource_availability import release_booking_trips
 from app.services.goods_declaration_review import (
     effective_goods_declaration_review_status,
     goods_declaration_review_customer_fields,
@@ -572,6 +573,7 @@ def cancel_booking(
             )
 
     booking.status = BookingStatus.CANCELLED
+    release_booking_trips(db, booking.id)
     db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
         {"hold_status": TruckSlotHoldStatus.RELEASED}
     )

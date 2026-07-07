@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { WorkflowApi, type Booking } from "@/lib/workflowApi";
+import { WorkflowApi, type Booking, type DispatchResourceAvailabilityRow } from "@/lib/workflowApi";
+import { formatDateTime } from "@/lib/appLocale";
 import DispatcherRouteSetter from "@/components/DispatcherRouteSetter";
 
 type BookingAvailability = {
@@ -11,10 +12,61 @@ type BookingAvailability = {
   required_truck_count: number;
   cargo_weight_tons: number;
   weight_splits: number[];
+  schedule_window_start?: string;
+  schedule_window_end?: string;
   trucks: { id: number; code: string; capacity_tons: number }[];
   drivers: { id: number; name: string }[];
   helpers: { id: number; name: string }[];
+  truck_roster: DispatchResourceAvailabilityRow[];
+  driver_roster: DispatchResourceAvailabilityRow[];
+  helper_roster: DispatchResourceAvailabilityRow[];
 };
+
+function statusBadgeStyle(status: DispatchResourceAvailabilityRow["status"]): CSSProperties {
+  if (status === "available") return { background: "#DCFCE7", color: "#166534" };
+  if (status === "on_trip") return { background: "#DBEAFE", color: "#1D4ED8" };
+  if (status === "assigned") return { background: "#FEF3C7", color: "#92400E" };
+  return { background: "#F3F4F6", color: "#4B5563" };
+}
+
+function ResourceStatusBadge({ status, label }: { status: DispatchResourceAvailabilityRow["status"]; label: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        marginLeft: 6,
+        padding: "0.1rem 0.45rem",
+        borderRadius: 999,
+        fontSize: "0.72rem",
+        fontWeight: 700,
+        ...statusBadgeStyle(status),
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function rosterById(
+  roster: DispatchResourceAvailabilityRow[] | undefined,
+  id: number,
+): DispatchResourceAvailabilityRow | undefined {
+  return roster?.find((r) => r.id === id);
+}
+
+function rosterOptionLabel(row: DispatchResourceAvailabilityRow, kind: "truck" | "crew"): string {
+  const base = kind === "truck" ? `${row.code ?? row.name} · ${row.capacity_tons ?? "—"} t` : row.name;
+  const next = row.next_available_at ? ` · free after ${formatDateTime(row.next_available_at)}` : "";
+  return `${base} — ${row.status_label}${next}`;
+}
+
+function rosterConflictMessage(
+  kind: "Truck" | "Driver" | "Helper",
+  row: DispatchResourceAvailabilityRow | undefined,
+): string | null {
+  if (!row || row.assignable) return null;
+  return row.conflict_reason ?? `${kind} is ${row.status_label.toLowerCase()} for the selected schedule.`;
+}
 
 type AssignmentRow = {
   trip_id: number;
@@ -149,6 +201,12 @@ function DispatcherJobAssignmentsInner() {
       if (!row.truck_id || !row.driver_id || !row.helper_id) {
         return `Assignment ${i + 1} is incomplete. Truck, driver, and helper are all required.`;
       }
+      const truckConflict = rosterConflictMessage("Truck", rosterById(availability.truck_roster, row.truck_id));
+      if (truckConflict) return `Assignment ${i + 1}: ${truckConflict}`;
+      const driverConflict = rosterConflictMessage("Driver", rosterById(availability.driver_roster, row.driver_id));
+      if (driverConflict) return `Assignment ${i + 1}: ${driverConflict}`;
+      const helperConflict = rosterConflictMessage("Helper", rosterById(availability.helper_roster, row.helper_id));
+      if (helperConflict) return `Assignment ${i + 1}: ${helperConflict}`;
     }
     const truckSet = new Set(selectedTruckIds);
     const driverSet = new Set(selectedDriverIds);
@@ -308,8 +366,16 @@ function DispatcherJobAssignmentsInner() {
               <br />
               <strong>Dropoff:</strong> {selected.dropoff_location}
               <br />
-              <strong>Schedule:</strong> {selected.scheduled_date} · window {selected.scheduled_time_slot} ·{" "}
-              <strong>{selected.cargo_weight_tons} t</strong> cargo
+              <strong>Schedule:</strong> {selected.scheduled_date} · window {selected.scheduled_time_slot}
+              {availability?.schedule_window_start && availability?.schedule_window_end ? (
+                <>
+                  {" "}
+                  · planned run {formatDateTime(availability.schedule_window_start)} →{" "}
+                  {formatDateTime(availability.schedule_window_end)}
+                </>
+              ) : null}
+              {" "}
+              · <strong>{selected.cargo_weight_tons} t</strong> cargo
               <br />
               <strong>Required trucks:</strong>{" "}
               {availability?.required_truck_count ??
@@ -333,6 +399,71 @@ function DispatcherJobAssignmentsInner() {
 
           {availability ? (
             <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+              <div
+                style={{
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 10,
+                  padding: 12,
+                  display: "grid",
+                  gap: 10,
+                  background: "#F9FAFB",
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>Resource availability for this booking window</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                  {(["truck", "driver", "helper"] as const).map((kind) => {
+                    const roster =
+                      kind === "truck"
+                        ? (availability.truck_roster ??
+                          availability.trucks.map((t) => ({
+                            id: t.id,
+                            name: t.code,
+                            code: t.code,
+                            capacity_tons: t.capacity_tons,
+                            status: "available" as const,
+                            status_label: "Available",
+                            assignable: true,
+                          })))
+                        : kind === "driver"
+                          ? (availability.driver_roster ??
+                            availability.drivers.map((d) => ({
+                              id: d.id,
+                              name: d.name,
+                              status: "available" as const,
+                              status_label: "Available",
+                              assignable: true,
+                            })))
+                          : (availability.helper_roster ??
+                            availability.helpers.map((h) => ({
+                              id: h.id,
+                              name: h.name,
+                              status: "available" as const,
+                              status_label: "Available",
+                              assignable: true,
+                            })));
+                    const title = kind === "truck" ? "Trucks" : kind === "driver" ? "Drivers" : "Helpers";
+                    return (
+                      <div key={kind} style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{title}</div>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#374151" }}>
+                          {roster.map((r) => (
+                            <li key={r.id} style={{ marginBottom: 4 }}>
+                              {kind === "truck" ? `${r.code ?? r.name} · ${r.capacity_tons ?? "—"} t` : r.name}
+                              <ResourceStatusBadge status={r.status} label={r.status_label} />
+                              {r.next_available_at ? (
+                                <span style={{ display: "block", color: "#6B7280", marginTop: 2 }}>
+                                  Next available: {formatDateTime(r.next_available_at)}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {draftRows.map((row, idx) => {
                 const usedTrucks = new Set(draftRows.filter((_, i) => i !== idx).map((r) => r.truck_id).filter((id) => id > 0));
                 const usedDrivers = new Set(
@@ -371,14 +502,34 @@ function DispatcherJobAssignmentsInner() {
                           style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
                         >
                           <option value={0}>— truck —</option>
-                          {availability.trucks
+                          {(availability.truck_roster ?? availability.trucks.map((t) => ({
+                            id: t.id,
+                            name: t.code,
+                            code: t.code,
+                            capacity_tons: t.capacity_tons,
+                            status: "available" as const,
+                            status_label: "Available",
+                            assignable: true,
+                          })))
                             .filter((t) => !usedTrucks.has(t.id) || t.id === row.truck_id)
                             .map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.code} · {t.capacity_tons} t
+                              <option key={t.id} value={t.id} disabled={!t.assignable && t.id !== row.truck_id}>
+                                {rosterOptionLabel(t, "truck")}
                               </option>
                             ))}
                         </select>
+                        {row.truck_id > 0 ? (
+                          <span style={{ fontSize: 12, color: "#6B7280" }}>
+                            {(() => {
+                              const r = rosterById(availability.truck_roster, row.truck_id);
+                              return r ? (
+                                <>
+                                  Status: <ResourceStatusBadge status={r.status} label={r.status_label} />
+                                </>
+                              ) : null;
+                            })()}
+                          </span>
+                        ) : null}
                       </label>
                       <label style={{ display: "grid", gap: 4 }}>
                         <span>Driver</span>
@@ -388,14 +539,32 @@ function DispatcherJobAssignmentsInner() {
                           style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
                         >
                           <option value={0}>— driver —</option>
-                          {availability.drivers
+                          {(availability.driver_roster ?? availability.drivers.map((d) => ({
+                            id: d.id,
+                            name: d.name,
+                            status: "available" as const,
+                            status_label: "Available",
+                            assignable: true,
+                          })))
                             .filter((d) => !usedDrivers.has(d.id) || d.id === row.driver_id)
                             .map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name}
+                              <option key={d.id} value={d.id} disabled={!d.assignable && d.id !== row.driver_id}>
+                                {rosterOptionLabel(d, "crew")}
                               </option>
                             ))}
                         </select>
+                        {row.driver_id > 0 ? (
+                          <span style={{ fontSize: 12, color: "#6B7280" }}>
+                            {(() => {
+                              const r = rosterById(availability.driver_roster, row.driver_id);
+                              return r ? (
+                                <>
+                                  Status: <ResourceStatusBadge status={r.status} label={r.status_label} />
+                                </>
+                              ) : null;
+                            })()}
+                          </span>
+                        ) : null}
                       </label>
                       <label style={{ display: "grid", gap: 4 }}>
                         <span>Helper (required)</span>
@@ -405,14 +574,32 @@ function DispatcherJobAssignmentsInner() {
                           style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
                         >
                           <option value={0}>— helper —</option>
-                          {availability.helpers
+                          {(availability.helper_roster ?? availability.helpers.map((h) => ({
+                            id: h.id,
+                            name: h.name,
+                            status: "available" as const,
+                            status_label: "Available",
+                            assignable: true,
+                          })))
                             .filter((h) => !usedHelpers.has(h.id) || h.id === row.helper_id)
                             .map((h) => (
-                              <option key={h.id} value={h.id}>
-                                {h.name}
+                              <option key={h.id} value={h.id} disabled={!h.assignable && h.id !== row.helper_id}>
+                                {rosterOptionLabel(h, "crew")}
                               </option>
                             ))}
                         </select>
+                        {row.helper_id > 0 ? (
+                          <span style={{ fontSize: 12, color: "#6B7280" }}>
+                            {(() => {
+                              const r = rosterById(availability.helper_roster, row.helper_id);
+                              return r ? (
+                                <>
+                                  Status: <ResourceStatusBadge status={r.status} label={r.status_label} />
+                                </>
+                              ) : null;
+                            })()}
+                          </span>
+                        ) : null}
                       </label>
                     </div>
                   </div>

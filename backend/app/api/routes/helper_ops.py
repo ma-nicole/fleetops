@@ -36,6 +36,7 @@ from app.services.evidence_capture import (
 )
 from app.services.pre_delivery_verification import is_delivery_progression_step, pre_delivery_block_detail
 from app.services.trip_status_sync import sync_trip_and_booking_status
+from app.services.dispatch_resource_availability import release_booking_trips, release_trip_resources
 
 router = APIRouter(prefix="/helper", tags=["helper"])
 logger = logging.getLogger(__name__)
@@ -212,18 +213,7 @@ async def helper_update_status(
 
     if step == "completed":
         # Release truck and assignment resources immediately for future scheduling.
-        if synced_trip.truck_id:
-            truck = db.query(Truck).filter(Truck.id == synced_trip.truck_id).first()
-            if truck and (truck.status or "").lower() != "maintenance":
-                truck.status = "available"
-                truck.availability_status = "available"
-        if synced_trip.driver_id:
-            driver = db.query(User).filter(User.id == synced_trip.driver_id, User.role == UserRole.DRIVER).first()
-            if driver:
-                driver.availability_status = "available"
-        helper_user = db.query(User).filter(User.id == user.id).first()
-        if helper_user:
-            helper_user.availability_status = "available"
+        release_trip_resources(db, synced_trip)
     db.commit()
     db.refresh(synced_trip)
     return {

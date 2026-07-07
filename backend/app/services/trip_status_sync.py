@@ -13,6 +13,7 @@ from app.models.entities import (
     TruckAssignmentStatus,
 )
 from app.services.booking_status_aggregate import apply_aggregate_booking_status
+from app.services.dispatch_resource_availability import release_trip_resources
 
 
 STEP_TO_TRIP_STATUS: dict[str, TripStatus] = {
@@ -79,6 +80,9 @@ def sync_trip_and_booking_status(
 
     # Multi-truck: booking.status always derived from ALL trips (never COMPLETED from one trip alone).
     apply_aggregate_booking_status(db, booking)
+
+    if step in {"completed", "cancelled"}:
+        release_trip_resources(db, trip)
 
     db.add(
         TripStatusUpdate(
