@@ -1,26 +1,9 @@
 [build]
   base = "frontend"
-  # BACKEND_ORIGIN must be set in Netlify env before build (writes public/_redirects for API proxy).
-  command = "npm ci && npm run build"
-
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+  command = "npm ci --include=dev && npm run build"
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "20"
-  # Direct HTTPS API avoids Netlify /api-proxy 500s; Railway CORS must allow this Netlify domain.
   NEXT_PUBLIC_API_URL = "https://fleetops-production-b2b7.up.railway.app/api"
   BACKEND_ORIGIN = "https://fleetops-production-b2b7.up.railway.app"
-
-# Force proxy rules when NEXT_PUBLIC_API_URL=/api-proxy (backup path).
-[[redirects]]
-  from = "/api-proxy/*"
-  to = "https://fleetops-production-b2b7.up.railway.app/api/:splat"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/uploads/*"
-  to = "https://fleetops-production-b2b7.up.railway.app/uploads/:splat"
-  status = 200
-  force = true
