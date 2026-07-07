@@ -1,9 +1,12 @@
 "use client";
 
-import { WorkflowApi, type DriverVehicleIssueSelectableTrip } from "@/lib/workflowApi";
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
+import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
+import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
+import { useRoleGuard } from "@/lib/useRoleGuard";
+import { WorkflowApi, type DriverVehicleIssueSelectableTrip } from "@/lib/workflowApi";
 
 const OPERATIONAL_STATUS_LABELS: Record<string, string> = {
   assigned: "Assigned",
@@ -48,10 +51,16 @@ export default function ReportVehicleIssuePage() {
   const [priority, setPriority] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [fileMeta, setFileMeta] = useState<EvidenceCaptureMetadata | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitOk, setSubmitOk] = useState<string | null>(null);
+
+  const selectedTrip = useMemo(
+    () => trips.find((t) => t.trip_id === tripId) ?? null,
+    [trips, tripId],
+  );
 
   const loadTrips = useCallback(async () => {
     setLoadingTrips(true);
@@ -100,11 +109,15 @@ export default function ReportVehicleIssuePage() {
       fd.append("issue_type", issueType);
       fd.append("priority", priority);
       fd.append("description", description.trim());
-      if (file) fd.append("file", file);
+      if (file) {
+        fd.append("file", file);
+        if (fileMeta) appendEvidenceToFormData(fd, fileMeta);
+      }
       const res = await WorkflowApi.driverSubmitVehicleIssueReport(fd);
       setSubmitOk(`Report #${res.id} submitted. Dispatch has been notified.`);
       setDescription("");
       setFile(null);
+      setFileMeta(null);
       setIssueType("");
       setPriority("");
       setTripId("");
@@ -322,20 +335,22 @@ export default function ReportVehicleIssuePage() {
         </div>
 
         <div>
-          <label htmlFor="photo" style={labelStyle}>
-            Photo / attachment (optional)
-          </label>
-          <input
-            id="photo"
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp,.pdf,.img"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          <EvidenceCaptureInput
+            label="Photo / attachment"
+            allowPdf
+            watermarkContext={{
+              bookingId: selectedTrip?.booking_id,
+              tripId: typeof tripId === "number" ? tripId : null,
+              crewName: selectedTrip?.helper_name,
+            }}
             disabled={trips.length === 0}
-            style={{ fontSize: "0.9rem" }}
+            value={file}
+            metadata={fileMeta}
+            onCapture={(f, meta) => {
+              setFile(f);
+              setFileMeta(meta);
+            }}
           />
-          <p style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", color: "#94A3B8" }}>
-            JPG, PNG, WebP, PDF — max 12 MB.
-          </p>
         </div>
 
         {submitError ? (

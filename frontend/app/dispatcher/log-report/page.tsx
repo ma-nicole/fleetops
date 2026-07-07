@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DispatchApi } from "@/lib/dispatchApi";
+import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
+import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
+import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
 import { WorkflowApi, type GeneralOperationalReportRow } from "@/lib/workflowApi";
 import { announce } from "@/lib/useAnnouncer";
 
@@ -43,6 +46,7 @@ export default function DispatcherOperationalLogPage() {
   const [priority, setPriority] = useState("medium");
   const [details, setDetails] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [fileMeta, setFileMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [lastSavedId, setLastSavedId] = useState<number | null>(null);
@@ -110,11 +114,15 @@ export default function DispatcherOperationalLogPage() {
       fd.append("report_type", reportType);
       fd.append("priority_level", priority);
       fd.append("operational_details", details.trim());
-      if (file) fd.append("file", file);
+      if (file) {
+        fd.append("file", file);
+        if (fileMeta) appendEvidenceToFormData(fd, fileMeta);
+      }
       const res = await DispatchApi.createOperationalLog(fd);
       setLastSavedId(res.id);
       setDetails("");
       setFile(null);
+      setFileMeta(null);
       announce("Operational log saved");
       void loadBoard();
     } catch (err: unknown) {
@@ -300,15 +308,19 @@ export default function DispatcherOperationalLogPage() {
         </div>
 
         <div>
-          <label htmlFor="oplog-file" style={{ display: "block", fontWeight: 700, marginBottom: "0.35rem" }}>
-            Supporting Documents / Photos (optional)
-          </label>
-          <input
-            id="oplog-file"
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp,.pdf,.img"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            style={{ fontSize: "0.9rem" }}
+          <EvidenceCaptureInput
+            label="Supporting documents / photos"
+            allowPdf
+            watermarkContext={{
+              bookingId: selected?.booking_id,
+              tripId: selected?.trip_id,
+            }}
+            value={file}
+            metadata={fileMeta}
+            onCapture={(f, meta) => {
+              setFile(f);
+              setFileMeta(meta);
+            }}
           />
         </div>
 

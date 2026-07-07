@@ -322,6 +322,10 @@ class Booking(Base):
     terms_agreement_storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     terms_agreement_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     terms_agreed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    terms_e_signature_storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    terms_signature_signer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    terms_signature_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    terms_agreement_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     customs_clearance_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     customs_tariff_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
@@ -358,6 +362,10 @@ class Booking(Base):
         from app.services.upload_urls import public_upload_url
 
         return public_upload_url(self.terms_agreement_storage_path)
+
+    @property
+    def terms_e_signed(self) -> bool:
+        return bool(self.terms_e_signature_storage_path and self.terms_agreed_at)
 
     customer: Mapped[User] = relationship(foreign_keys=[customer_id])
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
@@ -433,6 +441,10 @@ class TripStatusUpdate(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     remarks: Mapped[str | None] = mapped_column(String(500), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    evidence_capture_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    evidence_verification_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evidence_review_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    evidence_device_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -448,7 +460,39 @@ class TripLocationUpdate(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     remarks: Mapped[str | None] = mapped_column(String(500), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    evidence_capture_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    evidence_verification_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evidence_review_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    evidence_device_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class EvidenceCaptureRecord(Base):
+    """Metadata for operational evidence uploads (driver, dispatcher, delivery, etc.)."""
+
+    __tablename__ = "evidence_capture_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    upload_path: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    context_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    booking_id: Mapped[int | None] = mapped_column(ForeignKey("bookings.id"), nullable=True, index=True)
+    trip_id: Mapped[int | None] = mapped_column(ForeignKey("trips.id"), nullable=True, index=True)
+    uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    uploaded_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    capture_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    verification_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    review_required: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    device_captured_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    server_received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gps_accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distance_from_expected_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_flagged: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    milestone_context: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
 
 class RouteOption(Base):
     """A* candidate routes per booking (paper §3.2.9 + Test F-07 IsSelected flag)"""

@@ -18,10 +18,14 @@ import { useDocumentPreview } from "@/lib/useDocumentPreview";
 import {
   canManuallyApprove,
   canManuallyReject,
+  canMarkCashReceived,
+  isCashPayment,
   isManualPayment,
   isXenditPayment,
   paymentDisplayStatus,
+  transactionReference,
 } from "@/lib/paymentDisplayStatus";
+import { formatPaymentMethodLabel } from "@/lib/paymentMethodOptions";
 import { WorkflowApi, type Booking, type Payment } from "@/lib/workflowApi";
 
 function tokenHeader(): HeadersInit {
@@ -231,6 +235,30 @@ export default function AdminPaymentApprovalPage() {
     }
   };
 
+  const onMarkCashReceived = async (id: number) => {
+    const payment = payments.find((p) => p.id === id);
+    if (!payment || !canMarkCashReceived(payment)) {
+      window.alert("This payment is no longer awaiting cash confirmation.");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Mark this cash payment as received? The booking will be marked payment verified and cleared for dispatch readiness.",
+      )
+    ) {
+      return;
+    }
+    setBusyId(id);
+    try {
+      await WorkflowApi.markCashReceived(id);
+      await refresh();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "Cash confirmation failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const onReject = async (id: number) => {
     const payment = payments.find((p) => p.id === id);
     if (!payment || payment.status !== "for_verification") {
@@ -292,8 +320,8 @@ export default function AdminPaymentApprovalPage() {
             </Link>
             <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Payment monitoring</h1>
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.95rem" }}>
-              Xendit online payments verify automatically via webhook. Manual review remains only for bank transfer,
-              COD, and legacy proof uploads.
+              Xendit online payments verify automatically via webhook. Cash payments are confirmed with Cash Received.
+              Manual review remains only for legacy bank transfer, COD, and proof uploads.
             </p>
           </div>
           <Link
@@ -379,20 +407,20 @@ export default function AdminPaymentApprovalPage() {
                 filtered.map((row) => {
                   const p = row.payment;
                   const paidAt = p.xendit_paid_at || p.paid_at || p.proof_uploaded_at;
-                  const transactionId = p.xendit_payment_id || p.xendit_external_id || "—";
+                  const txnRef = transactionReference(p);
                   return (
                     <tr key={p.id} style={{ borderBottom: "1px solid #E8E8E8" }}>
                       <td style={{ padding: "0.75rem", fontWeight: 700, color: "#1F2937" }}>{p.reference}</td>
                       <td style={{ padding: "0.75rem", color: "#1F2937", fontSize: "0.85rem" }}>{row.bookingLabel}</td>
-                      <td style={{ padding: "0.75rem", fontSize: "0.85rem", color: "#374151", textTransform: "capitalize" }}>
-                        {isXenditPayment(p) ? "Xendit / GCash" : p.method}
+                      <td style={{ padding: "0.75rem", fontSize: "0.85rem", color: "#374151" }}>
+                        {formatPaymentMethodLabel(p.method)}
                       </td>
                       <td style={{ padding: "0.75rem", fontWeight: 600, color: "#10B981" }}>{formatPhp(p.amount)}</td>
                       <td style={{ padding: "0.75rem", fontSize: "0.85rem", color: "#6B7280" }}>
                         {paidAt ? formatDateTime(paidAt) : "—"}
                       </td>
                       <td style={{ padding: "0.75rem", fontSize: "0.78rem", color: "#4B5563", wordBreak: "break-all" }}>
-                        {transactionId}
+                        {txnRef}
                       </td>
                       <td style={{ padding: "0.75rem", textAlign: "center" }}>{statusBadge(p)}</td>
                       <td style={{ padding: "0.75rem", textAlign: "center", fontSize: "0.8rem" }}>
@@ -406,12 +434,40 @@ export default function AdminPaymentApprovalPage() {
                             <span style={{ color: "#92400E", fontWeight: 600 }}>Awaiting Xendit webhook</span>
                             <span style={{ color: "#6B7280" }}>Webhook: {p.webhook_status || p.xendit_status || "PENDING"}</span>
                           </div>
+                        ) : isCashPayment(p) && p.status === "verified" ? (
+                          <div style={{ display: "grid", gap: "0.25rem" }}>
+                            <span style={{ color: "#166534", fontWeight: 700 }}>Cash received</span>
+                            {p.verified_by_name ? (
+                              <span style={{ color: "#6B7280" }}>By: {p.verified_by_name}</span>
+                            ) : null}
+                          </div>
+                        ) : isCashPayment(p) ? (
+                          <span style={{ color: "#92400E", fontWeight: 600 }}>Awaiting cash payment</span>
                         ) : (
                           <span style={{ color: "#6B7280" }}>Manual proof review</span>
                         )}
                       </td>
                       <td style={{ padding: "0.75rem", textAlign: "center" }}>
-                        {canManuallyApprove(p) ? (
+                        {canMarkCashReceived(p) ? (
+                          <SubmitButton
+                            type="button"
+                            className=""
+                            busy={busyId === p.id}
+                            busyLabel="Confirming…"
+                            label="Cash received"
+                            disabled={busyId !== null}
+                            onClick={() => void onMarkCashReceived(p.id)}
+                            style={{
+                              padding: "0.4rem 0.7rem",
+                              background: "#10B981",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "4px",
+                              fontWeight: 600,
+                              fontSize: "0.8rem",
+                            }}
+                          />
+                        ) : canManuallyApprove(p) ? (
                           <div style={{ display: "flex", gap: "0.35rem", justifyContent: "center", flexWrap: "wrap" }}>
                             <SubmitButton
                               type="button"

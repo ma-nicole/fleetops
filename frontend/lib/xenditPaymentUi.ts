@@ -1,9 +1,22 @@
-export const XENDIT_GCASH_PAYMENT_STEPS = [
-  "Click Pay Now to open Xendit checkout, or scan the GCash QR code below.",
-  "Choose GCash or another supported Xendit payment method.",
-  "Confirm the exact amount and complete payment.",
-  "This page updates automatically when payment is received; no screenshot upload is needed.",
-] as const;
+export const XENDIT_CHECKOUT_STEPS: Record<string, readonly string[]> = {
+  gcash: [
+    "Click Pay Now to open Xendit checkout, or scan the GCash QR code below.",
+    "Complete payment in GCash or the hosted checkout page.",
+    "This page updates automatically when payment is received.",
+  ],
+  card: [
+    "Click Pay Now to open the secure Xendit checkout page.",
+    "Enter your credit or debit card details and confirm payment.",
+    "Your booking is verified automatically when Xendit confirms payment.",
+  ],
+  bank: [
+    "Click Pay Now to open the Xendit bank transfer checkout.",
+    "Follow the transfer instructions and complete payment.",
+    "Your booking is verified automatically when Xendit confirms the transfer.",
+  ],
+};
+
+export const XENDIT_GCASH_PAYMENT_STEPS = XENDIT_CHECKOUT_STEPS.gcash;
 
 /** Attempt to open the GCash app (mobile). Falls back silently on desktop. */
 export function openGcashApp(): void {

@@ -2,6 +2,8 @@
  * Typed wrapper around the booking → trip → payment lifecycle.
  */
 import { apiGet, apiPatch, apiPost, apiPostMultipart } from "./api";
+import { appendEvidenceToFormData } from "./evidenceFormData";
+import type { EvidenceCaptureMetadata } from "./evidenceCapture";
 import type { CargoTypeScreening, CargoTypeValidationAdminRow } from "./cargoTypeCategories";
 import type { DispatcherAssignmentRow, DispatcherUserOption } from "./dispatcherAssignment";
 
@@ -91,6 +93,9 @@ export type Booking = {
   terms_agreement_uploaded_at?: string | null;
   terms_agreement_file_url?: string | null;
   terms_agreed_at?: string | null;
+  terms_signature_signer_name?: string | null;
+  terms_agreement_version?: string | null;
+  terms_e_signed?: boolean;
   customs_clearance_status?: string | null;
   customs_tariff_notes?: string | null;
   customs_additional_charges_php?: number | null;
@@ -192,6 +197,11 @@ export type CrewTimelineEvent = {
   photo_url: string | null;
   submitted_by: string | null;
   update_index?: number;
+  evidence_verification_label?: string | null;
+  evidence_review_required?: boolean;
+  evidence_latitude?: number | null;
+  evidence_longitude?: number | null;
+  evidence_device_captured_at?: string | null;
 };
 
 export type DriverTripNotificationRow = {
@@ -567,10 +577,11 @@ export type Payment = {
   xendit_expires_at?: string | null;
   xendit_paid_at?: string | null;
   created_at: string;
-  verification_mode?: "xendit_auto" | "manual" | string | null;
+  verification_mode?: "xendit_auto" | "manual" | "cash_offline" | string | null;
   display_status?: string | null;
   webhook_verified?: boolean | null;
   webhook_status?: string | null;
+  verified_by_name?: string | null;
 };
 
 export type XenditConfig = {
@@ -582,6 +593,7 @@ export type XenditPaymentSession = {
   payment: Payment;
   qr_string: string | null;
   xendit_status: string | null;
+  checkout_url?: string | null;
 };
 
 export type ScheduleTimelineResource = {
@@ -744,8 +756,9 @@ export const WorkflowApi = {
     cargo_weight_tons: number;
     cargo_description?: string | null;
     terms_agreed: boolean;
+    terms_signer_name?: string;
     cargo_declaration: File;
-    terms_agreement: File;
+    terms_e_signature: File;
     toll_entry_point?: string;
     toll_exit_point?: string;
     vehicle_class?: string;
@@ -766,8 +779,9 @@ export const WorkflowApi = {
       fd.append("distance_km_override", String(payload.distance_km_override));
     }
     fd.append("terms_agreed", payload.terms_agreed ? "true" : "false");
+    if (payload.terms_signer_name) fd.append("terms_signer_name", payload.terms_signer_name);
     fd.append("cargo_declaration", payload.cargo_declaration);
-    fd.append("terms_agreement", payload.terms_agreement);
+    fd.append("terms_e_signature", payload.terms_e_signature);
     return apiPostMultipart<Booking>("/bookings/with-documents", fd);
   },
   getBooking: (id: number) => apiGet<Booking>(`/bookings/${id}`),
@@ -877,11 +891,10 @@ export const WorkflowApi = {
 
   resubmitBookingDocuments: (
     bookingId: number,
-    payload: { cargo_declaration?: File; terms_agreement?: File },
+    payload: { cargo_declaration?: File },
   ) => {
     const fd = new FormData();
     if (payload.cargo_declaration) fd.append("cargo_declaration", payload.cargo_declaration);
-    if (payload.terms_agreement) fd.append("terms_agreement", payload.terms_agreement);
     return apiPostMultipart<Booking>(`/bookings/${bookingId}/documents/resubmit`, fd);
   },
 
@@ -953,16 +966,18 @@ export const WorkflowApi = {
     apiPost<Trip>(`/workflow/job/${trip_id}/loading-complete`),
   deliveryReceivingStatus: (trip_id: number) =>
     apiGet<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/delivery-receiving-status`),
-  uploadReceivingDocument: (trip_id: number, file: File) => {
+  uploadReceivingDocument: (trip_id: number, file: File, evidence?: EvidenceCaptureMetadata | null) => {
     const fd = new FormData();
     fd.append("file", file);
+    if (evidence) appendEvidenceToFormData(fd, evidence);
     return apiPostMultipart<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/receiving-document`, fd);
   },
   verifyReceivingQr: (trip_id: number, scanned_payload: string) =>
     apiPost<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/verify-receiving-qr`, { scanned_payload }),
-  uploadDigitalSignature: (trip_id: number, file: File) => {
+  uploadDigitalSignature: (trip_id: number, file: File, evidence?: EvidenceCaptureMetadata | null) => {
     const fd = new FormData();
     fd.append("file", file);
+    if (evidence) appendEvidenceToFormData(fd, evidence);
     return apiPostMultipart<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/digital-signature`, fd);
   },
   completeTrip: (trip_id: number, proof_url?: string, notes?: string) =>
@@ -996,6 +1011,7 @@ export const WorkflowApi = {
     return apiPostMultipart<Payment>("/payments/submit-proof", fd);
   },
   verifyPayment: (payment_id: number) => apiPost<Payment>(`/payments/${payment_id}/verify`, {}),
+  markCashReceived: (payment_id: number) => apiPost<Payment>(`/payments/${payment_id}/cash-received`, {}),
   rejectPayment: (payment_id: number) => apiPost<Payment>(`/payments/${payment_id}/reject`, {}),
   payBooking: (booking_id: number, method: string, amount: number) =>
     apiPost<Payment>("/payments", { booking_id, method, amount }),
@@ -1003,8 +1019,9 @@ export const WorkflowApi = {
     apiPost<Payment>(`/payments/${payment_id}/refund`, { reason }),
   bookingPayments: (booking_id: number) => apiGet<Payment[]>(`/payments/booking/${booking_id}`),
   xenditConfig: () => apiGet<XenditConfig>("/payments/xendit/config"),
-  createXenditSession: (booking_id: number) =>
-    apiPost<XenditPaymentSession>(`/payments/xendit/session/${booking_id}`, {}),
+  createXenditSession: (booking_id: number, method: string = "gcash") =>
+    apiPost<XenditPaymentSession>(`/payments/xendit/session/${booking_id}`, { method }),
+  createCashSession: (booking_id: number) => apiPost<Payment>(`/payments/cash/session/${booking_id}`, {}),
   getXenditSession: (booking_id: number) => apiGet<XenditPaymentSession>(`/payments/xendit/session/${booking_id}`),
 
   // Feedback

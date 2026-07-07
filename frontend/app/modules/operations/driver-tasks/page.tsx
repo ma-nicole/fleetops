@@ -192,7 +192,11 @@ export default function DriverTaskListPage() {
             <h3 style={{ margin: "0 0 0.75rem", color: "#1A1A1A" }}>
               Complete delivery — Trip #{completionTrip.id}
             </h3>
-            <DeliveryCompletionPanel tripId={completionTrip.id} onReadyChange={setDeliveryReady} />
+            <DeliveryCompletionPanel
+              tripId={completionTrip.id}
+              bookingId={completionTrip.booking_id}
+              onReadyChange={setDeliveryReady}
+            />
             <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", flexWrap: "wrap" }}>
               <button
                 type="button"

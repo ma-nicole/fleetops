@@ -1,9 +1,12 @@
 "use client";
 
-import { WorkflowApi, type DriverVehicleIssueSelectableTrip } from "@/lib/workflowApi";
-import { useRoleGuard } from "@/lib/useRoleGuard";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
+import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
+import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
+import { useRoleGuard } from "@/lib/useRoleGuard";
+import { WorkflowApi, type DriverVehicleIssueSelectableTrip } from "@/lib/workflowApi";
 
 function todayIsoDate() {
   const d = new Date();
@@ -50,6 +53,7 @@ export default function DriverGeneralFormPage() {
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [fileMeta, setFileMeta] = useState<EvidenceCaptureMetadata | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -90,6 +94,7 @@ export default function DriverGeneralFormPage() {
     setDescription("");
     setNotes("");
     setFile(null);
+    setFileMeta(null);
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -124,7 +129,10 @@ export default function DriverGeneralFormPage() {
       fd.append("fuel_consumed", fuelConsumed.trim());
       fd.append("description", description.trim());
       fd.append("notes", notes.trim());
-      if (file) fd.append("file", file);
+      if (file) {
+        fd.append("file", file);
+        if (fileMeta) appendEvidenceToFormData(fd, fileMeta);
+      }
       const res = await WorkflowApi.driverSubmitGeneralOperationalReport(fd);
       setSubmittedOk(`Form #${res.id} saved. Dispatch and trip logs will show this record.`);
       resetForm();
@@ -443,18 +451,22 @@ export default function DriverGeneralFormPage() {
         </div>
 
         <div>
-          <label htmlFor="gf-file" style={labelStyle}>
-            Attachment (photo, proof, document — optional)
-          </label>
-          <input
-            id="gf-file"
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp,.pdf,.img"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          <EvidenceCaptureInput
+            label="Attachment (photo, proof, document)"
+            allowPdf
+            watermarkContext={{
+              bookingId: selected?.booking_id,
+              tripId: typeof tripId === "number" ? tripId : null,
+              crewName: selected?.helper_name,
+            }}
             disabled={trips.length === 0}
-            style={{ fontSize: "0.9rem" }}
+            value={file}
+            metadata={fileMeta}
+            onCapture={(f, meta) => {
+              setFile(f);
+              setFileMeta(meta);
+            }}
           />
-          <p style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", color: "#94A3B8" }}>Max 12 MB.</p>
         </div>
 
         {submitError ? <div style={{ color: "#B91C1C", fontSize: "0.9rem" }}>{submitError}</div> : null}

@@ -33,6 +33,14 @@ def _service_type_ok(service_type: ServiceType | str | None) -> bool:
     return val.strip().lower() in (ServiceType.FIXED.value, ServiceType.CUSTOMIZED.value)
 
 
+def _terms_requirements_met(booking: Booking) -> bool:
+    if booking.terms_agreed_at is None or not booking.terms_agreement_storage_path:
+        return False
+    if booking.terms_agreement_version:
+        return bool(booking.terms_e_signature_storage_path)
+    return True
+
+
 def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
     verified_payment = (
         db.query(Payment)
@@ -43,8 +51,7 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
     has_declaration_file = bool(
         booking.cargo_declaration_storage_path or booking.cargo_declaration_original_filename
     )
-    has_terms_file = bool(booking.terms_agreement_storage_path or booking.terms_agreement_original_filename)
-    has_terms_agreed = booking.terms_agreed_at is not None
+    terms_complete = _terms_requirements_met(booking)
     cargo_desc = (booking.cargo_description or "").strip()
     weight_ok = 0.1 <= float(booking.cargo_weight_tons or 0) <= MAX_BOOKING_WEIGHT_TONS
     service_ok = _service_type_ok(booking.service_type)
@@ -118,11 +125,15 @@ def build_pre_delivery_checklist(db: Session, booking: Booking) -> dict:
         {
             "key": "required_documents",
             "label": "Required documents",
-            "passed": has_declaration_file and has_terms_file and has_terms_agreed,
+            "passed": has_declaration_file and terms_complete,
             "detail": (
-                "Cargo declaration and signed terms agreement on file."
-                if has_declaration_file and has_terms_file and has_terms_agreed
-                else "Cargo declaration, terms agreement upload, and terms acceptance are all required."
+                "Cargo declaration and electronically signed terms agreement on file."
+                if has_declaration_file and terms_complete
+                else (
+                    "Cargo declaration, electronic signature, and terms acceptance are all required."
+                    if not terms_complete
+                    else "Cargo declaration document is missing."
+                )
             ),
         },
     ]

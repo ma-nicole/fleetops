@@ -68,6 +68,7 @@ class PaymentRead(BaseModel):
     display_status: str | None = None
     webhook_verified: bool | None = None
     webhook_status: str | None = None
+    verified_by_name: str | None = None
 
     class Config:
         from_attributes = True
@@ -82,6 +83,19 @@ class XenditPaymentSessionRead(BaseModel):
     payment: PaymentRead
     qr_string: str | None = None
     xendit_status: str | None = None
+    checkout_url: str | None = None
+
+
+class XenditSessionCreate(BaseModel):
+    method: str = "gcash"
+
+    @field_validator("method")
+    @classmethod
+    def normalize_method(cls, v: str) -> str:
+        key = (v or "gcash").strip().lower()
+        if key not in {"gcash", "card", "bank"}:
+            raise ValueError("method must be gcash, card, or bank")
+        return key
 
 
 class PaymentRefundRequest(BaseModel):

@@ -104,6 +104,10 @@ class BookingRead(BaseModel):
     terms_agreement_uploaded_at: datetime | None = None
     terms_agreement_file_url: str | None = None
     terms_agreed_at: datetime | None = None
+    terms_signature_signer_name: str | None = None
+    terms_signature_ip: str | None = None
+    terms_agreement_version: str | None = None
+    terms_e_signed: bool = False
     customs_clearance_status: str | None = None
     customs_tariff_notes: str | None = None
     customs_additional_charges_php: float | None = None

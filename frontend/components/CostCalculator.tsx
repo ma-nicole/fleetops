@@ -67,7 +67,8 @@ export default function CostCalculator({
   const [quoteStatus, setQuoteStatus] = useState<string | null>(null);
   const [freightLines, setFreightLines] = useState<Awaited<ReturnType<typeof freightLinesFromPayload>> | null>(null);
   const [cargoDeclaration, setCargoDeclaration] = useState<File | null>(null);
-  const [termsAgreement, setTermsAgreement] = useState<File | null>(null);
+  const [termsSignature, setTermsSignature] = useState<File | null>(null);
+  const [termsScrolled, setTermsScrolled] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [quoteRefreshNonce, setQuoteRefreshNonce] = useState(0);
   const prevStepRef = useRef<BookingWizardStep>("route");
@@ -105,8 +106,9 @@ export default function CostCalculator({
       slotAvailableTrucks,
       requiredTrucksFromApi,
       cargoDeclaration,
-      termsAgreement,
+      termsSignature,
       termsAccepted,
+      termsScrolled,
     }),
     [
       sites.length,
@@ -123,8 +125,9 @@ export default function CostCalculator({
       slotAvailableTrucks,
       requiredTrucksFromApi,
       cargoDeclaration,
-      termsAgreement,
+      termsSignature,
       termsAccepted,
+      termsScrolled,
     ],
   );
 
@@ -398,7 +401,8 @@ export default function CostCalculator({
     (slotAvailableTrucks[pickedSlot] ?? 0) >= requiredTrucksFromApi &&
     !slotsLoading &&
     !!cargoDeclaration &&
-    !!termsAgreement &&
+    !!termsSignature &&
+    termsScrolled &&
     termsAccepted &&
     distanceConfirmed;
 
@@ -474,6 +478,19 @@ export default function CostCalculator({
     setMessage("");
 
     try {
+      let termsSignerName = "";
+      if (typeof window !== "undefined") {
+        try {
+          const cached = window.localStorage.getItem("customer_current_user");
+          if (cached) {
+            const parsed = JSON.parse(cached) as { full_name?: string };
+            termsSignerName = parsed.full_name?.trim() ?? "";
+          }
+        } catch {
+          termsSignerName = "";
+        }
+      }
+
       const data = await WorkflowApi.createBookingWithDocuments({
         pickup_location: pickup,
         dropoff_location: dropoff,
@@ -482,8 +499,9 @@ export default function CostCalculator({
         scheduled_time_slot: pickedSlot,
         cargo_weight_tons: parseFloat(weight),
         terms_agreed: termsAccepted,
+        terms_signer_name: termsSignerName || undefined,
         cargo_declaration: cargoDeclaration!,
-        terms_agreement: termsAgreement!,
+        terms_e_signature: termsSignature!,
         toll_entry_point: manualTollEntry.trim() || undefined,
         toll_exit_point: manualTollExit.trim() || undefined,
         vehicle_class: manualVehicleClass.trim() || undefined,
@@ -586,13 +604,15 @@ export default function CostCalculator({
         {currentStep === "documents" && (
           <DocumentsStep
             cargoDeclaration={cargoDeclaration}
-            termsAgreement={termsAgreement}
+            termsSignature={termsSignature}
             termsAccepted={termsAccepted}
+            termsScrolled={termsScrolled}
             disabled={!hasEnoughSites}
             errors={errors}
             onCargoDeclarationChange={setCargoDeclaration}
-            onTermsAgreementChange={setTermsAgreement}
+            onTermsSignatureChange={setTermsSignature}
             onTermsAcceptedChange={setTermsAccepted}
+            onTermsScrolledChange={setTermsScrolled}
             onClearError={clearError}
           />
         )}
@@ -606,8 +626,9 @@ export default function CostCalculator({
             date={date}
             pickedSlot={pickedSlot}
             cargoDeclaration={cargoDeclaration}
-            termsAgreement={termsAgreement}
+            termsSignature={termsSignature}
             termsAccepted={termsAccepted}
+            termsScrolled={termsScrolled}
             cost={cost}
             freightLines={freightLines}
             routeQuoteMeta={routeQuoteMeta}

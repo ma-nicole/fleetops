@@ -30,7 +30,7 @@ from app.constants.gcash_payment import (
     GCASH_QR_UPLOAD_DIR,
 )
 from app.constants.payment_limits import GCASH_MAX_TRANSACTION_PHP
-from app.constants.payment_methods import ALLOWED_PAYMENT_METHODS, PROOF_OPTIONAL_METHODS
+from app.constants.payment_methods import ALLOWED_PAYMENT_METHODS, PROOF_OPTIONAL_METHODS, XENDIT_ONLINE_METHODS
 from app.core.config import settings
 from app.core.paths import uploads_root, uploads_subdir
 from app.schemas.payment import (
@@ -40,13 +40,20 @@ from app.schemas.payment import (
     PaymentRefundRequest,
     XenditConfigRead,
     XenditPaymentSessionRead,
+    XenditSessionCreate,
 )
 from app.services.notifications import send_email_notification
 from app.services.dispatcher_booking_assignment import assert_dispatcher_booking_access
 from app.services.payment_read import payment_read_response
 from app.services.payment_verification import mark_payment_and_booking_verified
 from app.services.xendit_client import xendit_configured
-from app.services.xendit_payment import create_xendit_gcash_session, handle_xendit_webhook, sync_xendit_payment_status
+from app.services.xendit_payment import (
+    create_cash_payment_intent,
+    create_xendit_checkout_session,
+    create_xendit_gcash_session,
+    handle_xendit_webhook,
+    sync_xendit_payment_status,
+)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -145,19 +152,22 @@ def get_xendit_config():
 @router.post("/xendit/session/{booking_id}", response_model=XenditPaymentSessionRead)
 def create_xendit_payment_session(
     booking_id: int,
+    payload: XenditSessionCreate | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.CUSTOMER)),
 ):
-    """Create (or return) a Xendit dynamic GCash QR payment for a booking."""
+    """Create (or return) a Xendit hosted checkout for GCash, card, or bank transfer."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    payment = create_xendit_gcash_session(db, booking, user)
+    method = (payload.method if payload else "gcash").strip().lower()
+    payment = create_xendit_checkout_session(db, booking, user, method=method)
     enriched = payment_read_response(db, payment)
     return XenditPaymentSessionRead(
         payment=enriched,
         qr_string=payment.xendit_qr_string,
         xendit_status=payment.xendit_status,
+        checkout_url=payment.xendit_invoice_url,
     )
 
 
@@ -188,7 +198,22 @@ def get_xendit_payment_session(
         payment=enriched,
         qr_string=payment.xendit_qr_string,
         xendit_status=payment.xendit_status,
+        checkout_url=payment.xendit_invoice_url,
     )
+
+
+@router.post("/cash/session/{booking_id}", response_model=PaymentRead)
+def create_cash_payment_session(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    """Record a cash payment intent for admin/accounting confirmation."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    payment = create_cash_payment_intent(db, booking, user)
+    return payment_read_response(db, payment)
 
 
 @router.post("/xendit/webhook")
@@ -259,6 +284,7 @@ def simulate_xendit_payment(
         payment=enriched,
         qr_string=payment.xendit_qr_string,
         xendit_status=payment.xendit_status,
+        checkout_url=payment.xendit_invoice_url,
     )
 
 
@@ -355,7 +381,12 @@ async def submit_payment_proof(
     if method == "gcash" and xendit_configured():
         raise HTTPException(
             status_code=400,
-            detail="GCash payments are processed through Xendit. Scan the QR code on the payment page — proof upload is not required.",
+            detail="GCash payments are processed through Xendit. Use the payment page checkout — proof upload is not required.",
+        )
+    if method in XENDIT_ONLINE_METHODS and xendit_configured():
+        raise HTTPException(
+            status_code=400,
+            detail=f"{method.title()} payments are processed through Xendit checkout. Proof upload is not required.",
         )
 
     amount = round(float(booking.estimated_cost or 0), 2)
@@ -593,6 +624,32 @@ def download_payment_proof(
     )
 
 
+@router.post("/{payment_id}/cash-received", response_model=PaymentRead)
+def mark_cash_received(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    reviewer: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    """Admin/accounting: confirm offline cash was received."""
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.method != "cash":
+        raise HTTPException(status_code=400, detail="Only cash payments can be marked as cash received.")
+    if payment.status != PaymentStatus.FOR_VERIFICATION:
+        raise HTTPException(status_code=400, detail="Only awaiting cash payments can be confirmed.")
+
+    book = db.query(Booking).filter(Booking.id == payment.booking_id).first()
+    expected = round(float(book.estimated_cost or 0), 2) if book else round(float(payment.amount or 0), 2)
+    if abs(round(float(payment.amount or 0), 2) - expected) > 0.01:
+        raise HTTPException(status_code=400, detail="Payment amount does not match the booking total.")
+
+    mark_payment_and_booking_verified(db, payment, book, reviewer_id=reviewer.id, notify_customer=True)
+    db.commit()
+    db.refresh(payment)
+    return payment_read_response(db, payment)
+
+
 @router.post("/{payment_id}/verify", response_model=PaymentRead)
 def verify_payment(
     payment_id: int,
@@ -602,6 +659,11 @@ def verify_payment(
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
+    if payment.method == "cash":
+        raise HTTPException(
+            status_code=400,
+            detail="Use the Cash Received action for cash payments.",
+        )
     if payment.status != PaymentStatus.FOR_VERIFICATION:
         raise HTTPException(status_code=400, detail="Only submissions awaiting verification can be approved")
     if payment.xendit_external_id and (payment.xendit_status or "").upper() == "PENDING":

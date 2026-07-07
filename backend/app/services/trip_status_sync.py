@@ -43,6 +43,12 @@ def sync_trip_and_booking_status(
     location_name: str = "",
     remarks: str = "",
     photo_url: str | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    evidence_capture_source: str | None = None,
+    evidence_verification_label: str | None = None,
+    evidence_review_required: bool = False,
+    evidence_device_captured_at: datetime | None = None,
 ) -> tuple[Trip, Booking]:
     trip = db.query(Trip).filter(Trip.id == trip_id).with_for_update().first()
     if not trip:
@@ -81,10 +87,14 @@ def sync_trip_and_booking_status(
             helper_id=helper_id,
             status=step,
             location_name=loc,
-            latitude=None,
-            longitude=None,
+            latitude=latitude,
+            longitude=longitude,
             remarks=(remarks or "").strip() or None,
             photo_url=photo_url,
+            evidence_capture_source=evidence_capture_source,
+            evidence_verification_label=evidence_verification_label,
+            evidence_review_required=evidence_review_required,
+            evidence_device_captured_at=evidence_device_captured_at,
         )
     )
     db.flush()

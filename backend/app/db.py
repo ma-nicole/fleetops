@@ -124,6 +124,10 @@ def apply_runtime_schema_fixes() -> None:
             ("terms_agreement_storage_path", "VARCHAR(512) NULL"),
             ("terms_agreement_uploaded_at", "DATETIME NULL"),
             ("terms_agreed_at", "DATETIME NULL"),
+            ("terms_e_signature_storage_path", "VARCHAR(512) NULL"),
+            ("terms_signature_signer_name", "VARCHAR(255) NULL"),
+            ("terms_signature_ip", "VARCHAR(64) NULL"),
+            ("terms_agreement_version", "VARCHAR(32) NULL"),
         ]
         for col, ddl_suffix in doc_cols:
             if col not in bk_cols:
@@ -725,6 +729,33 @@ def apply_runtime_schema_fixes() -> None:
                     "WHERE status IS NULL OR TRIM(status) = ''"
                 )
             )
+
+    _evidence_cols = [
+        ("evidence_capture_source", "VARCHAR(16) NULL"),
+        ("evidence_verification_label", "VARCHAR(64) NULL"),
+        ("evidence_review_required", "TINYINT(1) NOT NULL DEFAULT 0"),
+        ("evidence_device_captured_at", "DATETIME NULL"),
+    ]
+    for table in ("trip_status_updates", "trip_location_updates"):
+        if insp.has_table(table):
+            tcols = {c["name"] for c in insp.get_columns(table)}
+            t_alters: list[str] = []
+            for col, ddl in _evidence_cols:
+                if col not in tcols:
+                    if dialect == "mysql":
+                        t_alters.append(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+                    else:
+                        bool_ddl = "BOOLEAN NOT NULL DEFAULT 0" if "review_required" in col else ddl.replace("TINYINT(1)", "BOOLEAN")
+                        t_alters.append(f"ALTER TABLE {table} ADD COLUMN {col} {bool_ddl}")
+            if t_alters:
+                with engine.begin() as conn:
+                    for stmt in t_alters:
+                        conn.execute(text(stmt))
+
+    if not insp.has_table("evidence_capture_records"):
+        from app.models.entities import EvidenceCaptureRecord
+
+        EvidenceCaptureRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def get_db() -> Generator[Session, None, None]:

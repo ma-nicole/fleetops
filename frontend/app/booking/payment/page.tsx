@@ -13,32 +13,19 @@ import { ApiError } from "@/lib/api";
 import { ERROR_LOAD_DATA, LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { formatPhp } from "@/lib/appLocale";
 import {
-  CUSTOMER_PAYMENT_METHODS,
   formatPaymentMethodLabel,
+  getBookingPaymentOptions,
+  isXenditMethod,
   paymentMethodRequiresProof,
   type CustomerPaymentMethod,
 } from "@/lib/paymentMethodOptions";
+import { paymentDisplayStatus, transactionReference } from "@/lib/paymentDisplayStatus";
 import {
   GCASH_MAX_TRANSACTION_PHP,
   gcashAmountExceedsLimit,
 } from "@/lib/paymentLimits";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Booking, type Payment, type XenditPaymentSession } from "@/lib/workflowApi";
-
-function formatPaymentStatus(status: Payment["status"]): string {
-  switch (status) {
-    case "for_verification":
-      return "for verification";
-    case "verified":
-      return "verified";
-    case "rejected":
-      return "rejected";
-    case "refunded":
-      return "refunded";
-    default:
-      return status;
-  }
-}
 
 function applyXenditSession(
   session: XenditPaymentSession,
@@ -67,35 +54,35 @@ const PAYMENT_FLOW_STEPS = [
 function paymentProgressIndex({
   booking,
   latestPayment,
-  xenditActive,
+  xenditCheckout,
   xenditStatus,
 }: {
   booking: Booking | null;
   latestPayment: Payment | null;
-  xenditActive: boolean;
+  xenditCheckout: boolean;
   xenditStatus: string | null;
 }): number {
   if (!booking) return 0;
   if (booking.status === "payment_verified" || latestPayment?.status === "verified") return 5;
-  if (xenditActive && (xenditStatus || "").toUpperCase() === "PENDING") return 3;
+  if (xenditCheckout && (xenditStatus || "").toUpperCase() === "PENDING") return 3;
   if (latestPayment?.status === "for_verification") return 4;
   if (latestPayment?.status === "rejected") return 2;
-  if (xenditActive || latestPayment) return 3;
+  if (xenditCheckout || latestPayment) return 3;
   return 2;
 }
 
 function PaymentProgress({
   booking,
   latestPayment,
-  xenditActive,
+  xenditCheckout,
   xenditStatus,
 }: {
   booking: Booking | null;
   latestPayment: Payment | null;
-  xenditActive: boolean;
+  xenditCheckout: boolean;
   xenditStatus: string | null;
 }) {
-  const currentIndex = paymentProgressIndex({ booking, latestPayment, xenditActive, xenditStatus });
+  const currentIndex = paymentProgressIndex({ booking, latestPayment, xenditCheckout, xenditStatus });
   return (
     <div style={{ padding: "1rem", border: "1px solid #DBEAFE", borderRadius: 8, background: "#EFF6FF" }}>
       <h3 style={{ color: "#1A1A1A", margin: "0 0 0.75rem" }}>Payment progress</h3>
@@ -128,8 +115,8 @@ function PaymentProgress({
         })}
       </div>
       <p style={{ margin: "0.75rem 0 0", fontSize: "0.82rem", color: "#1E40AF", lineHeight: 1.45 }}>
-        Xendit payments verify automatically when the webhook or status refresh confirms payment. Manual fallback
-        methods stay for verification until an admin approves the proof.
+        Xendit online payments verify automatically via webhook. Cash payments are confirmed by admin when received.
+        Legacy manual methods stay for verification until an admin approves the proof.
       </p>
     </div>
   );
@@ -198,8 +185,13 @@ function BookingPaymentInner() {
 
   const total = booking?.estimated_cost ?? 0;
   const gcashBlocked = gcashAmountExceedsLimit(total);
-  const xenditActive = xenditEnabled && !gcashBlocked;
-  const requiresProof = paymentMethodRequiresProof(method) && !(method === "gcash" && xenditActive);
+  const paymentOptions = useMemo(
+    () => getBookingPaymentOptions(xenditEnabled, gcashBlocked),
+    [xenditEnabled, gcashBlocked],
+  );
+  const isXenditCheckout = xenditEnabled && isXenditMethod(method);
+  const isCashMethod = method === "cash";
+  const requiresProof = paymentMethodRequiresProof(method, xenditEnabled);
   const canSubmit = canSubmitPayment && (requiresProof ? !!selectedFile : true);
   const xenditPaid =
     (xenditStatus || "").toUpperCase() === "PAID" ||
@@ -222,11 +214,11 @@ function BookingPaymentInner() {
   }, [router]);
 
   const refreshXenditSession = useCallback(async () => {
-    if (!Number.isFinite(bookingId) || bookingId <= 0) return;
+    if (!Number.isFinite(bookingId) || bookingId <= 0 || !isXenditMethod(method)) return;
     setXenditLoading(true);
     setXenditError(null);
     try {
-      const session = await WorkflowApi.createXenditSession(bookingId);
+      const session = await WorkflowApi.createXenditSession(bookingId, method);
       applyXenditSession(session, sessionSetters);
       const pays = await WorkflowApi.bookingPayments(bookingId).catch(() => [] as Payment[]);
       if (pays.length) setExistingPayments(pays);
@@ -238,7 +230,7 @@ function BookingPaymentInner() {
     } finally {
       setXenditLoading(false);
     }
-  }, [bookingId, sessionSetters, handlePaymentVerified]);
+  }, [bookingId, method, sessionSetters, handlePaymentVerified]);
 
   const pollXenditSession = useCallback(async () => {
     if (!Number.isFinite(bookingId) || bookingId <= 0) return;
@@ -267,24 +259,43 @@ function BookingPaymentInner() {
   }, [ready, allowed, loadBooking]);
 
   useEffect(() => {
-    if (!xenditActive || !booking || pageLoading) return;
+    if (!isXenditCheckout || !booking || pageLoading) return;
     if (latestPayment?.status === "verified" || booking.status === "payment_verified") return;
     void refreshXenditSession();
-  }, [xenditActive, booking, pageLoading, latestPayment?.status, booking?.status, refreshXenditSession]);
+  }, [isXenditCheckout, method, booking, pageLoading, latestPayment?.status, booking?.status, refreshXenditSession]);
 
   useEffect(() => {
-    if (!xenditActive || xenditPaid) return;
+    if (!isXenditCheckout || xenditPaid) return;
     const timer = window.setInterval(() => {
       void pollXenditSession();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [xenditActive, xenditPaid, pollXenditSession]);
+  }, [isXenditCheckout, xenditPaid, pollXenditSession]);
 
   useEffect(() => {
     if (gcashBlocked && method === "gcash") {
-      setMethod("bank");
+      setMethod(xenditEnabled ? "card" : "bank");
     }
-  }, [gcashBlocked, method]);
+  }, [gcashBlocked, method, xenditEnabled]);
+
+  const handleConfirmCash = async () => {
+    if (!Number.isFinite(bookingId)) return;
+    if (!window.confirm("Confirm cash payment for this booking? An admin will mark the payment as received when you pay in cash.")) {
+      return;
+    }
+    setIsUploading(true);
+    setUploadError("");
+    try {
+      const payment = await WorkflowApi.createCashSession(bookingId);
+      setExistingPayments([payment]);
+      setUploadSuccess(true);
+      window.setTimeout(() => router.push("/modules/customer/payment"), 1200);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Unable to record cash payment.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -327,8 +338,8 @@ function BookingPaymentInner() {
       );
       return;
     }
-    if (method === "gcash" && xenditActive) {
-      setUploadError("GCash payments are processed through Xendit on this page. Scan the QR code — proof upload is not required.");
+    if (isXenditMethod(method) && xenditEnabled) {
+      setUploadError("Online payments are processed through Xendit on this page — proof upload is not required.");
       return;
     }
     if (requiresProof && !selectedFile) {
@@ -415,14 +426,86 @@ function BookingPaymentInner() {
 
       <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>Pay for your booking</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
-        {xenditActive
-          ? "Your Xendit payment request was created automatically. Use Pay Now or scan the GCash QR; no screenshot upload is required."
-          : "Use the details below, then upload proof of payment (JPEG, PNG, or PDF). An admin will verify your payment."}
+        Choose how you want to pay. Online methods use Xendit checkout and verify automatically. Cash payments are
+        confirmed by FleetOps staff — no proof upload required.
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "2rem" }}>
         <div style={{ display: "grid", gap: "1.25rem" }}>
-          {xenditActive ? (
+          <section
+            style={{
+              padding: "1.5rem",
+              border: "1px solid #E8E8E8",
+              borderRadius: "8px",
+              background: "#F9F9F9",
+            }}
+          >
+            <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Booking summary</h3>
+            <p style={{ color: "#666666", margin: "0.5rem 0" }}>
+              <strong>Booking:</strong> #{booking.id}
+            </p>
+            <p style={{ color: "#666666", margin: "0.5rem 0" }}>
+              <strong>From:</strong> {booking.pickup_location}
+            </p>
+            <p style={{ color: "#666666", margin: "0.5rem 0" }}>
+              <strong>To:</strong> {booking.dropoff_location}
+            </p>
+            <p style={{ color: "#666666", margin: "0.5rem 0" }}>
+              <strong>Date:</strong> {String(booking.scheduled_date)}
+            </p>
+            <p style={{ color: "#FF9800", fontWeight: 700, margin: "1rem 0 0 0" }}>Amount due: {formatPhp(total)}</p>
+            <CustomerDocumentReviewSection booking={booking} onUpdated={(updated) => setBooking(updated)} />
+          </section>
+
+          <section>
+            {gcashBlocked && xenditEnabled && (
+              <div
+                role="alert"
+                style={{
+                  padding: "0.85rem 1rem",
+                  background: "#FEF3C7",
+                  border: "1px solid #FCD34D",
+                  borderRadius: "8px",
+                  marginBottom: "1rem",
+                  fontSize: "0.9rem",
+                  color: "#92400E",
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong>GCash limit exceeded.</strong> Your booking total ({formatPhp(total)}) is above the GCash
+                maximum of {formatPhp(GCASH_MAX_TRANSACTION_PHP)} per transaction. Please use card or bank transfer
+                instead.
+              </div>
+            )}
+
+            <label style={{ display: "grid", gap: "0.35rem", marginBottom: "1rem" }}>
+              <span style={{ fontWeight: 600, color: "#374151" }}>Payment method</span>
+              <select
+                className="select"
+                value={method}
+                onChange={(e) => {
+                  setMethod(e.target.value as CustomerPaymentMethod);
+                  setUploadError("");
+                  setXenditError(null);
+                }}
+                disabled={!canSubmitPayment && !isXenditCheckout}
+              >
+                {paymentOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {paymentOptions.find((o) => o.value === method)?.description ? (
+              <p style={{ margin: "0 0 1rem", fontSize: "0.88rem", color: "#6B7280", lineHeight: 1.45 }}>
+                {paymentOptions.find((o) => o.value === method)?.description}
+              </p>
+            ) : null}
+          </section>
+
+          {isXenditCheckout ? (
             <XenditPaymentCard
               bookingId={booking.id}
               amount={total}
@@ -432,90 +515,66 @@ function BookingPaymentInner() {
               qrString={xenditQrString}
               xenditStatus={xenditStatus}
               payment={xenditPayment ?? latestPayment}
+              checkoutMethod={method}
               loading={xenditLoading}
               error={xenditError}
               onRetry={() => void refreshXenditSession()}
             />
           ) : null}
 
-          {!xenditActive && (
-            <>
-              <section
+          {isCashMethod ? (
+            <section style={{ padding: "1.5rem", border: "2px dashed var(--accent)", borderRadius: "8px", background: "#FFFBF0" }}>
+              <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Cash payment</h3>
+              {!canSubmitPayment && latestPayment ? (
+                <p style={{ color: "#047857", fontSize: "0.9rem", marginBottom: "1rem", fontWeight: 600 }}>
+                  Cash payment recorded ({paymentDisplayStatus(latestPayment)}).
+                </p>
+              ) : (
+                <p style={{ margin: "0 0 1rem", fontSize: "0.9rem", color: "#374151", lineHeight: 1.5 }}>
+                  Pay the exact amount in cash to FleetOps staff. Your booking stays in{" "}
+                  <strong>Awaiting Cash Payment</strong> until an authorized admin marks it as received.
+                </p>
+              )}
+              {uploadError ? (
+                <div style={{ padding: "0.75rem", background: "#FEE2E2", color: "#991B1B", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
+                  {uploadError}
+                </div>
+              ) : null}
+              {uploadSuccess ? (
+                <div style={{ padding: "0.75rem", background: "#D1FAE5", color: "#047857", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
+                  ✓ Cash payment recorded. Redirecting to payment history…
+                </div>
+              ) : null}
+              <SubmitButton
+                type="button"
+                className=""
+                onClick={() => void handleConfirmCash()}
+                busy={isUploading}
+                busyLabel="Recording…"
+                label="Confirm cash payment"
+                disabled={!canSubmitPayment || uploadSuccess}
                 style={{
-                  padding: "1.5rem",
-                  border: "1px solid #E8E8E8",
-                  borderRadius: "8px",
-                  background: "#F9F9F9",
+                  width: "100%",
+                  padding: "0.75rem",
+                  background: canSubmitPayment && !isUploading && !uploadSuccess ? "#10B981" : "#D1D5DB",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontWeight: 600,
                 }}
-              >
-                <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Booking summary</h3>
-                <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                  <strong>Booking:</strong> #{booking.id}
-                </p>
-                <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                  <strong>From:</strong> {booking.pickup_location}
-                </p>
-                <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                  <strong>To:</strong> {booking.dropoff_location}
-                </p>
-                <p style={{ color: "#666666", margin: "0.5rem 0" }}>
-                  <strong>Date:</strong> {String(booking.scheduled_date)}
-                </p>
-                <p style={{ color: "#FF9800", fontWeight: 700, margin: "1rem 0 0 0" }}>Amount due: {formatPhp(total)}</p>
-                <CustomerDocumentReviewSection booking={booking} onUpdated={(updated) => setBooking(updated)} />
-              </section>
+              />
+            </section>
+          ) : null}
 
-              <section>
-                {gcashBlocked && (
-                  <div
-                    role="alert"
-                    style={{
-                      padding: "0.85rem 1rem",
-                      background: "#FEF3C7",
-                      border: "1px solid #FCD34D",
-                      borderRadius: "8px",
-                      marginBottom: "1rem",
-                      fontSize: "0.9rem",
-                      color: "#92400E",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <strong>GCash limit exceeded.</strong> Your booking total ({formatPhp(total)}) is above the GCash
-                    maximum of {formatPhp(GCASH_MAX_TRANSACTION_PHP)} per transaction. Please use{" "}
-                    <strong>bank transfer</strong> instead.
-                  </div>
-                )}
-
-                <label style={{ display: "grid", gap: "0.35rem", marginBottom: "1rem" }}>
-                  <span style={{ fontWeight: 600, color: "#374151" }}>Payment method</span>
-                  <select
-                    className="select"
-                    value={method}
-                    onChange={(e) => {
-                      setMethod(e.target.value as CustomerPaymentMethod);
-                      setUploadError("");
-                    }}
-                  >
-                    {CUSTOMER_PAYMENT_METHODS.map((opt) => {
-                      const disabled = opt.value === "gcash" && gcashBlocked;
-                      return (
-                        <option key={opt.value} value={opt.value} disabled={disabled}>
-                          {opt.label}
-                          {disabled ? " (over limit — unavailable)" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-
-                <PaymentMethodInstructions
-                  method={method}
-                  bookingId={booking.id}
-                  total={total}
-                  gcashBlocked={gcashBlocked}
-                  xenditEnabled={false}
-                />
-              </section>
+          {!isXenditCheckout && !isCashMethod ? (
+            <>
+              <PaymentMethodInstructions
+                method={method}
+                bookingId={booking.id}
+                total={total}
+                gcashBlocked={gcashBlocked}
+                xenditEnabled={false}
+              />
 
               <section style={{ padding: "1.5rem", border: "2px dashed var(--accent)", borderRadius: "8px", background: "#EFF6FF" }}>
                 <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>
@@ -523,7 +582,7 @@ function BookingPaymentInner() {
                 </h3>
                 {!canSubmitPayment && latestPayment ? (
                   <p style={{ color: "#047857", fontSize: "0.9rem", marginBottom: "1rem", fontWeight: 600 }}>
-                    Payment already submitted ({formatPaymentStatus(latestPayment.status)}).
+                    Payment already submitted ({paymentDisplayStatus(latestPayment)}).
                   </p>
                 ) : null}
 
@@ -603,9 +662,9 @@ function BookingPaymentInner() {
                 />
               </section>
             </>
-          )}
+          ) : null}
 
-          {xenditActive && uploadSuccess ? (
+          {isXenditCheckout && uploadSuccess ? (
             <div
               role="status"
               style={{
@@ -626,7 +685,7 @@ function BookingPaymentInner() {
           <PaymentProgress
             booking={booking}
             latestPayment={xenditPayment ?? latestPayment}
-            xenditActive={xenditActive}
+            xenditCheckout={isXenditCheckout}
             xenditStatus={xenditStatus}
           />
           <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: "8px", background: "#F9F9F9" }}>
@@ -634,36 +693,34 @@ function BookingPaymentInner() {
             {(xenditPayment ?? latestPayment) ? (
               <div style={{ marginBottom: "0.85rem", fontSize: "0.88rem", color: "#374151", display: "grid", gap: "0.35rem" }}>
                 <p style={{ margin: 0 }}>
-                  <strong>Payment reference:</strong> {(xenditPayment ?? latestPayment)!.reference}
+                  <strong>Payment reference:</strong> {transactionReference(xenditPayment ?? latestPayment!)}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <strong>Method:</strong>{" "}
-                  {xenditActive ? "Xendit online payment" : formatPaymentMethodLabel((xenditPayment ?? latestPayment)!.method)}
+                  <strong>Method:</strong> {formatPaymentMethodLabel((xenditPayment ?? latestPayment)!.method)}
                 </p>
                 <p style={{ margin: 0 }}>
                   <strong>Amount:</strong> {formatPhp((xenditPayment ?? latestPayment)!.amount)}
                 </p>
                 <p style={{ margin: 0 }}>
                   <strong>Status:</strong>{" "}
-                  {xenditActive
-                    ? (xenditPayment ?? latestPayment)?.display_status ||
-                      xenditStatus ||
-                      formatPaymentStatus((xenditPayment ?? latestPayment)!.status)
-                    : (xenditPayment ?? latestPayment)?.display_status ||
-                      formatPaymentStatus((xenditPayment ?? latestPayment)!.status)}
+                  {paymentDisplayStatus(xenditPayment ?? latestPayment!)}
                 </p>
-                {(xenditPayment ?? latestPayment)?.xendit_external_id ? (
-                  <p style={{ margin: 0, wordBreak: "break-all" }}>
-                    <strong>Xendit ID:</strong> {(xenditPayment ?? latestPayment)!.xendit_external_id}
+                {(xenditPayment ?? latestPayment)?.verified_by_name ? (
+                  <p style={{ margin: 0 }}>
+                    <strong>Verified by:</strong> {(xenditPayment ?? latestPayment)!.verified_by_name}
                   </p>
                 ) : null}
               </div>
             ) : null}
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.9rem" }}>
-              {xenditActive ? (
+              {isXenditCheckout ? (
                 <>
                   Xendit payments are confirmed automatically via webhook. Your booking moves to{" "}
                   <strong>payment verified</strong> once paid.
+                </>
+              ) : isCashMethod ? (
+                <>
+                  Cash payments stay in <strong>Awaiting Cash Payment</strong> until an admin marks cash as received.
                 </>
               ) : (
                 <>

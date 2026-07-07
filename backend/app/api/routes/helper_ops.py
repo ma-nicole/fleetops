@@ -28,6 +28,12 @@ from app.models.entities import (
 )
 from app.services.crew_assigned_bookings import list_crew_assigned_bookings
 from app.services.delivery_receiving_verification import assert_delivery_receiving_complete
+from app.services.evidence_capture import (
+    evaluate_trip_evidence,
+    evidence_fields_dict,
+    parse_evidence_form,
+    record_evidence_capture,
+)
 from app.services.pre_delivery_verification import is_delivery_progression_step, pre_delivery_block_detail
 from app.services.trip_status_sync import sync_trip_and_booking_status
 
@@ -100,6 +106,12 @@ async def helper_update_status(
     location_name: str = Form(default=""),
     remarks: str = Form(default=""),
     photo: UploadFile | None = File(default=None),
+    evidence_capture_source: str = Form(default=""),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
@@ -161,6 +173,26 @@ async def helper_update_status(
             raise HTTPException(status_code=400, detail=block["message"])
 
     photo_path = _save_photo(trip.id, photo)
+    evidence_form = parse_evidence_form(
+        capture_source=evidence_capture_source,
+        evidence_device_captured_at=evidence_device_captured_at,
+        evidence_latitude=evidence_latitude,
+        evidence_longitude=evidence_longitude,
+        evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+        evidence_uploader_name=evidence_uploader_name,
+    )
+    evidence_eval = evaluate_trip_evidence(db, trip.booking, evidence_form, milestone_context=step) if photo_path else None
+    if photo_path and evidence_eval:
+        record_evidence_capture(
+            db,
+            upload_path=photo_path,
+            context_type="helper_milestone",
+            trip=trip,
+            booking=trip.booking,
+            user=user,
+            ev=evidence_eval,
+            milestone_context=step,
+        )
     trip.helper_last_proof_path = photo_path or trip.helper_last_proof_path
     synced_trip, _ = sync_trip_and_booking_status(
         db,
@@ -170,6 +202,12 @@ async def helper_update_status(
         location_name=(location_name or "").strip(),
         remarks=(remarks or "").strip(),
         photo_url=photo_path,
+        latitude=evidence_eval.latitude if evidence_eval else None,
+        longitude=evidence_eval.longitude if evidence_eval else None,
+        evidence_capture_source=evidence_eval.capture_source if evidence_eval else None,
+        evidence_verification_label=evidence_eval.verification_label if evidence_eval else None,
+        evidence_review_required=evidence_eval.review_required if evidence_eval else False,
+        evidence_device_captured_at=evidence_eval.device_captured_at if evidence_eval else None,
     )
 
     if step == "completed":
@@ -195,6 +233,7 @@ async def helper_update_status(
         "location_updates_submitted": enroute_count if step != "en_route" else enroute_count + 1,
         "required_location_updates": 3,
         "photo_path": photo_path,
+        **(evidence_fields_dict(evidence_eval) if evidence_eval else {}),
     }
 
 
@@ -204,6 +243,12 @@ async def helper_location_update(
     location_name: str = Form(...),
     remarks: str = Form(default=""),
     photo: UploadFile | None = File(default=None),
+    evidence_capture_source: str = Form(default=""),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
@@ -227,23 +272,47 @@ async def helper_location_update(
         raise HTTPException(status_code=400, detail="location_name is required")
 
     photo_path = _save_photo(trip.id, photo)
+    evidence_form = parse_evidence_form(
+        capture_source=evidence_capture_source,
+        evidence_device_captured_at=evidence_device_captured_at,
+        evidence_latitude=evidence_latitude,
+        evidence_longitude=evidence_longitude,
+        evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+        evidence_uploader_name=evidence_uploader_name,
+    )
+    booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+    evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="en_route") if photo_path else None
+    if photo_path and evidence_eval:
+        record_evidence_capture(
+            db,
+            upload_path=photo_path,
+            context_type="helper_location",
+            trip=trip,
+            booking=booking,
+            user=user,
+            ev=evidence_eval,
+            milestone_context="en_route",
+        )
     loc = location_name.strip()
     trip.latest_location = loc
     bk = db.query(Booking).filter(Booking.id == trip.booking_id).with_for_update().first()
     if bk:
         bk.latest_location = loc
-    db.add(
-        TripLocationUpdate(
-            booking_id=trip.booking_id,
-            trip_id=trip.id,
-            helper_id=user.id,
-            location_name=loc,
-            latitude=None,
-            longitude=None,
-            remarks=(remarks or "").strip() or None,
-            photo_url=photo_path,
-        )
+    loc_row = TripLocationUpdate(
+        booking_id=trip.booking_id,
+        trip_id=trip.id,
+        helper_id=user.id,
+        location_name=loc,
+        latitude=evidence_eval.latitude if evidence_eval else None,
+        longitude=evidence_eval.longitude if evidence_eval else None,
+        remarks=(remarks or "").strip() or None,
+        photo_url=photo_path,
+        evidence_capture_source=evidence_eval.capture_source if evidence_eval else None,
+        evidence_verification_label=evidence_eval.verification_label if evidence_eval else None,
+        evidence_review_required=evidence_eval.review_required if evidence_eval else False,
+        evidence_device_captured_at=evidence_eval.device_captured_at if evidence_eval else None,
     )
+    db.add(loc_row)
     db.commit()
     count = db.query(TripLocationUpdate).filter(TripLocationUpdate.trip_id == trip.id).count()
     return {"trip_id": trip.id, "location_updates_submitted": count, "required_location_updates": 3}

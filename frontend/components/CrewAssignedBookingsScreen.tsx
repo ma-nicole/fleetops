@@ -2,13 +2,16 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
 import { apiFullUrl, ApiError } from "@/lib/api";
 import { WorkflowApi, type CrewAssignedBookingRow } from "@/lib/workflowApi";
 import CrewSchedulingPlotPanel, { schedulingPlotFromCrewRow } from "@/components/CrewSchedulingPlotPanel";
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
 import DeliveryCompletionPanel from "@/components/DeliveryCompletionPanel";
+import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
+import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
+import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
 
 const PHASES = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"] as const;
 type Phase = (typeof PHASES)[number];
@@ -121,11 +124,6 @@ function nextPhase(s: Phase): Phase | null {
   if (s === "en_route") return "dropped_off";
   if (s === "dropped_off") return "completed";
   return null;
-}
-
-function clearFileInput(ref: React.RefObject<HTMLInputElement | null>) {
-  const el = ref.current;
-  if (el) el.value = "";
 }
 
 function progressNeedsWarning(r: CrewAssignedBookingRow, variant: "driver" | "helper" = "driver"): boolean {
@@ -262,13 +260,13 @@ export default function CrewAssignedBookingsScreen({
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>("for_pickup");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [photoMeta, setPhotoMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [locationPhoto, setLocationPhoto] = useState<File | null>(null);
+  const [locationPhotoMeta, setLocationPhotoMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [locationName, setLocationName] = useState("");
   const [remarks, setRemarks] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [deliveryReady, setDeliveryReady] = useState(false);
-  const milestonePhotoInputRef = useRef<HTMLInputElement | null>(null);
-  const locationPhotoInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -337,11 +335,14 @@ export default function CrewAssignedBookingsScreen({
       const fd = new FormData();
       fd.append("status", phase);
       fd.append("location_name", "");
-      if (photo) fd.append("photo", photo);
+      if (photo) {
+        fd.append("photo", photo);
+        if (photoMeta) appendEvidenceToFormData(fd, photoMeta);
+      }
       await WorkflowApi.helperSubmitProgress(tripId, fd);
       setMsg("Update saved.");
       setPhoto(null);
-      clearFileInput(milestonePhotoInputRef);
+      setPhotoMeta(null);
       const list = await load();
       const updated = list.find((x) => x.trip_id === tripId) ?? null;
       setDetail(updated);
@@ -372,11 +373,14 @@ export default function CrewAssignedBookingsScreen({
       const fd = new FormData();
       fd.append("location_name", locationName.trim());
       fd.append("remarks", remarks.trim());
-      if (locationPhoto) fd.append("photo", locationPhoto);
+      if (locationPhoto) {
+        fd.append("photo", locationPhoto);
+        if (locationPhotoMeta) appendEvidenceToFormData(fd, locationPhotoMeta);
+      }
       await WorkflowApi.helperSubmitLocation(tripId, fd);
       setMsg("Location update saved.");
       setLocationPhoto(null);
-      clearFileInput(locationPhotoInputRef);
+      setLocationPhotoMeta(null);
       setLocationName("");
       setRemarks("");
       const list = await load();
@@ -399,9 +403,9 @@ export default function CrewAssignedBookingsScreen({
     const allowed = nextPhase(current);
     setPhase(allowed ?? current);
     setPhoto(null);
+    setPhotoMeta(null);
     setLocationPhoto(null);
-    clearFileInput(milestonePhotoInputRef);
-    clearFileInput(locationPhotoInputRef);
+    setLocationPhotoMeta(null);
     setLocationName("");
     setRemarks("");
     setMsg(null);
@@ -426,7 +430,7 @@ export default function CrewAssignedBookingsScreen({
     >
       <strong>Proof &amp; receiving documents</strong>
       <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.15rem" }}>
-        <li>Photo proof (JPG/PNG) is required when marking <em>picked up</em> and <em>dropped off</em>.</li>
+        <li>Photo proof (camera capture) is required when marking <em>picked up</em> and <em>dropped off</em>.</li>
         <li>Submit all required location updates while <em>en route</em> before drop-off.</li>
         <li>
           Before <em>completed</em>: upload receiving document, verify trip QR code, and capture recipient digital
@@ -1147,38 +1151,49 @@ export default function CrewAssignedBookingsScreen({
                               onChange={(e) => setRemarks(e.target.value)}
                             />
                           </label>
-                          <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
-                            <span style={{ fontSize: "0.85rem", color: "#555" }}>Photo (optional)</span>
-                            <input
-                              ref={locationPhotoInputRef}
-                              key={`location-photo-${detail.trip_id}`}
-                              type="file"
-                              accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                              onChange={(e) => setLocationPhoto(e.target.files?.[0] ?? null)}
-                            />
-                          </label>
+                          <EvidenceCaptureInput
+                            label="Location photo"
+                            watermarkContext={{
+                              bookingId: detail.booking_id,
+                              tripId: detail.trip_id,
+                              crewName: detail.helper_name,
+                            }}
+                            uploaderName={detail.helper_name}
+                            value={locationPhoto}
+                            metadata={locationPhotoMeta}
+                            onCapture={(file, meta) => {
+                              setLocationPhoto(file);
+                              setLocationPhotoMeta(meta);
+                            }}
+                          />
                         </>
                       ) : (
                         <>
                           {effectivePhase === "completed" || current === "dropped_off" ? (
                             <DeliveryCompletionPanel
                               tripId={detail.trip_id}
+                              bookingId={detail.booking_id}
+                              crewName={detail.helper_name ?? detail.driver_name}
                               compact
                               onReadyChange={setDeliveryReady}
                             />
                           ) : null}
-                          <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
-                          <span style={{ fontSize: "0.85rem", color: "#555" }}>
-                            Milestone photo (.jpg, .png) {PHOTO_REQUIRED.has(effectivePhase) ? "(required)" : "(optional)"}
-                          </span>
-                          <input
-                            ref={milestonePhotoInputRef}
-                            key={`milestone-photo-${detail.trip_id}`}
-                            type="file"
-                            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+                          <EvidenceCaptureInput
+                            label={`Milestone photo ${PHOTO_REQUIRED.has(effectivePhase) ? "" : ""}`.trim()}
+                            required={PHOTO_REQUIRED.has(effectivePhase)}
+                            watermarkContext={{
+                              bookingId: detail.booking_id,
+                              tripId: detail.trip_id,
+                              crewName: detail.helper_name,
+                            }}
+                            uploaderName={detail.helper_name}
+                            value={photo}
+                            metadata={photoMeta}
+                            onCapture={(file, meta) => {
+                              setPhoto(file);
+                              setPhotoMeta(meta);
+                            }}
                           />
-                        </label>
                         </>
                       )}
 

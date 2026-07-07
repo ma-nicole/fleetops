@@ -59,6 +59,11 @@ from app.services.dispatch_assignment_readiness import (
 )
 from app.services.dispatch_operations_center import build_operations_center_payload
 from app.services.dispatch_trip_logs import build_trip_logs_payload
+from app.services.evidence_capture import (
+    evaluate_trip_evidence,
+    parse_evidence_form,
+    record_evidence_capture,
+)
 from app.services.dispatch_trip_monitoring_board import build_trip_monitoring_board_payload
 from app.services.dispatcher_booking_assignment import (
     assert_dispatcher_booking_access,
@@ -353,6 +358,12 @@ def create_operational_log(
     priority_level: str = Form(...),
     operational_details: str = Form(...),
     file: UploadFile | None = File(default=None),
+    evidence_capture_source: str = Form(default=""),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
@@ -380,6 +391,27 @@ def create_operational_log(
     assert_dispatcher_booking_access(db, user, trip.booking_id)
 
     attachment_url = _save_operational_log_attachment(trip_id, file)
+    if attachment_url and file:
+        evidence_form = parse_evidence_form(
+            capture_source=evidence_capture_source,
+            evidence_device_captured_at=evidence_device_captured_at,
+            evidence_latitude=evidence_latitude,
+            evidence_longitude=evidence_longitude,
+            evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+            evidence_uploader_name=evidence_uploader_name,
+        )
+        evidence_eval = evaluate_trip_evidence(db, trip.booking, evidence_form, milestone_context="operational_log")
+        rel_path = attachment_url.replace("/uploads/", "", 1) if attachment_url.startswith("/uploads/") else attachment_url
+        record_evidence_capture(
+            db,
+            upload_path=rel_path,
+            context_type="operational_log",
+            trip=trip,
+            booking=trip.booking,
+            user=user,
+            ev=evidence_eval,
+            milestone_context="operational_log",
+        )
 
     row = OperationalLog(
         booking_id=trip.booking_id,

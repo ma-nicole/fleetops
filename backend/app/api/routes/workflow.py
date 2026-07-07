@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import json
 from secrets import token_urlsafe
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
@@ -44,6 +44,11 @@ from app.services.delivery_receiving_verification import (
     mark_qr_verified,
     save_digital_signature,
     save_receiving_document,
+)
+from app.services.evidence_capture import (
+    evaluate_trip_evidence,
+    parse_evidence_form,
+    record_evidence_capture,
 )
 from app.services.predictive.cost_model import predict_trip_cost
 from app.services.routing import optimize_route
@@ -553,11 +558,37 @@ def get_delivery_receiving_status(
 async def upload_receiving_document(
     trip_id: int,
     file: UploadFile = File(...),
+    evidence_capture_source: str = Form(default=""),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
 ):
     trip = _trip_crew_or_driver(db, trip_id, user)
     path = save_receiving_document(trip.id, file)
+    booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+    evidence_form = parse_evidence_form(
+        capture_source=evidence_capture_source,
+        evidence_device_captured_at=evidence_device_captured_at,
+        evidence_latitude=evidence_latitude,
+        evidence_longitude=evidence_longitude,
+        evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+        evidence_uploader_name=evidence_uploader_name,
+    )
+    evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="delivery_document")
+    record_evidence_capture(
+        db,
+        upload_path=path,
+        context_type="delivery_document",
+        trip=trip,
+        booking=booking,
+        user=user,
+        ev=evidence_eval,
+        milestone_context="delivery_document",
+    )
     trip.receiving_document_path = path
     trip.receiving_document_uploaded_at = datetime.utcnow()
     ensure_trip_qr_token(trip)
@@ -623,11 +654,37 @@ def verify_receiving_qr(
 async def upload_digital_signature(
     trip_id: int,
     file: UploadFile = File(...),
+    evidence_capture_source: str = Form(default="live_capture"),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER, UserRole.HELPER)),
 ):
     trip = _trip_crew_or_driver(db, trip_id, user)
     path = save_digital_signature(trip.id, file)
+    booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+    evidence_form = parse_evidence_form(
+        capture_source=evidence_capture_source or "live_capture",
+        evidence_device_captured_at=evidence_device_captured_at,
+        evidence_latitude=evidence_latitude,
+        evidence_longitude=evidence_longitude,
+        evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+        evidence_uploader_name=evidence_uploader_name,
+    )
+    evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="delivery_signature")
+    record_evidence_capture(
+        db,
+        upload_path=path,
+        context_type="delivery_signature",
+        trip=trip,
+        booking=booking,
+        user=user,
+        ev=evidence_eval,
+        milestone_context="delivery_signature",
+    )
     trip.digital_signature_path = path
     trip.digital_signature_uploaded_at = datetime.utcnow()
     db.commit()

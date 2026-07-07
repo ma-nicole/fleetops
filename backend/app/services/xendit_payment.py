@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.constants.payment_methods import XENDIT_ONLINE_METHODS
 from app.core.config import settings
 from app.models.entities import (
     Booking,
@@ -31,6 +32,7 @@ from app.services.xendit_client import (
     create_invoice,
     get_invoice,
     get_qr_code_by_external_id,
+    xendit_channels_for_method,
     xendit_configured,
 )
 
@@ -103,7 +105,14 @@ def _active_xendit_payment(db: Session, booking_id: int) -> Payment | None:
     )
 
 
-def _create_hosted_invoice(booking: Booking, user: User, external_id: str, amount: float) -> dict[str, Any] | None:
+def _create_hosted_invoice(
+    booking: Booking,
+    user: User,
+    external_id: str,
+    amount: float,
+    *,
+    payment_method: str,
+) -> dict[str, Any] | None:
     try:
         return create_invoice(
             external_id=external_id,
@@ -113,7 +122,8 @@ def _create_hosted_invoice(booking: Booking, user: User, external_id: str, amoun
             invoice_duration=QR_EXPIRY_HOURS * 60 * 60,
             success_redirect_url=_frontend_url(f"/modules/customer/payment?bookingId={booking.id}&payment=paid"),
             failure_redirect_url=_frontend_url(f"/booking/payment?bookingId={booking.id}&payment=failed"),
-            metadata={"booking_id": booking.id, "customer_id": booking.customer_id},
+            metadata={"booking_id": booking.id, "customer_id": booking.customer_id, "method": payment_method},
+            payment_methods=xendit_channels_for_method(payment_method),
         )
     except XenditError as exc:
         logger.warning("Xendit invoice creation failed for booking %s: %s", booking.id, exc)
@@ -126,9 +136,17 @@ def _xendit_channel_not_activated(exc: XenditError) -> bool:
     return code == "CHANNEL_NOT_ACTIVATED" or "not been activated" in message or "not activated" in message
 
 
-def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Payment:
+def create_xendit_checkout_session(db: Session, booking: Booking, user: User, method: str = "gcash") -> Payment:
+    """Create a Xendit hosted checkout session for gcash, card, or bank transfer."""
     if not xendit_configured():
         raise HTTPException(status_code=503, detail="Xendit payments are not configured on this server.")
+
+    method_key = (method or "gcash").strip().lower()
+    if method_key not in XENDIT_ONLINE_METHODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported Xendit payment method. Use one of: {', '.join(sorted(XENDIT_ONLINE_METHODS))}.",
+        )
 
     _assert_booking_payable(booking, user)
     amount = round(float(booking.estimated_cost or 0), 2)
@@ -147,43 +165,55 @@ def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Pa
     if active:
         if active.xendit_status == XENDIT_STATUS_PAID or active.status == PaymentStatus.VERIFIED:
             return active
-        if active.xendit_status == XENDIT_STATUS_PENDING and (active.xendit_qr_string or active.xendit_invoice_url):
+        if (
+            active.xendit_status == XENDIT_STATUS_PENDING
+            and active.method == method_key
+            and (active.xendit_qr_string or active.xendit_invoice_url)
+        ):
             if active.xendit_expires_at and active.xendit_expires_at > datetime.utcnow():
                 return active
 
     external_id = build_xendit_external_id(booking.id)
-    metadata = {"booking_id": booking.id, "customer_id": booking.customer_id}
-    invoice = _create_hosted_invoice(booking, user, external_id, amount) or {}
+    metadata = {"booking_id": booking.id, "customer_id": booking.customer_id, "method": method_key}
+    invoice = _create_hosted_invoice(booking, user, external_id, amount, payment_method=method_key) or {}
 
     qr: dict[str, Any] = {}
-    try:
-        callback_url = xendit_webhook_url()
-        qr = create_dynamic_qr_code(
-            external_id=external_id,
-            amount=amount,
-            callback_url=callback_url,
-            metadata=metadata,
-        )
-    except HTTPException:
-        if not invoice:
-            raise
-        logger.warning("Xendit QR creation skipped for booking %s because webhook URL is not public.", booking.id)
-    except XenditError as exc:
-        if _xendit_channel_not_activated(exc):
-            if invoice:
-                logger.warning("Xendit QR channel is not activated; booking %s will use hosted invoice only.", booking.id)
+    if method_key == "gcash":
+        try:
+            callback_url = xendit_webhook_url()
+            qr = create_dynamic_qr_code(
+                external_id=external_id,
+                amount=amount,
+                callback_url=callback_url,
+                metadata=metadata,
+            )
+        except HTTPException:
+            if not invoice:
+                raise
+            logger.warning("Xendit QR creation skipped for booking %s because webhook URL is not public.", booking.id)
+        except XenditError as exc:
+            if _xendit_channel_not_activated(exc):
+                if invoice:
+                    logger.warning(
+                        "Xendit QR channel is not activated; booking %s will use hosted invoice only.",
+                        booking.id,
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=503,
+                        detail=(
+                            "GCash QR is not activated on your Xendit account yet. "
+                            "Activate QR Ph / GCash in the Xendit Dashboard, then try again."
+                        ),
+                    ) from exc
+            elif invoice:
+                logger.warning(
+                    "Xendit QR creation failed for booking %s; hosted invoice is still available: %s",
+                    booking.id,
+                    exc,
+                )
             else:
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        "GCash QR is not activated on your Xendit account yet. "
-                        "Activate QR Ph / GCash in the Xendit Dashboard, then try again."
-                    ),
-                ) from exc
-        elif invoice:
-            logger.warning("Xendit QR creation failed for booking %s; hosted invoice is still available: %s", booking.id, exc)
-        else:
-            raise HTTPException(status_code=502, detail=f"Unable to create Xendit payment: {exc}") from exc
+                raise HTTPException(status_code=502, detail=f"Unable to create Xendit payment: {exc}") from exc
 
     if not invoice.get("id") and not qr.get("id"):
         raise HTTPException(status_code=502, detail="Unable to create Xendit payment request.")
@@ -201,7 +231,7 @@ def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Pa
         booking_id=booking.id,
         transaction_id=transaction.id,
         customer_id=booking.customer_id,
-        method="gcash" if qr.get("qr_string") else "xendit",
+        method=method_key,
         amount=amount,
         status=PaymentStatus.FOR_VERIFICATION,
         reference=f"PAY-{token_hex(4).upper()}",
@@ -216,7 +246,68 @@ def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Pa
     )
     db.add(payment)
 
-    if booking.status in (BookingStatus.PAYMENT_REJECTED, BookingStatus.EXPIRED):
+    if booking.status in (BookingStatus.PAYMENT_REJECTED, BookingStatus.EXPIRED, BookingStatus.PENDING_PAYMENT):
+        booking.status = BookingStatus.PAYMENT_VERIFICATION
+
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Payment:
+    """Backward-compatible alias for GCash checkout."""
+    return create_xendit_checkout_session(db, booking, user, method="gcash")
+
+
+def create_cash_payment_intent(db: Session, booking: Booking, user: User) -> Payment:
+    """Record a cash payment intent — verified later by admin/accounting staff."""
+    _assert_booking_payable(booking, user)
+    amount = round(float(booking.estimated_cost or 0), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Booking has no payable amount.")
+
+    existing_verified = (
+        db.query(Payment)
+        .filter(Payment.booking_id == booking.id, Payment.status == PaymentStatus.VERIFIED)
+        .first()
+    )
+    if existing_verified:
+        raise HTTPException(status_code=400, detail="Payment already verified for this booking.")
+
+    pending_cash = (
+        db.query(Payment)
+        .filter(
+            Payment.booking_id == booking.id,
+            Payment.method == "cash",
+            Payment.status == PaymentStatus.FOR_VERIFICATION,
+        )
+        .order_by(Payment.id.desc())
+        .first()
+    )
+    if pending_cash:
+        return pending_cash
+
+    transaction = Transaction(
+        booking_id=booking.id,
+        customer_id=booking.customer_id,
+        type="booking",
+        amount=amount,
+    )
+    db.add(transaction)
+    db.flush()
+
+    payment = Payment(
+        booking_id=booking.id,
+        transaction_id=transaction.id,
+        customer_id=booking.customer_id,
+        method="cash",
+        amount=amount,
+        status=PaymentStatus.FOR_VERIFICATION,
+        reference=f"CASH-{token_hex(4).upper()}",
+    )
+    db.add(payment)
+
+    if booking.status in (BookingStatus.PAYMENT_REJECTED, BookingStatus.EXPIRED, BookingStatus.PENDING_PAYMENT):
         booking.status = BookingStatus.PAYMENT_VERIFICATION
 
     db.commit()

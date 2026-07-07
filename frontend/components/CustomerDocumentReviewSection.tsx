@@ -19,7 +19,8 @@ type DocumentReviewFields = Pick<
   | "cargo_declaration_original_filename"
   | "cargo_declaration_uploaded_at"
   | "terms_agreement_original_filename"
-  | "terms_agreement_uploaded_at"
+  | "terms_agreed_at"
+  | "terms_e_signed"
   | "goods_declaration_review_status"
   | "goods_declaration_review_status_label"
   | "goods_declaration_review_remarks"
@@ -110,8 +111,7 @@ export default function CustomerDocumentReviewSection({
   const isRejected = reviewStatus === "rejected";
 
   const [cargoFile, setCargoFile] = useState<File | null>(null);
-  const [termsFile, setTermsFile] = useState<File | null>(null);
-  const [errors, setErrors] = useState<{ cargo?: string; terms?: string; form?: string }>({});
+  const [errors, setErrors] = useState<{ cargo?: string; form?: string }>({});
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -119,28 +119,20 @@ export default function CustomerDocumentReviewSection({
     setErrors({});
     setSuccess(false);
 
-    if (!cargoFile && !termsFile) {
-      setErrors({ form: "Upload at least one revised document (declaration and/or terms)." });
+    if (!cargoFile) {
+      setErrors({ form: "Upload a revised cargo declaration to continue." });
       return;
     }
 
-    const nextErrors: typeof errors = {};
-    if (cargoFile) {
-      const err = validateBookingDocumentFile(cargoFile);
-      if (err) nextErrors.cargo = err;
-    }
-    if (termsFile) {
-      const err = validateBookingDocumentFile(termsFile);
-      if (err) nextErrors.terms = err;
-    }
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
+    const cargoErr = validateBookingDocumentFile(cargoFile);
+    if (cargoErr) {
+      setErrors({ cargo: cargoErr });
       return;
     }
 
     if (
       !window.confirm(
-        "Submit these revised documents for review? FleetOps will lock the previous revision request and notify reviewers immediately.",
+        "Submit this revised cargo declaration for review? FleetOps will lock the previous revision request and notify reviewers immediately.",
       )
     ) {
       return;
@@ -149,19 +141,17 @@ export default function CustomerDocumentReviewSection({
     setBusy(true);
     try {
       const updated = await WorkflowApi.resubmitBookingDocuments(booking.id, {
-        cargo_declaration: cargoFile ?? undefined,
-        terms_agreement: termsFile ?? undefined,
+        cargo_declaration: cargoFile,
       });
       setSuccess(true);
       setCargoFile(null);
-      setTermsFile(null);
       onUpdated?.(updated);
     } catch (e) {
       setErrors({ form: e instanceof Error ? e.message : "Upload failed. Please try again." });
     } finally {
       setBusy(false);
     }
-  }, [booking.id, cargoFile, onUpdated, termsFile]);
+  }, [booking.id, cargoFile, onUpdated]);
 
   const boxStyle: React.CSSProperties = compact
     ? {
@@ -219,18 +209,20 @@ export default function CustomerDocumentReviewSection({
 
       {!compact && !canResubmit && !isRejected && (
         <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#6B7280" }}>
-          Current files:{" "}
-          {booking.cargo_declaration_original_filename ?? "—"}
-          {booking.terms_agreement_original_filename
-            ? ` · Terms: ${booking.terms_agreement_original_filename}`
-            : ""}
+          Current files: {booking.cargo_declaration_original_filename ?? "—"}
+          {booking.terms_e_signed || booking.terms_agreed_at
+            ? " · Terms: electronically signed"
+            : booking.terms_agreement_original_filename
+              ? ` · Terms: ${booking.terms_agreement_original_filename}`
+              : ""}
         </p>
       )}
 
       {canResubmit && !compact && (
         <div style={{ marginTop: "0.85rem", display: "grid", gap: "0.65rem" }}>
           <p style={{ margin: 0, fontSize: "0.82rem", color: "#374151" }}>
-            Upload revised declaration and/or signed terms (JPEG, PNG, or PDF, max 5MB each).
+            Upload a revised cargo declaration (JPEG, PNG, or PDF, max 5MB). Your electronic terms acceptance
+            from booking remains on file.
           </p>
           <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.82rem", fontWeight: 600 }}>
             Revised cargo declaration
@@ -250,24 +242,6 @@ export default function CustomerDocumentReviewSection({
               <span style={{ color: "#B91C1C", fontWeight: 400 }}>{errors.cargo}</span>
             )}
           </label>
-          <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.82rem", fontWeight: 600 }}>
-            Revised terms &amp; agreement
-            <input
-              type="file"
-              accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-              disabled={busy}
-              onChange={(e) => {
-                setTermsFile(e.target.files?.[0] ?? null);
-                setErrors((prev) => ({ ...prev, terms: undefined, form: undefined }));
-              }}
-            />
-            {termsFile && (
-              <span style={{ fontWeight: 400, color: "#059669" }}>Selected: {termsFile.name}</span>
-            )}
-            {errors.terms && (
-              <span style={{ color: "#B91C1C", fontWeight: 400 }}>{errors.terms}</span>
-            )}
-          </label>
           {errors.form && (
             <p role="alert" style={{ margin: 0, color: "#B91C1C", fontSize: "0.82rem" }}>
               {errors.form}
@@ -285,7 +259,7 @@ export default function CustomerDocumentReviewSection({
             onClick={() => void submitResubmit()}
             style={{ justifySelf: "start" }}
           >
-            {busy ? "Uploading…" : "Submit revised documents"}
+            {busy ? "Uploading…" : "Submit revised declaration"}
           </button>
         </div>
       )}
@@ -301,7 +275,7 @@ export default function CustomerDocumentReviewSection({
             color: "#B45309",
           }}
         >
-          Upload revised documents
+          Upload revised declaration
         </Link>
       )}
 

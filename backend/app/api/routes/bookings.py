@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -47,7 +47,13 @@ from app.services.booking_status_aggregate import aggregate_customer_display_fro
 from app.services.general_operational_reports import list_general_operational_reports
 from app.constants.general_operational_report import GENERAL_OPS_CATEGORY_LABELS, GENERAL_OPS_TRIP_STATUS_LABELS
 from app.constants.operational_log import REPORT_TYPE_LABELS
-from app.services.booking_documents import resolve_booking_document_path, save_booking_document
+from app.services.booking_documents import resolve_booking_document_path, save_booking_document, save_terms_e_signature
+from app.services.terms_agreement_pdf import (
+    FLEETOPT_TERMS_VERSION,
+    generate_signed_terms_pdf,
+    signed_terms_pdf_abs_path,
+    signed_terms_pdf_relative_path,
+)
 from app.services.upload_urls import media_type_for_path
 from app.services.goods_declaration_review import (
     effective_goods_declaration_review_status,
@@ -278,6 +284,7 @@ def create_booking(
 
 @router.post("/with-documents", response_model=BookingRead)
 async def create_booking_with_documents(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.MANAGER, UserRole.ADMIN)),
     pickup_location: str = Form(...),
@@ -292,10 +299,11 @@ async def create_booking_with_documents(
     vehicle_class: str | None = Form(default=None),
     distance_km_override: float | None = Form(default=None),
     terms_agreed: str = Form(...),
+    terms_signer_name: str | None = Form(default=None),
     cargo_declaration: UploadFile = File(...),
-    terms_agreement: UploadFile = File(...),
+    terms_e_signature: UploadFile = File(...),
 ):
-    """Customer booking submit with required cargo declaration and terms agreement uploads."""
+    """Customer booking submit with cargo declaration upload and electronic terms acceptance."""
     if (terms_agreed or "").strip().lower() not in {"true", "1", "yes", "on"}:
         raise HTTPException(status_code=400, detail="You must accept the Terms & Agreement.")
 
@@ -321,17 +329,36 @@ async def create_booking_with_documents(
         decl_name, decl_path, decl_at = await save_booking_document(
             booking.id, cargo_declaration, prefix="declaration"
         )
-        terms_name, terms_path, terms_at = await save_booking_document(
-            booking.id, terms_agreement, prefix="terms"
-        )
+        sig_name, sig_path, _sig_at = await save_terms_e_signature(booking.id, terms_e_signature)
+        signed_at = datetime.utcnow()
+        signer_name = (terms_signer_name or user.full_name or "").strip() or user.full_name
+        client_ip = request.client.host if request.client else None
+
         booking.cargo_declaration_original_filename = decl_name
         booking.cargo_declaration_storage_path = decl_path
         booking.cargo_declaration_uploaded_at = decl_at
         mark_goods_declaration_pending(booking)
-        booking.terms_agreement_original_filename = terms_name
-        booking.terms_agreement_storage_path = terms_path
-        booking.terms_agreement_uploaded_at = terms_at
-        booking.terms_agreed_at = datetime.utcnow()
+
+        booking.terms_e_signature_storage_path = sig_path
+        booking.terms_signature_signer_name = signer_name
+        booking.terms_signature_ip = client_ip
+        booking.terms_agreement_version = FLEETOPT_TERMS_VERSION
+        booking.terms_agreed_at = signed_at
+
+        abs_sig = resolve_booking_document_path(sig_path)
+        pdf_abs = signed_terms_pdf_abs_path(booking.id)
+        generate_signed_terms_pdf(
+            booking_id=booking.id,
+            customer_name=signer_name,
+            user_account_id=user.id,
+            signed_at=signed_at,
+            ip_address=client_ip,
+            signature_png_path=abs_sig,
+            output_path=pdf_abs,
+        )
+        booking.terms_agreement_original_filename = f"FleetOpt-Signed-Terms-Booking-{booking.id}.pdf"
+        booking.terms_agreement_storage_path = signed_terms_pdf_relative_path(booking.id)
+        booking.terms_agreement_uploaded_at = signed_at
         return _finalize_new_booking(db, user, booking)
     except HTTPException:
         db.rollback()
@@ -375,11 +402,10 @@ def download_terms_agreement(
 async def resubmit_booking_documents(
     booking_id: int,
     cargo_declaration: UploadFile | None = File(None),
-    terms_agreement: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.MANAGER)),
 ):
-    """Customer re-uploads revised declaration and/or terms after admin requested revision."""
+    """Customer re-uploads revised cargo declaration after admin requested revision."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -394,9 +420,8 @@ async def resubmit_booking_documents(
         )
 
     has_decl = cargo_declaration is not None and bool(cargo_declaration.filename)
-    has_terms = terms_agreement is not None and bool(terms_agreement.filename)
-    if not has_decl and not has_terms:
-        raise HTTPException(status_code=400, detail="Upload at least one revised document.")
+    if not has_decl:
+        raise HTTPException(status_code=400, detail="Upload a revised cargo declaration.")
 
     if has_decl and cargo_declaration is not None:
         decl_name, decl_path, decl_at = await save_booking_document(
@@ -405,14 +430,6 @@ async def resubmit_booking_documents(
         booking.cargo_declaration_original_filename = decl_name
         booking.cargo_declaration_storage_path = decl_path
         booking.cargo_declaration_uploaded_at = decl_at
-
-    if has_terms and terms_agreement is not None:
-        terms_name, terms_path, terms_at = await save_booking_document(
-            booking.id, terms_agreement, prefix="terms"
-        )
-        booking.terms_agreement_original_filename = terms_name
-        booking.terms_agreement_storage_path = terms_path
-        booking.terms_agreement_uploaded_at = terms_at
 
     mark_goods_declaration_resubmitted(booking)
     db.commit()

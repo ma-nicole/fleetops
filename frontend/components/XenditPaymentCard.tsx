@@ -6,8 +6,9 @@ import {
   formatPaymentExpiry,
   formatXenditStatusLabel,
   openGcashApp,
-  XENDIT_GCASH_PAYMENT_STEPS,
+  XENDIT_CHECKOUT_STEPS,
 } from "@/lib/xenditPaymentUi";
+import { formatPaymentMethodLabel } from "@/lib/paymentMethodOptions";
 import type { Payment } from "@/lib/workflowApi";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 
@@ -20,6 +21,7 @@ type Props = {
   qrString: string | null;
   xenditStatus: string | null;
   payment: Payment | null;
+  checkoutMethod?: string | null;
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
@@ -47,6 +49,7 @@ export default function XenditPaymentCard({
   qrString,
   xenditStatus,
   payment,
+  checkoutMethod = "gcash",
   loading = false,
   error,
   onRetry,
@@ -56,6 +59,9 @@ export default function XenditPaymentCard({
   const isPending = !statusUpper || statusUpper === "PENDING";
   const isExpired = statusUpper === "EXPIRED";
   const isFailed = statusUpper === "FAILED";
+  const methodKey = (checkoutMethod || payment?.method || "gcash").toLowerCase();
+  const steps = XENDIT_CHECKOUT_STEPS[methodKey] ?? XENDIT_CHECKOUT_STEPS.gcash;
+  const showQr = methodKey === "gcash" && isPending;
   const tone = statusTone(isPaid ? "PAID" : xenditStatus);
 
   const xenditRef = payment?.xendit_invoice_id || payment?.xendit_qr_id || payment?.xendit_external_id || null;
@@ -105,7 +111,7 @@ export default function XenditPaymentCard({
         </div>
         <div className="xendit-payment-card__row">
           <dt>Payment method</dt>
-          <dd>GCash QR or hosted Xendit checkout</dd>
+          <dd>{formatPaymentMethodLabel(methodKey)} via Xendit checkout</dd>
         </div>
         {xenditRef ? (
           <div className="xendit-payment-card__row">
@@ -163,7 +169,7 @@ export default function XenditPaymentCard({
       {!isPaid && !isExpired && !isFailed ? (
         <>
           <ol className="xendit-payment-card__steps">
-            {XENDIT_GCASH_PAYMENT_STEPS.map((step) => (
+            {steps.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>
@@ -171,8 +177,12 @@ export default function XenditPaymentCard({
           <div className="xendit-payment-card__qr-wrap">
             {loading ? (
               <LoadingMessage label="Generating Xendit payment..." size="sm" />
-            ) : qrString && isPending ? (
+            ) : showQr && qrString ? (
               <QRCodeSVG value={qrString} size={240} level="M" includeMargin />
+            ) : methodKey !== "gcash" ? (
+              <p className="xendit-payment-card__qr-fallback">
+                Use Pay Now to open the secure Xendit checkout page for {formatPaymentMethodLabel(methodKey)}.
+              </p>
             ) : (
               <p className="xendit-payment-card__qr-fallback">
                 QR code unavailable.
@@ -194,13 +204,13 @@ export default function XenditPaymentCard({
                 rel="noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
               >
-                Pay Now
+                Pay Now — Xendit Checkout
               </a>
-            ) : (
+            ) : methodKey === "gcash" ? (
               <button type="button" className="button xendit-payment-card__gcash-btn" onClick={openGcashApp}>
-                Pay Now
+                Open GCash
               </button>
-            )}
+            ) : null}
             {onRetry ? (
               <button type="button" className="button button--secondary" onClick={onRetry} disabled={loading}>
                 {refreshLabel}

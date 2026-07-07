@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import EvidenceVerificationBadge from "@/components/EvidenceVerificationBadge";
 import type { CrewTimelineEvent } from "@/lib/workflowApi";
 
 export type HelperTimelineTone = "success" | "warning" | "danger";
@@ -13,6 +14,8 @@ export type HelperTimelineRow = {
   tone: HelperTimelineTone;
   photo_url?: string | null;
   pending?: boolean;
+  evidence_verification_label?: string | null;
+  evidence_review_required?: boolean;
 };
 
 const PHASES = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"] as const;
@@ -107,6 +110,8 @@ export function buildHelperTimelineRows(
     tone: toneForEvent(ev),
     photo_url: ev.photo_url,
     pending: false,
+    evidence_verification_label: ev.evidence_verification_label,
+    evidence_review_required: ev.evidence_review_required,
   }));
 
   if (!opts?.includePending) {
@@ -141,7 +146,7 @@ export function buildHelperTimelineRows(
       status: `Next: ${allowed.replace(/_/g, " ")}`,
       remarks:
         allowed === "picked_up" || allowed === "dropped_off"
-          ? "Photo proof (JPG/PNG) required when you submit this milestone."
+          ? "Camera photo proof required when you submit this milestone."
           : "Submit the next milestone when this leg is complete.",
       tone: "warning",
       pending: true,
@@ -151,7 +156,7 @@ export function buildHelperTimelineRows(
       key: "pending-dropped_off",
       at: null,
       status: "Next: dropped off",
-      remarks: "Photo proof (JPG/PNG) required when marking dropped off.",
+      remarks: "Camera photo proof required when marking dropped off.",
       tone: "warning",
       pending: true,
     });
@@ -261,6 +266,13 @@ export default function HelperUpdatesTimeline({
                     <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#92400E", letterSpacing: "0.04em" }}>
                       AWAITING
                     </span>
+                  ) : null}
+                  {row.evidence_verification_label ? (
+                    <EvidenceVerificationBadge
+                      label={row.evidence_verification_label}
+                      reviewRequired={row.evidence_review_required}
+                      compact
+                    />
                   ) : null}
                 </div>
                 <div style={{ color: "#1e293b" }}>

@@ -22,8 +22,9 @@ type Props = {
   date: string;
   pickedSlot: string;
   cargoDeclaration: File | null;
-  termsAgreement: File | null;
+  termsSignature: File | null;
   termsAccepted: boolean;
+  termsScrolled: boolean;
   cost: LiveCostQuote | null;
   freightLines: FreightLineDetail | null;
   routeQuoteMeta: QuoteGeoMeta | null;
@@ -54,6 +55,11 @@ function documentStatus(file: File | null): { label: string; ok: boolean } {
   return { label: file.name, ok: true };
 }
 
+function signatureStatus(file: File | null): { label: string; ok: boolean } {
+  if (!file) return { label: "Not signed", ok: false };
+  return { label: "Electronic signature captured", ok: true };
+}
+
 function StatusText({ ok, children }: { ok: boolean; children: ReactNode }) {
   return (
     <span className={ok ? "booking-doc-status booking-doc-status--ok" : "booking-doc-status booking-doc-status--missing"}>
@@ -70,8 +76,9 @@ export default function ReviewStep({
   date,
   pickedSlot,
   cargoDeclaration,
-  termsAgreement,
+  termsSignature,
   termsAccepted,
+  termsScrolled,
   cost,
   freightLines,
   routeQuoteMeta,
@@ -97,7 +104,7 @@ export default function ReviewStep({
   onManualVehicleClassChange,
 }: Props) {
   const decl = documentStatus(cargoDeclaration);
-  const terms = documentStatus(termsAgreement);
+  const terms = signatureStatus(termsSignature);
   const showPricing = mode === "pricing" || mode === "payment";
   const showPayment = mode === "payment";
 
@@ -133,7 +140,13 @@ export default function ReviewStep({
             </dd>
           </div>
           <div className="booking-summary-card__row">
-            <dt>Terms &amp; Agreement</dt>
+            <dt>Terms read</dt>
+            <dd>
+              <StatusText ok={termsScrolled}>{termsScrolled ? "Yes" : "Scroll required"}</StatusText>
+            </dd>
+          </div>
+          <div className="booking-summary-card__row">
+            <dt>Electronic signature</dt>
             <dd>
               <StatusText ok={terms.ok}>{terms.label}</StatusText>
             </dd>

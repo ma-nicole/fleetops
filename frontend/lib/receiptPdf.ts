@@ -12,6 +12,10 @@ export type ReceiptPdfOptions = {
   dropoff?: string;
   cargo?: string;
   serviceType?: string;
+  termsSignerName?: string;
+  termsSignedAtDisplay?: string;
+  termsAgreementVersion?: string;
+  signedTermsDownloadNote?: string;
   extraNotes?: string[];
   filenameStem?: string;
 };
@@ -38,6 +42,12 @@ export function downloadReceiptPdf(opts: ReceiptPdfOptions): void {
     ...(opts.dropoff ? [{ field: "Dropoff", value: opts.dropoff }] : []),
     ...(opts.cargo ? [{ field: "Cargo / load", value: opts.cargo }] : []),
     ...(opts.serviceType ? [{ field: "Service", value: opts.serviceType }] : []),
+    ...(opts.termsSignerName ? [{ field: "Terms signer", value: opts.termsSignerName }] : []),
+    ...(opts.termsSignedAtDisplay ? [{ field: "Terms signed", value: opts.termsSignedAtDisplay }] : []),
+    ...(opts.termsAgreementVersion ? [{ field: "Terms version", value: opts.termsAgreementVersion }] : []),
+    ...(opts.signedTermsDownloadNote
+      ? [{ field: "Signed terms agreement", value: opts.signedTermsDownloadNote }]
+      : []),
   ];
 
   downloadProfessionalReportPdf({
@@ -54,7 +64,15 @@ export function downloadReceiptPdf(opts: ReceiptPdfOptions): void {
       { key: "value", label: "Value" },
     ],
     tableRows: rows,
-    interpretation: opts.extraNotes?.join(" ") || "Official FleetOpts payment receipt for customer records.",
+    interpretation:
+      [
+        opts.extraNotes?.join(" "),
+        opts.signedTermsDownloadNote
+          ? "A signed FleetOpt Logistics Service Agreement is attached to this booking record."
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ") || "Official FleetOpts payment receipt for customer records.",
     analyticsType: "Descriptive",
     filenameStem: opts.filenameStem || `receipt_${opts.bookingId}`,
   });

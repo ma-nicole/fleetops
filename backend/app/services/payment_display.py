@@ -15,7 +15,11 @@ def is_xendit_payment(payment: Payment) -> bool:
 
 
 def verification_mode(payment: Payment) -> str:
-    return "xendit_auto" if is_xendit_payment(payment) else "manual"
+    if is_xendit_payment(payment):
+        return "xendit_auto"
+    if payment.method == "cash":
+        return "cash_offline"
+    return "manual"
 
 
 def webhook_verified(payment: Payment) -> bool:
@@ -56,6 +60,8 @@ def display_status(payment: Payment, booking: Booking | None = None) -> str:
         return "Payment Rejected"
 
     if payment.status == PaymentStatus.FOR_VERIFICATION:
+        if payment.method == "cash":
+            return "Awaiting Cash Payment"
         if is_xendit_payment(payment):
             if xendit == XENDIT_STATUS_PENDING:
                 return "Payment Processing"

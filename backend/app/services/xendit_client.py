@@ -110,6 +110,7 @@ def create_invoice(
     success_redirect_url: str | None,
     failure_redirect_url: str | None,
     metadata: dict[str, Any] | None = None,
+    payment_methods: list[str] | None = None,
 ) -> dict[str, Any]:
     return _json_request(
         "POST",
@@ -124,8 +125,21 @@ def create_invoice(
             "success_redirect_url": success_redirect_url,
             "failure_redirect_url": failure_redirect_url,
             "metadata": metadata,
+            "payment_methods": payment_methods,
         },
     )
+
+
+def xendit_channels_for_method(method: str) -> list[str]:
+    """Map FleetOps payment method to Xendit invoice payment_methods."""
+    key = (method or "").strip().lower()
+    if key == "gcash":
+        return ["GCASH", "QRPH"]
+    if key == "card":
+        return ["CREDIT_CARD", "DEBIT_CARD"]
+    if key == "bank":
+        return ["BANK_TRANSFER"]
+    return ["GCASH", "CREDIT_CARD", "DEBIT_CARD", "BANK_TRANSFER", "QRPH"]
 
 
 def get_qr_code_by_external_id(external_id: str) -> dict[str, Any]:

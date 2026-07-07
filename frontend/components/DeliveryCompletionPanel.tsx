@@ -4,11 +4,16 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { Html5Qrcode } from "html5-qrcode";
 import DigitalSignaturePad from "@/components/DigitalSignaturePad";
+import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
 import { apiFullUrl } from "@/lib/api";
+import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
+import { prepareEvidenceFile } from "@/lib/evidenceCapture";
 import { WorkflowApi, type DeliveryReceivingStatus } from "@/lib/workflowApi";
 
 type DeliveryCompletionPanelProps = {
   tripId: number;
+  bookingId?: number;
+  crewName?: string | null;
   onReadyChange?: (ready: boolean) => void;
   compact?: boolean;
 };
@@ -44,7 +49,13 @@ function CheckRow({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact = false }: DeliveryCompletionPanelProps) {
+export default function DeliveryCompletionPanel({
+  tripId,
+  bookingId,
+  crewName,
+  onReadyChange,
+  compact = false,
+}: DeliveryCompletionPanelProps) {
   const scanRegionId = useId().replace(/:/g, "");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [status, setStatus] = useState<DeliveryReceivingStatus | null>(null);
@@ -52,8 +63,11 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [receivingFile, setReceivingFile] = useState<File | null>(null);
+  const [receivingMeta, setReceivingMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [signatureMeta, setSignatureMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [signatureUploadFile, setSignatureUploadFile] = useState<File | null>(null);
+  const [signatureUploadMeta, setSignatureUploadMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [manualQr, setManualQr] = useState("");
   const [scanning, setScanning] = useState(false);
 
@@ -144,10 +158,11 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
     setBusy("doc");
     setMsg(null);
     try {
-      const s = await WorkflowApi.uploadReceivingDocument(tripId, receivingFile);
+      const s = await WorkflowApi.uploadReceivingDocument(tripId, receivingFile, receivingMeta);
       setStatus(s);
       onReadyChange?.(s.ready_for_completion);
       setReceivingFile(null);
+      setReceivingMeta(null);
       setMsg("Receiving document uploaded.");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Upload failed.");
@@ -158,6 +173,7 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
 
   const uploadSignature = async () => {
     const file = signatureUploadFile || signatureFile;
+    const meta = signatureUploadMeta || signatureMeta;
     if (!file) {
       setMsg("Draw or upload a digital signature first.");
       return;
@@ -165,11 +181,13 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
     setBusy("sig");
     setMsg(null);
     try {
-      const s = await WorkflowApi.uploadDigitalSignature(tripId, file);
+      const s = await WorkflowApi.uploadDigitalSignature(tripId, file, meta);
       setStatus(s);
       onReadyChange?.(s.ready_for_completion);
       setSignatureFile(null);
+      setSignatureMeta(null);
       setSignatureUploadFile(null);
+      setSignatureUploadMeta(null);
       setMsg("Digital signature saved.");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Signature upload failed.");
@@ -254,10 +272,17 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
             View uploaded document
           </button>
         ) : null}
-        <input
-          type="file"
-          accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,application/pdf"
-          onChange={(e) => setReceivingFile(e.target.files?.[0] ?? null)}
+        <EvidenceCaptureInput
+          label="Receiving document photo"
+          allowPdf
+          watermarkContext={{ bookingId, tripId, crewName }}
+          uploaderName={crewName}
+          value={receivingFile}
+          metadata={receivingMeta}
+          onCapture={(file, meta) => {
+            setReceivingFile(file);
+            setReceivingMeta(meta);
+          }}
         />
         <SubmitButton
           type="button"
@@ -317,15 +342,37 @@ export default function DeliveryCompletionPanel({ tripId, onReadyChange, compact
             View saved signature
           </button>
         ) : null}
-        <DigitalSignaturePad disabled={busy === "sig"} onChange={setSignatureFile} />
-        <label style={{ display: "grid", gap: 4, fontSize: "0.84rem" }}>
-          <span>Or upload signature image (PNG/JPG)</span>
-          <input
-            type="file"
-            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png"
-            onChange={(e) => setSignatureUploadFile(e.target.files?.[0] ?? null)}
-          />
-        </label>
+        <DigitalSignaturePad
+          disabled={busy === "sig"}
+          onChange={(file) => {
+            if (!file) {
+              setSignatureFile(null);
+              setSignatureMeta(null);
+              return;
+            }
+            void (async () => {
+              const { file: prepared, metadata } = await prepareEvidenceFile(file, "live_capture", {
+                bookingId,
+                tripId,
+                crewName,
+              }, crewName);
+              setSignatureFile(prepared);
+              setSignatureMeta(metadata);
+            })();
+          }}
+        />
+        <EvidenceCaptureInput
+          label="Or upload signature image"
+          allowGalleryFallback
+          watermarkContext={{ bookingId, tripId, crewName }}
+          uploaderName={crewName}
+          value={signatureUploadFile}
+          metadata={signatureUploadMeta}
+          onCapture={(file, meta) => {
+            setSignatureUploadFile(file);
+            setSignatureUploadMeta(meta);
+          }}
+        />
         <button type="button" className="button" disabled={busy === "sig"} onClick={() => void uploadSignature()}>
           {busy === "sig" ? "Saving…" : "Save digital signature"}
         </button>

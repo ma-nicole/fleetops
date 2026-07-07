@@ -20,8 +20,9 @@ type ValidationContext = {
   slotAvailableTrucks: Record<string, number>;
   requiredTrucksFromApi: number;
   cargoDeclaration: File | null;
-  termsAgreement: File | null;
+  termsSignature: File | null;
   termsAccepted: boolean;
+  termsScrolled: boolean;
 };
 
 function validateRouteFields(ctx: ValidationContext): FormErrors {
@@ -100,8 +101,12 @@ function validateDocumentFields(ctx: ValidationContext): FormErrors {
   const errors: FormErrors = {};
   const declErr = validateBookingDocumentFile(ctx.cargoDeclaration);
   if (declErr) errors.cargo_declaration = declErr;
-  const termsFileErr = validateBookingDocumentFile(ctx.termsAgreement);
-  if (termsFileErr) errors.terms_agreement = termsFileErr;
+  if (!ctx.termsScrolled) {
+    errors.terms_read = "Scroll through the full Terms & Agreement before signing.";
+  }
+  if (!ctx.termsSignature) {
+    errors.terms_signature = "Draw your electronic signature to continue.";
+  }
   if (!ctx.termsAccepted) {
     errors.terms_accepted = "You must accept the Terms & Agreement.";
   }

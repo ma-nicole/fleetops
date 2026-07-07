@@ -36,6 +36,11 @@ from app.services.general_operational_reports import (
     save_general_ops_attachment,
     validate_general_ops_payload,
 )
+from app.services.evidence_capture import (
+    evaluate_trip_evidence,
+    parse_evidence_form,
+    record_evidence_capture,
+)
 from app.services.latest_location_display import latest_location_display_for_trip
 from app.services.notifications import send_email_notification
 from app.services.vehicle_issue_reports import (
@@ -262,6 +267,12 @@ async def driver_submit_vehicle_issue_report(
     priority: str = Form(...),
     description: str = Form(...),
     file: UploadFile | None = File(default=None),
+    evidence_capture_source: str = Form(default=""),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER)),
 ):
@@ -269,6 +280,28 @@ async def driver_submit_vehicle_issue_report(
     trip = assert_trip_selectable_for_driver(db, trip_id=trip_id, driver_id=user.id)
     it, pr, desc = validate_issue_payload(issue_type, priority, description)
     attachment_url = save_vehicle_issue_attachment(trip_id, file)
+    if attachment_url and file:
+        booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+        evidence_form = parse_evidence_form(
+            capture_source=evidence_capture_source,
+            evidence_device_captured_at=evidence_device_captured_at,
+            evidence_latitude=evidence_latitude,
+            evidence_longitude=evidence_longitude,
+            evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+            evidence_uploader_name=evidence_uploader_name,
+        )
+        evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="vehicle_issue")
+        rel_path = attachment_url.replace("/uploads/", "", 1) if attachment_url.startswith("/uploads/") else attachment_url
+        record_evidence_capture(
+            db,
+            upload_path=rel_path,
+            context_type="vehicle_issue",
+            trip=trip,
+            booking=booking,
+            user=user,
+            ev=evidence_eval,
+            milestone_context="vehicle_issue",
+        )
 
     row = VehicleIssueReport(
         booking_id=trip.booking_id,
@@ -338,6 +371,12 @@ async def driver_submit_general_operational_report(
     description: str = Form(...),
     notes: str = Form(default=""),
     file: UploadFile | None = File(default=None),
+    evidence_capture_source: str = Form(default=""),
+    evidence_device_captured_at: str = Form(default=""),
+    evidence_latitude: str = Form(default=""),
+    evidence_longitude: str = Form(default=""),
+    evidence_gps_accuracy_m: str = Form(default=""),
+    evidence_uploader_name: str = Form(default=""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER)),
 ):
@@ -354,6 +393,28 @@ async def driver_submit_general_operational_report(
     fuel = parse_optional_float(fuel_consumed, "fuel consumed")
     notes_s = (notes or "").strip() or None
     attachment_url = save_general_ops_attachment(trip_id, file)
+    if attachment_url and file:
+        booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
+        evidence_form = parse_evidence_form(
+            capture_source=evidence_capture_source,
+            evidence_device_captured_at=evidence_device_captured_at,
+            evidence_latitude=evidence_latitude,
+            evidence_longitude=evidence_longitude,
+            evidence_gps_accuracy_m=evidence_gps_accuracy_m,
+            evidence_uploader_name=evidence_uploader_name,
+        )
+        evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="general_ops")
+        rel_path = attachment_url.replace("/uploads/", "", 1) if attachment_url.startswith("/uploads/") else attachment_url
+        record_evidence_capture(
+            db,
+            upload_path=rel_path,
+            context_type="general_ops",
+            trip=trip,
+            booking=booking,
+            user=user,
+            ev=evidence_eval,
+            milestone_context="general_ops",
+        )
 
     row = GeneralOperationalReport(
         booking_id=trip.booking_id,

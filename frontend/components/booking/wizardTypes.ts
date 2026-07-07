@@ -130,8 +130,9 @@ export type BookingFormState = {
   date: string;
   pickedSlot: string;
   cargoDeclaration: File | null;
-  termsAgreement: File | null;
+  termsSignature: File | null;
   termsAccepted: boolean;
+  termsScrolled: boolean;
   manualTollEntry: string;
   manualTollExit: string;
   manualVehicleClass: string;

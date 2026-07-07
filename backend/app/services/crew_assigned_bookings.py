@@ -101,6 +101,13 @@ def _merge_timeline(
                 "remarks": su.remarks,
                 "photo_url": su.photo_url,
                 "submitted_by": helper_name_fn(su.helper_id),
+                "evidence_verification_label": su.evidence_verification_label,
+                "evidence_review_required": bool(su.evidence_review_required),
+                "evidence_latitude": su.latitude,
+                "evidence_longitude": su.longitude,
+                "evidence_device_captured_at": (
+                    su.evidence_device_captured_at.isoformat() if su.evidence_device_captured_at else None
+                ),
             }
         )
     for i, lu in enumerate(location_rows, start=1):
@@ -116,6 +123,13 @@ def _merge_timeline(
                 "photo_url": lu.photo_url,
                 "submitted_by": helper_name_fn(lu.helper_id),
                 "update_index": i,
+                "evidence_verification_label": lu.evidence_verification_label,
+                "evidence_review_required": bool(lu.evidence_review_required),
+                "evidence_latitude": lu.latitude,
+                "evidence_longitude": lu.longitude,
+                "evidence_device_captured_at": (
+                    lu.evidence_device_captured_at.isoformat() if lu.evidence_device_captured_at else None
+                ),
             }
         )
     events.sort(key=lambda e: e["at"])
