@@ -560,6 +560,7 @@ export type Payment = {
   xendit_qr_id?: string | null;
   xendit_payment_id?: string | null;
   xendit_invoice_id?: string | null;
+  xendit_invoice_url?: string | null;
   xendit_external_id?: string | null;
   xendit_status?: "PENDING" | "PAID" | "EXPIRED" | "FAILED" | string | null;
   xendit_qr_string?: string | null;

@@ -403,6 +403,11 @@ async def submit_payment_proof(
                 detail="Use the payment page to submit a corrected proof for your rejected payment.",
             )
     if existing:
+        if existing.xendit_external_id and (existing.xendit_status or "").upper() in {"PENDING", "PAID"}:
+            raise HTTPException(
+                status_code=400,
+                detail="A Xendit online payment is already in progress for this booking. Manual proof upload is disabled.",
+            )
         if existing.status == PaymentStatus.VERIFIED:
             raise HTTPException(status_code=400, detail="Payment already verified for this booking.")
         if existing.status == PaymentStatus.FOR_VERIFICATION:

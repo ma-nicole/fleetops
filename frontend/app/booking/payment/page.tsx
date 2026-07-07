@@ -128,8 +128,8 @@ function PaymentProgress({
         })}
       </div>
       <p style={{ margin: "0.75rem 0 0", fontSize: "0.82rem", color: "#1E40AF", lineHeight: 1.45 }}>
-        Xendit payments verify automatically when the webhook/poll confirms payment. Alternate methods stay for
-        verification until an admin approves the proof.
+        Xendit payments verify automatically when the webhook or status refresh confirms payment. Manual fallback
+        methods stay for verification until an admin approves the proof.
       </p>
     </div>
   );
@@ -158,7 +158,6 @@ function BookingPaymentInner() {
   const [xenditPayment, setXenditPayment] = useState<Payment | null>(null);
   const [xenditLoading, setXenditLoading] = useState(false);
   const [xenditError, setXenditError] = useState<string | null>(null);
-  const [showAlternateMethods, setShowAlternateMethods] = useState(false);
 
   const bookingId = bookingIdRaw ? Number.parseInt(bookingIdRaw, 10) : NaN;
 
@@ -417,13 +416,13 @@ function BookingPaymentInner() {
       <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>Pay for your booking</h1>
       <p style={{ color: "#666666", marginBottom: "2rem" }}>
         {xenditActive
-          ? "Your Xendit GCash payment was created automatically. Scan the QR below to pay — no screenshot upload required."
+          ? "Your Xendit payment request was created automatically. Use Pay Now or scan the GCash QR; no screenshot upload is required."
           : "Use the details below, then upload proof of payment (JPEG, PNG, or PDF). An admin will verify your payment."}
       </p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "2rem" }}>
         <div style={{ display: "grid", gap: "1.25rem" }}>
-          {xenditActive && !showAlternateMethods ? (
+          {xenditActive ? (
             <XenditPaymentCard
               bookingId={booking.id}
               amount={total}
@@ -439,18 +438,7 @@ function BookingPaymentInner() {
             />
           ) : null}
 
-          {xenditActive ? (
-            <button
-              type="button"
-              className="button button--secondary"
-              style={{ justifySelf: "start" }}
-              onClick={() => setShowAlternateMethods((v) => !v)}
-            >
-              {showAlternateMethods ? "← Back to GCash (Xendit)" : "Pay another way (bank, COD, etc.)"}
-            </button>
-          ) : null}
-
-          {(!xenditActive || showAlternateMethods) && (
+          {!xenditActive && (
             <>
               <section
                 style={{
@@ -650,7 +638,7 @@ function BookingPaymentInner() {
                 </p>
                 <p style={{ margin: 0 }}>
                   <strong>Method:</strong>{" "}
-                  {xenditActive ? "GCash (Xendit)" : formatPaymentMethodLabel((xenditPayment ?? latestPayment)!.method)}
+                  {xenditActive ? "Xendit online payment" : formatPaymentMethodLabel((xenditPayment ?? latestPayment)!.method)}
                 </p>
                 <p style={{ margin: 0 }}>
                   <strong>Amount:</strong> {formatPhp((xenditPayment ?? latestPayment)!.amount)}
@@ -671,7 +659,7 @@ function BookingPaymentInner() {
             <p style={{ margin: 0, color: "#6B7280", fontSize: "0.9rem" }}>
               {xenditActive ? (
                 <>
-                  GCash payments through Xendit are confirmed automatically via webhook. Your booking moves to{" "}
+                  Xendit payments are confirmed automatically via webhook. Your booking moves to{" "}
                   <strong>payment verified</strong> once paid.
                 </>
               ) : (

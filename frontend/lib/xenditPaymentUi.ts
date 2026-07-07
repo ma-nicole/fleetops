@@ -1,8 +1,8 @@
 export const XENDIT_GCASH_PAYMENT_STEPS = [
-  "Open the GCash app on your phone.",
-  "Tap Scan and scan the QR code below.",
+  "Click Pay Now to open Xendit checkout, or scan the GCash QR code below.",
+  "Choose GCash or another supported Xendit payment method.",
   "Confirm the exact amount and complete payment.",
-  "This page updates automatically when payment is received — no screenshot upload needed.",
+  "This page updates automatically when payment is received; no screenshot upload is needed.",
 ] as const;
 
 /** Attempt to open the GCash app (mobile). Falls back silently on desktop. */

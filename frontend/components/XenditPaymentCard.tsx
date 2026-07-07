@@ -58,15 +58,17 @@ export default function XenditPaymentCard({
   const isFailed = statusUpper === "FAILED";
   const tone = statusTone(isPaid ? "PAID" : xenditStatus);
 
-  const xenditRef =
-    payment?.xendit_external_id || payment?.xendit_qr_id || payment?.reference || null;
+  const xenditRef = payment?.xendit_invoice_id || payment?.xendit_qr_id || payment?.xendit_external_id || null;
+  const xenditRefLabel = payment?.xendit_invoice_id ? "Xendit invoice ID" : "Xendit request ID";
+  const paymentUrl = payment?.xendit_invoice_url || null;
   const expiresAt = payment?.xendit_expires_at ?? null;
+  const refreshLabel = isExpired || isFailed ? "Generate new payment request" : "Refresh payment status";
 
   return (
     <article className="xendit-payment-card">
       <header className="xendit-payment-card__header">
         <div>
-          <p className="xendit-payment-card__eyebrow">GCash via Xendit</p>
+          <p className="xendit-payment-card__eyebrow">Xendit online payment</p>
           <h2 className="xendit-payment-card__title">Booking #{bookingId}</h2>
         </div>
         <div
@@ -103,17 +105,17 @@ export default function XenditPaymentCard({
         </div>
         <div className="xendit-payment-card__row">
           <dt>Payment method</dt>
-          <dd>GCash via Xendit</dd>
+          <dd>GCash QR or hosted Xendit checkout</dd>
         </div>
         {xenditRef ? (
           <div className="xendit-payment-card__row">
-            <dt>Xendit payment ID</dt>
+            <dt>{xenditRefLabel}</dt>
             <dd className="xendit-payment-card__mono">{xenditRef}</dd>
           </div>
         ) : null}
-        {expiresAt && isPending ? (
+        {expiresAt ? (
           <div className="xendit-payment-card__row">
-            <dt>Expires</dt>
+            <dt>Payment expiration</dt>
             <dd>{formatPaymentExpiry(expiresAt)}</dd>
           </div>
         ) : null}
@@ -138,10 +140,10 @@ export default function XenditPaymentCard({
 
       {isExpired ? (
         <div className="xendit-payment-card__alert xendit-payment-card__alert--warn" role="alert">
-          This QR code has expired.
+          This payment request has expired.
           {onRetry ? (
             <button type="button" className="xendit-payment-card__link-btn" onClick={onRetry}>
-              Generate a new QR
+              Generate a new payment request
             </button>
           ) : null}
         </div>
@@ -149,10 +151,10 @@ export default function XenditPaymentCard({
 
       {isFailed ? (
         <div className="xendit-payment-card__alert xendit-payment-card__alert--error" role="alert">
-          Payment failed. Generate a new QR or contact support.
+          Payment failed. Generate a new payment request or contact support.
           {onRetry ? (
             <button type="button" className="xendit-payment-card__link-btn" onClick={onRetry}>
-              Try again
+              Generate a new payment request
             </button>
           ) : null}
         </div>
@@ -168,7 +170,7 @@ export default function XenditPaymentCard({
 
           <div className="xendit-payment-card__qr-wrap">
             {loading ? (
-              <LoadingMessage label="Generating Xendit payment QR…" size="sm" />
+              <LoadingMessage label="Generating Xendit payment..." size="sm" />
             ) : qrString && isPending ? (
               <QRCodeSVG value={qrString} size={240} level="M" includeMargin />
             ) : (
@@ -176,7 +178,7 @@ export default function XenditPaymentCard({
                 QR code unavailable.
                 {onRetry ? (
                   <button type="button" className="xendit-payment-card__link-btn" onClick={onRetry}>
-                    Generate QR
+                    Refresh payment status
                   </button>
                 ) : null}
               </p>
@@ -184,18 +186,30 @@ export default function XenditPaymentCard({
           </div>
 
           <div className="xendit-payment-card__actions">
-            <button type="button" className="button xendit-payment-card__gcash-btn" onClick={openGcashApp}>
-              Pay via GCash
-            </button>
+            {paymentUrl ? (
+              <a
+                className="button xendit-payment-card__gcash-btn"
+                href={paymentUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+              >
+                Pay Now
+              </a>
+            ) : (
+              <button type="button" className="button xendit-payment-card__gcash-btn" onClick={openGcashApp}>
+                Pay Now
+              </button>
+            )}
             {onRetry ? (
               <button type="button" className="button button--secondary" onClick={onRetry} disabled={loading}>
-                Refresh QR
+                {refreshLabel}
               </button>
             ) : null}
           </div>
 
           <p className="xendit-payment-card__hint">
-            Waiting for payment… This page checks status every few seconds. Do not upload a screenshot — Xendit
+            Waiting for payment. This page checks status every few seconds. Do not upload a screenshot; Xendit
             confirms payment automatically.
           </p>
         </>

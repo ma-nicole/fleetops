@@ -29,6 +29,7 @@ def mark_payment_and_booking_verified(
         BookingStatus.PENDING_APPROVAL,
         BookingStatus.APPROVED,
         BookingStatus.PAYMENT_REJECTED,
+        BookingStatus.EXPIRED,
     }:
         booking.status = BookingStatus.PAYMENT_VERIFIED
         if reviewer_id is not None:

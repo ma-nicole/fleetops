@@ -202,6 +202,7 @@ def apply_runtime_schema_fixes() -> None:
             ("xendit_qr_id", "VARCHAR(64) NULL"),
             ("xendit_payment_id", "VARCHAR(64) NULL"),
             ("xendit_invoice_id", "VARCHAR(64) NULL"),
+            ("xendit_invoice_url", "VARCHAR(1024) NULL"),
             ("xendit_external_id", "VARCHAR(128) NULL"),
             ("xendit_status", "VARCHAR(32) NULL"),
             ("xendit_qr_string", "VARCHAR(2048) NULL"),
@@ -614,6 +615,7 @@ def apply_runtime_schema_fixes() -> None:
         TripShoulderCostEntry,
         TruckSlotHold,
         VehicleIssueReport,
+        XenditWebhookEvent,
     )
 
     for table in (
@@ -629,6 +631,7 @@ def apply_runtime_schema_fixes() -> None:
         HistoricalTollRecord.__table__,
         TollPlaza.__table__,
         TollPlazaAlias.__table__,
+        XenditWebhookEvent.__table__,
     ):
         if not insp.has_table(table.name):
             try:

@@ -57,6 +57,7 @@ class PaymentRead(BaseModel):
     xendit_qr_id: str | None = None
     xendit_payment_id: str | None = None
     xendit_invoice_id: str | None = None
+    xendit_invoice_url: str | None = None
     xendit_external_id: str | None = None
     xendit_status: str | None = None
     xendit_qr_string: str | None = None

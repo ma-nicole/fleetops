@@ -825,6 +825,7 @@ class Payment(Base):
     xendit_qr_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     xendit_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     xendit_invoice_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    xendit_invoice_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     xendit_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     xendit_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     xendit_qr_string: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -837,6 +838,20 @@ class Payment(Base):
         from app.services.upload_urls import public_upload_url
 
         return public_upload_url(self.proof_storage_path)
+
+
+class XenditWebhookEvent(Base):
+    __tablename__ = "xendit_webhook_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(191), unique=True, nullable=False, index=True)
+    event_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id"), nullable=True, index=True)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Feedback(Base):

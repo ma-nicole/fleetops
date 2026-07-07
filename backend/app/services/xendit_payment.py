@@ -1,22 +1,48 @@
-"""Xendit GCash QR payment orchestration for booking payments."""
+"""Xendit online payment orchestration for booking payments."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import json
+import logging
+from datetime import datetime, timedelta, timezone
 from secrets import token_hex
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.entities import Booking, BookingStatus, Payment, PaymentStatus, Transaction, User, UserRole
+from app.models.entities import (
+    Booking,
+    BookingStatus,
+    Payment,
+    PaymentStatus,
+    Transaction,
+    TruckSlotHold,
+    TruckSlotHoldStatus,
+    User,
+    UserRole,
+    XenditWebhookEvent,
+)
 from app.services.payment_verification import mark_payment_and_booking_verified
-from app.services.xendit_client import XenditError, create_dynamic_qr_code, get_qr_code_by_external_id, xendit_configured
+from app.services.xendit_client import (
+    XenditError,
+    create_dynamic_qr_code,
+    create_invoice,
+    get_qr_code_by_external_id,
+    xendit_configured,
+)
+
+logger = logging.getLogger(__name__)
 
 XENDIT_STATUS_PENDING = "PENDING"
 XENDIT_STATUS_PAID = "PAID"
 XENDIT_STATUS_EXPIRED = "EXPIRED"
 XENDIT_STATUS_FAILED = "FAILED"
+
+XENDIT_SUCCESS_STATUSES = {"COMPLETED", "PAID", "SETTLED", "SUCCEEDED", "SUCCESS"}
+XENDIT_EXPIRED_STATUSES = {"EXPIRED"}
+XENDIT_FAILED_STATUSES = {"FAILED", "VOIDED", "CANCELLED", "CANCELED"}
 
 QR_EXPIRY_HOURS = 24
 
@@ -44,6 +70,13 @@ def xendit_webhook_url() -> str:
     return f"{base}/api/payments/xendit/webhook"
 
 
+def _frontend_url(path: str) -> str | None:
+    base = (settings.frontend_url or "").strip().rstrip("/")
+    if not base:
+        return None
+    return f"{base}{path}"
+
+
 def _assert_booking_payable(booking: Booking, user: User) -> None:
     if user.role == UserRole.CUSTOMER and booking.customer_id != user.id:
         raise HTTPException(status_code=403, detail="Not your booking")
@@ -68,6 +101,29 @@ def _active_xendit_payment(db: Session, booking_id: int) -> Payment | None:
     )
 
 
+def _create_hosted_invoice(booking: Booking, user: User, external_id: str, amount: float) -> dict[str, Any] | None:
+    try:
+        return create_invoice(
+            external_id=external_id,
+            amount=amount,
+            description=f"FleetOps booking #{booking.id}",
+            payer_email=user.email,
+            invoice_duration=QR_EXPIRY_HOURS * 60 * 60,
+            success_redirect_url=_frontend_url(f"/modules/customer/payment?bookingId={booking.id}&payment=paid"),
+            failure_redirect_url=_frontend_url(f"/booking/payment?bookingId={booking.id}&payment=failed"),
+            metadata={"booking_id": booking.id, "customer_id": booking.customer_id},
+        )
+    except XenditError as exc:
+        logger.warning("Xendit invoice creation failed for booking %s: %s", booking.id, exc)
+        return None
+
+
+def _xendit_channel_not_activated(exc: XenditError) -> bool:
+    code = str(getattr(exc, "error_code", "") or "").upper()
+    message = str(exc).lower()
+    return code == "CHANNEL_NOT_ACTIVATED" or "not been activated" in message or "not activated" in message
+
+
 def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Payment:
     if not xendit_configured():
         raise HTTPException(status_code=503, detail="Xendit payments are not configured on this server.")
@@ -89,32 +145,46 @@ def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Pa
     if active:
         if active.xendit_status == XENDIT_STATUS_PAID or active.status == PaymentStatus.VERIFIED:
             return active
-        if active.xendit_status == XENDIT_STATUS_PENDING and active.xendit_qr_string:
+        if active.xendit_status == XENDIT_STATUS_PENDING and (active.xendit_qr_string or active.xendit_invoice_url):
             if active.xendit_expires_at and active.xendit_expires_at > datetime.utcnow():
                 return active
 
     external_id = build_xendit_external_id(booking.id)
-    callback_url = xendit_webhook_url()
     metadata = {"booking_id": booking.id, "customer_id": booking.customer_id}
+    invoice = _create_hosted_invoice(booking, user, external_id, amount) or {}
 
+    qr: dict[str, Any] = {}
     try:
+        callback_url = xendit_webhook_url()
         qr = create_dynamic_qr_code(
             external_id=external_id,
             amount=amount,
             callback_url=callback_url,
             metadata=metadata,
         )
+    except HTTPException:
+        if not invoice:
+            raise
+        logger.warning("Xendit QR creation skipped for booking %s because webhook URL is not public.", booking.id)
     except XenditError as exc:
-        code = getattr(exc, "error_code", None)
-        if code == "CHANNEL_NOT_ACTIVATED":
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "GCash QR is not activated on your Xendit account yet. "
-                    "Activate QR Ph / GCash in the Xendit Dashboard, then try again."
-                ),
-            ) from exc
-        raise HTTPException(status_code=502, detail=f"Unable to create Xendit payment: {exc}") from exc
+        if _xendit_channel_not_activated(exc):
+            if invoice:
+                logger.warning("Xendit QR channel is not activated; booking %s will use hosted invoice only.", booking.id)
+            else:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "GCash QR is not activated on your Xendit account yet. "
+                        "Activate QR Ph / GCash in the Xendit Dashboard, then try again."
+                    ),
+                ) from exc
+        elif invoice:
+            logger.warning("Xendit QR creation failed for booking %s; hosted invoice is still available: %s", booking.id, exc)
+        else:
+            raise HTTPException(status_code=502, detail=f"Unable to create Xendit payment: {exc}") from exc
+
+    if not invoice.get("id") and not qr.get("id"):
+        raise HTTPException(status_code=502, detail="Unable to create Xendit payment request.")
 
     transaction = Transaction(
         booking_id=booking.id,
@@ -129,19 +199,22 @@ def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Pa
         booking_id=booking.id,
         transaction_id=transaction.id,
         customer_id=booking.customer_id,
-        method="gcash",
+        method="gcash" if qr.get("qr_string") else "xendit",
         amount=amount,
         status=PaymentStatus.FOR_VERIFICATION,
         reference=f"PAY-{token_hex(4).upper()}",
         xendit_qr_id=qr.get("id"),
-        xendit_external_id=qr.get("external_id") or external_id,
+        xendit_payment_id=None,
+        xendit_invoice_id=invoice.get("id"),
+        xendit_invoice_url=invoice.get("invoice_url"),
+        xendit_external_id=qr.get("external_id") or invoice.get("external_id") or external_id,
         xendit_status=XENDIT_STATUS_PENDING,
         xendit_qr_string=qr.get("qr_string"),
         xendit_expires_at=datetime.utcnow() + timedelta(hours=QR_EXPIRY_HOURS),
     )
     db.add(payment)
 
-    if booking.status == BookingStatus.PAYMENT_REJECTED:
+    if booking.status in (BookingStatus.PAYMENT_REJECTED, BookingStatus.EXPIRED):
         booking.status = BookingStatus.PAYMENT_VERIFICATION
 
     db.commit()
@@ -149,15 +222,43 @@ def create_xendit_gcash_session(db: Session, booking: Booking, user: User) -> Pa
     return payment
 
 
+def _mark_xendit_payment_expired(db: Session, payment: Payment, *, commit: bool) -> Payment:
+    if payment.status == PaymentStatus.VERIFIED:
+        return payment
+
+    payment.xendit_status = XENDIT_STATUS_EXPIRED
+    payment.status = PaymentStatus.REJECTED
+    payment.reviewed_at = payment.reviewed_at or datetime.utcnow()
+
+    booking = db.query(Booking).filter(Booking.id == payment.booking_id).first()
+    if booking and booking.status in {
+        BookingStatus.PENDING_PAYMENT,
+        BookingStatus.PAYMENT_VERIFICATION,
+        BookingStatus.PENDING_APPROVAL,
+        BookingStatus.APPROVED,
+        BookingStatus.PAYMENT_REJECTED,
+        BookingStatus.EXPIRED,
+    }:
+        booking.status = BookingStatus.EXPIRED
+        db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
+            {"hold_status": TruckSlotHoldStatus.EXPIRED}
+        )
+
+    if commit:
+        db.commit()
+        db.refresh(payment)
+    return payment
+
+
 def sync_xendit_payment_status(db: Session, payment: Payment) -> Payment:
-    """Poll Xendit for QR status and map expiry when the code is no longer active."""
+    """Poll Xendit for QR status and map expiry when the payment request is no longer active."""
     if not payment.xendit_external_id or payment.xendit_status != XENDIT_STATUS_PENDING:
         return payment
 
     if payment.xendit_expires_at and payment.xendit_expires_at <= datetime.utcnow():
-        payment.xendit_status = XENDIT_STATUS_EXPIRED
-        db.commit()
-        db.refresh(payment)
+        return _mark_xendit_payment_expired(db, payment, commit=True)
+
+    if not payment.xendit_qr_id:
         return payment
 
     try:
@@ -167,49 +268,188 @@ def sync_xendit_payment_status(db: Session, payment: Payment) -> Payment:
 
     qr_status = str(qr.get("status") or "").upper()
     if qr_status == "INACTIVE" and payment.status != PaymentStatus.VERIFIED:
-        payment.xendit_status = XENDIT_STATUS_EXPIRED
-        db.commit()
-        db.refresh(payment)
+        return _mark_xendit_payment_expired(db, payment, commit=True)
     return payment
 
 
-def handle_xendit_webhook(db: Session, payload: dict) -> Payment | None:
-    event = str(payload.get("event") or "")
-    if event != "qr.payment":
-        return None
+def _payload_data(payload: dict[str, Any]) -> dict[str, Any]:
+    data = payload.get("data")
+    return data if isinstance(data, dict) else payload
 
-    status = str(payload.get("status") or "").upper()
-    xendit_payment_id = payload.get("id")
-    qr_code = payload.get("qr_code") or {}
-    external_id = qr_code.get("external_id")
 
-    if not external_id:
-        return None
+def _webhook_identity(payload: dict[str, Any]) -> dict[str, str | None]:
+    data = _payload_data(payload)
+    event_type = str(payload.get("event") or payload.get("event_type") or payload.get("type") or data.get("event") or "")
+    status = str(data.get("status") or payload.get("status") or "").upper() or None
+    qr_code = data.get("qr_code") if isinstance(data.get("qr_code"), dict) else payload.get("qr_code")
+    qr_code = qr_code if isinstance(qr_code, dict) else {}
 
-    payment = (
-        db.query(Payment)
-        .filter(Payment.xendit_external_id == external_id)
-        .order_by(Payment.id.desc())
-        .first()
+    external_id = (
+        qr_code.get("external_id")
+        or data.get("external_id")
+        or payload.get("external_id")
+        or data.get("reference_id")
+        or payload.get("reference_id")
     )
-    if not payment:
+    invoice_id = data.get("invoice_id") or payload.get("invoice_id")
+    if not invoice_id and (data.get("invoice_url") or event_type.lower().startswith("invoice")):
+        invoice_id = data.get("id") or payload.get("id")
+
+    payment_id = (
+        data.get("payment_id")
+        or payload.get("payment_id")
+        or data.get("transaction_id")
+        or payload.get("transaction_id")
+    )
+    if not payment_id and event_type == "qr.payment":
+        payment_id = data.get("id") or payload.get("id")
+
+    raw_event_id = payload.get("event_id") or payload.get("webhook_id")
+    if raw_event_id:
+        event_id = str(raw_event_id)
+    else:
+        stable_id = payment_id or invoice_id or external_id or payload.get("id") or "unknown"
+        event_id = f"{event_type or 'xendit'}:{stable_id}:{status or 'UNKNOWN'}"
+
+    return {
+        "event_id": str(event_id),
+        "event_type": event_type or None,
+        "status": status,
+        "external_id": str(external_id) if external_id else None,
+        "invoice_id": str(invoice_id) if invoice_id else None,
+        "payment_id": str(payment_id) if payment_id else None,
+    }
+
+
+def _record_webhook_event(
+    db: Session,
+    payload: dict[str, Any],
+    identity: dict[str, str | None],
+) -> tuple[XenditWebhookEvent, bool]:
+    existing = db.query(XenditWebhookEvent).filter(XenditWebhookEvent.event_id == identity["event_id"]).first()
+    if existing:
+        return existing, existing.processed_at is not None
+
+    row = XenditWebhookEvent(
+        event_id=identity["event_id"] or f"xendit:{token_hex(8)}",
+        event_type=identity["event_type"],
+        status=identity["status"],
+        external_id=identity["external_id"],
+        payload_json=json.dumps(payload, default=str),
+    )
+    db.add(row)
+    db.flush()
+    return row, False
+
+
+def _find_payment_for_webhook(db: Session, identity: dict[str, str | None]) -> Payment | None:
+    if identity["external_id"]:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.xendit_external_id == identity["external_id"])
+            .order_by(Payment.id.desc())
+            .first()
+        )
+        if payment:
+            return payment
+
+    if identity["invoice_id"]:
+        payment = (
+            db.query(Payment)
+            .filter(Payment.xendit_invoice_id == identity["invoice_id"])
+            .order_by(Payment.id.desc())
+            .first()
+        )
+        if payment:
+            return payment
+
+    if identity["payment_id"]:
+        return (
+            db.query(Payment)
+            .filter(Payment.xendit_payment_id == identity["payment_id"])
+            .order_by(Payment.id.desc())
+            .first()
+        )
+    return None
+
+
+def _payment_method_from_payload(payload: dict[str, Any]) -> str | None:
+    data = _payload_data(payload)
+    payment_detail = data.get("payment_detail") if isinstance(data.get("payment_detail"), dict) else {}
+    source = (
+        payment_detail.get("source")
+        or data.get("payment_channel")
+        or payload.get("payment_channel")
+        or data.get("channel_code")
+        or payload.get("channel_code")
+        or data.get("payment_method")
+        or payload.get("payment_method")
+        or data.get("payment_method_type")
+        or payload.get("payment_method_type")
+    )
+    return str(source).lower() if source else None
+
+
+def _paid_at_from_payload(payload: dict[str, Any]) -> datetime:
+    data = _payload_data(payload)
+    raw = data.get("paid_at") or payload.get("paid_at") or data.get("updated") or payload.get("updated")
+    if not raw:
+        return datetime.utcnow()
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.utcnow()
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def handle_xendit_webhook(db: Session, payload: dict) -> Payment | None:
+    if not isinstance(payload, dict):
         return None
 
-    payment.xendit_payment_id = xendit_payment_id or payment.xendit_payment_id
-    payment_detail = payload.get("payment_detail") or {}
-    if payment_detail.get("source"):
-        payment.method = str(payment_detail["source"]).lower()
+    identity = _webhook_identity(payload)
+    event_log, already_processed = _record_webhook_event(db, payload, identity)
+    if already_processed:
+        return db.query(Payment).filter(Payment.id == event_log.payment_id).first() if event_log.payment_id else None
 
-    if status == "COMPLETED":
-        payment.xendit_status = XENDIT_STATUS_PAID
-        payment.xendit_paid_at = datetime.utcnow()
-        booking = db.query(Booking).filter(Booking.id == payment.booking_id).first()
-        mark_payment_and_booking_verified(db, payment, booking, reviewer_id=None, notify_customer=True)
+    payment = _find_payment_for_webhook(db, identity)
+    if not payment:
+        event_log.processed_at = datetime.utcnow()
         db.commit()
-        db.refresh(payment)
-        return payment
+        return None
 
-    payment.xendit_status = XENDIT_STATUS_FAILED
+    event_log.payment_id = payment.id
+    if identity["payment_id"]:
+        payment.xendit_payment_id = identity["payment_id"]
+    if identity["invoice_id"]:
+        payment.xendit_invoice_id = identity["invoice_id"]
+
+    method = _payment_method_from_payload(payload)
+    if method:
+        payment.method = method
+
+    status = (identity["status"] or "").upper()
+    if status in XENDIT_SUCCESS_STATUSES:
+        paid_at = _paid_at_from_payload(payload)
+        payment.xendit_status = XENDIT_STATUS_PAID
+        payment.xendit_paid_at = payment.xendit_paid_at or paid_at
+        payment.paid_at = payment.paid_at or payment.xendit_paid_at
+
+        if payment.status != PaymentStatus.VERIFIED:
+            booking = db.query(Booking).filter(Booking.id == payment.booking_id).first()
+            mark_payment_and_booking_verified(db, payment, booking, reviewer_id=None, notify_customer=True)
+
+    elif status in XENDIT_EXPIRED_STATUSES:
+        _mark_xendit_payment_expired(db, payment, commit=False)
+
+    elif status in XENDIT_FAILED_STATUSES:
+        payment.xendit_status = XENDIT_STATUS_FAILED
+        payment.status = PaymentStatus.REJECTED
+        payment.reviewed_at = payment.reviewed_at or datetime.utcnow()
+
+    event_log.status = status or event_log.status
+    event_log.processed_at = datetime.utcnow()
     db.commit()
     db.refresh(payment)
     return payment
