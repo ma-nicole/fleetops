@@ -25,7 +25,7 @@ function formatMoneyPhp(amount: number): string {
 }
 
 /**
- * Payment receipt PDF using the FleetOpts professional report header.
+ * Payment receipt PDF using the FleetOpt professional report header.
  */
 export function downloadReceiptPdf(opts: ReceiptPdfOptions): void {
   const context = getReportExportContext("Customer Payments", "Payment Receipt");
@@ -72,7 +72,7 @@ export function downloadReceiptPdf(opts: ReceiptPdfOptions): void {
           : null,
       ]
         .filter(Boolean)
-        .join(" ") || "Official FleetOpts payment receipt for customer records.",
+        .join(" ") || "Official FleetOpt payment receipt for customer records.",
     analyticsType: "Descriptive",
     filenameStem: opts.filenameStem || `receipt_${opts.bookingId}`,
   });

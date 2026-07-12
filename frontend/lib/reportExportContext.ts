@@ -3,7 +3,7 @@ import { getEffectiveRole, type UserRole } from "./auth";
 import type { PanelFilters } from "./analyticsStatistics";
 
 const SYSTEM_VERSION = "1.0.0";
-const SYSTEM_NAME = "FleetOpts Logistics Management System";
+const SYSTEM_NAME = "FleetOpt Logistics Management System";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",

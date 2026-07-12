@@ -1,8 +1,4 @@
-import csv
-import io
-
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -93,46 +89,82 @@ def finance_overview(
     }
 
 
-@router.get("/finance.csv")
-def finance_csv(
+@router.get("/finance-report")
+def finance_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
 ):
     payments = db.query(Payment).all()
-    stream = io.StringIO()
-    writer = csv.writer(stream)
-    writer.writerow(["id", "booking_id", "customer_id", "method", "amount", "status", "reference", "created_at"])
-    for p in payments:
-        writer.writerow([
-            p.id, p.booking_id, p.customer_id, p.method,
-            f"{p.amount}", p.status.value, p.reference, p.created_at.isoformat(),
-        ])
-    stream.seek(0)
-    return StreamingResponse(iter([stream.getvalue()]), media_type="text/csv")
+    rows = [
+        {
+            "id": p.id,
+            "booking_id": p.booking_id,
+            "customer_id": p.customer_id,
+            "method": p.method,
+            "amount": float(p.amount) if p.amount is not None else None,
+            "status": p.status.value,
+            "reference": p.reference,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in payments
+    ]
+    return {
+        "report_name": "Financial Reports",
+        "module_name": "Financial Reports",
+        "columns": [
+            {"key": "id", "label": "Payment ID"},
+            {"key": "booking_id", "label": "Booking ID"},
+            {"key": "customer_id", "label": "Customer ID"},
+            {"key": "method", "label": "Method"},
+            {"key": "amount", "label": "Amount (PHP)"},
+            {"key": "status", "label": "Status"},
+            {"key": "reference", "label": "Reference"},
+            {"key": "created_at", "label": "Created at"},
+        ],
+        "rows": rows,
+        "record_count": len(rows),
+    }
 
 
-@router.get("/maintenance.csv")
-def maintenance_csv(
+@router.get("/maintenance-report")
+def maintenance_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
 ):
-    rows = db.query(MaintenanceRecord).all()
-    stream = io.StringIO()
-    writer = csv.writer(stream)
-    writer.writerow([
-        "id", "truck_id", "issue", "severity", "status", "predicted_risk_score",
-        "estimated_cost", "actual_cost", "scheduled_date", "next_service_date",
-    ])
-    for r in rows:
-        writer.writerow([
-            r.id, r.truck_id, r.reported_issue, r.severity,
-            r.status.value if hasattr(r.status, "value") else str(r.status),
-            r.predicted_risk_score, r.estimated_cost, r.actual_cost,
-            r.scheduled_date.isoformat() if r.scheduled_date else "",
-            r.next_service_date.isoformat() if r.next_service_date else "",
-        ])
-    stream.seek(0)
-    return StreamingResponse(iter([stream.getvalue()]), media_type="text/csv")
+    records = db.query(MaintenanceRecord).all()
+    rows = [
+        {
+            "id": r.id,
+            "truck_id": r.truck_id,
+            "issue": r.reported_issue,
+            "severity": r.severity,
+            "status": r.status.value if hasattr(r.status, "value") else str(r.status),
+            "predicted_risk_score": r.predicted_risk_score,
+            "estimated_cost": float(r.estimated_cost) if r.estimated_cost is not None else None,
+            "actual_cost": float(r.actual_cost) if r.actual_cost is not None else None,
+            "scheduled_date": r.scheduled_date.isoformat() if r.scheduled_date else None,
+            "next_service_date": r.next_service_date.isoformat() if r.next_service_date else None,
+        }
+        for r in records
+    ]
+    return {
+        "report_name": "Maintenance Reports",
+        "module_name": "Maintenance Reports",
+        "columns": [
+            {"key": "id", "label": "Record ID"},
+            {"key": "truck_id", "label": "Truck ID"},
+            {"key": "issue", "label": "Issue"},
+            {"key": "severity", "label": "Severity"},
+            {"key": "status", "label": "Status"},
+            {"key": "predicted_risk_score", "label": "Predicted risk"},
+            {"key": "estimated_cost", "label": "Estimated cost (PHP)"},
+            {"key": "actual_cost", "label": "Actual cost (PHP)"},
+            {"key": "scheduled_date", "label": "Scheduled date"},
+            {"key": "next_service_date", "label": "Next service"},
+        ],
+        "rows": rows,
+        "record_count": len(rows),
+    }
 
 
 @router.post("/job-orders/{booking_id}")

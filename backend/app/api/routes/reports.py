@@ -1,8 +1,4 @@
-import csv
-import io
-
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.security import require_roles
@@ -13,51 +9,65 @@ from app.models.entities import Booking, Trip, User, UserRole
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-def _csv_stream(rows: list[list[str]], headers: list[str]) -> io.StringIO:
-    stream = io.StringIO()
-    writer = csv.writer(stream)
-    writer.writerow(headers)
-    writer.writerows(rows)
-    stream.seek(0)
-    return stream
-
-
-@router.get("/bookings.csv")
+@router.get("/bookings")
 def bookings_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.DISPATCHER)),
 ):
     bookings = db.query(Booking).all()
     rows = [
-        [
-            str(item.id),
-            str(item.customer_id),
-            item.pickup_location,
-            item.dropoff_location,
-            item.status.value,
-            f"{item.estimated_cost}",
-        ]
+        {
+            "booking_id": item.id,
+            "customer_id": item.customer_id,
+            "pickup": item.pickup_location,
+            "dropoff": item.dropoff_location,
+            "status": item.status.value,
+            "estimated_cost": float(item.estimated_cost) if item.estimated_cost is not None else None,
+        }
         for item in bookings
     ]
-    stream = _csv_stream(rows, ["booking_id", "customer_id", "pickup", "dropoff", "status", "estimated_cost"])
-    return StreamingResponse(iter([stream.getvalue()]), media_type="text/csv")
+    return {
+        "report_name": "Booking Reports",
+        "module_name": "Admin Reports",
+        "columns": [
+            {"key": "booking_id", "label": "Booking ID"},
+            {"key": "customer_id", "label": "Customer ID"},
+            {"key": "pickup", "label": "Pickup"},
+            {"key": "dropoff", "label": "Dropoff"},
+            {"key": "status", "label": "Status"},
+            {"key": "estimated_cost", "label": "Estimated cost (PHP)"},
+        ],
+        "rows": rows,
+        "record_count": len(rows),
+    }
 
 
-@router.get("/fleet.csv")
+@router.get("/fleet")
 def fleet_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
 ):
     trips = db.query(Trip).all()
     rows = [
-        [
-            str(item.id),
-            str(item.truck_id),
-            str(item.driver_id),
-            f"{item.distance_km}",
-            f"{item.fuel_cost + item.toll_cost + item.labor_cost}",
-        ]
+        {
+            "trip_id": item.id,
+            "truck_id": item.truck_id,
+            "driver_id": item.driver_id,
+            "distance_km": float(item.distance_km) if item.distance_km is not None else None,
+            "total_cost": float(item.fuel_cost + item.toll_cost + item.labor_cost),
+        }
         for item in trips
     ]
-    stream = _csv_stream(rows, ["trip_id", "truck_id", "driver_id", "distance_km", "total_cost"])
-    return StreamingResponse(iter([stream.getvalue()]), media_type="text/csv")
+    return {
+        "report_name": "Fleet Reports",
+        "module_name": "Fleet Reports",
+        "columns": [
+            {"key": "trip_id", "label": "Trip ID"},
+            {"key": "truck_id", "label": "Truck ID"},
+            {"key": "driver_id", "label": "Driver ID"},
+            {"key": "distance_km", "label": "Distance (km)"},
+            {"key": "total_cost", "label": "Total cost (PHP)"},
+        ],
+        "rows": rows,
+        "record_count": len(rows),
+    }

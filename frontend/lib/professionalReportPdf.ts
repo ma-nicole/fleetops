@@ -12,14 +12,29 @@ export type ReportIndicator = {
 
 export type ChartSnapshotItem = Record<string, string | number>;
 
+export type ChartSnapshot = {
+  chartType: string;
+  title: string;
+  items: ChartSnapshotItem[];
+  valueField?: string;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
+  /** PNG/JPEG data URL from live chart capture (preferred over redraw). */
+  imageDataUrl?: string | null;
+};
+
 export type PredictiveAnalyticsBlock = {
   modelUsed?: string;
   regressionEquation?: string;
   forecastingMethod?: string;
   confidenceLevel?: string;
   rSquared?: string | number;
+  mae?: string | number;
+  rmse?: string | number;
+  mape?: string | number;
   prediction?: string;
   interpretation?: string;
+  trend?: string;
 };
 
 export type ProfessionalReportPayload = {
@@ -31,30 +46,30 @@ export type ProfessionalReportPayload = {
   tableRows: Record<string, unknown>[];
   statistics?: StatisticsSummary | null;
   indicators?: ReportIndicator[];
-  chartSnapshot?: {
-    chartType: string;
-    title: string;
-    items: ChartSnapshotItem[];
-    valueField?: string;
-    xAxisLabel?: string;
-    yAxisLabel?: string;
-  };
+  /** @deprecated Prefer `charts` — kept for callers that still pass a single snapshot. */
+  chartSnapshot?: ChartSnapshot;
+  charts?: ChartSnapshot[];
   interpretation?: string | null;
   predictive?: PredictiveAnalyticsBlock | null;
   analyticsType?: string;
+  chartType?: string;
   filenameStem: string;
 };
 
-const MARGIN = 14;
-const PAGE_BOTTOM = 285;
-const LINE = 5.2;
+/** A4 portrait; ~20mm margins. */
+const MARGIN = 20;
+const PAGE_BOTTOM = 277;
+const FOOTER_Y = 287;
+
+type MutableY = { y: number };
 
 type PdfWriter = {
   doc: jsPDF;
-  y: number;
+  state: MutableY;
   pageW: number;
+  contentW: number;
   ensureSpace: (mm: number) => void;
-  heading: (text: string, size?: number) => void;
+  heading: (text: string) => void;
   subheading: (text: string) => void;
   paragraph: (text: string, size?: number) => void;
   bulletList: (items: string[]) => void;
@@ -63,70 +78,116 @@ type PdfWriter = {
 
 function createWriter(doc: jsPDF): PdfWriter {
   const pageW = doc.internal.pageSize.getWidth();
-  let y = 18;
+  const contentW = pageW - MARGIN * 2;
+  const state: MutableY = { y: MARGIN + 2 };
 
   const ensureSpace = (neededMm: number) => {
-    if (y + neededMm > PAGE_BOTTOM) {
+    if (state.y + neededMm > PAGE_BOTTOM) {
       doc.addPage();
-      y = 18;
+      state.y = MARGIN + 2;
     }
   };
 
-  const heading = (text: string, size = 12) => {
-    ensureSpace(12);
+  const heading = (text: string) => {
+    ensureSpace(14);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(size);
-    doc.setTextColor(30);
-    doc.text(text, MARGIN, y);
-    y += size === 12 ? 8 : 10;
+    doc.setFontSize(12);
+    doc.setTextColor(25, 25, 25);
+    doc.text(text, MARGIN, state.y);
+    state.y += 8;
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.line(MARGIN, state.y - 4, pageW - MARGIN, state.y - 4);
+    state.y += 2;
   };
 
   const subheading = (text: string) => {
     ensureSpace(10);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setTextColor(55);
-    doc.text(text, MARGIN, y);
-    y += 7;
+    doc.setTextColor(50, 50, 50);
+    doc.text(text, MARGIN, state.y);
+    state.y += 7;
   };
 
   const paragraph = (text: string, size = 9) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(size);
-    doc.setTextColor(40);
-    const lines = doc.splitTextToSize(text, pageW - MARGIN * 2);
-    ensureSpace(lines.length * 4.2 + 4);
-    doc.text(lines, MARGIN, y);
-    y += lines.length * 4.2 + 3;
+    doc.setTextColor(40, 40, 40);
+    const lines = doc.splitTextToSize(text, contentW) as string[];
+    ensureSpace(lines.length * 4.4 + 4);
+    doc.text(lines, MARGIN, state.y);
+    state.y += lines.length * 4.4 + 3;
   };
 
   const bulletList = (items: string[]) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(40);
+    doc.setTextColor(40, 40, 40);
     for (const item of items) {
-      const lines = doc.splitTextToSize(`• ${item}`, pageW - MARGIN * 2 - 4);
-      ensureSpace(lines.length * 4.2 + 2);
-      doc.text(lines, MARGIN + 2, y);
-      y += lines.length * 4.2 + 1.5;
+      const lines = doc.splitTextToSize(`• ${item}`, contentW - 3) as string[];
+      ensureSpace(lines.length * 4.3 + 2);
+      doc.text(lines, MARGIN + 2, state.y);
+      state.y += lines.length * 4.3 + 1.5;
     }
-    y += 2;
+    state.y += 2;
   };
 
   const keyValue = (label: string, value: string) => {
+    ensureSpace(8);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
+    doc.setTextColor(35, 35, 35);
     const labelText = `${label}:`;
+    doc.text(labelText, MARGIN, state.y);
     const labelW = doc.getTextWidth(labelText);
-    ensureSpace(LINE + 2);
-    doc.text(labelText, MARGIN, y);
     doc.setFont("helvetica", "normal");
-    const valueLines = doc.splitTextToSize(value || "—", pageW - MARGIN * 2 - labelW - 3);
-    doc.text(valueLines, MARGIN + labelW + 2, y);
-    y += Math.max(valueLines.length * LINE, LINE) + 1;
+    const valueLines = doc.splitTextToSize(value || "—", contentW - labelW - 4) as string[];
+    doc.text(valueLines, MARGIN + labelW + 3, state.y);
+    state.y += Math.max(valueLines.length * 4.5, 5) + 1.5;
   };
 
-  return { doc, y, pageW, ensureSpace, heading, subheading, paragraph, bulletList, keyValue };
+  return { doc, state, pageW, contentW, ensureSpace, heading, subheading, paragraph, bulletList, keyValue };
+}
+
+function formatPhpCell(value: unknown): string {
+  if (value == null || value === "") return "—";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (Number.isInteger(value) && Math.abs(value) < 1000) return String(value);
+    return value.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  const s = String(value);
+  const n = Number(s.replace(/,/g, ""));
+  if (s !== "" && Number.isFinite(n) && /^-?\d+(\.\d+)?$/.test(s.replace(/,/g, ""))) {
+    return n.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  return s;
+}
+
+function formatCell(value: unknown, key: string): string {
+  if (value == null || value === "") return "—";
+  const k = key.toLowerCase();
+  if (k.includes("date") || k.includes("_at") || k.endsWith("at")) {
+    const d = new Date(String(value));
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" });
+    }
+  }
+  if (
+    k.includes("cost") ||
+    k.includes("amount") ||
+    k.includes("php") ||
+    k.includes("revenue") ||
+    k.includes("price") ||
+    k.includes("toll") ||
+    k.includes("fee")
+  ) {
+    return formatPhpCell(value);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  }
+  return String(value);
 }
 
 function writeStandardHeader(w: PdfWriter, payload: ProfessionalReportPayload) {
@@ -142,20 +203,39 @@ function writeStandardHeader(w: PdfWriter, payload: ProfessionalReportPayload) {
     timeZone: "Asia/Manila",
     hour: "numeric",
     minute: "2-digit",
+    second: "2-digit",
   });
-  const exportTs = generated.toISOString();
 
   w.doc.setFont("helvetica", "bold");
-  w.doc.setFontSize(14);
-  w.doc.setTextColor(20);
-  w.doc.text(context.systemName, MARGIN, w.y);
-  w.y += 8;
+  w.doc.setFontSize(15);
+  w.doc.setTextColor(15, 15, 15);
+  w.doc.text(context.systemName, MARGIN, w.state.y);
 
-  w.doc.setDrawColor(180);
-  w.doc.line(MARGIN, w.y, w.pageW - MARGIN, w.y);
-  w.y += 7;
+  // Brand mark (company logo placeholder when no image asset is bundled)
+  const markW = 28;
+  const markH = 10;
+  const markX = w.pageW - MARGIN - markW;
+  const markY = w.state.y - 6;
+  w.doc.setFillColor(30, 64, 55);
+  w.doc.roundedRect(markX, markY, markW, markH, 1.5, 1.5, "F");
+  w.doc.setFont("helvetica", "bold");
+  w.doc.setFontSize(7);
+  w.doc.setTextColor(255, 255, 255);
+  w.doc.text("FleetOpt", markX + markW / 2, markY + 6.2, { align: "center" });
+  w.state.y += 7;
 
-  w.keyValue("Report", payload.context.reportName);
+  w.doc.setFont("helvetica", "bold");
+  w.doc.setFontSize(12);
+  w.doc.setTextColor(30, 30, 30);
+  const titleLines = w.doc.splitTextToSize(context.reportName, w.contentW) as string[];
+  w.doc.text(titleLines, MARGIN, w.state.y);
+  w.state.y += titleLines.length * 5.5 + 3;
+
+  w.doc.setDrawColor(60, 60, 60);
+  w.doc.setLineWidth(0.5);
+  w.doc.line(MARGIN, w.state.y, w.pageW - MARGIN, w.state.y);
+  w.state.y += 7;
+
   w.keyValue("Module", context.moduleName);
   w.keyValue("Generated by", context.generatedBy);
   w.keyValue("Role", context.userRole);
@@ -163,18 +243,19 @@ function writeStandardHeader(w: PdfWriter, payload: ProfessionalReportPayload) {
   w.keyValue("Generated time", timeStr);
   w.keyValue("Report period", reportPeriod ?? "All available data");
   w.keyValue("System version", context.systemVersion);
-  w.keyValue("Export timestamp", exportTs);
+  if (payload.analyticsType) w.keyValue("Analytics type", payload.analyticsType);
+  if (payload.chartType) w.keyValue("Primary chart type", payload.chartType);
+  const filterPreview = (filtersUsed ?? []).slice(0, 6).join("; ") || "No additional filters applied.";
+  w.keyValue("Filters used", filterPreview);
 
-  w.subheading("Filters used");
-  w.bulletList(filtersUsed);
-
-  w.y += 2;
-  w.doc.setDrawColor(220);
-  w.doc.line(MARGIN, w.y, w.pageW - MARGIN, w.y);
-  w.y += 8;
+  w.state.y += 2;
+  w.doc.setDrawColor(210, 210, 210);
+  w.doc.setLineWidth(0.3);
+  w.doc.line(MARGIN, w.state.y, w.pageW - MARGIN, w.state.y);
+  w.state.y += 8;
 }
 
-function writeExecutiveSummary(w: PdfWriter, items: ReportIndicator[]) {
+function writeExecutiveSummary(w: PdfWriter, items: ReportIndicator[], payload: ProfessionalReportPayload) {
   w.heading("Section 1 — Executive Summary");
   if (!items.length) {
     w.paragraph("No summary metrics available for this export.");
@@ -184,114 +265,36 @@ function writeExecutiveSummary(w: PdfWriter, items: ReportIndicator[]) {
     w.keyValue(item.label, String(item.value));
     if (item.interpretation) w.paragraph(item.interpretation, 8);
   }
-  w.y += 3;
-}
-
-function writeFilterSummary(w: PdfWriter, filters: string[]) {
-  w.heading("Section 2 — Filter Summary");
-  w.bulletList(filters);
-}
-
-function formatCell(value: unknown): string {
-  if (value == null || value === "") return "—";
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  if (payload.predictive?.rSquared != null) {
+    w.keyValue("R² value", String(payload.predictive.rSquared));
   }
-  return String(value);
-}
-
-function writeDataTable(
-  w: PdfWriter,
-  columns: ReportTableColumn[],
-  rows: Record<string, unknown>[],
-) {
-  w.heading("Section 3 — Main Data Table");
-  w.paragraph(`Total records: ${rows.length}`);
-
-  if (!rows.length || !columns.length) {
-    w.paragraph("No tabular data available for this report.");
-    return;
+  if (payload.predictive?.forecastingMethod) {
+    w.keyValue("Forecast method", payload.predictive.forecastingMethod);
   }
-
-  const colCount = Math.min(columns.length, 6);
-  const usableCols = columns.slice(0, colCount);
-  const colW = (w.pageW - MARGIN * 2) / colCount;
-  const maxRowsPerPage = Math.floor((PAGE_BOTTOM - w.y - 20) / 5.5);
-
-  const drawHeader = () => {
-    w.ensureSpace(12);
-    w.doc.setFillColor(240, 240, 240);
-    w.doc.rect(MARGIN, w.y - 4, w.pageW - MARGIN * 2, 7, "F");
-    w.doc.setFont("helvetica", "bold");
-    w.doc.setFontSize(7.5);
-    usableCols.forEach((col, i) => {
-      const cell = col.label.slice(0, 18);
-      w.doc.text(cell, MARGIN + i * colW + 1, w.y);
-    });
-    w.y += 6;
-  };
-
-  drawHeader();
-  let rowOnPage = 0;
-
-  for (let ri = 0; ri < rows.length; ri++) {
-    if (rowOnPage >= maxRowsPerPage) {
-      w.doc.addPage();
-      w.y = 18;
-      drawHeader();
-      rowOnPage = 0;
-    }
-    w.ensureSpace(6);
-    w.doc.setFont("helvetica", "normal");
-    w.doc.setFontSize(7);
-    usableCols.forEach((col, i) => {
-      const raw = formatCell(rows[ri][col.key]);
-      const clipped = raw.length > 22 ? `${raw.slice(0, 21)}…` : raw;
-      w.doc.text(clipped, MARGIN + i * colW + 1, w.y);
-    });
-    w.y += 5;
-    rowOnPage++;
-  }
-
-  if (columns.length > colCount) {
-    w.paragraph(
-      `Note: ${columns.length - colCount} additional column(s) omitted from PDF layout. Export CSV for full columns.`,
-      7.5,
+  if (payload.chartType || payload.charts?.[0]?.chartType || payload.chartSnapshot?.chartType) {
+    w.keyValue(
+      "Chart type",
+      payload.chartType ||
+        payload.charts?.[0]?.chartType ||
+        payload.chartSnapshot?.chartType ||
+        "—",
     );
   }
-  w.y += 4;
+  if (payload.analyticsType) w.keyValue("Analytics type", payload.analyticsType);
+  w.state.y += 2;
 }
 
-function writeStatistics(w: PdfWriter, stats: StatisticsSummary | null | undefined) {
-  w.heading("Section 4 — Statistical Summary");
-  if (!stats) {
-    w.paragraph("Insufficient numeric data for statistical analysis.");
-    return;
-  }
-  w.keyValue("Count", String(stats.count));
-  w.keyValue("Minimum", String(stats.minimum));
-  w.keyValue("Maximum", String(stats.maximum));
-  w.keyValue("Average", String(stats.average));
-  w.keyValue("Median", String(stats.median));
-  w.keyValue("Subtotal / Sum", String(stats.subtotal));
-  if (stats.standard_deviation != null) {
-    w.keyValue("Standard deviation", String(stats.standard_deviation));
-    const variance = stats.standard_deviation ** 2;
-    w.keyValue("Variance", variance.toFixed(2));
-  }
-  if (stats.insufficient_for_spread) {
-    w.paragraph("Spread metrics require at least two numeric observations.");
-  }
-  w.y += 3;
+function writeFiltersSection(w: PdfWriter, filters: string[]) {
+  w.heading("Section 2 — Filters Used");
+  w.bulletList(filters.length ? filters : ["No additional filters applied."]);
 }
 
 function numericFromItem(item: ChartSnapshotItem, valueField?: string): number {
   const keys = valueField
     ? [valueField]
-    : ["value", "amount_php", "count", "revenue_php", "total_cost_php"];
+    : ["value", "amount_php", "count", "revenue_php", "total_cost_php", "actual_toll_php"];
   for (const k of keys) {
-    const v = item[k];
-    const n = Number(v);
+    const n = Number(item[k]);
     if (Number.isFinite(n)) return n;
   }
   return 0;
@@ -300,21 +303,37 @@ function numericFromItem(item: ChartSnapshotItem, valueField?: string): number {
 function labelFromItem(item: ChartSnapshotItem): string {
   const keys = ["label", "status", "client_name", "truck_code", "driver_name", "route", "month", "period"];
   for (const k of keys) {
-    if (item[k] != null && String(item[k]).trim()) return String(item[k]).slice(0, 24);
+    if (item[k] != null && String(item[k]).trim()) return String(item[k]).slice(0, 28);
   }
   return "Item";
 }
 
-function writeChartSnapshot(
-  w: PdfWriter,
-  snapshot: NonNullable<ProfessionalReportPayload["chartSnapshot"]>,
-) {
-  w.heading("Section 5 — Visualization Snapshot");
+function writeChartPage(w: PdfWriter, snapshot: ChartSnapshot, index: number, total: number) {
+  w.doc.addPage();
+  w.state.y = MARGIN + 2;
+  w.heading(`Section 3 — Chart${total > 1 ? ` ${index + 1} of ${total}` : ""}`);
   w.paragraph(`${snapshot.title} (${snapshot.chartType.toUpperCase()})`);
   if (snapshot.xAxisLabel) w.keyValue("X-axis", snapshot.xAxisLabel);
   if (snapshot.yAxisLabel) w.keyValue("Y-axis", snapshot.yAxisLabel);
 
-  const items = snapshot.items.slice(0, 12);
+  if (snapshot.imageDataUrl) {
+    try {
+      const imgW = Math.min(w.contentW, 160);
+      const imgH = imgW * 0.55;
+      w.ensureSpace(imgH + 10);
+      const x = MARGIN + (w.contentW - imgW) / 2;
+      w.doc.setFillColor(255, 255, 255);
+      w.doc.rect(x - 2, w.state.y - 2, imgW + 4, imgH + 4, "F");
+      const format = snapshot.imageDataUrl.includes("image/jpeg") ? "JPEG" : "PNG";
+      w.doc.addImage(snapshot.imageDataUrl, format, x, w.state.y, imgW, imgH);
+      w.state.y += imgH + 8;
+      return;
+    } catch {
+      w.paragraph("Chart image could not be embedded; drawing data bars instead.", 8);
+    }
+  }
+
+  const items = snapshot.items.slice(0, 16);
   if (!items.length) {
     w.paragraph("No chart data points available.");
     return;
@@ -322,92 +341,260 @@ function writeChartSnapshot(
 
   const values = items.map((it) => numericFromItem(it, snapshot.valueField));
   const maxVal = Math.max(...values, 1);
-  const barMaxW = w.pageW - MARGIN * 2 - 55;
-  const barH = 4.5;
+  const chartLeft = MARGIN + 48;
+  const barMaxW = w.pageW - chartLeft - MARGIN - 28;
+  const barH = 5;
+  const blockH = items.length * (barH + 3.5) + 12;
+  w.ensureSpace(blockH);
 
-  w.ensureSpace(items.length * (barH + 3) + 8);
+  // White chart background
+  w.doc.setFillColor(255, 255, 255);
+  w.doc.setDrawColor(220, 220, 220);
+  w.doc.rect(MARGIN, w.state.y - 4, w.contentW, blockH, "FD");
+
   items.forEach((item, idx) => {
     const label = labelFromItem(item);
     const val = values[idx];
-    const barW = (val / maxVal) * barMaxW;
+    const barW = Math.max(1, (val / maxVal) * barMaxW);
     w.doc.setFont("helvetica", "normal");
     w.doc.setFontSize(7.5);
-    w.doc.text(label, MARGIN, w.y);
-    const barY = w.y - 3;
-    w.doc.setFillColor(82, 183, 136);
-    w.doc.rect(MARGIN + 52, barY, barW, barH, "F");
-    w.doc.setTextColor(60);
-    w.doc.text(String(val), MARGIN + 54 + barW + 2, w.y);
-    w.y += barH + 3;
+    w.doc.setTextColor(40, 40, 40);
+    w.doc.text(label, MARGIN + 3, w.state.y + 2);
+    const barY = w.state.y - 2.5;
+    w.doc.setFillColor(46, 125, 90);
+    w.doc.rect(chartLeft, barY, barW, barH, "F");
+    w.doc.setTextColor(50, 50, 50);
+    w.doc.text(formatPhpCell(val), chartLeft + barW + 2, w.state.y + 2);
+    w.state.y += barH + 3.5;
   });
-  w.y += 4;
+  w.state.y += 6;
 }
 
-function writeInterpretation(w: PdfWriter, interpretation: string | null | undefined, analyticsType?: string) {
-  w.heading("Section 6 — Analytics Interpretation");
-  if (analyticsType) w.keyValue("Analytics type", analyticsType);
-  if (interpretation?.trim()) {
-    w.paragraph(interpretation);
-  } else {
+function writeAllCharts(w: PdfWriter, charts: ChartSnapshot[]) {
+  if (!charts.length) {
+    w.heading("Section 3 — Charts");
+    w.paragraph("No chart data was available for this export.");
+    return;
+  }
+  charts.forEach((c, i) => writeChartPage(w, c, i, charts.length));
+}
+
+function writeStatistics(w: PdfWriter, stats: StatisticsSummary | null | undefined, predictive?: PredictiveAnalyticsBlock | null) {
+  w.heading("Section 4 — Statistical Summary");
+  if (!stats && !predictive) {
+    w.paragraph("Insufficient numeric data for statistical analysis.");
+    return;
+  }
+
+  // Simple 2-column table
+  const rows: [string, string][] = [];
+  if (stats) {
+    rows.push(
+      ["Count", String(stats.count)],
+      ["Minimum", formatPhpCell(stats.minimum)],
+      ["Maximum", formatPhpCell(stats.maximum)],
+      ["Average", formatPhpCell(stats.average)],
+      ["Median", formatPhpCell(stats.median)],
+      ["Total / Sum", formatPhpCell(stats.subtotal)],
+    );
+    if (stats.standard_deviation != null) {
+      rows.push(
+        ["Standard deviation", formatPhpCell(stats.standard_deviation)],
+        ["Variance", formatPhpCell(stats.standard_deviation ** 2)],
+      );
+    }
+    if (stats.insufficient_for_spread) {
+      rows.push(["Note", "Spread metrics require at least two numeric observations."]);
+    }
+  }
+  if (predictive) {
+    if (predictive.rSquared != null) rows.push(["R²", String(predictive.rSquared)]);
+    if (predictive.mae != null) rows.push(["MAE", String(predictive.mae)]);
+    if (predictive.rmse != null) rows.push(["RMSE", String(predictive.rmse)]);
+    if (predictive.mape != null) rows.push(["MAPE", String(predictive.mape)]);
+    if (predictive.confidenceLevel) rows.push(["Confidence", predictive.confidenceLevel]);
+    if (predictive.trend) rows.push(["Trend", predictive.trend]);
+    if (predictive.forecastingMethod) rows.push(["Forecast method", predictive.forecastingMethod]);
+    if (predictive.modelUsed) rows.push(["Model", predictive.modelUsed]);
+  }
+
+  const col1 = 55;
+  const col2 = w.contentW - col1;
+  for (let i = 0; i < rows.length; i++) {
+    w.ensureSpace(8);
+    const [label, value] = rows[i];
+    if (i % 2 === 0) {
+      w.doc.setFillColor(245, 247, 250);
+      w.doc.rect(MARGIN, w.state.y - 3.5, w.contentW, 7, "F");
+    }
+    w.doc.setDrawColor(220, 220, 220);
+    w.doc.rect(MARGIN, w.state.y - 3.5, w.contentW, 7, "S");
+    w.doc.setFont("helvetica", "bold");
+    w.doc.setFontSize(8);
+    w.doc.setTextColor(40, 40, 40);
+    w.doc.text(label, MARGIN + 2, w.state.y);
+    w.doc.setFont("helvetica", "normal");
+    const vLines = w.doc.splitTextToSize(value, col2 - 4) as string[];
+    w.doc.text(vLines[0] ?? "—", MARGIN + col1 + 2, w.state.y);
+    w.state.y += 7;
+  }
+  w.state.y += 4;
+}
+
+function writeDataTable(w: PdfWriter, columns: ReportTableColumn[], rows: Record<string, unknown>[]) {
+  w.heading("Section 5 — Data Table");
+  w.paragraph(`Total records: ${rows.length}`);
+
+  if (!rows.length || !columns.length) {
+    w.paragraph("No tabular data available for this report.");
+    return;
+  }
+
+  const maxCols = Math.min(columns.length, 7);
+  const usableCols = columns.slice(0, maxCols);
+  const colW = w.contentW / usableCols.length;
+  const fontSize = usableCols.length > 5 ? 6.5 : 7.5;
+  const rowMinH = 6;
+
+  const drawHeader = () => {
+    w.ensureSpace(10);
+    w.doc.setFillColor(35, 55, 70);
+    w.doc.rect(MARGIN, w.state.y - 4, w.contentW, 8, "F");
+    w.doc.setFont("helvetica", "bold");
+    w.doc.setFontSize(fontSize);
+    w.doc.setTextColor(255, 255, 255);
+    usableCols.forEach((col, i) => {
+      const cell = w.doc.splitTextToSize(col.label, colW - 2) as string[];
+      w.doc.text(cell[0] ?? col.label, MARGIN + i * colW + 1, w.state.y);
+    });
+    w.state.y += 7;
+  };
+
+  drawHeader();
+
+  for (let ri = 0; ri < rows.length; ri++) {
+    const cellLines = usableCols.map((col) => {
+      const raw = formatCell(rows[ri][col.key], col.key);
+      return w.doc.splitTextToSize(raw, colW - 2) as string[];
+    });
+    const lineCount = Math.max(1, ...cellLines.map((l) => l.length));
+    const rowH = Math.max(rowMinH, lineCount * 3.6 + 2);
+
+    if (w.state.y + rowH > PAGE_BOTTOM) {
+      w.doc.addPage();
+      w.state.y = MARGIN + 2;
+      drawHeader();
+    }
+
+    if (ri % 2 === 0) {
+      w.doc.setFillColor(248, 250, 252);
+      w.doc.rect(MARGIN, w.state.y - 3.5, w.contentW, rowH, "F");
+    }
+    w.doc.setDrawColor(225, 225, 225);
+    w.doc.rect(MARGIN, w.state.y - 3.5, w.contentW, rowH, "S");
+
+    w.doc.setFont("helvetica", "normal");
+    w.doc.setFontSize(fontSize);
+    w.doc.setTextColor(35, 35, 35);
+    usableCols.forEach((_, i) => {
+      const lines = cellLines[i];
+      w.doc.text(lines, MARGIN + i * colW + 1, w.state.y);
+    });
+    w.state.y += rowH;
+  }
+
+  if (columns.length > maxCols) {
     w.paragraph(
-      "No AI interpretation was generated for this export. Use descriptive statistics and trend indicators above for panel review.",
+      `Note: ${columns.length - maxCols} additional column(s) are summarized in prior sections; PDF layout shows the primary ${maxCols} columns for readability.`,
+      7.5,
     );
   }
+  w.state.y += 3;
 }
 
-function writePredictiveBlock(w: PdfWriter, block: PredictiveAnalyticsBlock) {
-  w.subheading("Predictive analytics details");
-  if (block.modelUsed) w.keyValue("Model used", block.modelUsed);
-  if (block.regressionEquation) w.keyValue("Regression equation", block.regressionEquation);
-  if (block.forecastingMethod) w.keyValue("Forecasting method", block.forecastingMethod);
-  if (block.confidenceLevel) w.keyValue("Confidence level", block.confidenceLevel);
-  if (block.rSquared != null) w.keyValue("R²", String(block.rSquared));
-  if (block.prediction) w.keyValue("Prediction", block.prediction);
-  if (block.interpretation) w.paragraph(block.interpretation);
-}
+function writeAiInterpretation(
+  w: PdfWriter,
+  interpretation: string | null | undefined,
+  analyticsType?: string,
+  indicators?: ReportIndicator[],
+  predictive?: PredictiveAnalyticsBlock | null,
+) {
+  w.heading("Section 6 — AI Interpretation");
+  if (analyticsType) w.keyValue("Analytics type", analyticsType);
 
-function writeFooter(w: PdfWriter) {
-  const pages = w.doc.getNumberOfPages();
-  for (let p = 1; p <= pages; p++) {
-    w.doc.setPage(p);
-    w.doc.setFont("helvetica", "normal");
-    w.doc.setFontSize(8);
-    w.doc.setTextColor(120);
-    const footer = `FleetOpts Report · Page ${p} of ${pages} · Generated ${new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" })} PHT`;
-    w.doc.text(footer, MARGIN, 292);
-  }
-}
-
-export function downloadProfessionalReportPdf(payload: ProfessionalReportPayload): void {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const w = createWriter(doc);
-
-  writeStandardHeader(w, payload);
-  writeExecutiveSummary(w, payload.executiveSummary);
-  writeFilterSummary(w, payload.filtersUsed);
-  writeDataTable(w, payload.tableColumns, payload.tableRows);
-  writeStatistics(w, payload.statistics);
-
-  if (payload.chartSnapshot?.items?.length) {
-    writeChartSnapshot(w, payload.chartSnapshot);
-  }
-
-  writeInterpretation(w, payload.interpretation, payload.analyticsType);
-
-  if (payload.predictive) {
-    writePredictiveBlock(w, payload.predictive);
-  }
-
-  if (payload.indicators?.length) {
-    w.heading("Supplementary Indicators");
-    for (const ind of payload.indicators) {
+  if (indicators?.length) {
+    w.subheading("Indicators");
+    for (const ind of indicators) {
       w.keyValue(ind.label, String(ind.value));
       if (ind.interpretation) w.paragraph(ind.interpretation, 8);
     }
   }
 
-  writeFooter(w);
+  if (predictive) {
+    w.subheading("Regression and forecast results");
+    if (predictive.modelUsed) w.keyValue("Model", predictive.modelUsed);
+    if (predictive.regressionEquation) w.keyValue("Regression equation", predictive.regressionEquation);
+    if (predictive.forecastingMethod) w.keyValue("Forecast method", predictive.forecastingMethod);
+    if (predictive.rSquared != null) w.keyValue("R²", String(predictive.rSquared));
+    if (predictive.prediction) w.keyValue("Prediction", predictive.prediction);
+    if (predictive.confidenceLevel) w.keyValue("Confidence", predictive.confidenceLevel);
+    if (predictive.trend) w.keyValue("Trend", predictive.trend);
+    if (predictive.interpretation) w.paragraph(predictive.interpretation);
+  }
+
+  w.subheading("Interpretation and recommendations");
+  if (interpretation?.trim()) {
+    w.paragraph(interpretation);
+  } else {
+    w.paragraph(
+      "No AI interpretation was generated for this export. Use the executive summary, statistical summary, and data table for operational review.",
+    );
+  }
+}
+
+function writeFooters(doc: jsPDF, context: ReportExportContext) {
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(110, 110, 110);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(MARGIN, FOOTER_Y - 4, doc.internal.pageSize.getWidth() - MARGIN, FOOTER_Y - 4);
+    const left = `${context.systemName} · v${context.systemVersion}`;
+    const right = `Page ${p} of ${pages}`;
+    doc.text(left, MARGIN, FOOTER_Y);
+    doc.text(right, doc.internal.pageSize.getWidth() - MARGIN, FOOTER_Y, { align: "right" });
+  }
+}
+
+function collectCharts(payload: ProfessionalReportPayload): ChartSnapshot[] {
+  if (payload.charts?.length) return payload.charts.filter((c) => c && (c.items?.length || c.imageDataUrl));
+  if (payload.chartSnapshot) return [payload.chartSnapshot];
+  return [];
+}
+
+export function downloadProfessionalReportPdf(payload: ProfessionalReportPayload): void {
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const w = createWriter(doc);
+  const charts = collectCharts(payload);
+
+  writeStandardHeader(w, payload);
+  writeExecutiveSummary(w, payload.executiveSummary, payload);
+  writeFiltersSection(w, payload.filtersUsed);
+  writeAllCharts(w, charts);
+
+  // Stats and table continue on a fresh flow after charts (charts already used new pages)
+  if (charts.length) {
+    w.doc.addPage();
+    w.state.y = MARGIN + 2;
+  }
+  writeStatistics(w, payload.statistics, payload.predictive);
+  writeDataTable(w, payload.tableColumns, payload.tableRows);
+  writeAiInterpretation(w, payload.interpretation, payload.analyticsType, payload.indicators, payload.predictive);
+
+  writeFooters(doc, payload.context);
 
   const stem = payload.filenameStem.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
-  doc.save(`fleetopts-${stem}.pdf`);
+  doc.save(`fleetopt-${stem}.pdf`);
 }

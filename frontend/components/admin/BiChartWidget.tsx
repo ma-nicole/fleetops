@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { EmptyChart, type ChartClickPayload } from "@/components/admin/AnalyticsCharts";
 import { RechartsAnalyticsChart, type AnalyticsChartKind } from "@/components/admin/RechartsAnalyticsChart";
 import { DrillDownAnalyticsModal } from "@/components/admin/BiAnalyticsComponents";
 import type { AdminAnalyticsPayload, ComparativeMetric, RoleAnalyticsFeatureBlock, StatisticsSummary } from "@/lib/analyticsApi";
 import { AnalyticsApi } from "@/lib/analyticsApi";
-import { computeRowStatistics } from "@/lib/analyticsStatistics";
+import { computeRowStatistics, EMPTY_PANEL_FILTERS } from "@/lib/analyticsStatistics";
+import { downloadDrilldownReportPdf } from "@/lib/buildDrilldownReportExport";
+import { captureChartImageDataUrl } from "@/lib/chartCapture";
 import { compareFromChartSeries, findComparative, type PeriodComparisonResult } from "@/lib/periodComparison";
 import {
   formatStatusLabel,
@@ -243,6 +245,8 @@ export function BiChartWidget({
   const [modalOpen, setModalOpen] = useState(false);
   const [compareMode, setCompareMode] = useState<"none" | "quarter" | "yoy">("none");
   const [aiLoading, setAiLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const widgetRef = useRef<HTMLElement | null>(null);
   const [widgetGranularity, setWidgetGranularity] = useState<TimeGranularity>(() =>
     featureKey === "login_history"
       ? "quarterly"
@@ -472,6 +476,47 @@ export function BiChartWidget({
     setModalOpen(true);
   };
 
+  const downloadPdf = async () => {
+    const rows = scopedDrilldown.length ? scopedDrilldown : drilldown;
+    if (!rows.length) return;
+    setPdfLoading(true);
+    try {
+      const imageDataUrl = await captureChartImageDataUrl({ root: widgetRef.current });
+      await downloadDrilldownReportPdf({
+        context: {
+          sectionTitle: title,
+          chartType: resolvedMeta?.kind ?? "bar",
+          chartItems: items,
+          valueField: resolvedMeta?.valueKey,
+          analyticsType,
+          analyticsMethod,
+          xAxisLabel: resolvedMeta?.labelKey?.replace(/_/g, " "),
+          yAxisLabel: legendLabel,
+        },
+        selection: { label: title, displayLabel: `${title} · Full details`, fieldKeys: [] },
+        panelFilters: EMPTY_PANEL_FILTERS,
+        panelFiltered: rows,
+        chartFiltered: rows,
+        columns,
+        statistics: stats,
+        indicators: [
+          { label: "Total records", value: rows.length },
+          ...(stats
+            ? [
+                { label: "Average", value: stats.average },
+                { label: "Maximum", value: stats.maximum },
+                { label: "Minimum", value: stats.minimum },
+              ]
+            : []),
+        ],
+        interpretation: null,
+        chartImageDataUrl: imageDataUrl,
+      });
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   const explainChart = async () => {
     setAiLoading(true);
     try {
@@ -590,7 +635,7 @@ export function BiChartWidget({
   }
 
   return (
-    <article className="bi-chart-widget" data-widget-id={widgetId}>
+    <article ref={widgetRef} className="bi-chart-widget" data-widget-id={widgetId}>
       <header className="bi-chart-widget__header">
         <h3 className="bi-chart-widget__title">{title}</h3>
         <div className="bi-badge-row">
@@ -670,6 +715,14 @@ export function BiChartWidget({
         </button>
         <button type="button" className="bi-chart-widget__btn" onClick={openDetails}>
           Open Details
+        </button>
+        <button
+          type="button"
+          className="bi-chart-widget__btn"
+          onClick={() => void downloadPdf()}
+          disabled={pdfLoading || !(scopedDrilldown.length ? scopedDrilldown : drilldown).length}
+        >
+          {pdfLoading ? "Preparing PDF…" : "Download PDF"}
         </button>
         <button
           type="button"

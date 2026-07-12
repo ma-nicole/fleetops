@@ -20,6 +20,7 @@ type BuildArgs = {
   indicators: ReportIndicator[];
   interpretation: string | null;
   moduleName?: string;
+  chartImageDataUrl?: string | null;
 };
 
 function buildExecutiveSummary(
@@ -36,6 +37,8 @@ function buildExecutiveSummary(
       { label: "Subtotal / Sum", value: statistics.subtotal },
       { label: "Average", value: statistics.average },
       { label: "Median", value: statistics.median },
+      { label: "Maximum", value: statistics.maximum },
+      { label: "Minimum", value: statistics.minimum },
     );
     if (statistics.standard_deviation != null) {
       summary.push({ label: "Standard deviation", value: statistics.standard_deviation });
@@ -72,6 +75,7 @@ export function buildDrilldownReportPayload(args: BuildArgs): ProfessionalReport
     indicators,
     interpretation,
     moduleName = "Analytics Center",
+    chartImageDataUrl,
   } = args;
 
   const reportName = `${context.sectionTitle} — ${selection.displayLabel}`;
@@ -93,22 +97,26 @@ export function buildDrilldownReportPayload(args: BuildArgs): ProfessionalReport
     tableRows: panelFiltered,
     statistics,
     indicators,
-    chartSnapshot: {
-      chartType: context.chartType,
-      title: context.sectionTitle,
-      items: context.chartItems,
-      valueField: context.valueField,
-      xAxisLabel: context.xAxisLabel,
-      yAxisLabel: context.yAxisLabel,
-    },
+    charts: [
+      {
+        chartType: context.chartType,
+        title: context.sectionTitle,
+        items: context.chartItems,
+        valueField: context.valueField,
+        xAxisLabel: context.xAxisLabel,
+        yAxisLabel: context.yAxisLabel,
+        imageDataUrl: chartImageDataUrl ?? undefined,
+      },
+    ],
     interpretation,
     predictive: buildPredictiveBlock(context, interpretation),
     analyticsType: context.analyticsType ?? "Descriptive",
+    chartType: context.chartType,
     filenameStem: `${context.sectionTitle}_${selection.displayLabel}`.replace(/\s+/g, "_").toLowerCase(),
   };
 }
 
-export function downloadDrilldownReportPdf(args: BuildArgs): void {
+export async function downloadDrilldownReportPdf(args: BuildArgs): Promise<void> {
   if (!args.panelFiltered.length) return;
   downloadProfessionalReportPdf(buildDrilldownReportPayload(args));
 }

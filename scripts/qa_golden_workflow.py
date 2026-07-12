@@ -367,9 +367,9 @@ def main() -> int:
         log("customer_analytics", r.status_code == 200, f"{r.status_code}")
 
         for path, label in [
-            ("/api/reports/bookings.csv", "reports_bookings_csv"),
-            ("/api/reports/fleet.csv", "reports_fleet_csv"),
-            ("/api/manager/finance.csv", "manager_finance_csv"),
+            ("/api/reports/bookings", "reports_bookings"),
+            ("/api/reports/fleet", "reports_fleet"),
+            ("/api/manager/finance-report", "manager_finance_report"),
         ]:
             rr = client.get(f"{BASE}{path}", headers=h(tokens["admin"]))
             ctype = rr.headers.get("content-type", "")

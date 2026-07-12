@@ -17,7 +17,7 @@ import {
 import type { ChartSelection } from "@/lib/chartDrilldownUtils";
 import { filterDrilldownRows } from "@/lib/chartDrilldownUtils";
 import { downloadDrilldownReportPdf } from "@/lib/buildDrilldownReportExport";
-
+import { captureChartImageDataUrl } from "@/lib/chartCapture";
 import type { DrillDownModalContext } from "@/lib/drilldownReportTypes";
 
 export type { DrillDownModalContext } from "@/lib/drilldownReportTypes";
@@ -217,31 +217,10 @@ export function DrillDownAnalyticsModal({
     }
   };
 
-  const exportCsv = () => {
-    if (!panelFiltered.length) return;
-    const header = columns.map((c) => c.label).join(",");
-    const body = panelFiltered.map((row) =>
-      columns
-        .map((c) => {
-          const raw = row[c.key] ?? "";
-          const cell = String(raw).replace(/"/g, "\"\"");
-          return `"${cell}"`;
-        })
-        .join(","),
-    );
-    const csv = [header, ...body].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${context.sectionTitle.replace(/\s+/g, "_").toLowerCase()}_drilldown.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportPdf = () => {
+  const exportPdf = async () => {
     if (!selection || !panelFiltered.length) return;
-    downloadDrilldownReportPdf({
+    const imageDataUrl = await captureChartImageDataUrl();
+    await downloadDrilldownReportPdf({
       context,
       selection,
       panelFilters,
@@ -251,6 +230,7 @@ export function DrillDownAnalyticsModal({
       statistics,
       indicators,
       interpretation,
+      chartImageDataUrl: imageDataUrl,
     });
   };
 
@@ -477,11 +457,13 @@ export function DrillDownAnalyticsModal({
               <button type="button" className="quick-action-btn" onClick={() => setPanelFilters(EMPTY_PANEL_FILTERS)}>
                 Reset panel filters
               </button>
-              <button type="button" className="quick-action-btn" onClick={exportCsv} disabled={!panelFiltered.length}>
-                Export filtered data (CSV)
-              </button>
-              <button type="button" className="quick-action-btn" onClick={exportPdf} disabled={!panelFiltered.length}>
-                Export professional report (PDF)
+              <button
+                type="button"
+                className="quick-action-btn"
+                onClick={() => void exportPdf()}
+                disabled={!panelFiltered.length}
+              >
+                Download PDF
               </button>
             </div>
           </section>
