@@ -106,8 +106,8 @@ def _edge_costs(
     toll_rate: float = 1.5,
     labor_rate_per_hour: float = 100.0,
     avg_speed_kmh: float = 50.0,
-) -> tuple[float, float, float, float, float]:
-    """Compute (fuel, toll, time_penalty, maintenance_penalty, total) for one edge.
+) -> tuple[float, float, float, float, float, float]:
+    """Compute fuel, toll, travel time, time penalty, maintenance penalty, and total.
 
     Matches paper §3.2.9 step 18 — g(n) = FuelCost + TollCost + TimePenalty + MaintenancePenalty.
     """
@@ -123,15 +123,35 @@ def _edge_costs(
     return (
         round(fuel_cost, 2),
         round(toll_cost, 2),
+        round(time_hours, 3),
         round(time_penalty, 2),
         round(maintenance_penalty, 2),
         round(total, 2),
     )
 
 
-def _heuristic_factory(end: str, graph: nx.Graph):
+def _heuristic_factory(end: str, graph: nx.Graph, objective: str, cargo_weight_tons: float):
     end_node = graph.nodes.get(end, {})
     end_lat, end_lng = end_node.get("lat"), end_node.get("lng")
+
+    # Calibrate coordinate distance to the smallest observed road/geographic
+    # ratio, then multiply by the smallest edge objective per kilometre. This
+    # keeps h(n) a conservative lower bound for every supported objective.
+    coordinate_scale = 0.0
+    ratios: list[float] = []
+    objective_per_km: list[float] = []
+    for u, v, data in graph.edges(data=True):
+        a, b = graph.nodes[u], graph.nodes[v]
+        geo_km = ((a.get("lat", 0) - b.get("lat", 0)) ** 2 + (a.get("lng", 0) - b.get("lng", 0)) ** 2) ** 0.5 * 111.0
+        road_km = float(data.get("distance_km", 1))
+        if geo_km > 0:
+            ratios.append(road_km / geo_km)
+        *_, total = _edge_costs(road_km, data.get("road_class", "highway"), cargo_weight_tons)
+        value = {"cost": total, "distance": road_km, "time": road_km / 50.0}[objective]
+        objective_per_km.append(value / max(road_km, 0.001))
+    if ratios:
+        coordinate_scale = min(ratios) * 0.95
+    lower_bound_per_km = min(objective_per_km) if objective_per_km else 0.0
 
     def heuristic(node: str, _target: str) -> float:
         n = graph.nodes.get(node, {})
@@ -139,7 +159,8 @@ def _heuristic_factory(end: str, graph: nx.Graph):
         if None in (lat, lng, end_lat, end_lng):
             return 0.0
         # ~111km per degree (rough)
-        return ((lat - end_lat) ** 2 + (lng - end_lng) ** 2) ** 0.5 * 111.0 * 30.0
+        geographic_km = ((lat - end_lat) ** 2 + (lng - end_lng) ** 2) ** 0.5 * 111.0
+        return geographic_km * coordinate_scale * lower_bound_per_km
 
     return heuristic
 
@@ -148,19 +169,20 @@ def _path_cost(
     graph: nx.Graph,
     path: list[str],
     cargo_weight_tons: float,
-) -> tuple[float, float, float, float, float, list[RouteEdge]]:
-    fuel_total = toll_total = time_total = maint_total = total = 0.0
+) -> tuple[float, float, float, float, float, float, list[RouteEdge]]:
+    fuel_total = toll_total = travel_total = time_total = maint_total = total = 0.0
     edges: list[RouteEdge] = []
     for i in range(len(path) - 1):
         a, b = path[i], path[i + 1]
         edge = graph[a][b]
-        fuel, toll, t_pen, m_pen, sub = _edge_costs(
+        fuel, toll, travel_hours, t_pen, m_pen, sub = _edge_costs(
             distance_km=edge.get("distance_km", 1),
             road_class=edge.get("road_class", "highway"),
             cargo_weight_tons=cargo_weight_tons,
         )
         fuel_total += fuel
         toll_total += toll
+        travel_total += travel_hours
         time_total += t_pen
         maint_total += m_pen
         total += sub
@@ -170,10 +192,11 @@ def _path_cost(
             distance_km=edge.get("distance_km", 1),
             fuel_cost=fuel,
             toll_cost=toll,
+            travel_time_hours=travel_hours,
             time_penalty=t_pen,
             maintenance_penalty=m_pen,
         ))
-    return fuel_total, toll_total, time_total, maint_total, total, edges
+    return fuel_total, toll_total, travel_total, time_total, maint_total, total, edges
 
 
 def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeResponse:
@@ -186,6 +209,8 @@ def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeRespo
             constraints_applied=[
                 f"origin '{req.origin}' or destination '{req.destination}' not present in the road graph",
             ],
+            optimization_method="A* graph search with an admissible cost lower-bound heuristic",
+            objective=req.weight,
         )
 
     banned = _ban_segments(db, req.departure_hour)
@@ -204,12 +229,14 @@ def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeRespo
             candidates=[],
             selected_rank=0,
             constraints_applied=constraint_log + ["No feasible path after constraints applied"],
+            optimization_method="A* graph search with an admissible cost lower-bound heuristic",
+            objective=req.weight,
         )
 
     # Build a cost-weighted view for A*
     weighted = nx.Graph()
     for u, v, data in graph.edges(data=True):
-        _, _, _, _, total = _edge_costs(
+        _, _, _, _, _, total = _edge_costs(
             distance_km=data.get("distance_km", 1),
             road_class=data.get("road_class", "highway"),
             cargo_weight_tons=req.cargo_weight_tons,
@@ -221,7 +248,7 @@ def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeRespo
         }.get(req.weight, total)
         weighted.add_edge(u, v, weight=weight_value)
 
-    heuristic = _heuristic_factory(req.destination, graph)
+    heuristic = _heuristic_factory(req.destination, graph, req.weight, req.cargo_weight_tons)
     primary = nx.astar_path(weighted, req.origin, req.destination, heuristic=heuristic, weight="weight")
 
     # Generate top-3 alternative simple paths up to 7 nodes (cap exploration)
@@ -238,12 +265,19 @@ def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeRespo
 
     candidates: list[RouteCandidate] = []
     for rank, path in enumerate([primary, *alt_paths], start=1):
-        fuel_total, toll_total, time_total, maint_total, total, edges = _path_cost(
+        fuel_total, toll_total, travel_total, time_total, maint_total, total, edges = _path_cost(
             graph, path, req.cargo_weight_tons
+        )
+        objective_labels = {"cost": "lowest modeled operational cost", "distance": "shortest estimated distance", "time": "lowest estimated travel time"}
+        selection_reason = (
+            f"Selected by A* because this candidate has the {objective_labels[req.weight]} among feasible routes after constraints."
+            if rank == 1
+            else f"Alternative route retained for comparison; it did not beat the selected route on {req.weight}."
         )
         explanation = [
             f"Hops: {len(path)}",
             f"Distance: {round(sum(e.distance_km for e in edges), 1)} km",
+            f"Estimated travel time: {round(travel_total, 2)} hours",
             f"Time penalty: ₱{round(time_total, 2)}",
             f"Maintenance penalty: ₱{round(maint_total, 2)}",
         ]
@@ -254,11 +288,13 @@ def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeRespo
                 distance_km=round(sum(e.distance_km for e in edges), 2),
                 fuel_cost=round(fuel_total, 2),
                 toll_cost=round(toll_total, 2),
+                estimated_travel_time_hours=round(travel_total, 2),
                 time_penalty=round(time_total, 2),
                 maintenance_penalty=round(maint_total, 2),
                 total_cost=round(total, 2),
                 edges=edges,
                 explanation=explanation,
+                selection_reason=selection_reason,
             )
         )
 
@@ -266,4 +302,6 @@ def optimize_route(req: RouteOptimizeRequest, db: Session) -> RouteOptimizeRespo
         candidates=candidates,
         selected_rank=1,
         constraints_applied=constraint_log or ["No active truck-ban constraints"],
+        optimization_method="A* graph search with an admissible cost lower-bound heuristic",
+        objective=req.weight,
     )

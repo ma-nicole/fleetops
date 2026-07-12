@@ -19,20 +19,47 @@ export type TripCostPredictRequest = {
   road_condition?: "highway" | "urban" | "rough";
   fuel_price_per_liter?: number;
   labor_rate_per_hour?: number;
+  helper_rate_per_hour?: number;
   toll_rate_per_km?: number;
+};
+
+export type CostRegressionTarget = {
+  target: string;
+  label: string;
+  prediction: number | null;
+  r_squared: number | null;
+  coefficients: Record<string, number>;
+  intercept: number | null;
+};
+
+export type CostRegressionSummary = {
+  method: string;
+  trained: boolean;
+  regression_used: boolean;
+  sample_size: number;
+  minimum_samples: number;
+  features: string[];
+  targets: CostRegressionTarget[];
+  interpretation: string;
+  recommendation: string;
+  fallback_reason: string | null;
 };
 
 export type TripCostPredictResponse = {
   fuel_liters: number;
   fuel_cost: number;
   toll_cost: number;
+  driver_cost: number;
+  helper_cost: number;
   labor_cost: number;
   maintenance_risk_cost: number;
+  total_operational_cost: number;
   total_cost: number;
   load_factor: number;
   speed_factor: number;
   road_factor: number;
   explanation: string[];
+  regression: CostRegressionSummary;
 };
 
 export type FuelPredictRequest = {
@@ -89,6 +116,7 @@ export type RouteEdge = {
   distance_km: number;
   fuel_cost: number;
   toll_cost: number;
+  travel_time_hours: number;
   time_penalty: number;
   maintenance_penalty: number;
 };
@@ -99,17 +127,21 @@ export type RouteCandidate = {
   distance_km: number;
   fuel_cost: number;
   toll_cost: number;
+  estimated_travel_time_hours: number;
   time_penalty: number;
   maintenance_penalty: number;
   total_cost: number;
   edges: RouteEdge[];
   explanation: string[];
+  selection_reason: string;
 };
 
 export type RouteOptimizeResponse = {
   candidates: RouteCandidate[];
   selected_rank: number;
   constraints_applied: string[];
+  optimization_method: string;
+  objective: "cost" | "distance" | "time";
 };
 
 export type AssignmentCandidate = {
@@ -147,6 +179,34 @@ export type WhatIfResponse = {
 export type MonthlyForecastResponse = {
   horizon_months: number;
   points: { period: string; value: number }[];
+};
+
+export type OperationalForecastSeries = {
+  key: string;
+  title: string;
+  unit: string;
+  chart_type: "line" | "area" | "bar";
+  historical: { period: string; value: number }[];
+  forecast: { period: string; value: number }[];
+  method: string;
+  interpretation: string;
+  recommendation: string;
+  statistics: {
+    minimum: number;
+    maximum: number;
+    average: number;
+    total: number;
+    standard_deviation: number | null;
+    count: number;
+  } | null;
+};
+
+export type OperationalForecastResponse = {
+  granularity: TimeGranularity;
+  horizon: number;
+  date_from: string | null;
+  date_to: string | null;
+  series: OperationalForecastSeries[];
 };
 
 export type ModelMetricRead = {
@@ -633,6 +693,15 @@ export const AnalyticsApi = {
   whatIf: (req: WhatIfRequest) => apiPost<WhatIfResponse>("/analytics/whatif", req),
   forecastMonthly: (horizon = 6) =>
     apiGet<MonthlyForecastResponse>(`/analytics/forecast-monthly?horizon=${horizon}`),
+  forecastOperations: (query: { granularity?: TimeGranularity; horizon?: number; date_from?: string; date_to?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (query.granularity) params.set("granularity", query.granularity);
+    if (query.horizon) params.set("horizon", String(query.horizon));
+    if (query.date_from) params.set("date_from", query.date_from);
+    if (query.date_to) params.set("date_to", query.date_to);
+    return apiGet<OperationalForecastResponse>(`/analytics/forecast-operations?${params.toString()}`);
+  },
+  costRegression: () => apiGet<CostRegressionSummary>("/analytics/cost-regression"),
   feedbackSummary: () => apiGet<FeedbackSummaryResponse>("/analytics/feedback-summary"),
   trainCostModel: () => apiPost<Record<string, unknown>>("/analytics/train-cost-model"),
   dashboard: () => apiGet<AnalyticsDashboard>("/analytics/dashboard"),

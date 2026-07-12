@@ -1,5 +1,8 @@
 """Predictive analytics endpoints (paper §3.2.8 Fig 23 + §3.5.10)."""
-from fastapi import APIRouter, Depends
+from datetime import date
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.security import require_roles
@@ -11,6 +14,7 @@ from app.schemas.predict import (
     MaintenancePredictRequest,
     MaintenancePredictResponse,
     MonthlyForecastResponse,
+    OperationalForecastResponse,
     TripCostPredictRequest,
     TripCostPredictResponse,
     FeedbackSummaryResponse,
@@ -22,6 +26,7 @@ from app.services.predictive.cost_model import predict_trip_cost, train_cost_reg
 from app.services.predictive.demand_model import forecast_monthly_cost
 from app.services.predictive.fuel_model import predict_fuel_consumption
 from app.services.predictive.maintenance_model import predict_maintenance
+from app.services.predictive.operational_forecast import forecast_operations
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics-predict"])
@@ -83,6 +88,34 @@ def monthly_forecast_endpoint(
     _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN)),
 ):
     return forecast_monthly_cost(db, periods=horizon)
+
+
+@router.get("/forecast-operations", response_model=OperationalForecastResponse)
+def operational_forecast_endpoint(
+    granularity: Literal["daily", "weekly", "monthly", "quarterly", "yearly"] = "monthly",
+    horizon: int = Query(default=3, ge=1, le=12),
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.DISPATCHER)),
+):
+    """Historical series, forecasts, methods, interpretations, and recommendations."""
+    return forecast_operations(
+        db,
+        granularity=granularity,
+        horizon=horizon,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@router.get("/cost-regression")
+def cost_regression_endpoint(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.DISPATCHER)),
+):
+    """Read-only model diagnostics for transparent analytics presentation."""
+    return train_cost_regression(db)
 
 
 @router.post("/train-cost-model")

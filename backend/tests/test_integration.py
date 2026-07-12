@@ -666,9 +666,15 @@ class TestPredictiveAnalytics:
         )
         assert response.status_code == 200
         body = response.json()
-        for key in ("fuel_liters", "fuel_cost", "toll_cost", "labor_cost", "total_cost", "explanation"):
+        for key in (
+            "fuel_liters", "fuel_cost", "toll_cost", "driver_cost", "helper_cost",
+            "labor_cost", "total_operational_cost", "total_cost", "regression", "explanation",
+        ):
             assert key in body
         assert body["total_cost"] > 0
+        assert {row["target"] for row in body["regression"]["targets"]} == {
+            "fuel_cost", "toll_cost", "driver_cost", "helper_cost", "total_operational_cost"
+        }
 
     def test_predict_fuel(self, client, test_users):
         dispatcher = test_users["dispatcher"]
@@ -693,6 +699,22 @@ class TestPredictiveAnalytics:
         )
         assert response.status_code == 200
         assert response.json()["priority_level"] in {"low_risk", "medium_risk", "high_risk"}
+
+    def test_operational_forecasts_expose_decision_support(self, client, test_users):
+        manager = test_users["manager"]
+        token = create_access_token(manager.email, manager.role.value)
+        response = client.get(
+            "/api/analytics/forecast-operations?granularity=monthly&horizon=3",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert {row["key"] for row in body["series"]} == {
+            "booking_demand", "fuel_usage", "fleet_maintenance", "delivery_trends"
+        }
+        for row in body["series"]:
+            for key in ("historical", "forecast", "method", "interpretation", "recommendation"):
+                assert key in row
 
 
 # ═══════════════════════════════════════════════════════════
@@ -719,6 +741,9 @@ class TestPrescriptiveAnalytics:
         body = response.json()
         assert body["candidates"]
         assert body["candidates"][0]["total_cost"] > 0
+        assert body["optimization_method"].startswith("A*")
+        assert body["candidates"][0]["estimated_travel_time_hours"] > 0
+        assert "Selected by A*" in body["candidates"][0]["selection_reason"]
 
     def test_whatif(self, client, test_users):
         manager = test_users["manager"]

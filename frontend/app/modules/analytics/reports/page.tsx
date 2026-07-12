@@ -60,7 +60,7 @@ export default function DashboardReportsPage() {
               <Link href="/modules/analytics/predictions">Operational predictions</Link>
             </li>
             <li>
-              <strong>Manager:</strong> <Link href="/analytics/reports">Analytics reports</Link> (stubbed connector view),{" "}
+              <strong>Manager:</strong> <Link href="/analytics/reports">Live role analytics and reports</Link>,{" "}
               <Link href="/modules/analytics/accuracy">Accuracy &amp; drift</Link> (+ retrain where allowed)
             </li>
           </ul>

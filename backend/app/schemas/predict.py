@@ -1,5 +1,5 @@
 """Predictive & prescriptive request/response schemas (paper §3.2.8 + §3.2.9)."""
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # -----------------------------------------------------------------
@@ -14,6 +14,7 @@ class TripCostPredictRequest(BaseModel):
     road_condition: str = "highway"  # highway | urban | rough
     fuel_price_per_liter: float = 60.0
     labor_rate_per_hour: float = 100.0
+    helper_rate_per_hour: float = 60.0
     toll_rate_per_km: float = 1.5
 
     @field_validator("distance_km", "cargo_weight_tons", "fuel_price_per_liter")
@@ -32,17 +33,43 @@ class TripCostPredictRequest(BaseModel):
         return v
 
 
+class CostRegressionTarget(BaseModel):
+    target: str
+    label: str
+    prediction: float | None = None
+    r_squared: float | None = None
+    coefficients: dict[str, float] = Field(default_factory=dict)
+    intercept: float | None = None
+
+
+class CostRegressionSummary(BaseModel):
+    method: str
+    trained: bool
+    regression_used: bool
+    sample_size: int
+    minimum_samples: int
+    features: list[str]
+    targets: list[CostRegressionTarget]
+    interpretation: str
+    recommendation: str
+    fallback_reason: str | None = None
+
+
 class TripCostPredictResponse(BaseModel):
     fuel_liters: float
     fuel_cost: float
     toll_cost: float
+    driver_cost: float
+    helper_cost: float
     labor_cost: float
     maintenance_risk_cost: float
+    total_operational_cost: float
     total_cost: float
     load_factor: float
     speed_factor: float
     road_factor: float
     explanation: list[str]
+    regression: CostRegressionSummary
 
 
 # -----------------------------------------------------------------
@@ -119,6 +146,7 @@ class RouteEdge(BaseModel):
     distance_km: float
     fuel_cost: float
     toll_cost: float
+    travel_time_hours: float
     time_penalty: float
     maintenance_penalty: float
 
@@ -129,17 +157,21 @@ class RouteCandidate(BaseModel):
     distance_km: float
     fuel_cost: float
     toll_cost: float
+    estimated_travel_time_hours: float
     time_penalty: float
     maintenance_penalty: float
     total_cost: float
     edges: list[RouteEdge]
     explanation: list[str]
+    selection_reason: str
 
 
 class RouteOptimizeResponse(BaseModel):
     candidates: list[RouteCandidate]
     selected_rank: int
     constraints_applied: list[str]
+    optimization_method: str
+    objective: str
 
 
 # -----------------------------------------------------------------
@@ -198,6 +230,36 @@ class MonthlyForecastPoint(BaseModel):
 class MonthlyForecastResponse(BaseModel):
     horizon_months: int
     points: list[MonthlyForecastPoint]
+
+
+class ForecastStatistics(BaseModel):
+    minimum: float
+    maximum: float
+    average: float
+    total: float
+    standard_deviation: float | None = None
+    count: int
+
+
+class OperationalForecastSeries(BaseModel):
+    key: str
+    title: str
+    unit: str
+    chart_type: str
+    historical: list[MonthlyForecastPoint]
+    forecast: list[MonthlyForecastPoint]
+    method: str
+    interpretation: str
+    recommendation: str
+    statistics: ForecastStatistics | None = None
+
+
+class OperationalForecastResponse(BaseModel):
+    granularity: str
+    horizon: int
+    date_from: str | None = None
+    date_to: str | None = None
+    series: list[OperationalForecastSeries]
 
 
 class ModelMetricRead(BaseModel):

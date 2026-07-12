@@ -5,11 +5,17 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import { AnalyticsApi, type RouteOptimizeResponse } from "@/lib/analyticsApi";
 import { formatPhp, formatPhpWhole } from "@/lib/appLocale";
 
+const ROUTE_NODES = [
+  "Warehouse-Tarlac", "Hub-Pampanga", "SMC-Plant-Bulacan", "Hub-Manila-North",
+  "Hub-Cabanatuan", "Hub-Baguio", "Customer-Pasig", "Customer-QC",
+  "Customer-Makati", "Customer-Manila", "Customer-Caloocan",
+];
+
 export default function RouteOptimizerPage() {
   useRoleGuard(["manager", "admin", "dispatcher"]);
 
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
+  const [origin, setOrigin] = useState("Warehouse-Tarlac");
+  const [destination, setDestination] = useState("Customer-QC");
   const [weight, setWeight] = useState<"cost" | "distance" | "time">("cost");
   const [cargo, setCargo] = useState(10);
   const [departureHour, setDepartureHour] = useState(8);
@@ -62,20 +68,18 @@ export default function RouteOptimizerPage() {
         <section style={card}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
             <Field label="Origin">
-              <input
+              <select
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
-                placeholder="e.g. warehouse or city landmark"
                 style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6, width: "100%" }}
-              />
+              >{ROUTE_NODES.map((node) => <option key={node} value={node}>{node}</option>)}</select>
             </Field>
             <Field label="Destination">
-              <input
+              <select
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
-                placeholder="e.g. delivery site"
                 style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6, width: "100%" }}
-              />
+              >{ROUTE_NODES.map((node) => <option key={node} value={node}>{node}</option>)}</select>
             </Field>
             <Field label="Optimize for">
               <select
@@ -130,6 +134,11 @@ export default function RouteOptimizerPage() {
 
         {result && (
           <>
+            <section style={{ ...card, background: "#ECFDF5" }}>
+              <h2 style={{ margin: "0 0 8px" }}>Optimization result</h2>
+              <p style={{ margin: "0 0 6px" }}><strong>Method:</strong> {result.optimization_method}</p>
+              <p style={{ margin: 0 }}><strong>Objective:</strong> {result.objective === "cost" ? "Lowest operational cost" : result.objective === "distance" ? "Shortest distance" : "Fastest travel time"}</p>
+            </section>
             {result.constraints_applied?.length > 0 && (
               <section style={{ ...card, background: "#FFFBEB" }}>
                 <h3 style={{ margin: "0 0 8px" }}>Constraints applied</h3>
@@ -152,7 +161,7 @@ export default function RouteOptimizerPage() {
                     }`,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                     <h3 style={{ margin: 0 }}>
                       Candidate #{candidate.rank}
                       {candidate.rank === result.selected_rank && (
@@ -177,12 +186,17 @@ export default function RouteOptimizerPage() {
                   <p style={{ marginTop: 8, color: "#374151" }}>
                     {candidate.path.join(" → ")}
                   </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginTop: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 12 }}>
                     <Stat label="Distance" value={`${candidate.distance_km} km`} />
+                    <Stat label="Travel time" value={`${candidate.estimated_travel_time_hours} h`} />
                     <Stat label="Fuel" value={formatPhp(candidate.fuel_cost)} />
                     <Stat label="Toll" value={formatPhp(candidate.toll_cost)} />
                     <Stat label="Time penalty" value={formatPhp(candidate.time_penalty)} />
                     <Stat label="Maintenance" value={formatPhp(candidate.maintenance_penalty)} />
+                  </div>
+                  <div style={{ marginTop: 12, background: candidate.rank === result.selected_rank ? "#ECFDF5" : "#F9FAFB", borderRadius: 8, padding: 10 }}>
+                    <strong>{candidate.rank === result.selected_rank ? "Why this route was selected" : "Comparison result"}</strong>
+                    <p style={{ margin: "5px 0 0" }}>{candidate.selection_reason}</p>
                   </div>
                   <details style={{ marginTop: 12 }}>
                     <summary style={{ cursor: "pointer", color: "#0EA5E9" }}>Edge breakdown</summary>
@@ -193,7 +207,8 @@ export default function RouteOptimizerPage() {
                           <th style={tdStyle}>To</th>
                           <th style={tdStyle}>km</th>
                           <th style={tdStyle}>Fuel</th>
-                          <th style={tdStyle}>Toll</th>
+                           <th style={tdStyle}>Toll</th>
+                           <th style={tdStyle}>Travel time</th>
                           <th style={tdStyle}>Time</th>
                           <th style={tdStyle}>Maintenance</th>
                         </tr>
@@ -206,6 +221,7 @@ export default function RouteOptimizerPage() {
                             <td style={tdStyle}>{e.distance_km}</td>
                             <td style={tdStyle}>{formatPhp(e.fuel_cost)}</td>
                             <td style={tdStyle}>{formatPhp(e.toll_cost)}</td>
+                            <td style={tdStyle}>{e.travel_time_hours} h</td>
                             <td style={tdStyle}>{formatPhp(e.time_penalty)}</td>
                             <td style={tdStyle}>{formatPhp(e.maintenance_penalty)}</td>
                           </tr>

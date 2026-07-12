@@ -153,6 +153,50 @@ function ComparisonBanner({ result }: { result: PeriodComparisonResult }) {
   );
 }
 
+function PredictiveDecisionSupport({
+  title,
+  featureKey,
+  note,
+  items,
+  valueKey,
+}: {
+  title: string;
+  featureKey?: string;
+  note?: string;
+  items: Array<Record<string, string | number>>;
+  valueKey?: string;
+}) {
+  const values = valueKey
+    ? items.map((item) => Number(item[valueKey])).filter(Number.isFinite)
+    : [];
+  const latest = values.length ? values[values.length - 1] : null;
+  const change = values.length > 1 && values[0] !== 0
+    ? ((values[values.length - 1] - values[0]) / Math.abs(values[0])) * 100
+    : null;
+  const key = `${featureKey ?? ""} ${title}`.toLowerCase();
+  let recommendation = "Validate the prediction against current operational records before committing resources, then monitor actual versus predicted results.";
+  if (/maintenance|breakdown|failure/.test(key)) recommendation = "Prioritize the highest-risk vehicles for inspection and reserve maintenance capacity before assigning long-haul work.";
+  else if (/demand|workload|staffing|allocation|capacity/.test(key)) recommendation = "Align truck, driver, and helper capacity with the projected workload and review shortages before confirming new schedules.";
+  else if (/cost|fuel|expense|overrun/.test(key)) recommendation = "Review the largest predicted cost drivers, update the operating budget, and investigate routes or vehicles above the expected range.";
+  else if (/delay|schedule|completion|disruption/.test(key)) recommendation = "Review at-risk schedules and intervene on the highest-delay records before their next dispatch milestone.";
+  else if (/route|travel|eta/.test(key)) recommendation = "Compare route alternatives and apply the lowest-risk feasible option while checking current constraints and travel conditions.";
+  const resultText = latest == null
+    ? "No numeric prediction is available for the selected filters."
+    : `Latest modeled result: ${latest}${change == null ? "." : ` (${change >= 0 ? "+" : ""}${change.toFixed(1)}% across the displayed series).`}`;
+  return (
+    <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+      <div style={{ background: "#EFF6FF", borderRadius: 8, padding: 10 }}>
+        <strong>System interpretation</strong>
+        <p style={{ margin: "5px 0 0" }}>{note ? `${note} ${resultText}` : resultText}</p>
+      </div>
+      <div style={{ background: "#ECFDF5", borderRadius: 8, padding: 10 }}>
+        <strong>Actionable recommendation</strong>
+        <p style={{ margin: "5px 0 0" }}>{recommendation}</p>
+      </div>
+    </div>
+  );
+}
+
 export function BiChartWidget({
   title,
   block,
@@ -601,6 +645,15 @@ export function BiChartWidget({
         </div>
       ) : null}
       <CompactStatistics stats={stats} />
+      {analyticsType === "Predictive" ? (
+        <PredictiveDecisionSupport
+          title={title}
+          featureKey={featureKey}
+          note={widgetNote}
+          items={items}
+          valueKey={resolvedMeta?.valueKey}
+        />
+      ) : null}
 
       {compareMode === "quarter" && quarterCompare ? <ComparisonBanner result={quarterCompare} /> : null}
       {compareMode === "yoy" && yoyCompare ? <ComparisonBanner result={yoyCompare} /> : null}
