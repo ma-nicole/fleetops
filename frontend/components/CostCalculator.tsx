@@ -72,6 +72,8 @@ export default function CostCalculator({
   const [termsSignature, setTermsSignature] = useState<File | null>(null);
   const [termsScrolled, setTermsScrolled] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [cargoDescription, setCargoDescription] = useState("");
+  const [cargoTypeCategory, setCargoTypeCategory] = useState("");
   const [quoteRefreshNonce, setQuoteRefreshNonce] = useState(0);
   const prevStepRef = useRef<BookingWizardStep>("route");
   const today = new Date().toISOString().split("T")[0];
@@ -100,6 +102,8 @@ export default function CostCalculator({
       pickup,
       dropoff,
       weight,
+      cargoDescription,
+      cargoTypeCategory,
       date,
       today,
       pickedSlot,
@@ -119,6 +123,8 @@ export default function CostCalculator({
       pickup,
       dropoff,
       weight,
+      cargoDescription,
+      cargoTypeCategory,
       date,
       today,
       pickedSlot,
@@ -520,6 +526,8 @@ export default function CostCalculator({
         scheduled_date: date,
         scheduled_time_slot: pickedSlot,
         cargo_weight_tons: parseFloat(weight),
+        cargo_description: cargoDescription.replace(/\s+/g, " ").trim(),
+        cargo_type_category: cargoTypeCategory.trim(),
         terms_agreed: termsAccepted,
         terms_signer_name: termsSignerName || undefined,
         cargo_declaration: cargoDeclaration!,
@@ -619,8 +627,18 @@ export default function CostCalculator({
           <ShipmentStep
             hasEnoughSites={hasEnoughSites}
             weight={weight}
+            cargoDescription={cargoDescription}
+            cargoTypeCategory={cargoTypeCategory}
             errors={errors}
             onWeightChange={setWeight}
+            onCargoDescriptionChange={(value) => {
+              setCargoDescription(value);
+              clearError("cargo_description");
+            }}
+            onCargoTypeCategoryChange={(value) => {
+              setCargoTypeCategory(value);
+              clearError("cargo_type_category");
+            }}
           />
         )}
 
@@ -664,6 +682,8 @@ export default function CostCalculator({
             pickup={pickup}
             dropoff={dropoff}
             weight={weight}
+            cargoDescription={cargoDescription}
+            cargoTypeCategory={cargoTypeCategory}
             date={date}
             pickedSlot={pickedSlot}
             cargoDeclaration={cargoDeclaration}

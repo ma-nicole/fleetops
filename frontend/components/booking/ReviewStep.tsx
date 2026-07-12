@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { formatPhp } from "@/lib/appLocale";
+import { CARGO_TYPE_CATEGORIES } from "@/lib/cargoTypeCategories";
 import SubmitButton from "@/components/ui/SubmitButton";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import BookingQuoteCard from "./BookingQuoteCard";
@@ -19,6 +20,8 @@ type Props = {
   pickup: string;
   dropoff: string;
   weight: string;
+  cargoDescription?: string;
+  cargoTypeCategory?: string;
   date: string;
   pickedSlot: string;
   cargoDeclaration: File | null;
@@ -73,6 +76,8 @@ export default function ReviewStep({
   pickup,
   dropoff,
   weight,
+  cargoDescription = "",
+  cargoTypeCategory = "",
   date,
   pickedSlot,
   cargoDeclaration,
@@ -133,6 +138,18 @@ export default function ReviewStep({
           <div className="booking-summary-card__row">
             <dt>Cargo weight</dt>
             <dd>{weight ? `${weight} metric tons` : "-"}</dd>
+          </div>
+          <div className="booking-summary-card__row">
+            <dt>Cargo description</dt>
+            <dd>{cargoDescription.trim() || "-"}</dd>
+          </div>
+          <div className="booking-summary-card__row">
+            <dt>Cargo type</dt>
+            <dd>
+              {cargoTypeCategory
+                ? CARGO_TYPE_CATEGORIES.find((c) => c.value === cargoTypeCategory)?.label ?? cargoTypeCategory
+                : "-"}
+            </dd>
           </div>
           <div className="booking-summary-card__row">
             <dt>Schedule date</dt>

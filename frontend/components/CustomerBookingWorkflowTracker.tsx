@@ -21,6 +21,7 @@ export default function CustomerBookingWorkflowTracker({ booking, payment = null
 
   return (
     <div
+      className="customer-booking-workflow-tracker"
       style={{
         border: "1px solid #E5E7EB",
         borderRadius: 10,

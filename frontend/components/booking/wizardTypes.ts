@@ -174,6 +174,8 @@ export type BookingFormState = {
   pickup: string;
   dropoff: string;
   weight: string;
+  cargoDescription?: string;
+  cargoTypeCategory?: string;
   date: string;
   pickedSlot: string;
   cargoDeclaration: File | null;

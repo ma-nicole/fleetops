@@ -78,6 +78,7 @@ def main() -> int:
                 "scheduled_time_slot": slot,
                 "cargo_weight_tons": "8",
                 "cargo_description": "QA_GOLDEN_WORKFLOW general cargo",
+                "cargo_type_category": "general",
                 "terms_agreed": "true",
                 "terms_signer_name": "QA Customer",
             },

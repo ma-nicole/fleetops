@@ -153,7 +153,17 @@ function BookingPaymentInner() {
     return [...existingPayments].sort((a, b) => b.id - a.id)[0];
   }, [existingPayments]);
 
+  const paymentVerified =
+    latestPayment?.status === "verified" || booking?.status === "payment_verified";
+  const pendingCash =
+    latestPayment?.method === "cash" && latestPayment.status === "for_verification";
+
+  /** Proof/manual upload path: block when any non-rejected payment exists. */
   const canSubmitPayment = !latestPayment || latestPayment.status === "rejected";
+  /** Cash can supersede a pending Xendit session; block only when verified or cash already pending. */
+  const canSubmitCash = !paymentVerified && !pendingCash;
+  /** Xendit must not start when cash is awaiting admin confirmation. */
+  const canStartXendit = !paymentVerified && !pendingCash;
 
   const loadBooking = useCallback(async () => {
     if (!Number.isFinite(bookingId) || bookingId <= 0) {
@@ -256,30 +266,47 @@ function BookingPaymentInner() {
     void WorkflowApi.xenditConfig()
       .then((cfg) => {
         setXenditEnabled(cfg.enabled);
-        if (cfg.enabled) setMethod("gcash");
+        // Keep customer method choice (including cash). Default state is already gcash.
       })
       .catch(() => setXenditEnabled(false));
   }, [ready, allowed, loadBooking]);
 
   useEffect(() => {
-    if (!isXenditCheckout || !booking || pageLoading) return;
-    if (latestPayment?.status === "verified" || booking.status === "payment_verified") return;
-    void refreshXenditSession();
-  }, [isXenditCheckout, method, booking, pageLoading, latestPayment?.status, booking?.status, refreshXenditSession]);
+    if (pendingCash && method !== "cash") {
+      setMethod("cash");
+    }
+  }, [pendingCash, method]);
 
   useEffect(() => {
-    if (!isXenditCheckout || xenditPaid) return;
+    if (!isXenditCheckout || !booking || pageLoading) return;
+    if (!canStartXendit) return;
+    if (latestPayment?.status === "verified" || booking.status === "payment_verified") return;
+    void refreshXenditSession();
+  }, [
+    isXenditCheckout,
+    method,
+    booking,
+    pageLoading,
+    canStartXendit,
+    latestPayment?.status,
+    booking?.status,
+    refreshXenditSession,
+  ]);
+
+  useEffect(() => {
+    if (!isXenditCheckout || xenditPaid || !canStartXendit) return;
     const timer = window.setInterval(() => {
       void pollXenditSession();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [isXenditCheckout, xenditPaid, pollXenditSession]);
+  }, [isXenditCheckout, xenditPaid, canStartXendit, pollXenditSession]);
 
   useEffect(() => {
+    if (pendingCash) return;
     if (gcashBlocked && method === "gcash") {
       setMethod(xenditEnabled ? "card" : "bank");
     }
-  }, [gcashBlocked, method, xenditEnabled]);
+  }, [gcashBlocked, method, xenditEnabled, pendingCash]);
 
   const handleConfirmCash = async () => {
     if (!Number.isFinite(bookingId)) return;
@@ -291,6 +318,10 @@ function BookingPaymentInner() {
     try {
       const payment = await WorkflowApi.createCashSession(bookingId);
       setExistingPayments([payment]);
+      setXenditQrString(null);
+      setXenditStatus(null);
+      setXenditPayment(null);
+      setXenditError(null);
       setUploadSuccess(true);
       window.setTimeout(
         () => router.push(`/modules/operations/trips?booking=${bookingId}`),
@@ -494,7 +525,7 @@ function BookingPaymentInner() {
                   setUploadError("");
                   setXenditError(null);
                 }}
-                disabled={!canSubmitPayment && !isXenditCheckout}
+                disabled={paymentVerified || pendingCash}
               >
                 {paymentOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -511,7 +542,7 @@ function BookingPaymentInner() {
             ) : null}
           </section>
 
-          {isXenditCheckout ? (
+          {isXenditCheckout && canStartXendit ? (
             <XenditPaymentCard
               bookingId={booking.id}
               amount={total}
@@ -528,17 +559,33 @@ function BookingPaymentInner() {
             />
           ) : null}
 
+          {isXenditCheckout && !canStartXendit ? (
+            <section style={{ padding: "1rem", border: "1px solid #FCD34D", borderRadius: 8, background: "#FFFBEB" }}>
+              <p style={{ margin: 0, color: "#92400E", fontSize: "0.9rem" }}>
+                {pendingCash
+                  ? "Cash payment is awaiting admin confirmation. Online Xendit checkout is paused for this booking."
+                  : "Payment is already verified for this booking."}
+              </p>
+            </section>
+          ) : null}
+
           {isCashMethod ? (
             <section style={{ padding: "1.5rem", border: "2px dashed var(--accent)", borderRadius: "8px", background: "#FFFBF0" }}>
               <h3 style={{ color: "#1A1A1A", marginTop: 0, marginBottom: "1rem" }}>Cash payment</h3>
-              {!canSubmitPayment && latestPayment ? (
+              {pendingCash && latestPayment ? (
                 <p style={{ color: "#047857", fontSize: "0.9rem", marginBottom: "1rem", fontWeight: 600 }}>
-                  Cash payment recorded ({paymentDisplayStatus(latestPayment)}).
+                  Cash payment recorded ({paymentDisplayStatus(latestPayment)}). Waiting for admin to mark cash as
+                  received — Xendit is not used for cash.
+                </p>
+              ) : paymentVerified ? (
+                <p style={{ color: "#047857", fontSize: "0.9rem", marginBottom: "1rem", fontWeight: 600 }}>
+                  Payment already verified for this booking.
                 </p>
               ) : (
                 <p style={{ margin: "0 0 1rem", fontSize: "0.9rem", color: "#374151", lineHeight: 1.5 }}>
                   Pay the exact amount in cash to FleetOps staff. Your booking stays in{" "}
-                  <strong>Awaiting Cash Payment</strong> until an authorized admin marks it as received.
+                  <strong>Awaiting Cash Payment</strong> until an authorized admin marks it as received. Selecting cash
+                  does not open Xendit.
                 </p>
               )}
               {uploadError ? (
@@ -558,11 +605,11 @@ function BookingPaymentInner() {
                 busy={isUploading}
                 busyLabel="Recording…"
                 label="Confirm cash payment"
-                disabled={!canSubmitPayment || uploadSuccess}
+                disabled={!canSubmitCash || uploadSuccess}
                 style={{
                   width: "100%",
                   padding: "0.75rem",
-                  background: canSubmitPayment && !isUploading && !uploadSuccess ? "#10B981" : "#D1D5DB",
+                  background: canSubmitCash && !isUploading && !uploadSuccess ? "#10B981" : "#D1D5DB",
                   color: "white",
                   border: "none",
                   borderRadius: "6px",

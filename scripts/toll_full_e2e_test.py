@@ -206,6 +206,7 @@ def main() -> int:
                     "scheduled_time_slot": slot_used,
                     "cargo_weight_tons": 10,
                     "cargo_description": E2E_MARKER,
+                    "cargo_type_category": "general",
                 },
                 headers=customer_h,
             )

@@ -4,26 +4,75 @@ import { useEffect, useRef } from "react";
 
 type DigitalSignaturePadProps = {
   disabled?: boolean;
+  /** Existing signature File to redraw when remounting (e.g. wizard Previous). */
+  value?: File | null;
   onChange?: (file: File | null) => void;
 };
 
-export default function DigitalSignaturePad({ disabled = false, onChange }: DigitalSignaturePadProps) {
+export default function DigitalSignaturePad({ disabled = false, value = null, onChange }: DigitalSignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const hasStrokeRef = useRef(false);
+  const restoredFromRef = useRef<File | null>(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const paintBlank = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = "#111827";
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    paintBlank(canvas, ctx);
   }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (!value) {
+      if (restoredFromRef.current) {
+        paintBlank(canvas, ctx);
+        hasStrokeRef.current = false;
+        restoredFromRef.current = null;
+      }
+      return;
+    }
+
+    if (restoredFromRef.current === value && hasStrokeRef.current) return;
+
+    let cancelled = false;
+    const url = URL.createObjectURL(value);
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      paintBlank(canvas, ctx);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      hasStrokeRef.current = true;
+      restoredFromRef.current = value;
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(url);
+    };
+  }, [value]);
 
   const pos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -84,9 +133,9 @@ export default function DigitalSignaturePad({ disabled = false, onChange }: Digi
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    paintBlank(canvas, ctx);
     hasStrokeRef.current = false;
+    restoredFromRef.current = null;
     onChange?.(null);
   };
 

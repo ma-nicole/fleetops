@@ -163,6 +163,8 @@ class TestBookingWorkflow:
                 "scheduled_date": (datetime.now() + timedelta(days=1)).date().isoformat(),
                 "scheduled_time_slot": "08:00",
                 "cargo_weight_tons": 10.5,
+                "cargo_description": "Integration test cargo",
+                "cargo_type_category": "general",
             },
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -404,6 +406,8 @@ class TestDispatchWorkflow:
                 "scheduled_date": (datetime.now() + timedelta(days=3)).date().isoformat(),
                 "scheduled_time_slot": "08:00",
                 "cargo_weight_tons": 8,
+                "cargo_description": "Vague address test cargo",
+                "cargo_type_category": "general",
             },
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -1164,6 +1168,8 @@ class TestCostEstimation:
                 "service_type": "fixed",
                 "scheduled_date": (datetime.now() + timedelta(days=2)).date().isoformat(),
                 "cargo_weight_tons": 12.5,
+                "cargo_description": "Workflow create test cargo",
+                "cargo_type_category": "general",
             },
             headers={"Authorization": f"Bearer {token}"},
         )

@@ -161,6 +161,22 @@ def create_xendit_checkout_session(db: Session, booking: Booking, user: User, me
     if existing_verified:
         raise HTTPException(status_code=400, detail="Payment already verified for this booking.")
 
+    pending_cash = (
+        db.query(Payment)
+        .filter(
+            Payment.booking_id == booking.id,
+            Payment.method == "cash",
+            Payment.status == PaymentStatus.FOR_VERIFICATION,
+        )
+        .order_by(Payment.id.desc())
+        .first()
+    )
+    if pending_cash:
+        raise HTTPException(
+            status_code=400,
+            detail="Cash payment is already awaiting admin confirmation for this booking. Do not start an online payment.",
+        )
+
     active = _active_xendit_payment(db, booking.id)
     if active:
         if active.xendit_status == XENDIT_STATUS_PAID or active.status == PaymentStatus.VERIFIED:
@@ -286,6 +302,14 @@ def create_cash_payment_intent(db: Session, booking: Booking, user: User) -> Pay
     )
     if pending_cash:
         return pending_cash
+
+    # Prefer cash: soft-reject any pending Xendit session without expiring the booking.
+    active_xendit = _active_xendit_payment(db, booking.id)
+    if active_xendit and active_xendit.status != PaymentStatus.VERIFIED:
+        active_xendit.xendit_status = XENDIT_STATUS_EXPIRED
+        active_xendit.status = PaymentStatus.REJECTED
+        active_xendit.reviewed_at = active_xendit.reviewed_at or datetime.utcnow()
+        db.add(active_xendit)
 
     transaction = Transaction(
         booking_id=booking.id,

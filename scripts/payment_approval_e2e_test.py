@@ -86,6 +86,7 @@ def main() -> int:
                     "scheduled_time_slot": "17:30",
                     "cargo_weight_tons": 5,
                     "cargo_description": "PAYMENT_E2E_TEST",
+                    "cargo_type_category": "general",
                 },
                 headers=customer_h,
             )

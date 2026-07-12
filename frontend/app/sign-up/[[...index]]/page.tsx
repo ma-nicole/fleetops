@@ -15,7 +15,9 @@ import {
   AUTH_NAME_MAX_LENGTH,
   AUTH_PASSWORD_MAX_LENGTH,
   buildInternationalPhone,
+  normalizeAuthName,
   sanitizeAuthEmail,
+  sanitizeAuthNameInput,
   sanitizeAuthPassword,
   sanitizeAuthText,
   validateCustomerPassword,
@@ -66,10 +68,15 @@ export default function SignUpPage() {
 
   const validateFields = (): boolean => {
     const next: FieldErrors = {};
-    const fnErr = validateFirstName(firstName);
+    const normalizedFirst = normalizeAuthName(firstName, AUTH_NAME_MAX_LENGTH);
+    const normalizedLast = normalizeAuthName(lastName, AUTH_NAME_MAX_LENGTH);
+    if (normalizedFirst !== firstName) setFirstName(normalizedFirst);
+    if (normalizedLast !== lastName) setLastName(normalizedLast);
+
+    const fnErr = validateFirstName(normalizedFirst);
     if (fnErr) next.firstName = fnErr;
 
-    const lnErr = validateLastName(lastName);
+    const lnErr = validateLastName(normalizedLast);
     if (lnErr) next.lastName = lnErr;
 
     const mail = sanitizeAuthEmail(email);
@@ -107,7 +114,10 @@ export default function SignUpPage() {
 
     const mail = sanitizeAuthEmail(email);
     const combinedPhone = buildInternationalPhone(phoneDial, phoneNational);
-    const fullName = sanitizeAuthText(`${firstName} ${lastName}`, AUTH_NAME_MAX_LENGTH);
+    const fullName = normalizeAuthName(
+      `${normalizeAuthName(firstName, AUTH_NAME_MAX_LENGTH)} ${normalizeAuthName(lastName, AUTH_NAME_MAX_LENGTH)}`,
+      AUTH_NAME_MAX_LENGTH,
+    );
     const safePassword = sanitizeAuthPassword(password);
 
     try {
@@ -198,9 +208,10 @@ export default function SignUpPage() {
             value={firstName}
             maxLength={AUTH_NAME_MAX_LENGTH}
             onChange={(event) => {
-              setFirstName(sanitizeAuthText(event.target.value, AUTH_NAME_MAX_LENGTH));
+              setFirstName(sanitizeAuthNameInput(event.target.value, AUTH_NAME_MAX_LENGTH));
               if (fieldErrors.firstName) setFieldErrors((p) => ({ ...p, firstName: undefined }));
             }}
+            onBlur={() => setFirstName((v) => normalizeAuthName(v, AUTH_NAME_MAX_LENGTH))}
             error={fieldErrors.firstName}
           />
           <FloatingField
@@ -210,9 +221,10 @@ export default function SignUpPage() {
             value={lastName}
             maxLength={AUTH_NAME_MAX_LENGTH}
             onChange={(event) => {
-              setLastName(sanitizeAuthText(event.target.value, AUTH_NAME_MAX_LENGTH));
+              setLastName(sanitizeAuthNameInput(event.target.value, AUTH_NAME_MAX_LENGTH));
               if (fieldErrors.lastName) setFieldErrors((p) => ({ ...p, lastName: undefined }));
             }}
+            onBlur={() => setLastName((v) => normalizeAuthName(v, AUTH_NAME_MAX_LENGTH))}
             error={fieldErrors.lastName}
           />
         </div>

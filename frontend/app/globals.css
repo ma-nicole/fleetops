@@ -134,6 +134,9 @@ a {
   padding: 1.25rem;
   box-shadow: var(--shadow-xs);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 body {
@@ -2924,9 +2927,26 @@ html {
 
 .dashboard-standard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: var(--space-4);
   align-items: start;
+}
+
+.dashboard-standard-grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#customer-tracking {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+#customer-tracking .workflow-timeline,
+#customer-tracking .customer-booking-workflow-tracker {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .analytics-structure {

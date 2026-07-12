@@ -111,6 +111,7 @@ def create_booking_request(
         scheduled_time_slot=str(payload.get("scheduled_time_slot") or "").strip(),
         cargo_weight_tons=payload.get("cargo_weight_tons"),
         cargo_description=payload.get("cargo_description"),
+        cargo_type_category=payload.get("cargo_type_category") or "other",
     )
 
     # Use the paper §3.2.8 trip-cost predictor (regression-blended) for the customer-facing quote.
@@ -155,6 +156,7 @@ def create_booking_request(
         scheduled_time_slot=booking_data.scheduled_time_slot,
         cargo_weight_tons=booking_data.cargo_weight_tons,
         cargo_description=booking_data.cargo_description,
+        cargo_type_category=booking_data.cargo_type_category,
         estimated_cost=prediction.total_cost,
         status=BookingStatus.PENDING_APPROVAL,
     )

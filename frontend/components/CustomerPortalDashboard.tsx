@@ -231,8 +231,8 @@ export default function CustomerPortalDashboard() {
               <KpiCard label="Fulfillment snapshot" value={`${kpis.rate}%`} delta="Completed vs all bookings" trend={kpis.rate >= 90 ? "up" : "flat"} tone={kpis.rate >= 90 ? "success" : "neutral"} />
             </section>
 
-            <section className="dashboard-standard-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}>
-              <div id="customer-tracking" className="card scroll-section" style={{ display: "grid", gap: "1rem" }}>
+            <section className="dashboard-standard-grid">
+              <div id="customer-tracking" className="card scroll-section" style={{ display: "grid", gap: "1rem", minWidth: 0, overflow: "hidden" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                   <h2 style={{ margin: 0 }}>Shipment tracking</h2>
                   <a href="/modules/operations/trips" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 600 }}>
@@ -257,6 +257,9 @@ export default function CustomerPortalDashboard() {
                             display: "grid",
                             gap: "0.75rem",
                             background: "#FAFAFA",
+                            minWidth: 0,
+                            maxWidth: "100%",
+                            overflow: "hidden",
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -299,8 +302,8 @@ export default function CustomerPortalDashboard() {
                 )}
               </div>
 
-              <div style={{ display: "grid", gap: "1.25rem" }}>
-                <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+              <div style={{ display: "grid", gap: "1.25rem", minWidth: 0 }}>
+                <div className="card" style={{ display: "grid", gap: "0.85rem", minWidth: 0 }}>
                   <h2 style={{ margin: 0 }}>Sites</h2>
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                     Use separate fields: street, district or village, city or municipality, province, and zip code —

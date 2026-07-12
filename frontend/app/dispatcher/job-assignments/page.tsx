@@ -260,13 +260,16 @@ function DispatcherJobAssignmentsInner() {
     border: "1px solid #E5E7EB",
     borderRadius: 12,
     padding: 18,
+    minWidth: 0,
+    maxWidth: "100%",
+    overflow: "hidden",
   };
 
   const driverContext = fromDriverId || fromDriverName;
 
   return (
-    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 16 }}>
+    <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh", overflowX: "hidden" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gap: 16, minWidth: 0, width: "100%" }}>
         <header>
           <h1 style={{ margin: 0 }}>Job Assignment</h1>
           <p style={{ color: "#6B7280", marginTop: 4 }}>
@@ -384,7 +387,14 @@ function DispatcherJobAssignmentsInner() {
                 setBookingId(Number(e.target.value));
               }}
               disabled={loadingBookings || bookings.length === 0}
-              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+              style={{
+                padding: 8,
+                border: "1px solid #D1D5DB",
+                borderRadius: 6,
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
+              }}
             >
               <option value={0}>{loadingBookings ? "Loading…" : "— pick a booking —"}</option>
               {bookings.map((b) => (
@@ -527,16 +537,24 @@ function DispatcherJobAssignmentsInner() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                        gap: 10,
+                        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+                        gap: 12,
+                        alignItems: "start",
                       }}
                     >
-                      <label style={{ display: "grid", gap: 4 }}>
+                      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
                         <span>Truck</span>
                         <select
                           value={row.truck_id}
                           onChange={(e) => updateRow(idx, { truck_id: Number(e.target.value) })}
-                          style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+                          style={{
+                            padding: 8,
+                            border: "1px solid #D1D5DB",
+                            borderRadius: 6,
+                            width: "100%",
+                            maxWidth: "100%",
+                            boxSizing: "border-box",
+                          }}
                         >
                           <option value={0}>— truck —</option>
                           {(availability.truck_roster ?? availability.trucks.map((t) => ({
@@ -568,12 +586,19 @@ function DispatcherJobAssignmentsInner() {
                           </span>
                         ) : null}
                       </label>
-                      <label style={{ display: "grid", gap: 4 }}>
+                      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
                         <span>Driver</span>
                         <select
                           value={row.driver_id}
                           onChange={(e) => updateRow(idx, { driver_id: Number(e.target.value) })}
-                          style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+                          style={{
+                            padding: 8,
+                            border: "1px solid #D1D5DB",
+                            borderRadius: 6,
+                            width: "100%",
+                            maxWidth: "100%",
+                            boxSizing: "border-box",
+                          }}
                         >
                           <option value={0}>— driver —</option>
                           {(availability.driver_roster ?? availability.drivers.map((d) => ({
@@ -603,12 +628,19 @@ function DispatcherJobAssignmentsInner() {
                           </span>
                         ) : null}
                       </label>
-                      <label style={{ display: "grid", gap: 4 }}>
+                      <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
                         <span>Helper (required)</span>
                         <select
                           value={row.helper_id}
                           onChange={(e) => updateRow(idx, { helper_id: Number(e.target.value) })}
-                          style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
+                          style={{
+                            padding: 8,
+                            border: "1px solid #D1D5DB",
+                            borderRadius: 6,
+                            width: "100%",
+                            maxWidth: "100%",
+                            boxSizing: "border-box",
+                          }}
                         >
                           <option value={0}>— helper —</option>
                           {(availability.helper_roster ?? availability.helpers.map((h) => ({
@@ -669,20 +701,28 @@ function DispatcherJobAssignmentsInner() {
           <p style={{ color: "#6B7280", marginTop: 0 }}>
             Live board: booking, pickup window, route, truck, driver, helper, trip status, latest location.
           </p>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div style={{ overflowX: "auto", width: "100%", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
+            <table
+              style={{
+                width: "100%",
+                minWidth: 900,
+                borderCollapse: "collapse",
+                fontSize: 13,
+                tableLayout: "fixed",
+              }}
+            >
               <thead>
                 <tr style={{ background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", textAlign: "left" }}>
-                  <th style={{ padding: 8 }}>Trip</th>
-                  <th style={{ padding: 8 }}>Booking</th>
-                  <th style={{ padding: 8 }}>Date / slot</th>
-                  <th style={{ padding: 8 }}>Route</th>
-                  <th style={{ padding: 8 }}>Wt (t)</th>
-                  <th style={{ padding: 8 }}>Truck</th>
-                  <th style={{ padding: 8 }}>Driver</th>
-                  <th style={{ padding: 8 }}>Helper</th>
-                  <th style={{ padding: 8 }}>Status</th>
-                  <th style={{ padding: 8 }}>Latest Location</th>
+                  <th style={{ padding: 8, width: "7%" }}>Trip</th>
+                  <th style={{ padding: 8, width: "8%" }}>Booking</th>
+                  <th style={{ padding: 8, width: "12%" }}>Date / slot</th>
+                  <th style={{ padding: 8, width: "18%" }}>Route</th>
+                  <th style={{ padding: 8, width: "6%" }}>Wt (t)</th>
+                  <th style={{ padding: 8, width: "8%" }}>Truck</th>
+                  <th style={{ padding: 8, width: "10%" }}>Driver</th>
+                  <th style={{ padding: 8, width: "10%" }}>Helper</th>
+                  <th style={{ padding: 8, width: "10%" }}>Status</th>
+                  <th style={{ padding: 8, width: "11%" }}>Latest Location</th>
                 </tr>
               </thead>
               <tbody>
@@ -695,22 +735,22 @@ function DispatcherJobAssignmentsInner() {
                 ) : (
                   assignments.map((a) => (
                     <tr key={a.trip_id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                      <td style={{ padding: 8, fontWeight: 600 }}>#{a.trip_id}</td>
-                      <td style={{ padding: 8 }}>#{a.booking_id}</td>
-                      <td style={{ padding: 8 }}>
+                      <td style={{ padding: 8, fontWeight: 600, overflowWrap: "anywhere" }}>#{a.trip_id}</td>
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>#{a.booking_id}</td>
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>
                         {a.scheduled_date} {a.scheduled_time_slot}
                       </td>
-                      <td style={{ padding: 8, maxWidth: 220 }}>
+                      <td style={{ padding: 8, overflowWrap: "anywhere", wordBreak: "break-word" }}>
                         {a.pickup_location.slice(0, 40)}… → {a.dropoff_location.slice(0, 40)}…
                       </td>
                       <td style={{ padding: 8 }}>{a.cargo_weight_tons}</td>
-                      <td style={{ padding: 8 }}>{a.truck_code}</td>
-                      <td style={{ padding: 8 }}>{a.driver_name ?? "—"}</td>
-                      <td style={{ padding: 8 }}>{a.helper_name ?? "—"}</td>
-                      <td style={{ padding: 8, textTransform: "capitalize" }}>
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.truck_code}</td>
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.driver_name ?? "—"}</td>
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.helper_name ?? "—"}</td>
+                      <td style={{ padding: 8, textTransform: "capitalize", overflowWrap: "anywhere" }}>
                         {(a.helper_progress_status || a.trip_status || "—").replace(/_/g, " ")}
                       </td>
-                      <td style={{ padding: 8 }}>{a.latest_location ?? "—"}</td>
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.latest_location ?? "—"}</td>
                     </tr>
                   ))
                 )}

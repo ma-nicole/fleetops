@@ -1,9 +1,12 @@
 import { BOOKING_TIME_SLOTS } from "@/lib/bookingSlots";
 import { isValidBookingWeightTons, bookingWeightValidationMessage } from "@/components/BookingCargoWeightField";
 import { validateBookingDocumentFile } from "@/components/BookingDocumentUploadFields";
+import { CARGO_TYPE_CATEGORIES } from "@/lib/cargoTypeCategories";
 import { validateCustomerSiteAddress } from "@/lib/formValidation";
 import { MIN_BOOKING_SITES } from "@/lib/customerSites";
 import type { BookingWizardStep, FormErrors } from "./wizardTypes";
+
+const CARGO_CATEGORY_VALUES = new Set(CARGO_TYPE_CATEGORIES.map((c) => c.value));
 
 type ValidationContext = {
   sitesCount: number;
@@ -12,6 +15,8 @@ type ValidationContext = {
   pickup: string;
   dropoff: string;
   weight: string;
+  cargoDescription: string;
+  cargoTypeCategory: string;
   date: string;
   today: string;
   pickedSlot: string;
@@ -64,6 +69,18 @@ function validateShipmentFields(ctx: ValidationContext): FormErrors {
   const wTons = parseFloat(ctx.weight);
   if (!isValidBookingWeightTons(wTons)) {
     errors.cargo_weight_tons = bookingWeightValidationMessage();
+  }
+  const desc = (ctx.cargoDescription || "").replace(/\s+/g, " ").trim();
+  if (!desc) {
+    errors.cargo_description = "Cargo description is required.";
+  } else if (desc.length < 3) {
+    errors.cargo_description = "Cargo description must be at least 3 characters.";
+  }
+  const category = (ctx.cargoTypeCategory || "").trim();
+  if (!category) {
+    errors.cargo_type_category = "Select a cargo type / category (use Other / mixed if unsure).";
+  } else if (!CARGO_CATEGORY_VALUES.has(category as (typeof CARGO_TYPE_CATEGORIES)[number]["value"])) {
+    errors.cargo_type_category = "Select a valid cargo type / category.";
   }
   return errors;
 }

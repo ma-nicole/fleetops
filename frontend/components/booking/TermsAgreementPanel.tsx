@@ -96,6 +96,7 @@ export default function TermsAgreementPanel({
         <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", fontWeight: 600 }}>Electronic signature</p>
         <DigitalSignaturePad
           disabled={!canSign}
+          value={signatureFile}
           onChange={(file) => {
             onSignatureChange(file);
             onClearError?.("terms_signature");

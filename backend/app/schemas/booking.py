@@ -4,9 +4,10 @@ from typing import Optional
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.constants.booking_time_slots import BOOKING_TIME_SLOTS
-from app.models.entities import BookingStatus, CustomsClearanceStatus, ServiceType
+from app.models.entities import BookingStatus, CargoTypeCategory, CustomsClearanceStatus, ServiceType
 
 CUSTOMS_CLEARANCE_STATUSES = {s.value for s in CustomsClearanceStatus}
+CARGO_TYPE_CATEGORY_VALUES = frozenset(c.value for c in CargoTypeCategory)
 
 
 class BookingCreate(BaseModel):
@@ -16,7 +17,8 @@ class BookingCreate(BaseModel):
     scheduled_date: date
     scheduled_time_slot: str
     cargo_weight_tons: float
-    cargo_description: str | None = None
+    cargo_description: str
+    cargo_type_category: str
     toll_entry_point: str | None = None
     toll_exit_point: str | None = None
     vehicle_class: str | None = None
@@ -29,6 +31,26 @@ class BookingCreate(BaseModel):
         if v <= 0 or v > 168:
             raise ValueError("Cargo weight must be between 0.1 and 168 metric tons (fleet limit)")
         return v
+
+    @field_validator("cargo_description")
+    @classmethod
+    def validate_cargo_description(cls, v: str) -> str:
+        t = " ".join((v or "").split()).strip()
+        if len(t) < 3:
+            raise ValueError("Cargo description is required (at least 3 characters)")
+        if len(t) > 500:
+            raise ValueError("Cargo description must be at most 500 characters")
+        return t
+
+    @field_validator("cargo_type_category")
+    @classmethod
+    def validate_cargo_type_category(cls, v: str) -> str:
+        key = (v or "").strip().lower()
+        if key not in CARGO_TYPE_CATEGORY_VALUES:
+            raise ValueError(
+                f"Cargo type category must be one of: {', '.join(sorted(CARGO_TYPE_CATEGORY_VALUES))}"
+            )
+        return key
 
     @field_validator("pickup_location", "dropoff_location")
     @classmethod

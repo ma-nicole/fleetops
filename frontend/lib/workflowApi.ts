@@ -783,7 +783,8 @@ export const WorkflowApi = {
     scheduled_date: string;
     scheduled_time_slot: string;
     cargo_weight_tons: number;
-    cargo_description?: string | null;
+    cargo_description: string;
+    cargo_type_category: string;
   }) => apiPost<Booking>("/bookings", payload),
   createBookingWithDocuments: (payload: {
     pickup_location: string;
@@ -793,6 +794,7 @@ export const WorkflowApi = {
     scheduled_time_slot: string;
     cargo_weight_tons: number;
     cargo_description?: string | null;
+    cargo_type_category?: string | null;
     terms_agreed: boolean;
     terms_signer_name?: string;
     cargo_declaration: File;
@@ -810,6 +812,7 @@ export const WorkflowApi = {
     fd.append("scheduled_time_slot", payload.scheduled_time_slot);
     fd.append("cargo_weight_tons", String(payload.cargo_weight_tons));
     if (payload.cargo_description) fd.append("cargo_description", payload.cargo_description);
+    if (payload.cargo_type_category) fd.append("cargo_type_category", payload.cargo_type_category);
     if (payload.toll_entry_point) fd.append("toll_entry_point", payload.toll_entry_point);
     if (payload.toll_exit_point) fd.append("toll_exit_point", payload.toll_exit_point);
     if (payload.vehicle_class) fd.append("vehicle_class", payload.vehicle_class);

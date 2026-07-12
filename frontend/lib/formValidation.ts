@@ -21,9 +21,19 @@ export type PasswordRequirementCheck = {
   met: boolean;
 };
 
-/** Strip control characters and trim; preserve inner spaces for names. */
+/** Strip control characters only — keep trailing spaces so multi-word names can be typed. */
+export function sanitizeAuthNameInput(value: string, maxLength: number): string {
+  return value.replace(CONTROL_CHARS, "").replace(/ {2,}/g, " ").slice(0, maxLength);
+}
+
+/** Final name normalize for submit/blur: trim ends and collapse internal whitespace. */
+export function normalizeAuthName(value: string, maxLength: number): string {
+  return value.replace(CONTROL_CHARS, "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+/** Strip control characters and trim; preserve inner spaces for names. Prefer sanitizeAuthNameInput while typing. */
 export function sanitizeAuthText(value: string, maxLength: number): string {
-  return value.replace(CONTROL_CHARS, "").trim().slice(0, maxLength);
+  return normalizeAuthName(value, maxLength);
 }
 
 /** Normalize email for auth forms: trim, lowercase, strip control chars, cap length. */

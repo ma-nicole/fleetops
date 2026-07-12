@@ -344,6 +344,7 @@ export default function DeliveryCompletionPanel({
         ) : null}
         <DigitalSignaturePad
           disabled={busy === "sig"}
+          value={signatureFile}
           onChange={(file) => {
             if (!file) {
               setSignatureFile(null);
