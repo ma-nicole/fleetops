@@ -232,8 +232,28 @@ export default function CustomerPortalDashboard() {
             </section>
 
             <section className="dashboard-standard-grid">
-              <div id="customer-tracking" className="card scroll-section" style={{ display: "grid", gap: "1rem", minWidth: 0, overflow: "hidden" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+              <div
+                id="customer-tracking"
+                className="card scroll-section"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                  minWidth: 0,
+                  maxHeight: "min(70vh, 560px)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "0.5rem",
+                    flexShrink: 0,
+                  }}
+                >
                   <h2 style={{ margin: 0 }}>Shipment tracking</h2>
                   <a href="/modules/operations/trips" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 600 }}>
                     Trips overview
@@ -245,7 +265,18 @@ export default function CustomerPortalDashboard() {
                     {EMPTY_SHIPMENTS}
                   </p>
                 ) : (
-                  <div style={{ display: "grid", gap: "1rem" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "1rem",
+                      minHeight: 0,
+                      flex: 1,
+                      overflowY: "auto",
+                      overflowX: "hidden",
+                      paddingRight: "0.25rem",
+                      WebkitOverflowScrolling: "touch",
+                    }}
+                  >
                     {activeShow.map((order) => {
                       return (
                         <div
