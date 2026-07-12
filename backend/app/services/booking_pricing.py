@@ -42,23 +42,19 @@ def pricing_with_toll_matrix(
         route_origin=route_origin,
         route_destination=route_destination,
         route_waypoints=route_waypoints,
+        route_distance_km=distance_km,
+        settings=settings,
     )
-    if per_truck is not None:
-        pricing = customer_freight_pricing(
-            distance_km,
-            cargo_weight_tons,
-            knobs,
-            toll_budget_per_truck=per_truck,
-            toll_estimate_meta=meta,
-        )
-    else:
-        pricing = customer_freight_pricing(
-            distance_km,
-            cargo_weight_tons,
-            knobs,
-            toll_estimate_meta=meta,
-        )
+    # Always inject the matrix result (including explicit 0 with reason). Never fall back to knobs.
+    pricing = customer_freight_pricing(
+        distance_km,
+        cargo_weight_tons,
+        knobs,
+        toll_budget_per_truck=float(per_truck),
+        toll_estimate_meta=meta,
+    )
     pricing["fuel_price_meta"] = fuel_price_meta_dict(fuel_snap)
     pricing["maintenance_cost_php"] = 0.0
     pricing["service_fee_php"] = 0.0
+    pricing["toll_estimate_meta"] = meta
     return pricing, meta

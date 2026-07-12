@@ -24,6 +24,7 @@ import {
   type LiveCostQuote,
   type QuotedCostBreakdown,
   type QuoteGeoMeta,
+  type RouteOptionQuote,
   type RouteQuoteApiResponse,
   type TollEstimateMeta,
 } from "@/components/booking/wizardTypes";
@@ -62,6 +63,10 @@ export default function CostCalculator({
   const [distanceConfirmed, setDistanceConfirmed] = useState(true);
   const [distanceWarning, setDistanceWarning] = useState<string | null>(null);
   const [quoteStatus, setQuoteStatus] = useState<string | null>(null);
+  const [routeOptions, setRouteOptions] = useState<RouteOptionQuote[]>([]);
+  const [selectedRouteOptionId, setSelectedRouteOptionId] = useState<string | null>(null);
+  const [recommendedRouteOptionId, setRecommendedRouteOptionId] = useState<string | null>(null);
+  const [travelTimeLabel, setTravelTimeLabel] = useState<string | null>(null);
   const [freightLines, setFreightLines] = useState<Awaited<ReturnType<typeof freightLinesFromPayload>> | null>(null);
   const [cargoDeclaration, setCargoDeclaration] = useState<File | null>(null);
   const [termsSignature, setTermsSignature] = useState<File | null>(null);
@@ -257,10 +262,23 @@ export default function CostCalculator({
         suggestedExit: data.suggested_toll_exit_point ?? null,
         tollSource: data.toll_source ?? null,
         segments: data.toll_segments ?? [],
+        isEstimated: Boolean(data.toll_is_estimated),
+        matchMethod: data.toll_match_method ?? null,
       });
       setDistanceConfirmed(data.distance_confirmed !== false);
       setDistanceWarning(data.distance_warning ?? null);
       setQuoteStatus(data.quote_status ?? null);
+      if (data.route_options?.length) {
+        setRouteOptions(data.route_options);
+        const recommended =
+          data.recommended_route_option_id ?? data.route_options.find((o) => o.is_recommended)?.id ?? null;
+        setRecommendedRouteOptionId(recommended);
+        setSelectedRouteOptionId((prev) => {
+          if (prev && data.route_options!.some((o) => o.id === prev)) return prev;
+          return data.selected_route_option_id ?? recommended ?? data.route_options![0]?.id ?? null;
+        });
+      }
+      setTravelTimeLabel(data.travel_time_label ?? null);
       setFreightLines(freightLinesFromPayload(data));
       onQuotedBreakdown?.({
         cargo_gross_php: live.cargo_gross_php,
@@ -282,6 +300,7 @@ export default function CostCalculator({
           weight_tons: effectiveWeightTons,
           vehicle_class: "Class 3",
           distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
+          selected_route_option_id: selectedRouteOptionId || undefined,
         }),
         signal,
       });
@@ -292,6 +311,7 @@ export default function CostCalculator({
       dropoff,
       effectiveWeightTons,
       manualDistanceKm,
+      selectedRouteOptionId,
       applyRouteQuoteResponse,
     ],
   );
@@ -302,6 +322,10 @@ export default function CostCalculator({
       setRouteQuoteMeta(null);
       setTollEstimateMeta(null);
       setFreightLines(null);
+      setRouteOptions([]);
+      setSelectedRouteOptionId(null);
+      setRecommendedRouteOptionId(null);
+      setTravelTimeLabel(null);
       setLoading(false);
       return;
     }
@@ -314,6 +338,10 @@ export default function CostCalculator({
       setRouteQuoteMeta(null);
       setTollEstimateMeta(null);
       setFreightLines(null);
+      setRouteOptions([]);
+      setSelectedRouteOptionId(null);
+      setRecommendedRouteOptionId(null);
+      setTravelTimeLabel(null);
       setLoading(false);
       return;
     }
@@ -336,6 +364,8 @@ export default function CostCalculator({
             setRouteQuoteMeta(null);
             setTollEstimateMeta(null);
             setFreightLines(null);
+            setRouteOptions([]);
+            setTravelTimeLabel(null);
             if (e instanceof ApiError) {
               setMessage(e.message);
               setMessageType("error");
@@ -364,6 +394,7 @@ export default function CostCalculator({
     pickupId,
     dropoffId,
     manualDistanceKm,
+    selectedRouteOptionId,
     fetchRouteQuote,
     currentStep,
     quoteRefreshNonce,
@@ -494,7 +525,11 @@ export default function CostCalculator({
         cargo_declaration: cargoDeclaration!,
         terms_e_signature: termsSignature!,
         vehicle_class: "Class 3",
-        distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
+        distance_km_override: manualDistanceKm.trim()
+          ? Number(manualDistanceKm)
+          : cost?.distance_km && cost.distance_km > 0
+            ? cost.distance_km
+            : undefined,
       });
 
       router.push(customerBookingPaymentPath(data.id));
@@ -556,10 +591,27 @@ export default function CostCalculator({
             manualDistanceKm={manualDistanceKm}
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
-            onPickupIdChange={setPickupId}
-            onDropoffIdChange={setDropoffId}
+            onPickupIdChange={(id) => {
+              setPickupId(id);
+              setSelectedRouteOptionId(null);
+              setManualDistanceKm("");
+            }}
+            onDropoffIdChange={(id) => {
+              setDropoffId(id);
+              setSelectedRouteOptionId(null);
+              setManualDistanceKm("");
+            }}
             onClearError={clearError}
             onManualDistanceKmChange={setManualDistanceKm}
+            routeOptions={routeOptions}
+            selectedRouteOptionId={selectedRouteOptionId}
+            recommendedRouteOptionId={recommendedRouteOptionId}
+            travelTimeLabel={travelTimeLabel}
+            onSelectRouteOption={(optionId) => {
+              if (optionId === selectedRouteOptionId) return;
+              setSelectedRouteOptionId(optionId);
+              setManualDistanceKm("");
+            }}
           />
         )}
 

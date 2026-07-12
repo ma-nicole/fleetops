@@ -4,7 +4,7 @@ import type { CustomerSite } from "@/lib/customerSites";
 import { MIN_BOOKING_SITES } from "@/lib/customerSites";
 import RouteDistancePreview from "./RouteDistancePreview";
 import { siteMenuLabel } from "./bookingQuoteUtils";
-import type { FormErrors, LiveCostQuote, QuoteGeoMeta } from "./wizardTypes";
+import type { FormErrors, LiveCostQuote, QuoteGeoMeta, RouteOptionQuote } from "./wizardTypes";
 
 type Props = {
   sites: CustomerSite[];
@@ -27,6 +27,11 @@ type Props = {
   onDropoffIdChange: (id: string) => void;
   onClearError: (key: string) => void;
   onManualDistanceKmChange: (value: string) => void;
+  routeOptions: RouteOptionQuote[];
+  selectedRouteOptionId: string | null;
+  recommendedRouteOptionId: string | null;
+  travelTimeLabel: string | null;
+  onSelectRouteOption: (optionId: string) => void;
 };
 
 export default function RouteStep({
@@ -50,6 +55,11 @@ export default function RouteStep({
   onDropoffIdChange,
   onClearError,
   onManualDistanceKmChange,
+  routeOptions,
+  selectedRouteOptionId,
+  recommendedRouteOptionId,
+  travelTimeLabel,
+  onSelectRouteOption,
 }: Props) {
   return (
     <div className="booking-wizard-step" style={{ display: "grid", gap: "1rem" }}>
@@ -155,6 +165,11 @@ export default function RouteStep({
         quoteStatus={quoteStatus}
         showApproximateRoutingWarning={showApproximateRoutingWarning}
         onManualDistanceKmChange={onManualDistanceKmChange}
+        routeOptions={routeOptions}
+        selectedRouteOptionId={selectedRouteOptionId}
+        recommendedRouteOptionId={recommendedRouteOptionId}
+        travelTimeLabel={travelTimeLabel}
+        onSelectRouteOption={onSelectRouteOption}
       />
     </div>
   );

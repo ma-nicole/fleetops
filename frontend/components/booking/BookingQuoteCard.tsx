@@ -179,7 +179,9 @@ export default function BookingQuoteCard({
               {formatPhp(freightLines.helper_share_php)}
             </li>
             <li>
-              Toll (auto from {freightLines.toll_source || "Toll Matrix"}) → {formatPhp(freightLines.toll_fees_php)}
+              Toll (auto from {freightLines.toll_source || "Toll Matrix"}
+              {freightLines.toll_is_estimated || tollEstimateMeta?.isEstimated ? ", estimated" : ""}) →{" "}
+              {formatPhp(freightLines.toll_fees_php)}
             </li>
             {tollEstimateMeta && (
               <li style={{ listStyle: "none", marginTop: "0.5rem" }}>
@@ -187,13 +189,27 @@ export default function BookingQuoteCard({
                   style={{
                     padding: "0.65rem 0.85rem",
                     borderRadius: 8,
-                    background: tollEstimateMeta.matched ? "rgba(124, 58, 237, 0.08)" : "rgba(251, 191, 36, 0.12)",
-                    border: `1px solid ${tollEstimateMeta.matched ? "rgba(124, 58, 237, 0.25)" : "rgba(251, 191, 36, 0.35)"}`,
+                    background: !tollEstimateMeta.matched
+                      ? "rgba(251, 191, 36, 0.12)"
+                      : tollEstimateMeta.isEstimated
+                        ? "rgba(245, 158, 11, 0.1)"
+                        : "rgba(16, 185, 129, 0.08)",
+                    border: `1px solid ${
+                      !tollEstimateMeta.matched
+                        ? "rgba(251, 191, 36, 0.35)"
+                        : tollEstimateMeta.isEstimated
+                          ? "rgba(245, 158, 11, 0.35)"
+                          : "rgba(16, 185, 129, 0.28)"
+                    }`,
                   }}
                 >
                   {tollEstimateMeta.matched ? (
                     <>
-                      <strong>Estimated Toll Budget</strong>
+                      <strong>
+                        {tollEstimateMeta.isEstimated
+                          ? "Estimated toll (nearest plazas)"
+                          : "Toll Matrix match"}
+                      </strong>
                       {tollEstimateMeta.budgetPerTruck != null && (
                         <span> — {formatPhp(tollEstimateMeta.budgetPerTruck)} per truck</span>
                       )}
@@ -203,7 +219,9 @@ export default function BookingQuoteCard({
                       {tollEstimateMeta.entryPoint && tollEstimateMeta.exitPoint && (
                         <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>
                           {tollEstimateMeta.entryPoint} → {tollEstimateMeta.exitPoint}
-                          {tollEstimateMeta.effectiveDate ? ` (effective ${tollEstimateMeta.effectiveDate.slice(0, 10)})` : ""}
+                          {tollEstimateMeta.effectiveDate
+                            ? ` (effective ${tollEstimateMeta.effectiveDate.slice(0, 10)})`
+                            : ""}
                         </div>
                       )}
                       {(tollEstimateMeta.segments?.length ?? 0) > 1 ? (
@@ -216,8 +234,11 @@ export default function BookingQuoteCard({
                         </ul>
                       ) : null}
                       <div style={{ fontSize: "0.85rem", color: "#6B7280", marginTop: "0.25rem" }}>
-                        Source: {tollEstimateMeta.tollSource || freightLines.toll_source || "Toll Matrix"} (automatic
-                        descriptive lookup).
+                        Source: {tollEstimateMeta.tollSource || freightLines.toll_source || "Toll Matrix"}
+                        {tollEstimateMeta.isEstimated
+                          ? " · nearest entry/exit plazas with a matrix rate."
+                          : " · automatic descriptive lookup."}
+                        {tollEstimateMeta.message ? ` ${tollEstimateMeta.message}` : ""}
                       </div>
                     </>
                   ) : (

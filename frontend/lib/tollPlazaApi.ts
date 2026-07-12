@@ -6,6 +6,9 @@ export type TollPlazaRow = {
   id: number;
   canonical_name: string;
   status: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  corridor?: string | null;
   aliases: TollPlazaAlias[];
   created_at: string;
   updated_at: string;
@@ -15,6 +18,9 @@ export type TollPlazaPayload = {
   canonical_name: string;
   status: string;
   aliases: string[];
+  latitude?: number | null;
+  longitude?: number | null;
+  corridor?: string | null;
 };
 
 export type AdminBookingTollOverridePayload = {

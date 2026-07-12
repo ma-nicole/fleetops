@@ -114,6 +114,7 @@ export default function CustomerPaymentPage() {
                     <th style={th}>Transaction ref</th>
                     <th style={th}>Paid at</th>
                     <th style={th}>Verified by</th>
+                    <th style={th}>Progress</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -132,6 +133,14 @@ export default function CustomerPaymentPage() {
                         <td style={{ ...td, fontSize: "0.85rem", wordBreak: "break-all" }}>{transactionReference(p)}</td>
                         <td style={td}>{paidAt ? formatDateTime(paidAt) : "—"}</td>
                         <td style={td}>{isCashPayment(p) && p.verified_by_name ? p.verified_by_name : "—"}</td>
+                        <td style={td}>
+                          <Link
+                            href={`/modules/operations/trips?booking=${p.booking_id}`}
+                            style={{ color: "#92400E", fontWeight: 700, fontSize: "0.85rem" }}
+                          >
+                            Track
+                          </Link>
+                        </td>
                       </tr>
                     );
                   })}

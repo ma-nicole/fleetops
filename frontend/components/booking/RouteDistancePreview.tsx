@@ -1,8 +1,9 @@
 "use client";
 
 import LoadingMessage from "@/components/ui/LoadingMessage";
+import RouteOptionsCompare from "./RouteOptionsCompare";
 import { geocodeProviderNote, routingDistanceNote } from "./bookingQuoteUtils";
-import type { LiveCostQuote, QuoteGeoMeta } from "./wizardTypes";
+import type { LiveCostQuote, QuoteGeoMeta, RouteOptionQuote } from "./wizardTypes";
 
 type Props = {
   cost: LiveCostQuote | null;
@@ -16,9 +17,14 @@ type Props = {
   quoteStatus: string | null;
   showApproximateRoutingWarning: boolean;
   onManualDistanceKmChange: (value: string) => void;
+  routeOptions: RouteOptionQuote[];
+  selectedRouteOptionId: string | null;
+  recommendedRouteOptionId: string | null;
+  travelTimeLabel: string | null;
+  onSelectRouteOption: (optionId: string) => void;
 };
 
-/** Route step: distance and routing preview only; no pricing totals until Pricing Breakdown. */
+/** Route step: distance, multi-route compare, and routing preview; pricing totals stay on Pricing Breakdown. */
 export default function RouteDistancePreview({
   cost,
   loading,
@@ -31,11 +37,17 @@ export default function RouteDistancePreview({
   quoteStatus,
   showApproximateRoutingWarning,
   onManualDistanceKmChange,
+  routeOptions,
+  selectedRouteOptionId,
+  recommendedRouteOptionId,
+  travelTimeLabel,
+  onSelectRouteOption,
 }: Props) {
   const providerNote = geocodeProviderNote(routeQuoteMeta);
+  const selected = routeOptions.find((o) => o.id === selectedRouteOptionId) ?? routeOptions.find((o) => o.is_recommended);
 
   if (loading && hasEnoughSites) {
-    return <LoadingMessage label="Calculating road distance..." size="sm" />;
+    return <LoadingMessage label="Calculating route options..." size="sm" />;
   }
 
   if (!cost) {
@@ -50,18 +62,39 @@ export default function RouteDistancePreview({
         borderRadius: "12px",
         padding: "1rem",
         display: "grid",
-        gap: "0.65rem",
+        gap: "0.85rem",
         background: "rgba(82, 183, 136, 0.05)",
       }}
     >
       <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-        <strong style={{ color: "var(--text-primary)" }}>Road distance: {cost.distance_km} km</strong>
+        <strong style={{ color: "var(--text-primary)" }}>
+          Selected distance: {cost.distance_km} km
+        </strong>
+        {travelTimeLabel || selected?.travel_time_label ? (
+          <>
+            {" · "}
+            <strong style={{ color: "var(--text-primary)" }}>
+              {travelTimeLabel || selected?.travel_time_label}
+            </strong>
+          </>
+        ) : null}
         {quoteStatus && quoteStatus !== "Confirmed" && (
           <span style={{ color: "#b45309", fontWeight: 600 }}> - {quoteStatus}</span>
         )}
-        {" - "}
+        {" · "}
         <strong style={{ color: "var(--text-primary)" }}>{cost.total_trucks} truck(s)</strong> estimated for routing
       </p>
+
+      {routeOptions.length > 0 ? (
+        <RouteOptionsCompare
+          options={routeOptions}
+          selectedOptionId={selectedRouteOptionId || selected?.id || null}
+          recommendedOptionId={recommendedRouteOptionId}
+          onSelect={onSelectRouteOption}
+          disabled={loading}
+        />
+      ) : null}
+
       {routeQuoteMeta?.routing_method ? (
         <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
           {routingDistanceNote(routeQuoteMeta.routing_method)}
@@ -91,13 +124,13 @@ export default function RouteDistancePreview({
       )}
       {showApproximateRoutingWarning ? (
         <p style={{ margin: 0, fontSize: "0.82rem", color: "#92400E" }}>
-          Use clear saved site addresses so the server can geocode and route accurately. The full cost estimate appears
-          on Pricing Breakdown after shipment details are entered.
+          Use clear saved site addresses so the server can geocode and route accurately. Compare the options above,
+          then continue — the full cost estimate appears on Pricing Breakdown after shipment details are entered.
         </p>
       ) : (
         <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-          Pricing is calculated from the server after you complete shipment details. The full breakdown appears on
-          Pricing Breakdown.
+          Compare routes above before continuing. Pricing is calculated from the selected route after you complete
+          shipment details.
         </p>
       )}
     </div>

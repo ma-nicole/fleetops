@@ -29,6 +29,9 @@ def _to_read(plaza: TollPlaza) -> TollPlazaRead:
         id=plaza.id,
         canonical_name=plaza.canonical_name,
         status=plaza.status,
+        latitude=plaza.latitude,
+        longitude=plaza.longitude,
+        corridor=plaza.corridor,
         aliases=[TollPlazaAliasRead.model_validate(a) for a in aliases],
         created_at=plaza.created_at,
         updated_at=plaza.updated_at,
@@ -56,7 +59,13 @@ def create_toll_plaza(
     name = payload.canonical_name.strip()
     if db.query(TollPlaza).filter(TollPlaza.canonical_name == name).first():
         raise HTTPException(status_code=409, detail="A toll plaza with this name already exists.")
-    plaza = TollPlaza(canonical_name=name, status=status)
+    plaza = TollPlaza(
+        canonical_name=name,
+        status=status,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        corridor=(payload.corridor.strip() if payload.corridor else None),
+    )
     db.add(plaza)
     db.flush()
     for alias in payload.aliases:

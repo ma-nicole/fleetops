@@ -37,6 +37,21 @@ export type LiveCostQuote = {
 
 export type FormErrors = Record<string, string>;
 
+export type RouteOptionQuote = {
+  id: string;
+  label: string;
+  rank: number;
+  is_recommended: boolean;
+  distance_km: number;
+  travel_time_hours: number;
+  travel_time_label: string;
+  estimated_fuel_cost_php: number;
+  estimated_toll_cost_php: number;
+  quoted_total_php: number;
+  routing_method: string;
+  summary?: string | null;
+};
+
 export type RouteQuoteApiResponse = {
   distance_km: number;
   weight_tons: number;
@@ -78,6 +93,8 @@ export type RouteQuoteApiResponse = {
     effective_date?: string | null;
     vehicle_class?: string;
   }>;
+  toll_is_estimated?: boolean;
+  toll_match_method?: string | null;
   maintenance_cost_php?: number;
   service_fee_php?: number;
   fuel_price_source?: string | null;
@@ -87,6 +104,11 @@ export type RouteQuoteApiResponse = {
   distance_confirmed?: boolean;
   distance_warning?: string | null;
   quote_status?: string | null;
+  route_options?: RouteOptionQuote[];
+  recommended_route_option_id?: string | null;
+  selected_route_option_id?: string | null;
+  travel_time_hours?: number | null;
+  travel_time_label?: string | null;
 };
 
 export type FreightLineDetail = {
@@ -108,6 +130,7 @@ export type FreightLineDetail = {
   fuel_price_source?: string | null;
   fuel_price_fetched_at?: string | null;
   toll_source?: string | null;
+  toll_is_estimated?: boolean;
 };
 
 export type QuoteGeoMeta = Pick<
@@ -128,6 +151,8 @@ export type TollEstimateMeta = {
   suggestedExit: string | null;
   tollSource?: string | null;
   segments?: RouteQuoteApiResponse["toll_segments"];
+  isEstimated?: boolean;
+  matchMethod?: string | null;
 };
 
 export type BookingWizardStep = "route" | "shipment" | "schedule" | "documents" | "review" | "pricing" | "payment";

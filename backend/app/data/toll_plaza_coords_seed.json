@@ -1,0 +1,156 @@
+[
+  {
+    "canonical_name": "Mindanao Ave.",
+    "latitude": 14.7005,
+    "longitude": 121.0398,
+    "corridor": "NLEX",
+    "aliases": ["Mindanao Avenue", "Mindanao Ave", "Quezon City Mindanao", "Metro Manila Mindanao"]
+  },
+  {
+    "canonical_name": "Balintawak",
+    "latitude": 14.6575,
+    "longitude": 121.0045,
+    "corridor": "NLEX",
+    "aliases": ["Balintawak Exit", "Balintawak Interchange", "Quezon City Balintawak"]
+  },
+  {
+    "canonical_name": "Karuhatan",
+    "latitude": 14.6872,
+    "longitude": 120.9785,
+    "corridor": "NLEX",
+    "aliases": ["Karuhatan Exit", "Valenzuela Karuhatan"]
+  },
+  {
+    "canonical_name": "CDV",
+    "latitude": 14.7355,
+    "longitude": 120.9550,
+    "corridor": "NLEX",
+    "aliases": ["City of Valenzuela", "Valenzuela CDV", "CDV Exit"]
+  },
+  {
+    "canonical_name": "Bocaue",
+    "latitude": 14.7983,
+    "longitude": 120.9260,
+    "corridor": "NLEX",
+    "aliases": ["Bocaue Exit", "Bocaue Bulacan"]
+  },
+  {
+    "canonical_name": "San Fernando",
+    "latitude": 15.0280,
+    "longitude": 120.6885,
+    "corridor": "NLEX",
+    "aliases": ["San Fernando Pampanga", "San Fernando Exit", "City of San Fernando", "Pampanga San Fernando"]
+  },
+  {
+    "canonical_name": "San Simon",
+    "latitude": 14.9985,
+    "longitude": 120.6195,
+    "corridor": "NLEX",
+    "aliases": ["San Simon Exit", "San Simon Pampanga"]
+  },
+  {
+    "canonical_name": "Mexico",
+    "latitude": 15.0645,
+    "longitude": 120.7200,
+    "corridor": "NLEX",
+    "aliases": ["Mexico Exit", "Mexico Pampanga"]
+  },
+  {
+    "canonical_name": "Tarlac",
+    "latitude": 15.4865,
+    "longitude": 120.5975,
+    "corridor": "SCTEX",
+    "aliases": ["Tarlac Exit", "Tarlac City", "SCTEX Tarlac"]
+  },
+  {
+    "canonical_name": "San Miguel",
+    "latitude": 15.1450,
+    "longitude": 120.9750,
+    "corridor": "SCTEX",
+    "aliases": ["San Miguel Exit", "San Miguel Tarlac"]
+  },
+  {
+    "canonical_name": "New Clark City",
+    "latitude": 15.3450,
+    "longitude": 120.5300,
+    "corridor": "SCTEX",
+    "aliases": ["NCC", "New Clark", "Clark Freeport"]
+  },
+  {
+    "canonical_name": "Magallanes",
+    "latitude": 14.5450,
+    "longitude": 121.0175,
+    "corridor": "SLEX",
+    "aliases": ["Magallanes Interchange", "EDSA Magallanes", "SLEX Magallanes", "Makati Magallanes"]
+  },
+  {
+    "canonical_name": "Alabang",
+    "latitude": 14.4225,
+    "longitude": 121.0405,
+    "corridor": "SLEX",
+    "aliases": ["Alabang Exit", "Filinvest Alabang", "SLEX Alabang"]
+  },
+  {
+    "canonical_name": "Susana Heights",
+    "latitude": 14.3850,
+    "longitude": 121.0450,
+    "corridor": "SLEX",
+    "aliases": ["Susana Heights Exit", "Muntinlupa Susana"]
+  },
+  {
+    "canonical_name": "Santa Rosa",
+    "latitude": 14.2950,
+    "longitude": 121.0950,
+    "corridor": "SLEX",
+    "aliases": ["Sta Rosa", "Sta. Rosa", "Santa Rosa Exit", "Laguna Santa Rosa"]
+  },
+  {
+    "canonical_name": "Calamba",
+    "latitude": 14.2100,
+    "longitude": 121.1450,
+    "corridor": "SLEX",
+    "aliases": ["Calamba Exit", "SLEX Calamba", "Calamba Laguna"]
+  },
+  {
+    "canonical_name": "Sto. Tomas",
+    "latitude": 14.1050,
+    "longitude": 121.1700,
+    "corridor": "STAR",
+    "aliases": ["Santo Tomas", "Sto Tomas Batangas", "STAR Sto Tomas"]
+  },
+  {
+    "canonical_name": "Tanauan",
+    "latitude": 14.0860,
+    "longitude": 121.1500,
+    "corridor": "STAR",
+    "aliases": ["Tanauan Exit", "Tanauan Batangas"]
+  },
+  {
+    "canonical_name": "Lipa",
+    "latitude": 13.9411,
+    "longitude": 121.1631,
+    "corridor": "STAR",
+    "aliases": ["Lipa Exit", "Lipa Batangas", "STAR Lipa"]
+  },
+  {
+    "canonical_name": "Batangas",
+    "latitude": 13.7565,
+    "longitude": 121.0583,
+    "corridor": "STAR",
+    "aliases": ["Batangas City", "Batangas Exit", "STAR Batangas"]
+  },
+  {
+    "canonical_name": "Kawit",
+    "latitude": 14.4445,
+    "longitude": 120.9010,
+    "corridor": "CAVITEX",
+    "aliases": ["Kawit Exit", "Cavitex Kawit", "Cavite Kawit"]
+  },
+  {
+    "canonical_name": "Coastal Road",
+    "latitude": 14.5200,
+    "longitude": 120.9800,
+    "corridor": "CAVITEX",
+    "aliases": ["Cavitex Coastal", "Parañaque Coastal", "Manila Coastal Road"]
+  }
+]

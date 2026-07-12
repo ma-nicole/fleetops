@@ -268,3 +268,133 @@ def geocode_coordinates(address: str, settings: Settings) -> tuple[float | None,
         return lat, lon, "nominatim"
 
     return None, None, "none"
+
+
+def search_place_suggestions(
+    query: str,
+    settings: Settings,
+    *,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """Return address suggestions with coordinates (Google or Nominatim)."""
+    a = normalize_address_for_geocode(query)
+    if len(a) < 3:
+        return []
+    limit = max(1, min(int(limit or 6), 10))
+
+    key = _google_geocoding_api_key(settings)
+    if key:
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                r = client.get(
+                    "https://maps.googleapis.com/maps/api/geocode/json",
+                    params={"address": a, "key": key, "region": "ph"},
+                )
+                r.raise_for_status()
+                data = r.json()
+                out: list[dict[str, Any]] = []
+                for row in (data.get("results") or [])[:limit]:
+                    if not isinstance(row, dict):
+                        continue
+                    loc = (row.get("geometry") or {}).get("location") or {}
+                    lat, lng = loc.get("lat"), loc.get("lng")
+                    label = row.get("formatted_address") or a
+                    if lat is None or lng is None:
+                        continue
+                    out.append(
+                        {
+                            "label": str(label),
+                            "latitude": float(lat),
+                            "longitude": float(lng),
+                            "provider": "google",
+                        }
+                    )
+                if out:
+                    return out
+        except Exception as e:
+            logger.warning("Google place search failed: %s", e)
+
+    ua = settings.geocoding_user_agent.strip() or "FleetOpt/1.0"
+    bias = ", Philippines"
+    q = a if bias.lower() in a.lower() else f"{a}{bias}"
+    _respect_nom_throttle()
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            r = client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": q,
+                    "format": "json",
+                    "limit": str(limit),
+                    "countrycodes": "ph",
+                    "addressdetails": "1",
+                },
+                headers={"User-Agent": ua},
+            )
+            r.raise_for_status()
+            rows: list[dict[str, Any]] = r.json()
+            out: list[dict[str, Any]] = []
+            for row in rows[:limit]:
+                if not isinstance(row, dict):
+                    continue
+                lat, lon = row.get("lat"), row.get("lon")
+                label = row.get("display_name") or a
+                if lat is None or lon is None:
+                    continue
+                out.append(
+                    {
+                        "label": str(label),
+                        "latitude": float(lat),
+                        "longitude": float(lon),
+                        "provider": "nominatim",
+                    }
+                )
+            return out
+    except Exception as e:
+        logger.warning("Nominatim place search failed: %s", e)
+        return []
+
+
+def reverse_geocode_label(lat: float, lon: float, settings: Settings) -> tuple[str | None, str]:
+    """Reverse-geocode coordinates to a display label. Returns (label, provider)."""
+    key = _google_geocoding_api_key(settings)
+    if key:
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                r = client.get(
+                    "https://maps.googleapis.com/maps/api/geocode/json",
+                    params={"latlng": f"{lat},{lon}", "key": key},
+                )
+                r.raise_for_status()
+                data = r.json()
+                results = data.get("results") or []
+                if results:
+                    label = results[0].get("formatted_address")
+                    if label:
+                        return str(label), "google"
+        except Exception as e:
+            logger.warning("Google reverse geocode failed: %s", e)
+
+    ua = settings.geocoding_user_agent.strip() or "FleetOpt/1.0"
+    _respect_nom_throttle()
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            r = client.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={
+                    "lat": str(lat),
+                    "lon": str(lon),
+                    "format": "json",
+                    "zoom": "18",
+                    "addressdetails": "1",
+                },
+                headers={"User-Agent": ua},
+            )
+            r.raise_for_status()
+            data = r.json()
+            label = data.get("display_name") if isinstance(data, dict) else None
+            if label:
+                return str(label), "nominatim"
+    except Exception as e:
+        logger.warning("Nominatim reverse geocode failed: %s", e)
+    return None, "none"

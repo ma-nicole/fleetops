@@ -696,6 +696,20 @@ def apply_runtime_schema_fixes() -> None:
                 )
             )
 
+    if insp.has_table("toll_plazas"):
+        tp_cols = {c["name"] for c in insp.get_columns("toll_plazas")}
+        tp_alters: list[str] = []
+        if "latitude" not in tp_cols:
+            tp_alters.append("ALTER TABLE toll_plazas ADD COLUMN latitude FLOAT NULL")
+        if "longitude" not in tp_cols:
+            tp_alters.append("ALTER TABLE toll_plazas ADD COLUMN longitude FLOAT NULL")
+        if "corridor" not in tp_cols:
+            tp_alters.append("ALTER TABLE toll_plazas ADD COLUMN corridor VARCHAR(64) NULL")
+        if tp_alters:
+            with engine.begin() as conn:
+                for stmt in tp_alters:
+                    conn.execute(text(stmt))
+
     if insp.has_table("historical_toll_records"):
         hr_cols = {c["name"] for c in insp.get_columns("historical_toll_records")}
         hr_alters: list[str] = []

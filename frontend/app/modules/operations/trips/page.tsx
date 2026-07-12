@@ -1,13 +1,16 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
+import CustomerBookingWorkflowTracker from "@/components/CustomerBookingWorkflowTracker";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { getDashboardPath, getEffectiveRole, type UserRole } from "@/lib/auth";
 import { APP_LOCALE, APP_TIMEZONE, formatPhpWhole } from "@/lib/appLocale";
+import { customerWorkflowCurrentLabel } from "@/lib/customerBookingWorkflow";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import {
   WorkflowApi,
@@ -133,8 +136,18 @@ const OPERATIONAL_STATUSES: BookingStatus[] = [
 ];
 
 export default function TripRecordsPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: "var(--page-main-padding)" }}>Loading…</div>}>
+      <TripRecordsPageInner />
+    </Suspense>
+  );
+}
+
+function TripRecordsPageInner() {
   useRoleGuard(["customer", "dispatcher", "manager", "admin"]);
 
+  const searchParams = useSearchParams();
+  const focusBookingId = Number(searchParams.get("booking") || "");
   const [role, setRole] = useState<UserRole | null>(null);
   const [bookings, setBookings] = useState<(Booking | CustomerBookingRow)[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -252,6 +265,21 @@ export default function TripRecordsPage() {
     return rows;
   }, [bookings, filter, search, isCustomer, paymentByBooking]);
 
+  const ordered = useMemo(() => {
+    if (!Number.isFinite(focusBookingId) || focusBookingId <= 0) return filtered;
+    const hit = filtered.find((b) => b.id === focusBookingId);
+    if (!hit) return filtered;
+    return [hit, ...filtered.filter((b) => b.id !== focusBookingId)];
+  }, [filtered, focusBookingId]);
+
+  useEffect(() => {
+    if (!Number.isFinite(focusBookingId) || focusBookingId <= 0 || loading) return;
+    const el = document.getElementById(`customer-booking-${focusBookingId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [focusBookingId, loading, ordered]);
+
   const dashboardHref = role ? getDashboardPath(role) : "/";
 
   const crumbs = [
@@ -358,7 +386,7 @@ export default function TripRecordsPage() {
 
       {loading ? (
         <p style={{ color: "#6B7280" }}>Loading bookings…</p>
-      ) : filtered.length === 0 ? (
+      ) : ordered.length === 0 ? (
         <div className="card" style={{ padding: "1.5rem", color: "#6B7280" }}>
           {isCustomer
             ? "No bookings match this filter yet. Create a booking or check Booking history for completed or closed shipments."
@@ -381,14 +409,21 @@ export default function TripRecordsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => {
+              {ordered.map((b) => {
                 const pay = isCustomer ? paymentByBooking.get(b.id) : undefined;
                 const paySub =
                   isCustomer && isCustomerRow(b) ? customerPaymentSubline(b, pay) : isCustomer ? null : paymentSubline(b.status, pay);
                 const detailColSpan = showStaffCols ? 6 : isCustomer ? 6 : 5;
+                const isFocused = isCustomer && Number.isFinite(focusBookingId) && b.id === focusBookingId;
                 const summaryRow = (
-                  <tr key={`${b.id}-summary`} style={{ borderBottom: isCustomer ? "none" : "1px solid #F3F4F6" }}>
-                    {showStaffCols && (
+                  <tr
+                    key={`${b.id}-summary`}
+                    id={isCustomer ? `customer-booking-${b.id}` : undefined}
+                    style={{
+                      borderBottom: isCustomer ? "none" : "1px solid #F3F4F6",
+                      background: isFocused ? "rgba(245, 158, 11, 0.08)" : undefined,
+                    }}
+                  >                    {showStaffCols && (
                       <td style={{ padding: "0.65rem 1rem", color: "#6B7280" }}>#{b.customer_id}</td>
                     )}
                     <td style={{ padding: "0.65rem 1rem", fontWeight: 700 }}>#{b.id}</td>
@@ -476,8 +511,15 @@ export default function TripRecordsPage() {
                             background: "#fff",
                           }}
                         >
+                          <CustomerBookingWorkflowTracker booking={b} payment={pay ?? null} />
                           <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#374151", marginBottom: "0.5rem" }}>
-                            Trip crews and live status (same as Shipment tracking)
+                            Trip crews and live status
+                            {isCustomerRow(b) ? (
+                              <span style={{ fontWeight: 500, color: "#6B7280" }}>
+                                {" "}
+                                · stage: {customerWorkflowCurrentLabel(b, pay ?? null)}
+                              </span>
+                            ) : null}
                           </div>
                           <CustomerBookingAssignmentsList assignments={b.assignments} dropoffAddress={b.dropoff_location} />
                           <CustomerDocumentReviewSection

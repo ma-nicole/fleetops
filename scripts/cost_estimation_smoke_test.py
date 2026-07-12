@@ -30,6 +30,8 @@ from app.services.fuel_price_service import (
 )
 from app.services.route_estimate import customer_freight_pricing
 from app.services.toll_matrix import _parse_waypoint_segments
+from app.services.toll_plaza_matching import haversine_km, nearest_plazas_to_point
+from app.services.toll_plaza_seed import SEED_PATH as TOLL_PLAZA_SEED_PATH
 
 
 def approx(a: float, b: float, tol: float = 0.02) -> bool:
@@ -101,6 +103,41 @@ def main() -> int:
         failures.append(f"Waypoint segments unexpected: {segs}")
     else:
         print(f"PASS multi-segment waypoints -> {segs}")
+
+    # --- Nearest plaza geo helpers ---
+    d = haversine_km(14.5450, 121.0175, 14.4225, 121.0405)  # Magallanes → Alabang
+    if not (10.0 < d < 20.0):
+        failures.append(f"Haversine Magallanes-Alabang unexpected: {d}")
+    else:
+        print(f"PASS haversine Magallanes->Alabang ~{d:.1f} km")
+
+    if not TOLL_PLAZA_SEED_PATH.is_file():
+        failures.append(f"Missing toll plaza seed {TOLL_PLAZA_SEED_PATH}")
+    else:
+        plazas_seed = json.loads(TOLL_PLAZA_SEED_PATH.read_text(encoding="utf-8"))
+        corridors = {str(r.get("corridor")) for r in plazas_seed if isinstance(r, dict)}
+        if not {"NLEX", "SCTEX", "SLEX"}.issubset(corridors):
+            failures.append(f"Seed corridors incomplete: {corridors}")
+        else:
+            print(f"PASS toll plaza seed corridors {sorted(corridors)} ({len(plazas_seed)} plazas)")
+
+        class _P:
+            def __init__(self, name: str, lat: float, lon: float):
+                self.canonical_name = name
+                self.latitude = lat
+                self.longitude = lon
+
+        fake = [
+            _P(r["canonical_name"], float(r["latitude"]), float(r["longitude"]))
+            for r in plazas_seed
+            if isinstance(r, dict) and r.get("latitude") is not None
+        ]
+        # Point near San Fernando Pampanga
+        near = nearest_plazas_to_point(fake, 15.03, 120.69, top_k=3)  # type: ignore[arg-type]
+        if not near or near[0][0].canonical_name != "San Fernando":
+            failures.append(f"Nearest to San Fernando area unexpected: {[(p.canonical_name, d) for p, d in near]}")
+        else:
+            print(f"PASS nearest plaza ranking -> {near[0][0].canonical_name} ({near[0][1]:.1f} km)")
 
     if failures:
         print("\nFAIL")

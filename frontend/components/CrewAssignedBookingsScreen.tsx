@@ -10,6 +10,7 @@ import CrewSchedulingPlotPanel, { schedulingPlotFromCrewRow } from "@/components
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
 import DeliveryCompletionPanel from "@/components/DeliveryCompletionPanel";
 import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
+import HelperLocationSelector, { type SelectedHelperLocation } from "@/components/HelperLocationSelector";
 import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
 import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
 
@@ -148,50 +149,106 @@ function operationalStageIndex(r: CrewAssignedBookingRow, variant: "driver" | "h
 
 function CrewFlowProgress({ row, variant }: { row: CrewAssignedBookingRow; variant: "driver" | "helper" }) {
   const currentIndex = operationalStageIndex(row, variant);
+  const fullyComplete = currentIndex >= OPERATIONAL_FLOW_STEPS.length - 1 && workflowPhase(row, variant) === "completed";
+
   return (
-    <div style={{ padding: "0.85rem 1rem", border: "1px solid #DBEAFE", borderRadius: 10, background: "#EFF6FF" }}>
+    <div
+      style={{
+        padding: "0.85rem 1rem",
+        border: "1px solid #DBEAFE",
+        borderRadius: 10,
+        background: "#EFF6FF",
+      }}
+      aria-label="Operational workflow progress"
+    >
       <h3 style={{ ...sectionTitle, marginBottom: "0.75rem" }}>Operational progress</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.5rem" }}>
+      <ol
+        style={{
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+          display: "grid",
+          gap: 0,
+        }}
+      >
         {OPERATIONAL_FLOW_STEPS.map((step, index) => {
-          const done = index < currentIndex || (index === currentIndex && step === "Completed");
-          const current = index === currentIndex && !done;
+          const done = fullyComplete || index < currentIndex;
+          const current = !done && index === currentIndex;
+          const locked = !done && !current;
+
           return (
-            <div
+            <li
               key={step}
+              aria-current={current ? "step" : undefined}
+              aria-disabled={locked || undefined}
               style={{
-                minHeight: 44,
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                padding: "0.45rem 0.55rem",
-                borderRadius: 8,
-                border: `1px solid ${done ? "#86EFAC" : current ? "#93C5FD" : "#DBEAFE"}`,
-                background: done ? "#ECFDF5" : current ? "#DBEAFE" : "white",
+                display: "grid",
+                gridTemplateColumns: "28px 1fr",
+                columnGap: "0.75rem",
+                position: "relative",
+                paddingBottom: index < OPERATIONAL_FLOW_STEPS.length - 1 ? "0.85rem" : 0,
+                opacity: locked ? 0.45 : 1,
+                pointerEvents: locked ? "none" : "auto",
+                userSelect: locked ? "none" : "auto",
               }}
             >
+              {index < OPERATIONAL_FLOW_STEPS.length - 1 ? (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    left: 13,
+                    top: 28,
+                    bottom: 0,
+                    width: 2,
+                    background: done ? "#16A34A" : current ? "#93C5FD" : "#E2E8F0",
+                  }}
+                />
+              ) : null}
               <span
                 aria-hidden="true"
                 style={{
-                  width: 22,
-                  height: 22,
+                  width: 28,
+                  height: 28,
                   borderRadius: "50%",
                   display: "inline-grid",
                   placeItems: "center",
                   flexShrink: 0,
-                  fontSize: "0.68rem",
+                  fontSize: done ? "0.85rem" : "0.72rem",
                   fontWeight: 800,
-                  background: done ? "#16A34A" : current ? "#2563EB" : "#E0F2FE",
-                  color: done || current ? "white" : "#1E40AF",
+                  zIndex: 1,
+                  position: "relative",
+                  background: done ? "#16A34A" : current ? "#B45309" : "#F1F5F9",
+                  color: done || current ? "#fff" : "#94A3B8",
+                  border: locked ? "1px solid #CBD5E1" : "none",
+                  boxShadow: current ? "0 0 0 3px rgba(180, 83, 9, 0.2)" : undefined,
                 }}
               >
-                {done ? "OK" : index + 1}
+                {done ? "✓" : current ? "●" : index + 1}
               </span>
-              <span style={{ fontSize: "0.78rem", fontWeight: current ? 800 : 600, color: "#1E293B" }}>{step}</span>
-            </div>
+              <span style={{ paddingTop: "0.2rem", display: "grid", gap: "0.1rem" }}>
+                <span
+                  style={{
+                    fontSize: "0.84rem",
+                    fontWeight: current ? 800 : done ? 700 : 500,
+                    color: done ? "#166534" : current ? "#92400E" : "#94A3B8",
+                  }}
+                >
+                  {step}
+                </span>
+                {done ? (
+                  <span style={{ fontSize: "0.72rem", color: "#16A34A", fontWeight: 600 }}>Completed</span>
+                ) : current ? (
+                  <span style={{ fontSize: "0.72rem", color: "#B45309", fontWeight: 600 }}>Current step</span>
+                ) : (
+                  <span style={{ fontSize: "0.72rem", color: "#94A3B8" }}>Locked until previous step is done</span>
+                )}
+              </span>
+            </li>
           );
         })}
-      </div>
-      <p style={{ margin: "0.7rem 0 0", color: "#1E40AF", fontSize: "0.8rem", lineHeight: 1.45 }}>
+      </ol>
+      <p style={{ margin: "0.85rem 0 0", color: "#1E40AF", fontSize: "0.8rem", lineHeight: 1.45 }}>
         Only the next valid milestone can be submitted. Proof photos and receiving requirements stay visible before
         completion.
       </p>
@@ -259,6 +316,7 @@ export default function CrewAssignedBookingsScreen({
   const [locationPhoto, setLocationPhoto] = useState<File | null>(null);
   const [locationPhotoMeta, setLocationPhotoMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [locationName, setLocationName] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState<SelectedHelperLocation | null>(null);
   const [remarks, setRemarks] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [deliveryReady, setDeliveryReady] = useState(false);
@@ -348,8 +406,8 @@ export default function CrewAssignedBookingsScreen({
 
   const submitLocation = async () => {
     if (!detail || variant !== "helper") return;
-    if (!locationName.trim()) {
-      setMsg("Location name is required.");
+    if (!selectedLocation?.label.trim() || selectedLocation.latitude == null || selectedLocation.longitude == null) {
+      setMsg("Select a complete location (search, map, or Region → Province → City → Barangay) before submitting.");
       return;
     }
     if (!locationPhoto) {
@@ -362,19 +420,32 @@ export default function CrewAssignedBookingsScreen({
     setBusy(true);
     setMsg(null);
     const tripId = detail.trip_id;
+    const resolvedName = selectedLocation.label.trim();
     try {
       const fd = new FormData();
-      fd.append("location_name", locationName.trim());
+      fd.append("location_name", resolvedName);
       fd.append("remarks", remarks.trim());
       if (locationPhoto) {
         fd.append("photo", locationPhoto);
-        if (locationPhotoMeta) appendEvidenceToFormData(fd, locationPhotoMeta);
+        const meta: EvidenceCaptureMetadata = {
+          captureSource: locationPhotoMeta?.captureSource || "gallery",
+          deviceCapturedAt: locationPhotoMeta?.deviceCapturedAt || new Date().toISOString(),
+          // Prefer map/search-selected coordinates; fall back to device GPS from the photo.
+          latitude: selectedLocation.latitude ?? locationPhotoMeta?.latitude ?? null,
+          longitude: selectedLocation.longitude ?? locationPhotoMeta?.longitude ?? null,
+          gpsAccuracyMeters: locationPhotoMeta?.gpsAccuracyMeters ?? null,
+          uploaderName: locationPhotoMeta?.uploaderName || detail.helper_name || null,
+          verificationLabel: locationPhotoMeta?.verificationLabel || "Uploaded from Gallery",
+          reviewRequired: locationPhotoMeta?.reviewRequired ?? false,
+        };
+        appendEvidenceToFormData(fd, meta);
       }
       await WorkflowApi.helperSubmitLocation(tripId, fd);
       setMsg("Location update saved.");
       setLocationPhoto(null);
       setLocationPhotoMeta(null);
       setLocationName("");
+      setSelectedLocation(null);
       setRemarks("");
       const list = await load();
       const updated = list.find((x) => x.trip_id === tripId) ?? null;
@@ -400,6 +471,7 @@ export default function CrewAssignedBookingsScreen({
     setLocationPhoto(null);
     setLocationPhotoMeta(null);
     setLocationName("");
+    setSelectedLocation(null);
     setRemarks("");
     setMsg(null);
     setDeliveryReady(Boolean(r.delivery_receiving?.ready_for_completion));
@@ -1114,17 +1186,23 @@ export default function CrewAssignedBookingsScreen({
                         >
                           <h3 style={{ ...sectionTitle, marginTop: 0 }}>Add progress update</h3>
                           <p style={{ fontSize: "0.82rem", color: "#1E40AF", margin: "0 0 0.65rem" }}>
-                            Upload as many progress updates as needed while en route. Each update needs a photo; GPS is
-                            captured automatically when available. Optional remarks are supported.
+                            Upload as many progress updates as needed while en route. Choose a location by search, map
+                            pin, or Region → Province → City → Barangay. Coordinates are filled automatically. A progress
+                            photo is still required.
                           </p>
-                          <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
-                            <span style={{ fontSize: "0.85rem", color: "#555" }}>Location name (required)</span>
-                            <input
-                              className="input"
-                              value={locationName ?? ""}
-                              onChange={(e) => setLocationName(e.target.value)}
+                          <div style={{ marginBottom: 10 }}>
+                            <span style={{ display: "block", fontSize: "0.85rem", color: "#555", marginBottom: 6 }}>
+                              Location (required)
+                            </span>
+                            <HelperLocationSelector
+                              disabled={busy}
+                              value={selectedLocation}
+                              onChange={(next) => {
+                                setSelectedLocation(next);
+                                setLocationName(next?.label || "");
+                              }}
                             />
-                          </label>
+                          </div>
                           <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                             <span style={{ fontSize: "0.85rem", color: "#555" }}>Remarks (optional)</span>
                             <input
@@ -1151,17 +1229,29 @@ export default function CrewAssignedBookingsScreen({
                           />
                           <button
                             type="button"
-                            disabled={busy || !canUpdate}
+                            disabled={
+                              busy ||
+                              !canUpdate ||
+                              !selectedLocation?.label ||
+                              selectedLocation.latitude == null ||
+                              selectedLocation.longitude == null
+                            }
                             onClick={() => void submitLocation()}
                             style={{
                               marginTop: 10,
                               padding: "0.65rem 1rem",
                               borderRadius: 8,
                               border: "none",
-                              background: "#2563EB",
+                              background:
+                                !selectedLocation?.label || selectedLocation.latitude == null
+                                  ? "#94A3B8"
+                                  : "#2563EB",
                               color: "white",
                               fontWeight: 700,
-                              cursor: busy ? "not-allowed" : "pointer",
+                              cursor:
+                                busy || !selectedLocation?.label || selectedLocation.latitude == null
+                                  ? "not-allowed"
+                                  : "pointer",
                             }}
                           >
                             {busy ? "Saving…" : "Save progress update"}
@@ -1170,6 +1260,65 @@ export default function CrewAssignedBookingsScreen({
                       ) : null}
 
                       <h3 style={{ ...sectionTitle, marginTop: 0 }}>Update status</h3>
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "0.4rem",
+                          marginBottom: "0.85rem",
+                          padding: "0.65rem 0.75rem",
+                          borderRadius: 8,
+                          border: "1px solid #E2E8F0",
+                          background: "#F8FAFC",
+                        }}
+                        aria-label="Milestone checklist"
+                      >
+                        {PHASES.map((p) => {
+                          const phaseIdx = PHASES.indexOf(p);
+                          const currentIdx = PHASES.indexOf(current);
+                          const stepDone = phaseIdx <= currentIdx;
+                          const stepCurrent = Boolean(allowed) && p === allowed;
+                          const stepLocked = !stepDone && !stepCurrent;
+                          return (
+                            <div
+                              key={`check-${p}`}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.55rem",
+                                opacity: stepLocked ? 0.45 : 1,
+                                pointerEvents: stepLocked ? "none" : "auto",
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: "50%",
+                                  display: "inline-grid",
+                                  placeItems: "center",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 800,
+                                  background: stepDone && !stepCurrent ? "#16A34A" : stepCurrent ? "#B45309" : "#E2E8F0",
+                                  color: stepDone || stepCurrent ? "#fff" : "#94A3B8",
+                                }}
+                              >
+                                {stepDone && !stepCurrent ? "✓" : stepCurrent ? "●" : ""}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.82rem",
+                                  fontWeight: stepCurrent ? 700 : 500,
+                                  color: stepDone && !stepCurrent ? "#166534" : stepCurrent ? "#92400E" : "#94A3B8",
+                                }}
+                              >
+                                {phaseLabel(p)}
+                                {stepDone && !stepCurrent ? " — done" : stepCurrent ? " — next" : " — locked"}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                       <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                         <span style={{ fontSize: "0.85rem", color: "#555" }}>Milestone</span>
                         <select
@@ -1177,11 +1326,19 @@ export default function CrewAssignedBookingsScreen({
                           value={phase ?? "for_pickup"}
                           onChange={(e) => setPhase(e.target.value as Phase)}
                         >
-                          {PHASES.map((p) => (
-                            <option key={p} value={p} disabled={p !== allowed}>
-                              {phaseLabel(p)}
-                            </option>
-                          ))}
+                          {PHASES.map((p) => {
+                            const phaseIdx = PHASES.indexOf(p);
+                            const currentIdx = PHASES.indexOf(current);
+                            const stepDone = phaseIdx <= currentIdx;
+                            const enabled = p === allowed;
+                            return (
+                              <option key={p} value={p} disabled={!enabled}>
+                                {stepDone && !enabled ? "✓ " : enabled ? "● " : "○ "}
+                                {phaseLabel(p)}
+                                {!enabled && !stepDone ? " (locked)" : ""}
+                              </option>
+                            );
+                          })}
                         </select>
                       </label>
 

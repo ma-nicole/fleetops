@@ -121,6 +121,15 @@ export default function ReviewStep({
             <dt>Dropoff</dt>
             <dd>{dropoff || "-"}</dd>
           </div>
+          {cost ? (
+            <div className="booking-summary-card__row">
+              <dt>Selected route</dt>
+              <dd>
+                {cost.distance_km} km
+                {routeQuoteMeta?.routing_method ? ` · ${routeQuoteMeta.routing_method.replace(/_/g, " ")}` : ""}
+              </dd>
+            </div>
+          ) : null}
           <div className="booking-summary-card__row">
             <dt>Cargo weight</dt>
             <dd>{weight ? `${weight} metric tons` : "-"}</dd>

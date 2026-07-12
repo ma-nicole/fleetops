@@ -1,6 +1,8 @@
-"""Resolve customer/route text to canonical toll plazas via exact name and aliases."""
+"""Resolve booking locations to Toll Matrix plazas via nearest-geo (not exact address text)."""
 from __future__ import annotations
 
+import logging
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -8,7 +10,11 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, settings as app_settings
 from app.models.entities import Route, TollMatrix, TollPlaza, TollPlazaAlias, TollPlazaStatus
+from app.services.geocoding import geocode_coordinates
+
+logger = logging.getLogger(__name__)
 
 MatchMethod = Literal[
     "manual",
@@ -18,16 +24,41 @@ MatchMethod = Literal[
     "alias_fuzzy",
     "matrix_exact",
     "matrix_fuzzy",
+    "nearest_geo",
     "none",
 ]
 MatchConfidence = Literal["high", "medium", "none"]
 
-NO_PLAZA_MATCH_MESSAGE = (
-    "No toll plaza match found. Flat toll fallback will be used."
-)
+NO_EXPRESSWAY_MESSAGE = "No expressway detected. Toll = ₱0."
+NO_NEARBY_ENTRY_MESSAGE = "No nearby toll entry found."
+NO_NEARBY_EXIT_MESSAGE = "No nearby toll exit found."
+NO_PLAZA_COORDS_MESSAGE = "No toll plazas with coordinates are loaded in the Toll Matrix catalog."
+GEOCODE_PICKUP_FAILED_MESSAGE = "Pickup location could not be geocoded for toll matching."
+GEOCODE_DROPOFF_FAILED_MESSAGE = "Dropoff location could not be geocoded for toll matching."
+NO_MATRIX_PAIR_MESSAGE = "No Toll Matrix route exists between the nearest entry and exit plazas."
+NO_PLAZA_MATCH_MESSAGE = NO_NEARBY_ENTRY_MESSAGE  # back-compat import name
 LOW_CONFIDENCE_PLAZA_MESSAGE = (
     "Toll plazas matched with medium confidence; auto-applied for quotation."
 )
+NEAREST_GEO_ESTIMATE_MESSAGE = (
+    "Toll estimated using nearest Toll Matrix entry/exit plazas to pickup/dropoff "
+    "(matched on vehicle class)."
+)
+
+# Crow-flies radius for nearest plaza search.
+NEAREST_PLAZA_MAX_KM = 90.0
+NEAREST_PLAZA_TOP_K = 10
+# Within this distance a plaza counts as "nearby" for expressway detection.
+NEARBY_PLAZA_KM = 40.0
+
+
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(min(1.0, a)))
 
 
 def normalize_location(value: str) -> str:
@@ -95,7 +126,6 @@ def _match_matrix_point(text: str, points: set[str]) -> PlazaMatch:
 
 
 def list_plaza_options(db: Session) -> list[str]:
-    """Canonical plaza names for manual selection dropdowns."""
     names: set[str] = set()
     for row in db.query(TollPlaza).filter(TollPlaza.status == TollPlazaStatus.ACTIVE.value).all():
         if row.canonical_name.strip():
@@ -129,6 +159,121 @@ def find_route_catalog_match(db: Session, pickup: str, dropoff: str) -> tuple[st
     return None
 
 
+def _plazas_with_coords(db: Session) -> list[TollPlaza]:
+    return (
+        db.query(TollPlaza)
+        .filter(
+            TollPlaza.status == TollPlazaStatus.ACTIVE.value,
+            TollPlaza.latitude.isnot(None),
+            TollPlaza.longitude.isnot(None),
+        )
+        .all()
+    )
+
+
+def nearest_plazas_to_point(
+    plazas: list[TollPlaza],
+    lat: float,
+    lon: float,
+    *,
+    top_k: int = NEAREST_PLAZA_TOP_K,
+    max_km: float = NEAREST_PLAZA_MAX_KM,
+) -> list[tuple[TollPlaza, float]]:
+    ranked: list[tuple[TollPlaza, float]] = []
+    for plaza in plazas:
+        if plaza.latitude is None or plaza.longitude is None:
+            continue
+        dist = haversine_km(lat, lon, float(plaza.latitude), float(plaza.longitude))
+        if dist <= max_km:
+            ranked.append((plaza, dist))
+    ranked.sort(key=lambda item: item[1])
+    return ranked[: max(1, top_k)]
+
+
+def resolve_nearest_geo_candidates(
+    db: Session,
+    *,
+    pickup_location: str,
+    dropoff_location: str,
+    settings: Settings | None = None,
+    top_k: int = NEAREST_PLAZA_TOP_K,
+) -> tuple[list[tuple[str, float]], list[tuple[str, float]], dict]:
+    """Geocode pickup/dropoff and return top-K nearest plaza names with distances (km)."""
+    cfg = settings or app_settings
+    meta: dict = {"is_estimated": True, "match_method": "nearest_geo"}
+    plazas = _plazas_with_coords(db)
+    if not plazas:
+        meta["geo_error"] = "no_plazas_with_coords"
+        meta["failure_reason"] = NO_PLAZA_COORDS_MESSAGE
+        return [], [], meta
+
+    plat, plon, pprov = geocode_coordinates(pickup_location or "", cfg)
+    dlat, dlon, dprov = geocode_coordinates(dropoff_location or "", cfg)
+    meta["pickup_geocode_provider"] = pprov
+    meta["dropoff_geocode_provider"] = dprov
+    meta["pickup_location"] = (pickup_location or "").strip()
+    meta["dropoff_location"] = (dropoff_location or "").strip()
+
+    entry_ranked: list[tuple[str, float]] = []
+    exit_ranked: list[tuple[str, float]] = []
+    if plat is not None and plon is not None:
+        entry_ranked = [
+            (p.canonical_name, round(dist, 2))
+            for p, dist in nearest_plazas_to_point(plazas, float(plat), float(plon), top_k=top_k)
+        ]
+        meta["pickup_lat"] = float(plat)
+        meta["pickup_lon"] = float(plon)
+        logger.info(
+            "toll_geo pickup_lat=%s pickup_lon=%s provider=%s nearest_entries=%s",
+            plat,
+            plon,
+            pprov,
+            entry_ranked[:5],
+        )
+    else:
+        meta["geo_error"] = "pickup_geocode_failed"
+        meta["failure_reason"] = GEOCODE_PICKUP_FAILED_MESSAGE
+
+    if dlat is not None and dlon is not None:
+        exit_ranked = [
+            (p.canonical_name, round(dist, 2))
+            for p, dist in nearest_plazas_to_point(plazas, float(dlat), float(dlon), top_k=top_k)
+        ]
+        meta["dropoff_lat"] = float(dlat)
+        meta["dropoff_lon"] = float(dlon)
+        logger.info(
+            "toll_geo dropoff_lat=%s dropoff_lon=%s provider=%s nearest_exits=%s",
+            dlat,
+            dlon,
+            dprov,
+            exit_ranked[:5],
+        )
+    else:
+        meta["geo_error"] = "dropoff_geocode_failed" if "geo_error" not in meta else meta["geo_error"]
+        meta["failure_reason"] = GEOCODE_DROPOFF_FAILED_MESSAGE
+
+    meta["nearest_entry_candidates"] = [{"plaza": n, "km": d} for n, d in entry_ranked]
+    meta["nearest_exit_candidates"] = [{"plaza": n, "km": d} for n, d in exit_ranked]
+
+    both_geocoded = (
+        plat is not None and plon is not None and dlat is not None and dlon is not None
+    )
+    if both_geocoded and not entry_ranked and not exit_ranked:
+        # Pickup and dropoff resolved, but no plaza within search radius → no expressway on route.
+        meta["failure_reason"] = NO_EXPRESSWAY_MESSAGE
+        meta["expressway_detected"] = False
+    elif plat is not None and plon is not None and not entry_ranked:
+        meta["failure_reason"] = NO_NEARBY_ENTRY_MESSAGE
+        meta["expressway_detected"] = False
+    elif dlat is not None and dlon is not None and not exit_ranked:
+        meta["failure_reason"] = NO_NEARBY_EXIT_MESSAGE
+        meta["expressway_detected"] = False
+    else:
+        meta["expressway_detected"] = bool(entry_ranked or exit_ranked)
+
+    return entry_ranked, exit_ranked, meta
+
+
 def resolve_plaza_pair(
     db: Session,
     *,
@@ -139,8 +284,8 @@ def resolve_plaza_pair(
     route_origin: str | None = None,
     route_destination: str | None = None,
 ) -> tuple[str | None, str | None, MatchMethod, MatchConfidence, dict]:
-    """Resolve entry/exit canonical plaza names using priority: manual > route catalog > alias matching."""
-    meta: dict = {}
+    """Optional text/manual resolution. Primary quoting path uses nearest-geo instead."""
+    meta: dict = {"is_estimated": False}
 
     if manual_entry and manual_exit:
         entry = manual_entry.strip()
@@ -188,6 +333,7 @@ def resolve_plaza_pair(
                 conf,
                 {
                     **meta,
+                    "is_estimated": conf != "high",
                     "entry_match_method": entry_match.method,
                     "exit_match_method": exit_match.method,
                 },
@@ -215,6 +361,7 @@ def resolve_plaza_pair(
         return entry_match.canonical, exit_match.canonical, method, "high", meta
 
     if entry_match.confidence != "none" and exit_match.confidence != "none":
+        meta["is_estimated"] = True
         return entry_match.canonical, exit_match.canonical, entry_match.method, "medium", meta
 
     return None, None, "none", "none", meta

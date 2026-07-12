@@ -210,8 +210,11 @@ function BookingPaymentInner() {
 
   const handlePaymentVerified = useCallback(() => {
     setUploadSuccess(true);
-    window.setTimeout(() => router.push("/modules/customer/payment"), 1500);
-  }, [router]);
+    window.setTimeout(
+      () => router.push(`/modules/operations/trips?booking=${bookingId}`),
+      1500,
+    );
+  }, [router, bookingId]);
 
   const refreshXenditSession = useCallback(async () => {
     if (!Number.isFinite(bookingId) || bookingId <= 0 || !isXenditMethod(method)) return;
@@ -289,7 +292,10 @@ function BookingPaymentInner() {
       const payment = await WorkflowApi.createCashSession(bookingId);
       setExistingPayments([payment]);
       setUploadSuccess(true);
-      window.setTimeout(() => router.push("/modules/customer/payment"), 1200);
+      window.setTimeout(
+        () => router.push(`/modules/operations/trips?booking=${bookingId}`),
+        1200,
+      );
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Unable to record cash payment.");
     } finally {
@@ -363,7 +369,7 @@ function BookingPaymentInner() {
       const pays = await WorkflowApi.bookingPayments(bookingId).catch(() => [] as Payment[]);
       setExistingPayments(pays);
       window.setTimeout(() => {
-        router.push("/modules/customer/payment");
+        router.push(`/modules/operations/trips?booking=${bookingId}`);
       }, 1200);
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : "Upload failed.");
@@ -542,7 +548,7 @@ function BookingPaymentInner() {
               ) : null}
               {uploadSuccess ? (
                 <div style={{ padding: "0.75rem", background: "#D1FAE5", color: "#047857", borderRadius: "6px", marginBottom: "1rem", fontSize: "0.9rem" }}>
-                  ✓ Cash payment recorded. Redirecting to payment history…
+                  ✓ Cash payment recorded. Taking you to booking progress tracking…
                 </div>
               ) : null}
               <SubmitButton
@@ -612,7 +618,7 @@ function BookingPaymentInner() {
                       fontSize: "0.9rem",
                     }}
                   >
-                    ✓ Proof submitted. Redirecting to payment history…
+                    ✓ Proof submitted. Taking you to booking progress tracking…
                   </div>
                 )}
 
@@ -675,7 +681,7 @@ function BookingPaymentInner() {
                 fontSize: "0.9rem",
               }}
             >
-              ✓ Payment received. Redirecting to payment history…
+              ✓ Payment received. Taking you to booking progress tracking…
             </div>
           ) : null}
         </div>
@@ -728,6 +734,16 @@ function BookingPaymentInner() {
                 </>
               )}
             </p>
+            {booking ? (
+              <p style={{ margin: "0.85rem 0 0" }}>
+                <Link
+                  href={`/modules/operations/trips?booking=${booking.id}`}
+                  style={{ color: "#92400E", fontWeight: 700, fontSize: "0.9rem" }}
+                >
+                  Monitor booking progress →
+                </Link>
+              </p>
+            ) : null}
           </div>
           </div>
         </aside>

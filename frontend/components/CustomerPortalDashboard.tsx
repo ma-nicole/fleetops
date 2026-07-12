@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
+import CustomerBookingWorkflowTracker from "@/components/CustomerBookingWorkflowTracker";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
@@ -12,6 +13,7 @@ import AsyncDataView from "@/components/ui/AsyncDataView";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import { EMPTY_BOOKINGS, EMPTY_SHIPMENTS, ERROR_LOAD_DATA, LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
 import { APP_LOCALE, APP_TIMEZONE, formatNumber, formatPhpWhole } from "@/lib/appLocale";
+import { customerWorkflowCurrentLabel } from "@/lib/customerBookingWorkflow";
 import {
   MIN_BOOKING_SITES,
   addCustomerSite,
@@ -262,8 +264,13 @@ export default function CustomerPortalDashboard() {
                               <div style={{ fontWeight: "700", marginBottom: "0.25rem" }}>Booking #{order.id}</div>
                               <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Pickup {formatShortDate(`${order.scheduled_date}`)}</div>
                             </div>
-                            <ShipmentBadge status="On going" />
+                            <ShipmentBadge status={customerWorkflowCurrentLabel(order, paymentByBooking.get(order.id) ?? null)} />
                           </div>
+                          <CustomerBookingWorkflowTracker
+                            booking={order}
+                            payment={paymentByBooking.get(order.id) ?? null}
+                            compact
+                          />
                           <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
                             <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
                             <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
@@ -275,8 +282,8 @@ export default function CustomerPortalDashboard() {
                             <span style={{ color: "var(--text-secondary)" }}>
                               Payment total <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
                             </span>
-                            <Link href="/modules/operations/trips" style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
-                              Details
+                            <Link href={`/modules/operations/trips?booking=${order.id}`} style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
+                              Track booking
                             </Link>
                           </div>
                           <CustomerDocumentReviewSection
@@ -578,11 +585,11 @@ const badgeBase: CSSProperties = {
 
 function ShipmentBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
-  if (s === "on going" || s === "ongoing")
+  if (s.includes("complet")) return <span style={{ ...badgeBase, background: "rgba(5,150,105,0.12)", color: "#047857" }}>{status}</span>;
+  if (s.includes("route") || s.includes("arrived") || s.includes("pickup") || s.includes("destination") || s.includes("driver"))
     return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "var(--brand-text-strong)" }}>{status}</span>;
-  if (s.includes("transit") || s.includes("route") || s.includes("delivery") || s.includes("en route")) return <span style={{ ...badgeBase, background: "rgba(37,99,235,0.12)", color: "var(--brand-text-strong)" }}>{status}</span>;
-  if (s.includes("deliver") || s.includes("complet")) return <span style={{ ...badgeBase, background: "rgba(5,150,105,0.12)", color: "#047857" }}>{status}</span>;
-  if (s.includes("pending") || s.includes("approv")) return <span style={{ ...badgeBase, background: "rgba(251,191,36,0.35)", color: "#92400e" }}>{status}</span>;
+  if (s.includes("payment") || s.includes("goods") || s.includes("dispatch") || s.includes("submitted"))
+    return <span style={{ ...badgeBase, background: "rgba(251,191,36,0.35)", color: "#92400e" }}>{status}</span>;
   return <span style={{ ...badgeBase, background: "#F3F4F6", color: "#475569" }}>{status}</span>;
 }
 

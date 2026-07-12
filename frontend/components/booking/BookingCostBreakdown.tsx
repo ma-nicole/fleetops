@@ -36,7 +36,14 @@ export default function BookingCostBreakdown({ cost, freightLines }: Props) {
         </div>
         <div className="booking-cost-breakdown__row">
           <dt>Estimated toll</dt>
-          <dd>{formatPhp(cost.toll_fees_php)}</dd>
+          <dd>
+            {formatPhp(cost.toll_fees_php)}
+            {freightLines?.toll_is_estimated ? (
+              <span style={{ display: "block", fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                Nearest plazas (estimated)
+              </span>
+            ) : null}
+          </dd>
         </div>
         <div className="booking-cost-breakdown__row">
           <dt>Driver cost</dt>
@@ -74,6 +81,7 @@ export default function BookingCostBreakdown({ cost, freightLines }: Props) {
         {freightLines?.fuel_price_source ? ` · Source: ${freightLines.fuel_price_source}` : ""}
         <br />
         Toll source: {tollSource}
+        {freightLines?.toll_is_estimated ? " · nearest-plaza estimate" : ""}
       </p>
     </div>
   );

@@ -16,6 +16,9 @@ class TollPlazaCreate(BaseModel):
     canonical_name: str = Field(..., min_length=2, max_length=255)
     status: str = Field(default="active")
     aliases: list[str] = Field(default_factory=list)
+    latitude: float | None = None
+    longitude: float | None = None
+    corridor: str | None = Field(default=None, max_length=64)
 
     @field_validator("canonical_name", mode="before")
     @classmethod
@@ -27,6 +30,9 @@ class TollPlazaUpdate(BaseModel):
     canonical_name: str | None = Field(default=None, min_length=2, max_length=255)
     status: str | None = None
     aliases: list[str] | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    corridor: str | None = Field(default=None, max_length=64)
 
 
 class TollPlazaAliasRead(BaseModel):
@@ -41,6 +47,9 @@ class TollPlazaRead(BaseModel):
     id: int
     canonical_name: str
     status: str
+    latitude: float | None = None
+    longitude: float | None = None
+    corridor: str | None = None
     aliases: list[TollPlazaAliasRead]
     created_at: datetime
     updated_at: datetime

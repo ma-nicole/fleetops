@@ -21,6 +21,7 @@ export function freightLinesFromPayload(data: RouteQuoteApiResponse): FreightLin
     fuel_price_source: data.fuel_price_source ?? null,
     fuel_price_fetched_at: data.fuel_price_fetched_at ?? null,
     toll_source: data.toll_source ?? (data.toll_matrix_matched ? "Toll Matrix" : "Flat toll fallback"),
+    toll_is_estimated: Boolean(data.toll_is_estimated),
   };
 }
 

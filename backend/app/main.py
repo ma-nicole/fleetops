@@ -22,6 +22,7 @@ from app.api.routes import (
     dispatch,
     driver,
     feedback,
+    geo_places,
     helper_ops,
     manager,
     payments,
@@ -81,6 +82,17 @@ app.add_middleware(
 def startup() -> None:
     uploads_root()
     apply_runtime_schema_fixes()
+    try:
+        from app.db import SessionLocal
+        from app.services.toll_plaza_seed import ensure_toll_reference_data
+
+        db = SessionLocal()
+        try:
+            ensure_toll_reference_data(db)
+        finally:
+            db.close()
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to seed toll plaza / matrix reference data")
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
@@ -136,6 +148,7 @@ app.include_router(customer.router, prefix="/api", dependencies=_api_deps)
 app.include_router(dispatch.router, prefix="/api", dependencies=_api_deps)
 app.include_router(driver.router, prefix="/api", dependencies=_api_deps)
 app.include_router(helper_ops.router, prefix="/api", dependencies=_api_deps)
+app.include_router(geo_places.router, prefix="/api", dependencies=_api_deps)
 app.include_router(manager.router, prefix="/api", dependencies=_api_deps)
 app.include_router(admin.router, prefix="/api", dependencies=_api_deps)
 app.include_router(toll_matrix.router, prefix="/api", dependencies=_api_deps)

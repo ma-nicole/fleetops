@@ -1024,12 +1024,15 @@ class TollPlazaStatus(str, Enum):
 
 
 class TollPlaza(Base):
-    """Canonical NLEX-SCTEX toll plaza name with admin-managed aliases."""
+    """Canonical NLEX / SCTEX / SLEX toll plaza with optional coords for nearest matching."""
 
     __tablename__ = "toll_plazas"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     canonical_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    corridor: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default=TollPlazaStatus.ACTIVE.value, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
