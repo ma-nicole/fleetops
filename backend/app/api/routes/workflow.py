@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import json
 from secrets import token_urlsafe
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import exists
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ from app.models.entities import (
 )
 from app.schemas.booking import BookingApprovalRequest, BookingRead
 from app.schemas.trip import (
-    TripRead, TripStatusUpdate, TripAcceptRequest, TripDeliveryProof,
+    TripRead, TripStatusUpdate, TripLocationNote, TripAcceptRequest, TripDeliveryProof,
     TripIssueReport, TripIssueRead, ReceivingQrVerifyRequest,
 )
 from app.services.booking_schedule import slot_available
@@ -420,7 +420,7 @@ def accept_job(
 @router.post("/job/{trip_id}/depart", response_model=TripRead)
 def depart_to_pickup(
     trip_id: int,
-    update: TripStatusUpdate,
+    update: TripLocationNote = Body(default_factory=TripLocationNote),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER)),
 ):
@@ -469,7 +469,7 @@ def depart_to_pickup(
 @router.post("/job/{trip_id}/arrived-pickup", response_model=TripRead)
 def arrived_at_pickup(
     trip_id: int,
-    update: TripStatusUpdate,
+    update: TripLocationNote = Body(default_factory=TripLocationNote),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DRIVER)),
 ):
@@ -484,6 +484,7 @@ def arrived_at_pickup(
     if trip.driver_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    _ = update  # optional location notes reserved for future use
     trip.arrival_pickup_time = datetime.utcnow()
     trip.loading_start_time = datetime.utcnow()
     trip.status = TripStatus.LOADING
@@ -817,6 +818,9 @@ def update_trip_status(
 
     if user.role == UserRole.DRIVER and trip.driver_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if update.status is None:
+        raise HTTPException(status_code=422, detail="status is required for update-status")
 
     trip.status = update.status
     trip.updated_at = datetime.utcnow()

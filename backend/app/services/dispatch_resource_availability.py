@@ -275,14 +275,19 @@ def _conflict_message(kind: ResourceKind, conflicts: list[dict[str, Any]]) -> st
     booking_id = first.get("booking_id")
     slot = first.get("scheduled_time_slot") or "—"
     date_s = first.get("scheduled_date") or "—"
-    if first.get("source") == "trip" and first.get("trip_status") in {
-        TripStatus.DEPARTED.value,
-        TripStatus.LOADING.value,
-        TripStatus.IN_DELIVERY.value,
-    }:
+    # Live in-progress trips block the resource even outside the planned window (delays).
+    if first.get("live_busy") or (
+        first.get("source") == "trip"
+        and first.get("trip_status")
+        in {
+            TripStatus.DEPARTED.value,
+            TripStatus.LOADING.value,
+            TripStatus.IN_DELIVERY.value,
+        }
+    ):
         return (
-            f"{label} is on an active trip for booking #{booking_id} "
-            f"({date_s} {slot}) that overlaps this booking window."
+            f"{label} is currently on an active trip for booking #{booking_id} "
+            f"(scheduled {date_s} {slot}) and cannot be reassigned until that trip is completed."
         )
     return (
         f"{label} is already assigned to booking #{booking_id} "

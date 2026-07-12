@@ -92,7 +92,12 @@ def main() -> int:
             if r.status_code not in (200, 201):
                 fail("1 Create booking", r.text)
                 return 1
-            booking = db.query(Booking).filter(Booking.id == r.json()["id"]).first()
+            booking_id = r.json().get("id")
+            db.expire_all()
+            booking = db.query(Booking).filter(Booking.id == booking_id).first()
+            if booking is None:
+                fail("1 Create booking", f"API returned id={booking_id} but row not visible in DB session")
+                return 1
             ok("1 Create booking", f"#{booking.id}")
         else:
             ok("1 Use existing booking", f"#{booking.id} status={booking.status.value}")

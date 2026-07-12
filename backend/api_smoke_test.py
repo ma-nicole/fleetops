@@ -1,9 +1,10 @@
 import httpx
 import sys
+from datetime import date, timedelta
 
 BASE = "http://127.0.0.1:8000"
 
-client = httpx.Client()
+client = httpx.Client(timeout=60.0)
 
 print('GET /docs')
 resp = client.get(BASE + '/docs')
@@ -20,18 +21,18 @@ resp = client.post(BASE + '/api/auth/register', json=invalid_user)
 print(resp.status_code)
 print(resp.text)
 
-# 2) Register a valid test user
+# 2) Register a valid test user (must satisfy password_policy: upper+lower+digit+special)
 print('\nPOST /api/auth/register (valid)')
 user = {
     'email': 'smoke_test_user@example.com',
-    'password': 'strongpassword123',
+    'password': 'StrongPass123!',
     'full_name': 'Smoke Test User',
 }
 resp = client.post(BASE + '/api/auth/register', json=user)
 print(resp.status_code)
 print(resp.text)
-if resp.status_code != 200 and 'Email already exists' in resp.text:
-    print('User exists, proceeding to login')
+if resp.status_code != 200 and ('already' in resp.text.lower() or resp.status_code in (400, 409, 422)):
+    print('User exists or register skipped; proceeding to login')
 
 # 3) Login
 print('\nPOST /api/auth/login (form)')
@@ -61,15 +62,20 @@ print(resp.text)
 
 # 5) Create valid booking
 print('\nPOST /api/bookings (valid payload)')
+sched = (date.today() + timedelta(days=14)).isoformat()
 valid_booking = {
-    'pickup_location': 'Warehouse 1',
-    'dropoff_location': 'Warehouse 2',
+    'pickup_location': 'Warehouse 1, Quezon City, Philippines',
+    'dropoff_location': 'Warehouse 2, Makati City, Philippines',
     'service_type': 'fixed',
-    'scheduled_date': '2026-05-02',
+    'scheduled_date': sched,
+    'scheduled_time_slot': '08:00',
     'cargo_weight_tons': 2.5,
 }
 resp = client.post(BASE + '/api/bookings', json=valid_booking, headers=headers)
 print(resp.status_code)
 print(resp.text)
+if resp.status_code not in (200, 201):
+    print('Valid booking failed; aborting')
+    sys.exit(1)
 
 print('\nSmoke test complete')

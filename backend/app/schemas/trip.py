@@ -79,9 +79,24 @@ class TripRead(BaseModel):
 
 
 class TripStatusUpdate(BaseModel):
-    status: TripStatus
+    status: TripStatus | None = None
     notes: str | None = None
     """Optional manual location label (GPS coordinates are not stored)."""
+    location_name: str | None = None
+
+    @field_validator("location_name", "notes", mode="before")
+    @classmethod
+    def strip_optional_text(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
+
+
+class TripLocationNote(BaseModel):
+    """Body for depart / arrived-pickup style transitions that set status server-side."""
+
+    notes: str | None = None
     location_name: str | None = None
 
     @field_validator("location_name", "notes", mode="before")

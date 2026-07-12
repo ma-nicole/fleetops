@@ -2340,6 +2340,9 @@ html {
 .app-main {
   transition: margin-left 0.25s ease;
   outline: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 .app-main--with-sidebar {

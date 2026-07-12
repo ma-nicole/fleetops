@@ -596,16 +596,18 @@ def seed_database(
             if booking.status in (BookingStatus.PENDING_APPROVAL, BookingStatus.REJECTED, BookingStatus.APPROVED):
                 continue
             distance_km = 60 + (idx % 5) * 18
+            days_ago = (anchor - booking.scheduled_date).days if booking.scheduled_date else idx + 1
+            # Keep at most a few live demo trips; older operational bookings should be completed
+            # so dispatcher assignment QA is not blocked by forever-busy seed crews.
             trip_status = (
                 TripStatus.COMPLETED
-                if booking.status == BookingStatus.COMPLETED
+                if booking.status == BookingStatus.COMPLETED or days_ago > 3
                 else TripStatus.IN_DELIVERY
                 if booking.status == BookingStatus.OUT_FOR_DELIVERY
                 else TripStatus.LOADING
                 if booking.status == BookingStatus.LOADING
                 else TripStatus.ASSIGNED
             )
-            days_ago = (anchor - booking.scheduled_date).days if booking.scheduled_date else idx + 1
             completed_at = (
                 datetime.utcnow() - timedelta(days=max(days_ago - 1, 1), hours=idx % 8)
                 if trip_status == TripStatus.COMPLETED

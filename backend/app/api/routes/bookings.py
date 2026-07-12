@@ -359,6 +359,11 @@ async def create_booking_with_documents(
                 output_path=pdf_abs,
             )
         except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Signed terms PDF generation failed for booking %s", booking.id
+            )
             raise HTTPException(
                 status_code=500,
                 detail="Unable to generate the signed terms agreement PDF. Please try again.",

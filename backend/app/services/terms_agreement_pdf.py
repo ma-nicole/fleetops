@@ -99,8 +99,18 @@ def generate_signed_terms_pdf(
     pdf.ln(3)
 
     if signature_png_path.is_file():
-        pdf.image(str(signature_png_path), x=15, w=70)
-        pdf.ln(2)
+        try:
+            pdf.image(str(signature_png_path), x=15, w=70)
+            pdf.ln(2)
+        except Exception as exc:
+            # Corrupt/unsupported signature images should not abort booking PDF generation.
+            pdf.set_font("Helvetica", "I", 9)
+            pdf.multi_cell(
+                text_w,
+                5,
+                f"[Electronic signature on file: {signature_png_path.name}; image embed skipped: {exc}]",
+            )
+            pdf.ln(2)
 
     pdf.multi_cell(
         text_w,
