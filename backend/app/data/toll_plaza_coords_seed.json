@@ -4,14 +4,7 @@
     "latitude": 14.7005,
     "longitude": 121.0398,
     "corridor": "NLEX",
-    "aliases": ["Mindanao Avenue", "Mindanao Ave", "Quezon City Mindanao", "Metro Manila Mindanao"]
-  },
-  {
-    "canonical_name": "Balintawak",
-    "latitude": 14.6575,
-    "longitude": 121.0045,
-    "corridor": "NLEX",
-    "aliases": ["Balintawak Exit", "Balintawak Interchange", "Quezon City Balintawak"]
+    "aliases": ["Mindanao Avenue", "Mindanao Ave", "Quezon City Mindanao", "Metro Manila NLEX"]
   },
   {
     "canonical_name": "Karuhatan",
@@ -39,7 +32,7 @@
     "latitude": 15.0280,
     "longitude": 120.6885,
     "corridor": "NLEX",
-    "aliases": ["San Fernando Pampanga", "San Fernando Exit", "City of San Fernando", "Pampanga San Fernando"]
+    "aliases": ["San Fernando Pampanga", "San Fernando Exit", "City of San Fernando", "Pampanga"]
   },
   {
     "canonical_name": "San Simon",
@@ -81,14 +74,14 @@
     "latitude": 14.5450,
     "longitude": 121.0175,
     "corridor": "SLEX",
-    "aliases": ["Magallanes Interchange", "EDSA Magallanes", "SLEX Magallanes", "Makati Magallanes"]
+    "aliases": ["Magallanes Interchange", "EDSA Magallanes", "SLEX Magallanes", "Makati Magallanes", "Manila SLEX"]
   },
   {
     "canonical_name": "Alabang",
     "latitude": 14.4225,
     "longitude": 121.0405,
     "corridor": "SLEX",
-    "aliases": ["Alabang Exit", "Filinvest Alabang", "SLEX Alabang"]
+    "aliases": ["Alabang Exit", "Filinvest Alabang", "SLEX Alabang", "Muntinlupa"]
   },
   {
     "canonical_name": "Susana Heights",
@@ -102,7 +95,7 @@
     "latitude": 14.2950,
     "longitude": 121.0950,
     "corridor": "SLEX",
-    "aliases": ["Sta Rosa", "Sta. Rosa", "Santa Rosa Exit", "Laguna Santa Rosa"]
+    "aliases": ["Sta Rosa", "Sta. Rosa", "Santa Rosa Exit", "Laguna Santa Rosa", "Laguna"]
   },
   {
     "canonical_name": "Calamba",
@@ -113,24 +106,10 @@
   },
   {
     "canonical_name": "Sto. Tomas",
-    "latitude": 14.1050,
+    "latitude": 14.1075,
     "longitude": 121.1700,
     "corridor": "STAR",
-    "aliases": ["Santo Tomas", "Sto Tomas Batangas", "STAR Sto Tomas"]
-  },
-  {
-    "canonical_name": "Tanauan",
-    "latitude": 14.0860,
-    "longitude": 121.1500,
-    "corridor": "STAR",
-    "aliases": ["Tanauan Exit", "Tanauan Batangas"]
-  },
-  {
-    "canonical_name": "Lipa",
-    "latitude": 13.9411,
-    "longitude": 121.1631,
-    "corridor": "STAR",
-    "aliases": ["Lipa Exit", "Lipa Batangas", "STAR Lipa"]
+    "aliases": ["Santo Tomas", "Sto Tomas", "Sto. Tomas Batangas", "STAR Sto. Tomas"]
   },
   {
     "canonical_name": "Batangas",
@@ -142,15 +121,15 @@
   {
     "canonical_name": "Kawit",
     "latitude": 14.4445,
-    "longitude": 120.9010,
+    "longitude": 120.9015,
     "corridor": "CAVITEX",
-    "aliases": ["Kawit Exit", "Cavitex Kawit", "Cavite Kawit"]
+    "aliases": ["Kawit Exit", "Cavite Kawit", "CAVITEX Kawit", "Cavite"]
   },
   {
     "canonical_name": "Coastal Road",
     "latitude": 14.5200,
     "longitude": 120.9800,
     "corridor": "CAVITEX",
-    "aliases": ["Cavitex Coastal", "Parañaque Coastal", "Manila Coastal Road"]
+    "aliases": ["Manila-Cavite Coastal Road", "Coastal", "Parañaque Coastal", "Manila Coastal"]
   }
 ]

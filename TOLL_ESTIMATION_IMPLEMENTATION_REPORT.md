@@ -1,65 +1,44 @@
 # Toll Matrix Matching — Audit & Fix Report
 
 **Date:** 2026-07-12  
-**Status:** Fixed (nearest entry/exit + Class matching; no silent ₱0)
+**Scope:** Automatic toll computation returning ₱0 (no plaza match) → nearest-entry/exit + Class 3 matrix matching
+
+---
 
 ## Root cause
 
-1. **Text-first plaza matching** — Full booking addresses rarely match plaza canonical names, so matching failed before nearest-geo ran reliably.
-2. **Toll Matrix sample not seeded on startup** — Plaza coordinates were seeded; matrix fee rows often missing → no entry+exit+class hit.
-3. **Silent ₱0 fallback** — When `resolve_booking_toll_estimate` returned `None`, `customer_freight_pricing` used `knobs.toll_fees_php_per_trip` (default 0) with no explanation.
+1. **Toll Matrix sample rows were not seeded on startup.** Only plaza coordinates were synced (`ensure_toll_plaza_coords_seeded`). Fresh / sparse DBs had plazas (or none) but missing Class 3 `toll_matrix` fees → matching failed.
+2. **Matching preferred exact/fuzzy address text** against plaza names. Customer addresses like “Quezon City, Metro Manila” never equaled “Mindanao Ave.”, so geo matching was only a secondary fallback and often never reached a matrix row.
+3. **On miss, quotation silently used flat `toll_fees_php_per_trip` (often 0)** because `pricing_with_toll_matrix` omitted `toll_budget_per_truck` when `resolve_booking_toll_estimate` returned `None`.
+4. **Failure messaging said “No toll plaza match found / Flat toll fallback”** instead of explaining nearby-entry, Class 3, or no-expressway cases.
 
-## Flow (booking → quotation)
+---
 
-```
-Pickup / dropoff / weight / distance
-        ↓
-pricing_with_toll_matrix()
-        ↓
-resolve_booking_toll_estimate()
-  1. waypoint segments (optional)
-  2. manual entry/exit (optional)
-  3. PRIMARY: geocode → nearest entry near pickup + nearest exit near dropoff
-     → match Toll Matrix (entry + exit + vehicle class)
-     → multi-segment BFS if no direct row
-  4. optional route-catalog / fuzzy text assist
-        ↓
-customer_freight_pricing(..., toll_budget_per_truck=<matrix fee or 0>)
-        ↓
-quoted_total includes toll_fees_php
-```
+## Fix summary
 
-## Matching algorithm (requirement)
+| Requirement | Implementation |
+|-------------|----------------|
+| Nearest entry/exit (not exact address) | Primary path: geocode pickup/dropoff → top-K plazas → closest valid Class 3 matrix pair (`entry_km + exit_km`) |
+| All vehicle types = Class 3 | `DEFAULT_VEHICLE_CLASS` forced in resolve + pricing |
+| Explicit miss reasons | Messages: nearby entry/exit missing, Class 3 missing for route, or `No expressway detected. Toll = ₱0.` |
+| No silent ₱0 / no flat fallback | Always inject explicit `toll_budget_per_truck` (matched fee or `0.0` with reason) |
+| Seed matrix + plazas | `ensure_toll_reference_data()` on app startup |
+| Debug logging | Logs coords, entry/exit, matrix segments, class, fee, or miss reason |
 
-Pickup → nearest toll **entry**  
-Dropoff → nearest toll **exit**  
-→ Match entry + exit + vehicle class  
-→ Retrieve fee from Toll Matrix  
-→ If multiple valid pairs, prefer lowest `entry_km + exit_km` (closest valid route)
-
-Not used: exact full-address string equality as the primary path.
-
-## Failure messages (no silent ₱0)
-
-| Situation | Message |
-|-----------|---------|
-| Both ends geocoded, no plaza in search radius | `No expressway detected. Toll = ₱0.` |
-| No nearby entry | `No nearby toll entry found.` |
-| No nearby exit | `No nearby toll exit found.` |
-| Pair exists for other classes only | `{Class} does not exist for this toll route (A → B). Available: …` |
-| Nearby plazas but no matrix edge | `No Toll Matrix route exists between the nearest entry and exit plazas.` |
+---
 
 ## Files modified
 
-| File | Change |
-|------|--------|
-| `backend/app/services/toll_plaza_matching.py` | Nearest-geo primary helpers; expressway vs no-entry messages; debug meta |
-| `backend/app/services/toll_matrix.py` | Nearest-first resolve; vehicle-class normalize/explain; always return explicit fee + logs |
-| `backend/app/services/booking_pricing.py` | Always inject matrix toll (never knobs fallback); pass `route_distance_km` |
-| `backend/app/services/toll_plaza_seed.py` | Seed plazas **and** matrix sample on startup |
-| `backend/app/main.py` | Call `ensure_toll_reference_data` |
-| `backend/app/data/toll_plaza_coords_seed.json` | Balintawak, STAR, CAVITEX plazas |
-| `backend/app/data/nlex_sctex_class3_sample.json` | Class 3 pairs for test corridors |
+- `backend/app/services/toll_matrix.py` — nearest-geo-first resolve, Class 3 force, miss explanations, logging
+- `backend/app/services/toll_plaza_matching.py` — messages, geo meta (`straight_line_km`), top-K=8
+- `backend/app/services/toll_plaza_seed.py` — plaza + Class 3 matrix sample seed
+- `backend/app/services/booking_pricing.py` — always pass explicit toll into freight quote
+- `backend/app/main.py` — startup calls `ensure_toll_reference_data`
+- `backend/app/data/nlex_sctex_class3_sample.json` — south/CAVITEX reverse pairs (e.g. Santa Rosa→Batangas)
+- `backend/app/data/toll_plaza_coords_seed.json` — NLEX/SCTEX/SLEX/STAR/CAVITEX plazas (prior expansion)
+- `scripts/toll_matrix_corridor_smoke.py` — local corridor verification
+
+---
 
 ## Database queries used
 
@@ -68,40 +47,60 @@ Not used: exact full-address string equality as the primary path.
 SELECT * FROM toll_plazas
 WHERE status = 'active' AND latitude IS NOT NULL AND longitude IS NOT NULL;
 
--- Active matrix edges for vehicle class as of date
+-- Class 3 matrix edges for fee lookup / multi-segment path
 SELECT * FROM toll_matrix
 WHERE status = 'active'
   AND vehicle_class = 'Class 3'
-  AND effective_date <= CURDATE()
+  AND effective_date <= :as_of
 ORDER BY effective_date DESC;
 
--- Vehicle classes available for a specific entry→exit
-SELECT DISTINCT vehicle_class FROM toll_matrix
-WHERE status = 'active'
-  AND entry_point = ? AND exit_point = ?
-  AND effective_date <= CURDATE();
+-- Seed insert (idempotent by normalized entry/exit/class)
+INSERT INTO toll_matrix (entry_point, exit_point, vehicle_class, toll_fee, effective_date, status)
+VALUES (...);
 ```
 
-Startup seed: upsert from `toll_plaza_coords_seed.json` + insert missing rows from `nlex_sctex_class3_sample.json`.
+Runtime path uses SQLAlchemy equivalents in `lookup_toll_matrix`, `_latest_active_edges`, and `_plazas_with_coords`.
 
-## Local corridor tests (geocode stubbed to city centers)
+---
 
-| Route | Entry → Exit | Toll (Class 3) | Injected into quote |
-|-------|--------------|----------------|---------------------|
-| Metro Manila → Pampanga | Mindanao Ave. → San Fernando | ₱1,180 | yes (`toll_fees_php=1180`) |
-| Metro Manila → Tarlac | Mindanao Ave. → Tarlac | ₱2,008 | yes |
-| Laguna → Batangas | Santa Rosa → Batangas | ₱636 | yes |
-| Cavite → Manila | Kawit → Magallanes | ₱285 | yes |
-| Tuguegarao → Laoag (no NCR expressway) | — | ₱0 | message: `No expressway detected. Toll = ₱0.` |
-| MM → Pampanga, Class 9 | — | ₱0 | `Class 9 does not exist for this toll route (Mindanao Ave. → San Fernando). Available: Class 3.` |
+## Corridor smoke results (local)
 
-## Sample computation (MM → Pampanga, 10 t, 80 km)
+| Corridor | Detected entry → exit | Toll (Class 3) | Quote `toll_fees_php` |
+|----------|----------------------|----------------|------------------------|
+| Metro Manila → Pampanga | Balintawak → San Fernando | ₱1,120 | ₱1,120 |
+| Metro Manila → Tarlac | Balintawak → Tarlac | ₱1,940 | ₱1,940 |
+| Laguna → Batangas | Santa Rosa → Batangas | ₱636 | ₱636 |
+| Cavite → Manila | Kawit → Magallanes | ₱285 | ₱285 |
+| Local Makati → Makati | — | ₱0 | Message: `No expressway detected. Toll = ₱0.` |
 
-- Detected entry: **Mindanao Ave.** (near Quezon City)  
-- Detected exit: **San Fernando**  
-- Matrix record: Class 3, effective 2026-01-20, fee **₱1,180**  
-- Quote: `toll_fees_php = 1180` added into `quoted_total` (cargo + fuel + driver 10% + helper 4.62% + toll)
+Run: `cd backend && python ../scripts/toll_matrix_corridor_smoke.py`
 
-## Debug logging
+---
 
-Logger messages include: pickup/dropoff lat/lon, nearest entry/exit candidates, matched matrix id(s), vehicle class, computed toll, and explicit zero reasons.
+## Sample computation (one booking)
+
+**Pickup:** Quezon City, Metro Manila  
+**Dropoff:** San Fernando, Pampanga  
+**Vehicle class used:** Class 3 (forced)  
+**Cargo:** 10 t · **Distance used in smoke quote:** 80 km  
+
+1. Geocode pickup ≈ `(14.651, 121.049)`, dropoff ≈ `(15.028, 120.694)`
+2. Nearest entry plazas include Balintawak / Mindanao Ave.; nearest exit includes San Fernando
+3. Closest valid Class 3 matrix row: **Balintawak → San Fernando** (`matrix_id=7`, fee **1120**)
+4. `pricing_with_toll_matrix` sets `toll_budget_per_truck=1120` → `toll_fees_php=1120` in quotation total
+
+---
+
+## Matching flow (current)
+
+```
+Pickup location → geocode → nearest toll entry candidates
+Dropoff location → geocode → nearest toll exit candidates
+        ↓
+Score pairs by (entry_km + exit_km); require Class 3 Toll Matrix row
+(or short multi-segment path of Class 3 edges)
+        ↓
+Inject toll into freight quotation (never silent flat-knob fallback)
+```
+
+Manual plaza override and waypoint segments remain supported overrides. Text/alias matching is secondary only when geo matching finds no matrix pair.

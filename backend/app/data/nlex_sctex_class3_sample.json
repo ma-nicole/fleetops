@@ -1,40 +1,275 @@
 [
-  {"entry_point": "Mindanao Ave.", "exit_point": "Karuhatan", "vehicle_class": "Class 3", "toll_fee": 254, "effective_date": "2026-01-20"},
-  {"entry_point": "Mindanao Ave.", "exit_point": "CDV", "vehicle_class": "Class 3", "toll_fee": 288, "effective_date": "2026-01-20"},
-  {"entry_point": "Mindanao Ave.", "exit_point": "Bocaue", "vehicle_class": "Class 3", "toll_fee": 420, "effective_date": "2026-01-20"},
-  {"entry_point": "Mindanao Ave.", "exit_point": "San Fernando", "vehicle_class": "Class 3", "toll_fee": 1180, "effective_date": "2026-01-20"},
-  {"entry_point": "Mindanao Ave.", "exit_point": "Tarlac", "vehicle_class": "Class 3", "toll_fee": 2008, "effective_date": "2026-01-20"},
-  {"entry_point": "Balintawak", "exit_point": "Bocaue", "vehicle_class": "Class 3", "toll_fee": 380, "effective_date": "2026-01-20"},
-  {"entry_point": "Balintawak", "exit_point": "San Fernando", "vehicle_class": "Class 3", "toll_fee": 1120, "effective_date": "2026-01-20"},
-  {"entry_point": "Balintawak", "exit_point": "Tarlac", "vehicle_class": "Class 3", "toll_fee": 1940, "effective_date": "2026-01-20"},
-  {"entry_point": "Bocaue", "exit_point": "CDV", "vehicle_class": "Class 3", "toll_fee": 28, "effective_date": "2026-01-20"},
-  {"entry_point": "Bocaue", "exit_point": "San Fernando", "vehicle_class": "Class 3", "toll_fee": 760, "effective_date": "2026-01-20"},
-  {"entry_point": "Bocaue", "exit_point": "Tarlac", "vehicle_class": "Class 3", "toll_fee": 1580, "effective_date": "2026-01-20"},
-  {"entry_point": "San Fernando", "exit_point": "San Simon", "vehicle_class": "Class 3", "toll_fee": 146, "effective_date": "2026-01-20"},
-  {"entry_point": "San Fernando", "exit_point": "Mexico", "vehicle_class": "Class 3", "toll_fee": 89, "effective_date": "2026-01-20"},
-  {"entry_point": "San Fernando", "exit_point": "Tarlac", "vehicle_class": "Class 3", "toll_fee": 820, "effective_date": "2026-01-20"},
-  {"entry_point": "Tarlac", "exit_point": "San Miguel", "vehicle_class": "Class 3", "toll_fee": 96, "effective_date": "2026-01-20"},
-  {"entry_point": "Tarlac", "exit_point": "New Clark City", "vehicle_class": "Class 3", "toll_fee": 447, "effective_date": "2026-01-20"},
-  {"entry_point": "Magallanes", "exit_point": "Alabang", "vehicle_class": "Class 3", "toll_fee": 186, "effective_date": "2026-01-20"},
-  {"entry_point": "Magallanes", "exit_point": "Susana Heights", "vehicle_class": "Class 3", "toll_fee": 248, "effective_date": "2026-01-20"},
-  {"entry_point": "Magallanes", "exit_point": "Santa Rosa", "vehicle_class": "Class 3", "toll_fee": 498, "effective_date": "2026-01-20"},
-  {"entry_point": "Magallanes", "exit_point": "Calamba", "vehicle_class": "Class 3", "toll_fee": 614, "effective_date": "2026-01-20"},
-  {"entry_point": "Alabang", "exit_point": "Santa Rosa", "vehicle_class": "Class 3", "toll_fee": 312, "effective_date": "2026-01-20"},
-  {"entry_point": "Alabang", "exit_point": "Calamba", "vehicle_class": "Class 3", "toll_fee": 428, "effective_date": "2026-01-20"},
-  {"entry_point": "Susana Heights", "exit_point": "Calamba", "vehicle_class": "Class 3", "toll_fee": 365, "effective_date": "2026-01-20"},
-  {"entry_point": "Santa Rosa", "exit_point": "Calamba", "vehicle_class": "Class 3", "toll_fee": 116, "effective_date": "2026-01-20"},
-  {"entry_point": "Calamba", "exit_point": "Sto. Tomas", "vehicle_class": "Class 3", "toll_fee": 95, "effective_date": "2026-01-20"},
-  {"entry_point": "Calamba", "exit_point": "Tanauan", "vehicle_class": "Class 3", "toll_fee": 145, "effective_date": "2026-01-20"},
-  {"entry_point": "Calamba", "exit_point": "Lipa", "vehicle_class": "Class 3", "toll_fee": 320, "effective_date": "2026-01-20"},
-  {"entry_point": "Calamba", "exit_point": "Batangas", "vehicle_class": "Class 3", "toll_fee": 520, "effective_date": "2026-01-20"},
-  {"entry_point": "Sto. Tomas", "exit_point": "Tanauan", "vehicle_class": "Class 3", "toll_fee": 55, "effective_date": "2026-01-20"},
-  {"entry_point": "Sto. Tomas", "exit_point": "Lipa", "vehicle_class": "Class 3", "toll_fee": 230, "effective_date": "2026-01-20"},
-  {"entry_point": "Sto. Tomas", "exit_point": "Batangas", "vehicle_class": "Class 3", "toll_fee": 430, "effective_date": "2026-01-20"},
-  {"entry_point": "Tanauan", "exit_point": "Lipa", "vehicle_class": "Class 3", "toll_fee": 175, "effective_date": "2026-01-20"},
-  {"entry_point": "Tanauan", "exit_point": "Batangas", "vehicle_class": "Class 3", "toll_fee": 375, "effective_date": "2026-01-20"},
-  {"entry_point": "Lipa", "exit_point": "Batangas", "vehicle_class": "Class 3", "toll_fee": 200, "effective_date": "2026-01-20"},
-  {"entry_point": "Santa Rosa", "exit_point": "Batangas", "vehicle_class": "Class 3", "toll_fee": 636, "effective_date": "2026-01-20"},
-  {"entry_point": "Kawit", "exit_point": "Coastal Road", "vehicle_class": "Class 3", "toll_fee": 165, "effective_date": "2026-01-20"},
-  {"entry_point": "Kawit", "exit_point": "Magallanes", "vehicle_class": "Class 3", "toll_fee": 285, "effective_date": "2026-01-20"},
-  {"entry_point": "Coastal Road", "exit_point": "Magallanes", "vehicle_class": "Class 3", "toll_fee": 120, "effective_date": "2026-01-20"}
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "Karuhatan",
+    "vehicle_class": "Class 3",
+    "toll_fee": 254,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "CDV",
+    "vehicle_class": "Class 3",
+    "toll_fee": 288,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "Bocaue",
+    "vehicle_class": "Class 3",
+    "toll_fee": 420,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "San Fernando",
+    "vehicle_class": "Class 3",
+    "toll_fee": 980,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "San Simon",
+    "vehicle_class": "Class 3",
+    "toll_fee": 1120,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Mindanao Ave.",
+    "exit_point": "Tarlac",
+    "vehicle_class": "Class 3",
+    "toll_fee": 2008,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Bocaue",
+    "exit_point": "CDV",
+    "vehicle_class": "Class 3",
+    "toll_fee": 28,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Bocaue",
+    "exit_point": "San Fernando",
+    "vehicle_class": "Class 3",
+    "toll_fee": 560,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Bocaue",
+    "exit_point": "Tarlac",
+    "vehicle_class": "Class 3",
+    "toll_fee": 1580,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "San Fernando",
+    "exit_point": "San Simon",
+    "vehicle_class": "Class 3",
+    "toll_fee": 146,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "San Fernando",
+    "exit_point": "Mexico",
+    "vehicle_class": "Class 3",
+    "toll_fee": 89,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "San Fernando",
+    "exit_point": "Tarlac",
+    "vehicle_class": "Class 3",
+    "toll_fee": 1028,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Tarlac",
+    "exit_point": "San Miguel",
+    "vehicle_class": "Class 3",
+    "toll_fee": 96,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Tarlac",
+    "exit_point": "New Clark City",
+    "vehicle_class": "Class 3",
+    "toll_fee": 447,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Magallanes",
+    "exit_point": "Alabang",
+    "vehicle_class": "Class 3",
+    "toll_fee": 186,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Magallanes",
+    "exit_point": "Susana Heights",
+    "vehicle_class": "Class 3",
+    "toll_fee": 248,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Magallanes",
+    "exit_point": "Santa Rosa",
+    "vehicle_class": "Class 3",
+    "toll_fee": 498,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Magallanes",
+    "exit_point": "Calamba",
+    "vehicle_class": "Class 3",
+    "toll_fee": 614,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Alabang",
+    "exit_point": "Santa Rosa",
+    "vehicle_class": "Class 3",
+    "toll_fee": 312,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Alabang",
+    "exit_point": "Calamba",
+    "vehicle_class": "Class 3",
+    "toll_fee": 428,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Susana Heights",
+    "exit_point": "Calamba",
+    "vehicle_class": "Class 3",
+    "toll_fee": 365,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Santa Rosa",
+    "exit_point": "Calamba",
+    "vehicle_class": "Class 3",
+    "toll_fee": 116,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Santa Rosa",
+    "exit_point": "Sto. Tomas",
+    "vehicle_class": "Class 3",
+    "toll_fee": 285,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Calamba",
+    "exit_point": "Sto. Tomas",
+    "vehicle_class": "Class 3",
+    "toll_fee": 168,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Calamba",
+    "exit_point": "Batangas",
+    "vehicle_class": "Class 3",
+    "toll_fee": 520,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Sto. Tomas",
+    "exit_point": "Batangas",
+    "vehicle_class": "Class 3",
+    "toll_fee": 352,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Kawit",
+    "exit_point": "Coastal Road",
+    "vehicle_class": "Class 3",
+    "toll_fee": 168,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Kawit",
+    "exit_point": "Magallanes",
+    "vehicle_class": "Class 3",
+    "toll_fee": 286,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Coastal Road",
+    "exit_point": "Magallanes",
+    "vehicle_class": "Class 3",
+    "toll_fee": 118,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Alabang",
+    "exit_point": "Magallanes",
+    "vehicle_class": "Class 3",
+    "toll_fee": 186,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Calamba",
+    "exit_point": "Magallanes",
+    "vehicle_class": "Class 3",
+    "toll_fee": 614,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Santa Rosa",
+    "exit_point": "Magallanes",
+    "vehicle_class": "Class 3",
+    "toll_fee": 498,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "San Fernando",
+    "exit_point": "Mindanao Ave.",
+    "vehicle_class": "Class 3",
+    "toll_fee": 980,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Tarlac",
+    "exit_point": "Mindanao Ave.",
+    "vehicle_class": "Class 3",
+    "toll_fee": 2008,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Batangas",
+    "exit_point": "Calamba",
+    "vehicle_class": "Class 3",
+    "toll_fee": 520,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Batangas",
+    "exit_point": "Santa Rosa",
+    "vehicle_class": "Class 3",
+    "toll_fee": 636,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Santa Rosa",
+    "exit_point": "Batangas",
+    "vehicle_class": "Class 3",
+    "toll_fee": 636,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Magallanes",
+    "exit_point": "Kawit",
+    "vehicle_class": "Class 3",
+    "toll_fee": 286,
+    "effective_date": "2026-01-20"
+  },
+  {
+    "entry_point": "Coastal Road",
+    "exit_point": "Kawit",
+    "vehicle_class": "Class 3",
+    "toll_fee": 168,
+    "effective_date": "2026-01-20"
+  }
 ]

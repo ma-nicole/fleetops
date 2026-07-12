@@ -1,4 +1,4 @@
-"""Seed / sync toll plazas + Toll Matrix sample rows from bundled JSON."""
+"""Seed / sync toll plazas (coords) and Class 3 Toll Matrix sample rows."""
 from __future__ import annotations
 
 import json
@@ -9,13 +9,15 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.models.entities import TollMatrix, TollMatrixStatus, TollPlaza, TollPlazaAlias, TollPlazaStatus
+from app.services.toll_plaza_matching import normalize_location
 
 logger = logging.getLogger(__name__)
 
-PLAZA_SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "toll_plaza_coords_seed.json"
-MATRIX_SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "nlex_sctex_class3_sample.json"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+PLAZA_SEED_PATH = DATA_DIR / "toll_plaza_coords_seed.json"
+MATRIX_SEED_PATH = DATA_DIR / "nlex_sctex_class3_sample.json"
 
-# Back-compat alias used by older imports / tests.
+# Back-compat alias used by older imports / smoke tests.
 SEED_PATH = PLAZA_SEED_PATH
 
 
@@ -93,21 +95,41 @@ def ensure_toll_plaza_coords_seeded(db: Session) -> int:
 
     if touched:
         db.commit()
+        logger.info("Toll plaza seed applied: touched=%s", touched)
     return touched
 
 
-def ensure_toll_matrix_seeded(db: Session) -> int:
-    """Insert missing active Class 3 matrix rows from the bundled sample (idempotent)."""
+def ensure_toll_matrix_sample_seeded(db: Session) -> int:
+    """Insert missing Class 3 matrix sample rows (idempotent by entry/exit/class/date)."""
     if not MATRIX_SEED_PATH.is_file():
-        logger.warning("Toll matrix seed missing: %s", MATRIX_SEED_PATH)
+        logger.warning("Toll matrix sample seed missing: %s", MATRIX_SEED_PATH)
         return 0
     try:
         rows = json.loads(MATRIX_SEED_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        logger.exception("Failed reading toll matrix seed")
+        logger.exception("Failed reading toll matrix sample seed")
         return 0
     if not isinstance(rows, list):
         return 0
+
+    existing_rows = (
+        db.query(TollMatrix)
+        .filter(TollMatrix.status == TollMatrixStatus.ACTIVE.value)
+        .all()
+    )
+    existing_keys = {
+        (
+            normalize_location(r.entry_point),
+            normalize_location(r.exit_point),
+            (r.vehicle_class or "Class 3").strip(),
+        )
+        for r in existing_rows
+    }
+    plaza_names = {
+        p.canonical_name.strip()
+        for p in db.query(TollPlaza).all()
+        if p.canonical_name and p.canonical_name.strip()
+    }
 
     inserted = 0
     for row in rows:
@@ -124,21 +146,20 @@ def ensure_toll_matrix_seeded(db: Session) -> int:
             eff = date(2026, 1, 20)
         if not entry or not exit_ or fee <= 0:
             continue
-        exists = (
-            db.query(TollMatrix)
-            .filter(
-                TollMatrix.entry_point == entry,
-                TollMatrix.exit_point == exit_,
-                TollMatrix.vehicle_class == vc,
-                TollMatrix.effective_date == eff,
-            )
-            .first()
-        )
-        if exists:
-            if exists.status != TollMatrixStatus.ACTIVE.value:
-                exists.status = TollMatrixStatus.ACTIVE.value
-                exists.toll_fee = fee
-                inserted += 1
+
+        for pname in (entry, exit_):
+            if pname not in plaza_names:
+                db.add(
+                    TollPlaza(
+                        canonical_name=pname,
+                        status=TollPlazaStatus.ACTIVE.value,
+                    )
+                )
+                plaza_names.add(pname)
+                db.flush()
+
+        key = (normalize_location(entry), normalize_location(exit_), vc)
+        if key in existing_keys:
             continue
         db.add(
             TollMatrix(
@@ -150,15 +171,16 @@ def ensure_toll_matrix_seeded(db: Session) -> int:
                 status=TollMatrixStatus.ACTIVE.value,
             )
         )
+        existing_keys.add(key)
         inserted += 1
 
     if inserted:
         db.commit()
+        logger.info("Toll matrix sample seed applied: inserted=%s", inserted)
     return inserted
 
 
 def ensure_toll_reference_data(db: Session) -> dict[str, int]:
     plazas = ensure_toll_plaza_coords_seeded(db)
-    matrix = ensure_toll_matrix_seeded(db)
-    logger.info("Toll reference seed plazas_touched=%s matrix_inserted=%s", plazas, matrix)
+    matrix = ensure_toll_matrix_sample_seeded(db)
     return {"plazas_touched": plazas, "matrix_inserted": matrix}

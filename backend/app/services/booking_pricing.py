@@ -1,4 +1,4 @@
-"""Shared booking pricing with optional toll matrix lookup."""
+"""Shared booking pricing with Toll Matrix lookup (Class 3)."""
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
@@ -30,11 +30,12 @@ def pricing_with_toll_matrix(
     knobs = resolve_booking_freight_knobs(db, settings)
     loads = split_cargo_into_truck_loads(cargo_weight_tons)
     truck_count = max(1, len(loads))
+    # Always Class 3 for fleet quotes; never fall back to flat toll knobs silently.
     per_truck, meta = resolve_booking_toll_estimate(
         db,
         pickup_location=pickup_location,
         dropoff_location=dropoff_location,
-        vehicle_class=vehicle_class,
+        vehicle_class=DEFAULT_VEHICLE_CLASS,
         truck_count=truck_count,
         as_of_date=as_of_date,
         manual_entry=manual_entry,
@@ -42,19 +43,18 @@ def pricing_with_toll_matrix(
         route_origin=route_origin,
         route_destination=route_destination,
         route_waypoints=route_waypoints,
-        route_distance_km=distance_km,
         settings=settings,
     )
-    # Always inject the matrix result (including explicit 0 with reason). Never fall back to knobs.
+    _ = vehicle_class
+    toll_amount = float(per_truck if per_truck is not None else 0.0)
     pricing = customer_freight_pricing(
         distance_km,
         cargo_weight_tons,
         knobs,
-        toll_budget_per_truck=float(per_truck),
+        toll_budget_per_truck=toll_amount,
         toll_estimate_meta=meta,
     )
     pricing["fuel_price_meta"] = fuel_price_meta_dict(fuel_snap)
     pricing["maintenance_cost_php"] = 0.0
     pricing["service_fee_php"] = 0.0
-    pricing["toll_estimate_meta"] = meta
     return pricing, meta
