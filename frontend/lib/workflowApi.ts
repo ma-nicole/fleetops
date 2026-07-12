@@ -626,7 +626,7 @@ export type ScheduleTimelineResource = {
   id: number;
   label: string;
   sub: string;
-  availability: "available" | "maintenance" | "lane";
+  availability: "available" | "maintenance" | "lane" | "assigned" | "unavailable" | "on_trip";
 };
 
 export type ScheduleTimelineEvent = {
