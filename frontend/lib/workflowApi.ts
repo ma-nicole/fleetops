@@ -27,6 +27,7 @@ export type BookingStatus =
 
 export type CustomerBookingAssignment = {
   trip_id: number;
+  booking_id?: number;
   trip_status: string;
   helper_progress_status: string | null;
   truck: {
@@ -44,6 +45,15 @@ export type CustomerBookingAssignment = {
     remarks: string | null;
     photo_url: string | null;
     created_at: string;
+    booking_id?: number;
+    trip_id?: number;
+    helper_id?: number | null;
+    helper_name?: string | null;
+    driver_id?: number | null;
+    driver_name?: string | null;
+    delivery_status?: string;
+    latitude?: number | null;
+    longitude?: number | null;
   }>;
   status_timeline: Array<{
     status: string;
@@ -51,7 +61,17 @@ export type CustomerBookingAssignment = {
     remarks: string | null;
     photo_url: string | null;
     created_at: string;
+    booking_id?: number;
+    trip_id?: number;
+    helper_id?: number | null;
+    helper_name?: string | null;
+    driver_id?: number | null;
+    driver_name?: string | null;
+    delivery_status?: string;
+    latitude?: number | null;
+    longitude?: number | null;
   }>;
+  timeline_events?: CrewTimelineEvent[];
 };
 
 export type CustomerBookingRow = Booking & {
@@ -197,6 +217,12 @@ export type CrewTimelineEvent = {
   photo_url: string | null;
   submitted_by: string | null;
   update_index?: number;
+  booking_id?: number;
+  trip_id?: number;
+  helper_id?: number | null;
+  driver_id?: number | null;
+  driver_name?: string | null;
+  delivery_status?: string | null;
   evidence_verification_label?: string | null;
   evidence_review_required?: boolean;
   evidence_latitude?: number | null;
@@ -813,6 +839,7 @@ export const WorkflowApi = {
       };
       assignments: Array<{
         trip_id: number;
+        booking_id?: number;
         trip_status: string;
         helper_progress_status: string | null;
         truck: { id: number; code: string; model_name: string | null; capacity_tons: number } | null;
@@ -824,6 +851,8 @@ export const WorkflowApi = {
           remarks: string | null;
           photo_url: string | null;
           created_at: string;
+          latitude?: number | null;
+          longitude?: number | null;
         }>;
         status_timeline: Array<{
           status: string;
@@ -831,7 +860,10 @@ export const WorkflowApi = {
           remarks: string | null;
           photo_url: string | null;
           created_at: string;
+          latitude?: number | null;
+          longitude?: number | null;
         }>;
+        timeline_events?: CrewTimelineEvent[];
       }>;
       /** Dispatcher operational logs (staff only; omitted for customers). */
       operational_logs?: Array<{

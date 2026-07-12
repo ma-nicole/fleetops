@@ -33,6 +33,8 @@ from app.services.booking_freight_knobs import (
     booking_freight_knobs_to_dict,
     ensure_booking_freight_row,
 )
+from app.services.fuel_price_service import ensure_fuel_price_for_quote, mark_admin_manual_fuel_price
+
 from app.services.cargo_type_classification import (
     cargo_type_category_label,
     parse_cargo_restricted_reasons,
@@ -268,9 +270,29 @@ def put_booking_freight_settings(
     row = ensure_booking_freight_row(db, app_settings)
     row.diesel_price_php_per_liter = payload.diesel_price_php_per_liter
     row.toll_fees_php_per_trip = payload.toll_fees_php_per_trip
+    mark_admin_manual_fuel_price(row)
     db.commit()
     db.refresh(row)
     return booking_freight_knobs_to_dict(row)
+
+
+@router.post("/booking-freight-settings/refresh-fuel-price")
+def refresh_booking_fuel_price(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    """Force-refresh diesel ₱/L from configured source (or bundled/cache fallback)."""
+    snap = ensure_fuel_price_for_quote(db, app_settings, force_refresh=True)
+    row = ensure_booking_freight_row(db, app_settings)
+    data = booking_freight_knobs_to_dict(row)
+    data["fuel_price_refresh"] = {
+        "ok": snap.refresh_ok,
+        "from_cache": snap.from_cache,
+        "message": snap.message,
+        "source": snap.source,
+        "fetched_at": snap.fetched_at.isoformat() if snap.fetched_at else None,
+    }
+    return data
 
 
 # ---------- Pricing config (Settings page) ----------

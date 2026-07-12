@@ -22,8 +22,17 @@ export type AdminStats = {
 export type AdminBookingFreightSettings = {
   id: number;
   diesel_price_php_per_liter: number;
+  diesel_price_source?: string | null;
+  diesel_price_fetched_at?: string | null;
   toll_fees_php_per_trip: number;
   updated_at: string | null;
+  fuel_price_refresh?: {
+    ok: boolean;
+    from_cache: boolean;
+    message: string | null;
+    source: string;
+    fetched_at: string | null;
+  };
 };
 
 export type AdminTruck = {
@@ -58,9 +67,13 @@ export const adminApi = {
 
   getBookingFreightSettings: () => apiGet<AdminBookingFreightSettings>("/admin/booking-freight-settings"),
 
-  saveBookingFreightSettings: (
-    body: Omit<AdminBookingFreightSettings, "id" | "updated_at">,
-  ) => apiPut<AdminBookingFreightSettings>("/admin/booking-freight-settings", body),
+  saveBookingFreightSettings: (body: {
+    diesel_price_php_per_liter: number;
+    toll_fees_php_per_trip: number;
+  }) => apiPut<AdminBookingFreightSettings>("/admin/booking-freight-settings", body),
+
+  refreshFuelPrice: () =>
+    apiPost<AdminBookingFreightSettings>("/admin/booking-freight-settings/refresh-fuel-price"),
 
   listTrucks: () => apiGet<AdminTruck[]>("/admin/trucks"),
 

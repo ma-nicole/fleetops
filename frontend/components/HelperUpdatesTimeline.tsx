@@ -16,6 +16,10 @@ export type HelperTimelineRow = {
   pending?: boolean;
   evidence_verification_label?: string | null;
   evidence_review_required?: boolean;
+  gps_label?: string | null;
+  delivery_status?: string | null;
+  submitted_by?: string | null;
+  driver_name?: string | null;
 };
 
 const PHASES = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"] as const;
@@ -57,6 +61,15 @@ function statusLabelForEvent(ev: CrewTimelineEvent): string {
 function remarksForEvent(ev: CrewTimelineEvent): string {
   const parts = [(ev.detail || "").trim(), (ev.remarks || "").trim()].filter(Boolean);
   return parts.length ? parts.join(" · ") : "—";
+}
+
+function gpsLabelForEvent(ev: CrewTimelineEvent): string | null {
+  const lat = ev.evidence_latitude;
+  const lon = ev.evidence_longitude;
+  if (typeof lat === "number" && typeof lon === "number" && Number.isFinite(lat) && Number.isFinite(lon)) {
+    return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  }
+  return null;
 }
 
 function nextPhase(current: string): string | null {
@@ -112,6 +125,10 @@ export function buildHelperTimelineRows(
     pending: false,
     evidence_verification_label: ev.evidence_verification_label,
     evidence_review_required: ev.evidence_review_required,
+    gps_label: gpsLabelForEvent(ev),
+    delivery_status: ev.delivery_status ?? (ev.kind === "location" ? "en_route" : ev.code),
+    submitted_by: ev.submitted_by,
+    driver_name: ev.driver_name,
   }));
 
   if (!opts?.includePending) {
@@ -123,23 +140,8 @@ export function buildHelperTimelineRows(
     return rows;
   }
 
-  if (op === "en_route") {
-    const submitted = opts.locationUpdatesSubmitted ?? 0;
-    const required = opts.requiredLocationUpdates ?? 3;
-    if (submitted < required) {
-      rows.push({
-        key: "pending-location-updates",
-        at: null,
-        status: "Location updates pending",
-        remarks: `Submit ${required - submitted} more location update${required - submitted === 1 ? "" : "s"} before drop-off (${submitted}/${required} done).`,
-        tone: "warning",
-        pending: true,
-      });
-    }
-  }
-
   const allowed = nextPhase(op === "assigned" ? "for_pickup" : op);
-  if (allowed && op !== "en_route") {
+  if (allowed) {
     rows.push({
       key: `pending-${allowed}`,
       at: null,
@@ -147,16 +149,9 @@ export function buildHelperTimelineRows(
       remarks:
         allowed === "picked_up" || allowed === "dropped_off"
           ? "Camera photo proof required when you submit this milestone."
-          : "Submit the next milestone when this leg is complete.",
-      tone: "warning",
-      pending: true,
-    });
-  } else if (op === "en_route" && (opts.locationUpdatesSubmitted ?? 0) >= (opts.requiredLocationUpdates ?? 3)) {
-    rows.push({
-      key: "pending-dropped_off",
-      at: null,
-      status: "Next: dropped off",
-      remarks: "Camera photo proof required when marking dropped off.",
+          : allowed === "en_route"
+            ? "You can add unlimited progress updates with photo proof while en route."
+            : "Submit the next milestone when this leg is complete.",
       tone: "warning",
       pending: true,
     });
@@ -172,6 +167,8 @@ type HelperUpdatesTimelineProps = {
   requiredLocationUpdates?: number;
   mediaSrc?: (url: string) => string;
   title?: string;
+  showPending?: boolean;
+  emptyMessage?: string;
 };
 
 export default function HelperUpdatesTimeline({
@@ -181,18 +178,20 @@ export default function HelperUpdatesTimeline({
   requiredLocationUpdates,
   mediaSrc,
   title = "Helper updates timeline",
+  showPending = true,
+  emptyMessage = "No helper updates yet. Submit your first milestone below when ready.",
 }: HelperUpdatesTimelineProps) {
   const rows = buildHelperTimelineRows(events, {
     operationalStatus,
     locationUpdatesSubmitted,
     requiredLocationUpdates,
-    includePending: true,
+    includePending: showPending,
   });
 
   if (rows.length === 0) {
     return (
       <p style={{ margin: "0 0 1rem", color: "#64748B", fontSize: "0.88rem" }}>
-        No helper updates yet. Submit your first milestone below when ready.
+        {emptyMessage}
       </p>
     );
   }
@@ -262,6 +261,11 @@ export default function HelperUpdatesTimeline({
                   >
                     {row.status}
                   </span>
+                  {row.delivery_status ? (
+                    <span style={{ fontSize: "0.68rem", fontWeight: 600, color: "#475569" }}>
+                      Status: {row.delivery_status.replace(/_/g, " ")}
+                    </span>
+                  ) : null}
                   {row.pending ? (
                     <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#92400E", letterSpacing: "0.04em" }}>
                       AWAITING
@@ -278,6 +282,18 @@ export default function HelperUpdatesTimeline({
                 <div style={{ color: "#1e293b" }}>
                   <strong>Remarks:</strong> {row.remarks}
                 </div>
+                {row.gps_label ? (
+                  <div style={{ color: "#475569", marginTop: 2, fontSize: "0.8rem" }}>
+                    <strong>GPS:</strong> {row.gps_label}
+                  </div>
+                ) : null}
+                {(row.submitted_by || row.driver_name) && !row.pending ? (
+                  <div style={{ color: "#64748B", marginTop: 2, fontSize: "0.78rem" }}>
+                    {row.submitted_by ? <>Helper: {row.submitted_by}</> : null}
+                    {row.submitted_by && row.driver_name ? " · " : null}
+                    {row.driver_name ? <>Driver: {row.driver_name}</> : null}
+                  </div>
+                ) : null}
                 {row.photo_url && mediaSrc ? (
                   <a
                     href={mediaSrc(row.photo_url)}

@@ -164,6 +164,7 @@ def _conflicts_for_resource(
 ) -> list[dict[str, Any]]:
     target_start, target_end = booking_interval_resolved(db, booking, cfg)
     conflicts: list[dict[str, Any]] = []
+    now = datetime.utcnow()
 
     for trip, bk in _active_trips(db):
         if exclude_booking_id is not None and bk.id == exclude_booking_id:
@@ -171,8 +172,13 @@ def _conflicts_for_resource(
         if not _trip_on_resource(trip, kind, resource_id):
             continue
         start, end = trip_interval(db, trip, cfg)
-        if not intervals_overlap(target_start, target_end, start, end):
+        # Live execution always blocks assignment, even if the planned window already ended (delays).
+        live_busy = trip.status in _ON_TRIP_STATUSES
+        if not live_busy and not intervals_overlap(target_start, target_end, start, end):
             continue
+        window_end = end
+        if live_busy and end < now:
+            window_end = now
         conflicts.append(
             {
                 "booking_id": bk.id,
@@ -180,9 +186,10 @@ def _conflicts_for_resource(
                 "scheduled_date": str(bk.scheduled_date),
                 "scheduled_time_slot": bk.scheduled_time_slot,
                 "window_start": start.isoformat(),
-                "window_end": end.isoformat(),
+                "window_end": window_end.isoformat(),
                 "trip_status": _trip_status_value(trip),
                 "source": "trip",
+                "live_busy": live_busy,
             }
         )
 
@@ -210,6 +217,37 @@ def _conflicts_for_resource(
         )
 
     return conflicts
+
+
+def _resource_has_active_commitment(
+    *,
+    kind: ResourceKind,
+    resource_id: int,
+    trip_rows: list[tuple[Trip, Booking]],
+    assignment_rows: list[tuple[TruckAssignment, Booking]],
+    exclude_booking_id: int | None = None,
+) -> bool:
+    """True when the resource has any non-terminal trip or pending assignment (any schedule)."""
+    for trip, bk in trip_rows:
+        if exclude_booking_id is not None and bk.id == exclude_booking_id:
+            continue
+        if _trip_on_resource(trip, kind, resource_id):
+            return True
+    for ta, bk in assignment_rows:
+        if exclude_booking_id is not None and bk.id == exclude_booking_id:
+            continue
+        if _assignment_on_resource(ta, kind, resource_id):
+            return True
+    return False
+
+
+def _busy_conflict_reason(kind: ResourceKind, global_status: ResourceStatus) -> str:
+    label = kind.replace("_", " ")
+    if global_status == "on_trip":
+        return f"{label.title()} is currently on an active trip."
+    if global_status == "assigned":
+        return f"{label.title()} already has a pending or active assignment."
+    return f"{label.title()} is not available."
 
 
 def _next_available_at(conflicts: list[dict[str, Any]]) -> str | None:
@@ -304,8 +342,18 @@ def evaluate_truck_for_booking(
     conflict_reason = _conflict_message("truck", conflicts)
     if _truck_operationally_unavailable(truck):
         conflict_reason = "Truck is under maintenance and cannot be assigned."
+    has_active = _resource_has_active_commitment(
+        kind="truck",
+        resource_id=truck.id,
+        trip_rows=trip_rows,
+        assignment_rows=assignment_rows,
+        exclude_booking_id=exclude_booking_id,
+    )
+    if has_active and not conflict_reason:
+        conflict_reason = _busy_conflict_reason("truck", global_status)
     assignable = (
         not conflicts
+        and not has_active
         and not _truck_operationally_unavailable(truck)
         and _norm(truck.status) == "available"
     )
@@ -348,7 +396,16 @@ def evaluate_driver_for_booking(
     conflict_reason = _conflict_message("driver", conflicts)
     if _off_duty(user.availability_status):
         conflict_reason = "Driver is off duty or on break."
-    assignable = not conflicts and not _off_duty(user.availability_status)
+    has_active = _resource_has_active_commitment(
+        kind="driver",
+        resource_id=user.id,
+        trip_rows=trip_rows,
+        assignment_rows=assignment_rows,
+        exclude_booking_id=exclude_booking_id,
+    )
+    if has_active and not conflict_reason:
+        conflict_reason = _busy_conflict_reason("driver", global_status)
+    assignable = not conflicts and not has_active and not _off_duty(user.availability_status)
     return _serialize_resource_row(
         kind="driver",
         resource_id=user.id,
@@ -387,7 +444,16 @@ def evaluate_helper_for_booking(
     conflict_reason = _conflict_message("helper", conflicts)
     if _off_duty(user.availability_status):
         conflict_reason = "Helper is off duty or on break."
-    assignable = not conflicts and not _off_duty(user.availability_status)
+    has_active = _resource_has_active_commitment(
+        kind="helper",
+        resource_id=user.id,
+        trip_rows=trip_rows,
+        assignment_rows=assignment_rows,
+        exclude_booking_id=exclude_booking_id,
+    )
+    if has_active and not conflict_reason:
+        conflict_reason = _busy_conflict_reason("helper", global_status)
+    assignable = not conflicts and not has_active and not _off_duty(user.availability_status)
     return _serialize_resource_row(
         kind="helper",
         resource_id=user.id,
@@ -522,18 +588,59 @@ def validate_resource_assignment(
     return None
 
 
+def _other_active_commitment_exists(
+    db: Session,
+    *,
+    kind: ResourceKind,
+    resource_id: int,
+    exclude_trip_id: int,
+    exclude_booking_id: int | None = None,
+) -> bool:
+    for trip, _bk in _active_trips(db):
+        if trip.id == exclude_trip_id:
+            continue
+        if _trip_on_resource(trip, kind, resource_id):
+            return True
+    for ta, bk in _active_assignments(db):
+        # Ignore this booking's assignment row — the completing trip owns that commitment.
+        if exclude_booking_id is not None and bk.id == exclude_booking_id:
+            continue
+        if _assignment_on_resource(ta, kind, resource_id):
+            return True
+    return False
+
+
 def release_trip_resources(db: Session, trip: Trip) -> None:
-    """Mark truck and crew available when a trip is completed or cancelled."""
-    if trip.truck_id:
+    """Mark truck and crew available when a trip is completed or cancelled — only if no other active legs remain."""
+    booking_id = trip.booking_id
+    if trip.truck_id and not _other_active_commitment_exists(
+        db,
+        kind="truck",
+        resource_id=trip.truck_id,
+        exclude_trip_id=trip.id,
+        exclude_booking_id=booking_id,
+    ):
         truck = db.query(Truck).filter(Truck.id == trip.truck_id).first()
         if truck and _norm(truck.status) != "maintenance":
             truck.status = "available"
             truck.availability_status = "available"
-    if trip.driver_id:
+    if trip.driver_id and not _other_active_commitment_exists(
+        db,
+        kind="driver",
+        resource_id=trip.driver_id,
+        exclude_trip_id=trip.id,
+        exclude_booking_id=booking_id,
+    ):
         driver = db.query(User).filter(User.id == trip.driver_id).first()
         if driver:
             driver.availability_status = "available"
-    if trip.helper_id:
+    if trip.helper_id and not _other_active_commitment_exists(
+        db,
+        kind="helper",
+        resource_id=trip.helper_id,
+        exclude_trip_id=trip.id,
+        exclude_booking_id=booking_id,
+    ):
         helper = db.query(User).filter(User.id == trip.helper_id).first()
         if helper:
             helper.availability_status = "available"

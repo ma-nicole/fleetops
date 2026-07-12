@@ -158,6 +158,22 @@ class RouteQuoteResponse(BaseModel):
 
     toll_match_method: str | None = None
 
+    toll_source: str | None = None
+
+    toll_segments: list[dict] = Field(default_factory=list)
+
+    maintenance_cost_php: float = 0.0
+
+    service_fee_php: float = 0.0
+
+    fuel_price_source: str | None = None
+
+    fuel_price_fetched_at: str | None = None
+
+    fuel_price_from_cache: bool = True
+
+    fuel_price_message: str | None = None
+
     distance_confirmed: bool = True
 
     distance_warning: str | None = None
@@ -318,6 +334,22 @@ def quote_customer_route(
         suggested_toll_exit_point=toll_meta.get("suggested_exit_point"),
 
         toll_match_method=toll_meta.get("match_method"),
+
+        toll_source=toll_meta.get("toll_source"),
+
+        toll_segments=toll_meta.get("segments") or [],
+
+        maintenance_cost_php=float(pricing.get("maintenance_cost_php") or 0),
+
+        service_fee_php=float(pricing.get("service_fee_php") or 0),
+
+        fuel_price_source=(pricing.get("fuel_price_meta") or {}).get("fuel_price_source"),
+
+        fuel_price_fetched_at=(pricing.get("fuel_price_meta") or {}).get("fuel_price_fetched_at"),
+
+        fuel_price_from_cache=bool((pricing.get("fuel_price_meta") or {}).get("fuel_price_from_cache", True)),
+
+        fuel_price_message=(pricing.get("fuel_price_meta") or {}).get("fuel_price_message"),
 
         distance_confirmed=dist.distance_confirmed,
 

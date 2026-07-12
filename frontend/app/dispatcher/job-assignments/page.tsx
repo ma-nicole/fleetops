@@ -270,11 +270,48 @@ function DispatcherJobAssignmentsInner() {
         <header>
           <h1 style={{ margin: 0 }}>Job Assignment</h1>
           <p style={{ color: "#6B7280", marginTop: 4 }}>
-            Shows bookings with <strong>verified payment, approved declaration, and cargo type validated</strong> that still
-            need truck / driver / helper assignment.
-            Capacity rules (four 42 t trucks, overlap by route duration) also apply to customer booking windows.
+            Clear sequence: select a ready booking → assign truck → assign driver → assign helper → create trip.
+            Only resources that are <strong>Available</strong> (no active trip, no pending assignment, no schedule
+            overlap) can be selected. Status badges: Available, Assigned, On Trip, Unavailable.
           </p>
         </header>
+
+        <ol
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            listStyle: "none",
+            margin: 0,
+            padding: "0.75rem 1rem",
+            background: "#F8FAFC",
+            border: "1px solid #E2E8F0",
+            borderRadius: 10,
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            color: "#334155",
+          }}
+        >
+          {[
+            "1. Select booking",
+            "2. Assign truck",
+            "3. Assign driver",
+            "4. Assign helper",
+            "5. Create trip",
+          ].map((step, idx) => (
+            <li
+              key={step}
+              style={{
+                padding: "0.35rem 0.65rem",
+                borderRadius: 8,
+                background: bookingId && idx === 0 ? "#DBEAFE" : "#fff",
+                border: "1px solid #E2E8F0",
+              }}
+            >
+              {step}
+            </li>
+          ))}
+        </ol>
 
         {loadingBookings ? <p style={{ color: "#6B7280", margin: 0 }}>Loading bookings…</p> : null}
 

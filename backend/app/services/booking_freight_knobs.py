@@ -17,6 +17,8 @@ def ensure_booking_freight_row(db: Session, app: Settings | None = None) -> Book
     row = BookingFreightSettings(
         id=1,
         diesel_price_php_per_liter=float(cfg.diesel_price_php_per_liter),
+        diesel_price_source="env_seed",
+        diesel_price_fetched_at=None,
         toll_fees_php_per_trip=float(cfg.toll_fees_php_per_trip),
     )
     db.add(row)
@@ -33,6 +35,8 @@ def booking_freight_knobs_to_dict(row: BookingFreightSettings) -> dict:
     return {
         "id": row.id,
         "diesel_price_php_per_liter": float(row.diesel_price_php_per_liter),
+        "diesel_price_source": row.diesel_price_source,
+        "diesel_price_fetched_at": row.diesel_price_fetched_at.isoformat() if row.diesel_price_fetched_at else None,
         "toll_fees_php_per_trip": float(row.toll_fees_php_per_trip),
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }

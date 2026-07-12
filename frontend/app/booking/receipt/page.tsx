@@ -179,7 +179,7 @@ export default function ReceiptPage() {
            Download receipt (PDF)
         </button>
         <Link
-          href="/booking/status"
+          href="/modules/operations/trips"
           style={{
             padding: "0.75rem",
             background: "#FF9800",

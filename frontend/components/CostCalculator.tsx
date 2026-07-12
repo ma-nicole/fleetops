@@ -58,9 +58,6 @@ export default function CostCalculator({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [routeQuoteMeta, setRouteQuoteMeta] = useState<QuoteGeoMeta | null>(null);
   const [tollEstimateMeta, setTollEstimateMeta] = useState<TollEstimateMeta | null>(null);
-  const [manualTollEntry, setManualTollEntry] = useState("");
-  const [manualTollExit, setManualTollExit] = useState("");
-  const [manualVehicleClass, setManualVehicleClass] = useState("Class 3");
   const [manualDistanceKm, setManualDistanceKm] = useState("");
   const [distanceConfirmed, setDistanceConfirmed] = useState(true);
   const [distanceWarning, setDistanceWarning] = useState<string | null>(null);
@@ -258,6 +255,8 @@ export default function CostCalculator({
         plazaOptions: data.toll_plaza_options ?? [],
         suggestedEntry: data.suggested_toll_entry_point ?? null,
         suggestedExit: data.suggested_toll_exit_point ?? null,
+        tollSource: data.toll_source ?? null,
+        segments: data.toll_segments ?? [],
       });
       setDistanceConfirmed(data.distance_confirmed !== false);
       setDistanceWarning(data.distance_warning ?? null);
@@ -281,9 +280,7 @@ export default function CostCalculator({
           pickup_location: pickup,
           dropoff_location: dropoff,
           weight_tons: effectiveWeightTons,
-          toll_entry_point: manualTollEntry.trim() || undefined,
-          toll_exit_point: manualTollExit.trim() || undefined,
-          vehicle_class: manualVehicleClass.trim() || undefined,
+          vehicle_class: "Class 3",
           distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
         }),
         signal,
@@ -294,9 +291,6 @@ export default function CostCalculator({
       pickup,
       dropoff,
       effectiveWeightTons,
-      manualTollEntry,
-      manualTollExit,
-      manualVehicleClass,
       manualDistanceKm,
       applyRouteQuoteResponse,
     ],
@@ -369,9 +363,6 @@ export default function CostCalculator({
     hasEnoughSites,
     pickupId,
     dropoffId,
-    manualTollEntry,
-    manualTollExit,
-    manualVehicleClass,
     manualDistanceKm,
     fetchRouteQuote,
     currentStep,
@@ -502,9 +493,7 @@ export default function CostCalculator({
         terms_signer_name: termsSignerName || undefined,
         cargo_declaration: cargoDeclaration!,
         terms_e_signature: termsSignature!,
-        toll_entry_point: manualTollEntry.trim() || undefined,
-        toll_exit_point: manualTollExit.trim() || undefined,
-        vehicle_class: manualVehicleClass.trim() || undefined,
+        vehicle_class: "Class 3",
         distance_km_override: manualDistanceKm.trim() ? Number(manualDistanceKm) : undefined,
       });
 
@@ -636,9 +625,9 @@ export default function CostCalculator({
             distanceWarning={distanceWarning}
             distanceConfirmed={distanceConfirmed}
             manualDistanceKm={manualDistanceKm}
-            manualTollEntry={manualTollEntry}
-            manualTollExit={manualTollExit}
-            manualVehicleClass={manualVehicleClass}
+            manualTollEntry=""
+            manualTollExit=""
+            manualVehicleClass="Class 3"
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
             quoteLoading={loading}
@@ -649,9 +638,9 @@ export default function CostCalculator({
             hasEnoughSites={hasEnoughSites}
             bookingPricingHint={bookingPricingHint}
             onManualDistanceKmChange={setManualDistanceKm}
-            onManualTollEntryChange={setManualTollEntry}
-            onManualTollExitChange={setManualTollExit}
-            onManualVehicleClassChange={setManualVehicleClass}
+            onManualTollEntryChange={() => {}}
+            onManualTollExitChange={() => {}}
+            onManualVehicleClassChange={() => {}}
           />
         )}
 

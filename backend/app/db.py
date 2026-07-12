@@ -271,6 +271,10 @@ def apply_runtime_schema_fixes() -> None:
             alters.append(
                 "ALTER TABLE booking_freight_settings ADD COLUMN toll_fees_php_per_trip FLOAT NOT NULL DEFAULT 0"
             )
+        if "diesel_price_source" not in bf_cols:
+            alters.append("ALTER TABLE booking_freight_settings ADD COLUMN diesel_price_source VARCHAR(128) NULL")
+        if "diesel_price_fetched_at" not in bf_cols:
+            alters.append("ALTER TABLE booking_freight_settings ADD COLUMN diesel_price_fetched_at DATETIME NULL")
         for col in (
             "truck_fuel_efficiency_kmpl",
             "cargo_rate_php_per_ton",

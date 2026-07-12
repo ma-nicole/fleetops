@@ -564,7 +564,7 @@ export default function OperationalCrewDashboard() {
                   </Link>
                 ) : (
                   <Link
-                    href="/driver/general-form"
+                    href="/modules/operations/driver-tasks"
                     className="button"
                     style={{
                       background: "#FF9800",
@@ -577,7 +577,7 @@ export default function OperationalCrewDashboard() {
                       fontWeight: 600,
                     }}
                   >
-                    Forms &amp; reports
+                    Accept / update job
                   </Link>
                 )}
               </div>
@@ -858,8 +858,8 @@ export default function OperationalCrewDashboard() {
                   Update status &amp; location
                 </Link>
               ) : (
-                <Link href="/driver/general-form" className="button" style={{ background: "#FF9800", color: "#fff", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
-                  Forms &amp; reports
+                <Link href="/modules/operations/driver-tasks" className="button" style={{ background: "#FF9800", color: "#fff", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                  Accept / update job
                 </Link>
               )}
               <button type="button" className="button" style={{ background: "#E5E7EB", color: "var(--text)" }} onClick={() => setDetailTrip(null)}>

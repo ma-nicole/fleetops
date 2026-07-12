@@ -382,23 +382,52 @@ def build_timeline(
         resources.append({"id": 0, "label": "Slot / capacity holds", "sub": "Unassigned lane", "availability": "lane"})
         for trk in trucks:
             st = _norm(trk.status)
+            ast = _norm(getattr(trk, "availability_status", None))
+            if st == "maintenance":
+                availability = "maintenance"
+            elif ast == "assigned":
+                availability = "assigned"
+            else:
+                availability = "available"
             resources.append(
                 {
                     "id": trk.id,
                     "label": trk.code,
                     "sub": f"{float(trk.capacity_tons or 0):.0f} t · {trk.status or '—'}",
-                    "availability": "maintenance" if st == "maintenance" else "available",
+                    "availability": availability,
                 }
             )
     else:
         drivers = db.query(User).filter(User.role == UserRole.DRIVER).order_by(User.full_name).all()
+        busy_driver_ids = {
+            trip.driver_id
+            for trip, _bk in (
+                db.query(Trip, Booking)
+                .join(Booking, Booking.id == Trip.booking_id)
+                .filter(
+                    ~Trip.status.in_({TripStatus.COMPLETED, TripStatus.CANCELLED}),
+                    Trip.driver_id.isnot(None),
+                )
+                .all()
+            )
+            if trip.driver_id
+        }
         for u in drivers:
+            st = _norm(u.availability_status)
+            if u.id in busy_driver_ids:
+                availability = "assigned"
+            elif st in {"off_duty", "off-duty", "on_break", "break", "unavailable"}:
+                availability = "unavailable"
+            elif st == "assigned":
+                availability = "assigned"
+            else:
+                availability = "available"
             resources.append(
                 {
                     "id": u.id,
                     "label": u.full_name,
                     "sub": u.availability_status or "—",
-                    "availability": "available",
+                    "availability": availability,
                 }
             )
 

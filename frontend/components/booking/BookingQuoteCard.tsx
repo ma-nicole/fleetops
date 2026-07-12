@@ -51,12 +51,19 @@ export default function BookingQuoteCard({
   quoteStatus,
   showApproximateRoutingWarning,
   readOnly = false,
-  allowTollEdit = true,
+  allowTollEdit = false,
   onManualDistanceKmChange,
-  onManualTollEntryChange,
-  onManualTollExitChange,
-  onManualVehicleClassChange,
+  onManualTollEntryChange: _onManualTollEntryChange,
+  onManualTollExitChange: _onManualTollExitChange,
+  onManualVehicleClassChange: _onManualVehicleClassChange,
 }: Props) {
+  void allowTollEdit;
+  void _onManualTollEntryChange;
+  void _onManualTollExitChange;
+  void _onManualVehicleClassChange;
+  void manualTollEntry;
+  void manualTollExit;
+  void manualVehicleClass;
   const providerNote = geocodeProviderNote(routeQuoteMeta);
 
   if (loading && hasEnoughSites) {
@@ -136,10 +143,8 @@ export default function BookingQuoteCard({
       {freightLines ? (
         <>
           <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--text-secondary)" }}>
-            Admin sets only <strong>diesel ₱/L</strong> and <strong>toll per trip</strong> under Calculations. Cargo
-            rate (₱650/t), 4 km/L, and crew percentages are fixed in the app to match your formula.
-            Offline fallbacks: <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_DIESEL_PRICE_PHP_PER_LITER</code>,{" "}
-            <code style={{ fontSize: "0.74rem" }}>NEXT_PUBLIC_TOLL_FEES_PHP_PER_TRIP</code>.
+            Fuel ₱/L is loaded automatically (cached) and toll is estimated from the Toll Matrix using pickup, dropoff,
+            and truck class. Cargo rate (₱650/t), 4 km/L, and crew percentages stay fixed in the app formula.
           </p>
           <ul
             style={{
@@ -157,6 +162,13 @@ export default function BookingQuoteCard({
             <li>
               Fuel (all trucks, route km ÷ 4 km/L) → {freightLines.diesel_liters.toFixed(2)} L @ ₱
               {freightLines.diesel_price_per_liter.toFixed(2)}/L → {formatPhp(freightLines.diesel_cost_php)}
+              {freightLines.fuel_price_fetched_at ? (
+                <span>
+                  {" "}
+                  · last updated {new Date(freightLines.fuel_price_fetched_at).toLocaleString()}
+                  {freightLines.fuel_price_source ? ` (${freightLines.fuel_price_source})` : ""}
+                </span>
+              ) : null}
             </li>
             <li>
               Driver share ({freightLines.driver_freight_share_pct.toFixed(2)}% of each truck&apos;s gross) →{" "}
@@ -166,7 +178,9 @@ export default function BookingQuoteCard({
               Helper share ({freightLines.helper_freight_share_pct.toFixed(2)}% of each truck&apos;s gross) →{" "}
               {formatPhp(freightLines.helper_share_php)}
             </li>
-            <li>Toll (per truck per trip) → {formatPhp(freightLines.toll_fees_php)}</li>
+            <li>
+              Toll (auto from {freightLines.toll_source || "Toll Matrix"}) → {formatPhp(freightLines.toll_fees_php)}
+            </li>
             {tollEstimateMeta && (
               <li style={{ listStyle: "none", marginTop: "0.5rem" }}>
                 <div
@@ -192,8 +206,18 @@ export default function BookingQuoteCard({
                           {tollEstimateMeta.effectiveDate ? ` (effective ${tollEstimateMeta.effectiveDate.slice(0, 10)})` : ""}
                         </div>
                       )}
+                      {(tollEstimateMeta.segments?.length ?? 0) > 1 ? (
+                        <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", fontSize: "0.8rem" }}>
+                          {tollEstimateMeta.segments!.map((seg, idx) => (
+                            <li key={`${seg.entry_point}-${seg.exit_point}-${idx}`}>
+                              {seg.entry_point} → {seg.exit_point}: {formatPhp(seg.toll_fee)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                       <div style={{ fontSize: "0.85rem", color: "#6B7280", marginTop: "0.25rem" }}>
-                        NLEX-SCTEX toll matrix fee (descriptive lookup, not live gate detection), included in quoted total.
+                        Source: {tollEstimateMeta.tollSource || freightLines.toll_source || "Toll Matrix"} (automatic
+                        descriptive lookup).
                       </div>
                     </>
                   ) : (
@@ -201,58 +225,11 @@ export default function BookingQuoteCard({
                       <strong>Toll estimate</strong>
                       <div style={{ fontSize: "0.9rem", marginTop: "0.25rem" }}>
                         {tollEstimateMeta.message ||
-                          "No toll plaza match found. Please select entry and exit toll manually."}
+                          "No Toll Matrix match for this route. Flat toll fallback is included so booking can continue."}
                       </div>
                     </>
                   )}
                 </div>
-                {allowTollEdit && !tollEstimateMeta.matched && tollEstimateMeta.plazaOptions.length > 0 && (
-                  <div style={{ marginTop: "0.65rem", display: "grid", gap: "0.5rem" }}>
-                    <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
-                      <span>Entry toll plaza (manual)</span>
-                      <select
-                        value={manualTollEntry}
-                        onChange={(e) => onManualTollEntryChange(e.target.value)}
-                        style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
-                      >
-                        <option value="">— select entry plaza —</option>
-                        {tollEstimateMeta.plazaOptions.map((p) => (
-                          <option key={`e-${p}`} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
-                      <span>Exit toll plaza (manual)</span>
-                      <select
-                        value={manualTollExit}
-                        onChange={(e) => onManualTollExitChange(e.target.value)}
-                        style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
-                      >
-                        <option value="">— select exit plaza —</option>
-                        {tollEstimateMeta.plazaOptions.map((p) => (
-                          <option key={`x-${p}`} value={p}>
-                            {p}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {(tollEstimateMeta.suggestedEntry || tollEstimateMeta.suggestedExit) && (
-                      <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280" }}>
-                        Suggested: {tollEstimateMeta.suggestedEntry || "?"} → {tollEstimateMeta.suggestedExit || "?"}
-                      </p>
-                    )}
-                    <label style={{ display: "grid", gap: 4, fontSize: "0.85rem" }}>
-                      <span>Vehicle class</span>
-                      <input
-                        value={manualVehicleClass}
-                        onChange={(e) => onManualVehicleClassChange(e.target.value)}
-                        style={{ padding: "0.45rem", borderRadius: 6, border: "1px solid #E5E7EB" }}
-                      />
-                    </label>
-                  </div>
-                )}
               </li>
             )}
             <li>

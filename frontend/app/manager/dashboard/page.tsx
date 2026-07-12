@@ -107,8 +107,8 @@ export default function ManagerDashboardPage() {
           subtitle="Planning, organizing, execution, and performance monitoring."
           actions={
             <>
-              <Link href="/manager/pending-bookings" className="quick-action-btn quick-action-btn--primary">
-                Pending bookings
+              <Link href="/admin/goods-declarations" className="quick-action-btn quick-action-btn--primary">
+                Review goods declarations
               </Link>
               <Link href="/manager/analytics" className="quick-action-btn">
                 Analytics center
@@ -316,7 +316,7 @@ export default function ManagerDashboardPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginTop: "1rem" }}>
                   <GhostLink href="/manager/finance">Finance</GhostLink>
                   <GhostLink href="/modules/analytics/route-optimizer">Routes</GhostLink>
-                  <GhostLink href="/manager/pending-bookings">Pending bookings</GhostLink>
+                  <GhostLink href="/admin/goods-declarations">Goods declarations</GhostLink>
                 </div>
               </article>
             </section>

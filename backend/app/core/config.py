@@ -148,6 +148,22 @@ class Settings(BaseSettings):
         le=500_000.0,
         description="Toll deduction ₱ per booking leg (admin Calculations tab).",
     )
+    fuel_price_source_url: str | None = Field(
+        default=None,
+        description="Optional trusted URL returning JSON diesel price (or HTML with Diesel common price).",
+    )
+    fuel_price_cache_ttl_hours: float = Field(
+        default=24.0,
+        ge=1.0,
+        le=168.0,
+        description="Hours before cached diesel price is refreshed from FUEL_PRICE_SOURCE_URL.",
+    )
+    fuel_price_fetch_timeout_sec: float = Field(
+        default=8.0,
+        ge=1.0,
+        le=60.0,
+        description="HTTP timeout for fuel price source fetch.",
+    )
 
     # Xendit payments (GCash QR)
     xendit_secret_key: str | None = Field(default=None, description="Xendit secret API key")

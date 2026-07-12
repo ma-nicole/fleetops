@@ -34,6 +34,7 @@ const menuModules: MenuModule[] = [
     roles: ["driver"],
     items: [
       { label: "Operations - Dashboard", href: "/driver/dashboard", roles: ["driver"] },
+      { label: "Jobs - Accept & Execute", href: "/modules/operations/driver-tasks", roles: ["driver"] },
       { label: "Analytics - Performance", href: "/driver/analytics", roles: ["driver"] },
       { label: "Bookings - Scheduled", href: "/driver/scheduled-trips", roles: ["driver"] },
     ],
@@ -57,8 +58,8 @@ const menuModules: MenuModule[] = [
     label: "Active Operations",
     roles: ["helper"],
     items: [
-      { label: "Operations - Dashboard", href: "/driver/dashboard", roles: ["helper"] },
       { label: "Bookings - Assigned", href: "/helper/bookings", roles: ["helper"] },
+      { label: "Operations - Overview", href: "/driver/dashboard", roles: ["helper"] },
     ],
   },
   {
@@ -125,7 +126,7 @@ const menuModules: MenuModule[] = [
       { label: "Assignments - Dispatchers", href: "/admin/dispatcher-assignments", roles: ["manager"] },
       { label: "Orders - Details", href: "/manager/order-details", roles: ["manager"] },
       { label: "Reports - General", href: "/manager/general-form", roles: ["manager"] },
-      { label: "Bookings - Pending", href: "/manager/pending-bookings", roles: ["manager"] },
+      { label: "Bookings - Goods Review", href: "/admin/goods-declarations", roles: ["manager"] },
       { label: "Bookings - Accomplished", href: "/manager/accomplished-bookings", roles: ["manager"] },
     ],
   },

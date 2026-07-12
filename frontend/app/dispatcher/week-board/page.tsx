@@ -362,7 +362,18 @@ export default function WeekBoardPage() {
                   {data.resources.map((r: ScheduleTimelineResource) => {
                     const rowEvents = data.events.filter((e) => e.resource_id === r.id && e.resource_kind === data.resource);
                     const hasTrip = rowEvents.some((e) => e.type === "trip");
-                    const avail = r.availability === "maintenance" ? "UNDER MAINTENANCE" : r.availability === "lane" ? "HOLDS" : "AVAILABLE";
+                    const avail =
+                      r.availability === "maintenance"
+                        ? "UNDER MAINTENANCE"
+                        : r.availability === "lane"
+                          ? "HOLDS"
+                          : r.availability === "assigned"
+                            ? "ASSIGNED"
+                            : r.availability === "unavailable"
+                              ? "UNAVAILABLE"
+                              : r.availability === "on_trip"
+                                ? "ON TRIP"
+                                : "AVAILABLE";
                     return (
                       <div
                         key={r.id}

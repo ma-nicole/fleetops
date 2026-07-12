@@ -23,10 +23,10 @@ MatchMethod = Literal[
 MatchConfidence = Literal["high", "medium", "none"]
 
 NO_PLAZA_MATCH_MESSAGE = (
-    "No toll plaza match found. Please select entry and exit toll manually."
+    "No toll plaza match found. Flat toll fallback will be used."
 )
 LOW_CONFIDENCE_PLAZA_MESSAGE = (
-    "Unable to confidently match toll plazas. Please select entry and exit toll manually."
+    "Toll plazas matched with medium confidence; auto-applied for quotation."
 )
 
 

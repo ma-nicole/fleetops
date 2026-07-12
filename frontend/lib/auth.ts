@@ -7,7 +7,7 @@ export type UserRole = "driver" | "helper" | "dispatcher" | "manager" | "admin" 
 
 export const ROLE_DASHBOARDS: Record<UserRole, string> = {
   driver: "/driver/dashboard",
-  helper: "/driver/dashboard",
+  helper: "/helper/bookings",
   dispatcher: "/dispatcher/dashboard",
   manager: "/manager/dashboard",
   admin: "/admin/dashboard",

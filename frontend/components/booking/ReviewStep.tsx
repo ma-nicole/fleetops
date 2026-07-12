@@ -187,7 +187,7 @@ export default function ReviewStep({
             quoteStatus={quoteStatus}
             showApproximateRoutingWarning={showApproximateRoutingWarning}
             readOnly
-            allowTollEdit
+            allowTollEdit={false}
             onManualDistanceKmChange={onManualDistanceKmChange}
             onManualTollEntryChange={onManualTollEntryChange}
             onManualTollExitChange={onManualTollExitChange}

@@ -16,6 +16,11 @@ export function freightLinesFromPayload(data: RouteQuoteApiResponse): FreightLin
     driver_freight_share_pct: data.driver_freight_share_pct,
     helper_freight_share_pct: data.helper_freight_share_pct,
     truck_loads: data.truck_loads,
+    maintenance_cost_php: data.maintenance_cost_php ?? 0,
+    service_fee_php: data.service_fee_php ?? 0,
+    fuel_price_source: data.fuel_price_source ?? null,
+    fuel_price_fetched_at: data.fuel_price_fetched_at ?? null,
+    toll_source: data.toll_source ?? (data.toll_matrix_matched ? "Toll Matrix" : "Flat toll fallback"),
   };
 }
 

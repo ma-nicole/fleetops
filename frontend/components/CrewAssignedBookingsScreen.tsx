@@ -126,11 +126,6 @@ function nextPhase(s: Phase): Phase | null {
   return null;
 }
 
-function progressNeedsWarning(r: CrewAssignedBookingRow, variant: "driver" | "helper" = "driver"): boolean {
-  const slug = variant === "helper" ? workflowPhase(r, "helper") : operationalSlug(r);
-  return slug === "en_route" && r.location_updates_submitted < r.required_location_updates;
-}
-
 function operationalStageIndex(r: CrewAssignedBookingRow, variant: "driver" | "helper"): number {
   const raw = variant === "helper" ? workflowPhase(r, "helper") : operationalSlug(r);
   if (raw === "assigned") return 0;
@@ -305,12 +300,6 @@ export default function CrewAssignedBookingsScreen({
       setMsg(`Only next status is allowed: ${allowed.replace(/_/g, " ")}`);
       return;
     }
-    if (phase === "dropped_off" && detail.location_updates_submitted < detail.required_location_updates) {
-      setMsg(
-        `Cannot set dropped off yet. Location updates submitted: ${detail.location_updates_submitted}/${detail.required_location_updates}.`,
-      );
-      return;
-    }
     if (PHOTO_REQUIRED.has(phase) && !photo) {
       setMsg(`Photo proof is required for ${phase.replace(/_/g, " ")}.`);
       return;
@@ -361,6 +350,10 @@ export default function CrewAssignedBookingsScreen({
     if (!detail || variant !== "helper") return;
     if (!locationName.trim()) {
       setMsg("Location name is required.");
+      return;
+    }
+    if (!locationPhoto) {
+      setMsg("Photo proof is required for location updates.");
       return;
     }
     if (!window.confirm(`Submit this location update for trip #${detail.trip_id}?`)) {
@@ -431,7 +424,10 @@ export default function CrewAssignedBookingsScreen({
       <strong>Proof &amp; receiving documents</strong>
       <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.15rem" }}>
         <li>Photo proof (camera capture) is required when marking <em>picked up</em> and <em>dropped off</em>.</li>
-        <li>Submit all required location updates while <em>en route</em> before drop-off.</li>
+        <li>
+          While <em>en route</em>, add as many progress updates as needed (photo + GPS + remarks). There is no fixed
+          upload count.
+        </li>
         <li>
           Before <em>completed</em>: upload receiving document, verify trip QR code, and capture recipient digital
           signature.
@@ -536,7 +532,6 @@ export default function CrewAssignedBookingsScreen({
                   const custLine = bk
                     ? [bk.customer_name || "—", bk.customer_company_name].filter(Boolean).join(" · ")
                     : "—";
-                  const warn = progressNeedsWarning(r, variant);
                   return (
                     <tr key={r.trip_id}>
                       {!isHelper ? <td style={{ ...td, fontWeight: 700 }}>#{r.trip_id}</td> : null}
@@ -599,15 +594,15 @@ export default function CrewAssignedBookingsScreen({
                             fontSize: "0.75rem",
                             padding: "0.15rem 0.45rem",
                             borderRadius: 6,
-                            background: warn ? "#FEF3C7" : "#F1F5F9",
-                            color: warn ? "#92400E" : "#334155",
-                            border: warn ? "1px solid #FCD34D" : "1px solid #E2E8F0",
+                            background: "#F1F5F9",
+                            color: "#334155",
+                            border: "1px solid #E2E8F0",
                           }}
-                          title={warn ? "En route: submit required location updates before drop-off." : undefined}
+                          title="En-route progress updates submitted"
                         >
                           {isHelper
-                            ? `Locations ${r.location_updates_submitted}/${r.required_location_updates}`
-                            : `${r.location_updates_submitted}/${r.required_location_updates}`}
+                            ? `Locations ${r.location_updates_submitted}`
+                            : `${r.location_updates_submitted} updates`}
                         </span>
                       </td>
                       <td style={{ ...td, textAlign: "center" }}>
@@ -716,11 +711,11 @@ export default function CrewAssignedBookingsScreen({
                             fontWeight: 700,
                             padding: "0.1rem 0.4rem",
                             borderRadius: 6,
-                            background: progressNeedsWarning(detail, "helper") ? "#FEF3C7" : "#ECFDF5",
-                            color: progressNeedsWarning(detail, "helper") ? "#92400E" : "#065F46",
+                            background: "#ECFDF5",
+                            color: "#065F46",
                           }}
                         >
-                          {detail.location_updates_submitted}/{detail.required_location_updates}
+                          {detail.location_updates_submitted} submitted
                         </span>
                       </div>
                     </div>
@@ -884,17 +879,17 @@ export default function CrewAssignedBookingsScreen({
                     <strong>Location update count:</strong> {detail.location_update_count}
                   </div>
                   <div>
-                    <strong>Location updates (required leg):</strong>{" "}
+                    <strong>Location updates submitted:</strong>{" "}
                     <span
                       style={{
                         fontWeight: 700,
                         padding: "0.1rem 0.4rem",
                         borderRadius: 6,
-                        background: progressNeedsWarning(detail) ? "#FEF3C7" : "#ECFDF5",
-                        color: progressNeedsWarning(detail) ? "#92400E" : "#065F46",
+                        background: "#ECFDF5",
+                        color: "#065F46",
                       }}
                     >
-                      {detail.location_updates_submitted}/{detail.required_location_updates}
+                      {detail.location_updates_submitted}
                     </span>
                   </div>
                   <div>
@@ -1081,9 +1076,8 @@ export default function CrewAssignedBookingsScreen({
                 {(() => {
                   const current = workflowPhase(detail, "helper");
                   const allowed = nextPhase(current);
-                  const needsLocationOnly = current === "en_route" && detail.location_updates_submitted < detail.required_location_updates;
-                  const effectivePhase = needsLocationOnly ? "en_route" : phase;
                   const canUpdate = current !== "completed";
+                  const canAddLocation = current === "en_route";
                   return current === "completed" ? (
                     <div>
                       <div style={{ padding: "0.75rem", borderRadius: 8, background: "#ECFDF5", color: "#065F46", fontWeight: 700 }}>
@@ -1108,32 +1102,20 @@ export default function CrewAssignedBookingsScreen({
                     </div>
                   ) : (
                     <>
-                      <h3 style={{ ...sectionTitle, marginTop: 0 }}>Update status</h3>
-                      <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
-                        <span style={{ fontSize: "0.85rem", color: "#555" }}>Milestone</span>
-                        <select
-                          className="select"
-                          value={effectivePhase ?? "for_pickup"}
-                          onChange={(e) => setPhase(e.target.value as Phase)}
+                      {canAddLocation ? (
+                        <div
+                          style={{
+                            marginBottom: "1.25rem",
+                            padding: "0.85rem 1rem",
+                            border: "1px solid #BFDBFE",
+                            borderRadius: 10,
+                            background: "#F8FBFF",
+                          }}
                         >
-                          {PHASES.map((p) => {
-                            const disabled =
-                              p !== allowed ||
-                              (p === "dropped_off" && detail.location_updates_submitted < detail.required_location_updates);
-                            return (
-                              <option key={p} value={p} disabled={disabled}>
-                                {phaseLabel(p)}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </label>
-
-                      {needsLocationOnly ? (
-                        <>
+                          <h3 style={{ ...sectionTitle, marginTop: 0 }}>Add progress update</h3>
                           <p style={{ fontSize: "0.82rem", color: "#1E40AF", margin: "0 0 0.65rem" }}>
-                            Submit {detail.required_location_updates} location updates while en route before dropped off.
-                            Current: {detail.location_updates_submitted}/{detail.required_location_updates}.
+                            Upload as many progress updates as needed while en route. Each update needs a photo; GPS is
+                            captured automatically when available. Optional remarks are supported.
                           </p>
                           <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
                             <span style={{ fontSize: "0.85rem", color: "#555" }}>Location name (required)</span>
@@ -1152,7 +1134,8 @@ export default function CrewAssignedBookingsScreen({
                             />
                           </label>
                           <EvidenceCaptureInput
-                            label="Location photo"
+                            label="Progress photo"
+                            required
                             watermarkContext={{
                               bookingId: detail.booking_id,
                               tripId: detail.trip_id,
@@ -1166,42 +1149,73 @@ export default function CrewAssignedBookingsScreen({
                               setLocationPhotoMeta(meta);
                             }}
                           />
-                        </>
-                      ) : (
-                        <>
-                          {effectivePhase === "completed" || current === "dropped_off" ? (
-                            <DeliveryCompletionPanel
-                              tripId={detail.trip_id}
-                              bookingId={detail.booking_id}
-                              crewName={detail.helper_name ?? detail.driver_name}
-                              compact
-                              onReadyChange={setDeliveryReady}
-                            />
-                          ) : null}
-                          <EvidenceCaptureInput
-                            label={`Milestone photo ${PHOTO_REQUIRED.has(effectivePhase) ? "" : ""}`.trim()}
-                            required={PHOTO_REQUIRED.has(effectivePhase)}
-                            watermarkContext={{
-                              bookingId: detail.booking_id,
-                              tripId: detail.trip_id,
-                              crewName: detail.helper_name,
+                          <button
+                            type="button"
+                            disabled={busy || !canUpdate}
+                            onClick={() => void submitLocation()}
+                            style={{
+                              marginTop: 10,
+                              padding: "0.65rem 1rem",
+                              borderRadius: 8,
+                              border: "none",
+                              background: "#2563EB",
+                              color: "white",
+                              fontWeight: 700,
+                              cursor: busy ? "not-allowed" : "pointer",
                             }}
-                            uploaderName={detail.helper_name}
-                            value={photo}
-                            metadata={photoMeta}
-                            onCapture={(file, meta) => {
-                              setPhoto(file);
-                              setPhotoMeta(meta);
-                            }}
-                          />
-                        </>
-                      )}
+                          >
+                            {busy ? "Saving…" : "Save progress update"}
+                          </button>
+                        </div>
+                      ) : null}
 
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <h3 style={{ ...sectionTitle, marginTop: 0 }}>Update status</h3>
+                      <label style={{ display: "grid", gap: 6, marginBottom: 10 }}>
+                        <span style={{ fontSize: "0.85rem", color: "#555" }}>Milestone</span>
+                        <select
+                          className="select"
+                          value={phase ?? "for_pickup"}
+                          onChange={(e) => setPhase(e.target.value as Phase)}
+                        >
+                          {PHASES.map((p) => (
+                            <option key={p} value={p} disabled={p !== allowed}>
+                              {phaseLabel(p)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      {phase === "completed" || current === "dropped_off" ? (
+                        <DeliveryCompletionPanel
+                          tripId={detail.trip_id}
+                          bookingId={detail.booking_id}
+                          crewName={detail.helper_name ?? detail.driver_name}
+                          compact
+                          onReadyChange={setDeliveryReady}
+                        />
+                      ) : null}
+                      <EvidenceCaptureInput
+                        label="Milestone photo"
+                        required={PHOTO_REQUIRED.has(phase)}
+                        watermarkContext={{
+                          bookingId: detail.booking_id,
+                          tripId: detail.trip_id,
+                          crewName: detail.helper_name,
+                        }}
+                        uploaderName={detail.helper_name}
+                        value={photo}
+                        metadata={photoMeta}
+                        onCapture={(file, meta) => {
+                          setPhoto(file);
+                          setPhotoMeta(meta);
+                        }}
+                      />
+
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
                         <button
                           type="button"
-                          disabled={busy || !canUpdate || (effectivePhase === "completed" && !deliveryReady)}
-                          onClick={() => void (needsLocationOnly ? submitLocation() : submitStatus())}
+                          disabled={busy || !canUpdate || (phase === "completed" && !deliveryReady)}
+                          onClick={() => void submitStatus()}
                           style={{
                             padding: "0.65rem 1rem",
                             borderRadius: 8,
@@ -1212,7 +1226,7 @@ export default function CrewAssignedBookingsScreen({
                             cursor: busy ? "not-allowed" : "pointer",
                           }}
                         >
-                          {busy ? "Saving…" : "Save update"}
+                          {busy ? "Saving…" : "Save milestone"}
                         </button>
                         <button
                           type="button"

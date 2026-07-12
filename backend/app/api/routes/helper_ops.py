@@ -160,8 +160,6 @@ async def helper_update_status(
         .filter(TripLocationUpdate.trip_id == trip.id, TripLocationUpdate.helper_id == user.id)
         .count()
     )
-    if step == "dropped_off" and enroute_count < 3:
-        raise HTTPException(status_code=400, detail="Submit at least 3 en-route location updates before dropped_off.")
     if step == "completed" and (trip.helper_progress_status or "").strip().lower() != "dropped_off":
         raise HTTPException(status_code=400, detail="Trip must be dropped_off before completed.")
 
@@ -221,7 +219,7 @@ async def helper_update_status(
         "status": step,
         "trip_status": synced_trip.status.value if hasattr(synced_trip.status, "value") else str(synced_trip.status),
         "location_updates_submitted": enroute_count if step != "en_route" else enroute_count + 1,
-        "required_location_updates": 3,
+        "required_location_updates": 0,
         "photo_path": photo_path,
         **(evidence_fields_dict(evidence_eval) if evidence_eval else {}),
     }
@@ -260,8 +258,12 @@ async def helper_location_update(
         raise HTTPException(status_code=400, detail="Location updates are allowed only while status is en_route.")
     if not location_name.strip():
         raise HTTPException(status_code=400, detail="location_name is required")
+    if photo is None:
+        raise HTTPException(status_code=400, detail="Location updates require proof photo.")
 
     photo_path = _save_photo(trip.id, photo)
+    if not photo_path:
+        raise HTTPException(status_code=400, detail="Location updates require proof photo.")
     evidence_form = parse_evidence_form(
         capture_source=evidence_capture_source,
         evidence_device_captured_at=evidence_device_captured_at,
@@ -271,23 +273,23 @@ async def helper_location_update(
         evidence_uploader_name=evidence_uploader_name,
     )
     booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
-    evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="en_route") if photo_path else None
-    if photo_path and evidence_eval:
-        record_evidence_capture(
-            db,
-            upload_path=photo_path,
-            context_type="helper_location",
-            trip=trip,
-            booking=booking,
-            user=user,
-            ev=evidence_eval,
-            milestone_context="en_route",
-        )
+    evidence_eval = evaluate_trip_evidence(db, booking, evidence_form, milestone_context="en_route")
+    record_evidence_capture(
+        db,
+        upload_path=photo_path,
+        context_type="helper_location",
+        trip=trip,
+        booking=booking,
+        user=user,
+        ev=evidence_eval,
+        milestone_context="en_route",
+    )
     loc = location_name.strip()
     trip.latest_location = loc
     bk = db.query(Booking).filter(Booking.id == trip.booking_id).with_for_update().first()
     if bk:
         bk.latest_location = loc
+    progress_status = (trip.helper_progress_status or "en_route").strip().lower()
     loc_row = TripLocationUpdate(
         booking_id=trip.booking_id,
         trip_id=trip.id,
@@ -305,7 +307,17 @@ async def helper_location_update(
     db.add(loc_row)
     db.commit()
     count = db.query(TripLocationUpdate).filter(TripLocationUpdate.trip_id == trip.id).count()
-    return {"trip_id": trip.id, "location_updates_submitted": count, "required_location_updates": 3}
+    return {
+        "trip_id": trip.id,
+        "booking_id": trip.booking_id,
+        "helper_id": user.id,
+        "driver_id": trip.driver_id,
+        "delivery_status": progress_status,
+        "location_updates_submitted": count,
+        "required_location_updates": 0,
+        "photo_path": photo_path,
+        **(evidence_fields_dict(evidence_eval) if evidence_eval else {}),
+    }
 
 
 @router.post("/trips/{trip_id}/progress")

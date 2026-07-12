@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
 import { apiFullUrl } from "@/lib/api";
-import { WorkflowApi, type DispatchTripMonitoringAssignment } from "@/lib/workflowApi";
+import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
+import { WorkflowApi, type CrewTimelineEvent, type DispatchTripMonitoringAssignment } from "@/lib/workflowApi";
 
 type LegacyAssignmentRow = Awaited<ReturnType<typeof WorkflowApi.dispatchAssignmentsBoard>>["assignments"][number];
 
@@ -55,7 +56,42 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
   if (!row) return null;
 
   const assignment = td?.assignments?.find((x) => x.trip_id === row.trip_id);
-  const proofCount = (assignment?.status_timeline ?? []).filter((x) => !!x.photo_url).length;
+  const timelineEvents: CrewTimelineEvent[] = (() => {
+    if (assignment?.timeline_events?.length) return assignment.timeline_events;
+    const milestones: CrewTimelineEvent[] = (assignment?.status_timeline ?? []).map((ev) => ({
+      at: ev.created_at,
+      kind: "milestone",
+      code: ev.status,
+      title: ev.status,
+      detail: ev.location_name || "",
+      remarks: ev.remarks,
+      photo_url: ev.photo_url,
+      submitted_by: assignment?.helper?.name ?? null,
+      delivery_status: ev.status,
+      evidence_latitude: ev.latitude ?? null,
+      evidence_longitude: ev.longitude ?? null,
+      driver_name: assignment?.driver?.name ?? null,
+    }));
+    const locations: CrewTimelineEvent[] = (assignment?.location_updates ?? []).map((ev, i) => ({
+      at: ev.created_at,
+      kind: "location",
+      code: `location_update_${i + 1}`,
+      title: ev.location_name ? `Update #${i + 1} — ${ev.location_name}` : `Update #${i + 1}`,
+      detail: ev.location_name || "",
+      remarks: ev.remarks,
+      photo_url: ev.photo_url,
+      submitted_by: assignment?.helper?.name ?? null,
+      update_index: i + 1,
+      delivery_status: "en_route",
+      evidence_latitude: ev.latitude ?? null,
+      evidence_longitude: ev.longitude ?? null,
+      driver_name: assignment?.driver?.name ?? null,
+    }));
+    return [...milestones, ...locations].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  })();
+  const proofCount =
+    timelineEvents.filter((x) => !!x.photo_url).length ||
+    (assignment?.status_timeline ?? []).filter((x) => !!x.photo_url).length;
   const roadKm = td?.booking?.road_distance_km;
   const displayDistanceKm =
     typeof roadKm === "number" && roadKm > 0 ? roadKm : Number(row.distance_km) || 0;
@@ -147,22 +183,17 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
             <p>
               <strong>Proof photos:</strong> {proofCount}
             </p>
-            {assignment?.status_timeline?.length ? (
+            {timelineEvents.length ? (
               <div>
-                <strong style={{ display: "block", marginBottom: 6 }}>Recent timeline</strong>
-                <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "#475569", fontSize: "0.88rem" }}>
-                  {assignment.status_timeline.slice(-10).map((ev) => (
-                    <li key={`${ev.created_at}-${ev.status}-${ev.location_name}`}>
-                      {new Intl.DateTimeFormat(APP_LOCALE, {
-                        timeZone: APP_TIMEZONE,
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      }).format(new Date(ev.created_at))}{" "}
-                      — {ev.status.replace(/_/g, " ")}
-                      {ev.location_name ? ` · ${ev.location_name}` : ""}
-                    </li>
-                  ))}
-                </ul>
+                <strong style={{ display: "block", marginBottom: 6 }}>Delivery timeline</strong>
+                <HelperUpdatesTimeline
+                  events={timelineEvents}
+                  operationalStatus={assignment?.helper_progress_status || row.helper_progress_status || undefined}
+                  mediaSrc={(url) => apiFullUrl(url.startsWith("/") ? url : `/${url}`)}
+                  showPending={false}
+                  emptyMessage="No delivery timeline updates yet."
+                  title="Delivery timeline"
+                />
               </div>
             ) : null}
             {(() => {

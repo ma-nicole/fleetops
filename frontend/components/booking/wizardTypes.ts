@@ -69,6 +69,21 @@ export type RouteQuoteApiResponse = {
   toll_plaza_options?: string[];
   suggested_toll_entry_point?: string | null;
   suggested_toll_exit_point?: string | null;
+  toll_source?: string | null;
+  toll_segments?: Array<{
+    entry_point: string;
+    exit_point: string;
+    toll_fee: number;
+    matrix_id?: number;
+    effective_date?: string | null;
+    vehicle_class?: string;
+  }>;
+  maintenance_cost_php?: number;
+  service_fee_php?: number;
+  fuel_price_source?: string | null;
+  fuel_price_fetched_at?: string | null;
+  fuel_price_from_cache?: boolean;
+  fuel_price_message?: string | null;
   distance_confirmed?: boolean;
   distance_warning?: string | null;
   quote_status?: string | null;
@@ -88,6 +103,11 @@ export type FreightLineDetail = {
   driver_freight_share_pct: number;
   helper_freight_share_pct: number;
   truck_loads: TruckLoadApiLine[];
+  maintenance_cost_php?: number;
+  service_fee_php?: number;
+  fuel_price_source?: string | null;
+  fuel_price_fetched_at?: string | null;
+  toll_source?: string | null;
 };
 
 export type QuoteGeoMeta = Pick<
@@ -106,6 +126,8 @@ export type TollEstimateMeta = {
   plazaOptions: string[];
   suggestedEntry: string | null;
   suggestedExit: string | null;
+  tollSource?: string | null;
+  segments?: RouteQuoteApiResponse["toll_segments"];
 };
 
 export type BookingWizardStep = "route" | "shipment" | "schedule" | "documents" | "review" | "pricing" | "payment";

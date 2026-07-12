@@ -8,6 +8,85 @@ from app.models.entities import Booking, Trip, TripLocationUpdate, TripStatusUpd
 from app.services.latest_location_display import latest_location_display_for_trip
 
 
+def _merge_assignment_timeline(
+    *,
+    booking_id: int,
+    trip_id: int,
+    driver_id: int | None,
+    driver_name: str | None,
+    helper_id: int | None,
+    helper_name: str | None,
+    status_updates: list[TripStatusUpdate],
+    location_updates: list[TripLocationUpdate],
+) -> list[dict]:
+    events: list[dict] = []
+    for u in status_updates:
+        code = (u.status or "").strip().lower()
+        events.append(
+            {
+                "at": u.created_at.isoformat(),
+                "kind": "milestone",
+                "code": code,
+                "title": code,
+                "detail": (u.location_name or "").strip(),
+                "status": code,
+                "location_name": u.location_name,
+                "remarks": u.remarks,
+                "photo_url": u.photo_url,
+                "created_at": u.created_at.isoformat(),
+                "booking_id": booking_id,
+                "trip_id": trip_id,
+                "helper_id": u.helper_id or helper_id,
+                "helper_name": helper_name,
+                "driver_id": driver_id,
+                "driver_name": driver_name,
+                "delivery_status": code,
+                "latitude": u.latitude,
+                "longitude": u.longitude,
+                "evidence_latitude": u.latitude,
+                "evidence_longitude": u.longitude,
+                "evidence_device_captured_at": (
+                    u.evidence_device_captured_at.isoformat() if u.evidence_device_captured_at else None
+                ),
+                "submitted_by": helper_name,
+            }
+        )
+    for i, u in enumerate(location_updates, start=1):
+        loc = (u.location_name or "").strip()
+        events.append(
+            {
+                "at": u.created_at.isoformat(),
+                "kind": "location",
+                "code": f"location_update_{i}",
+                "title": f"Update #{i} — {loc}" if loc else f"Update #{i}",
+                "detail": loc,
+                "status": "en_route",
+                "location_name": u.location_name,
+                "remarks": u.remarks,
+                "photo_url": u.photo_url,
+                "created_at": u.created_at.isoformat(),
+                "booking_id": booking_id,
+                "trip_id": trip_id,
+                "helper_id": u.helper_id or helper_id,
+                "helper_name": helper_name,
+                "driver_id": driver_id,
+                "driver_name": driver_name,
+                "delivery_status": "en_route",
+                "latitude": u.latitude,
+                "longitude": u.longitude,
+                "evidence_latitude": u.latitude,
+                "evidence_longitude": u.longitude,
+                "evidence_device_captured_at": (
+                    u.evidence_device_captured_at.isoformat() if u.evidence_device_captured_at else None
+                ),
+                "submitted_by": helper_name,
+                "update_index": i,
+            }
+        )
+    events.sort(key=lambda e: e["at"])
+    return events
+
+
 def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
     trips = db.query(Trip).filter(Trip.booking_id == booking.id).order_by(Trip.id.asc()).all()
     assignment_rows: list[dict] = []
@@ -46,9 +125,22 @@ def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
             booking.dropoff_location,
             latest_ping,
         )
+        driver_name = driver.full_name if driver else None
+        helper_name = helper.full_name if helper else None
+        timeline_events = _merge_assignment_timeline(
+            booking_id=booking.id,
+            trip_id=tr.id,
+            driver_id=tr.driver_id,
+            driver_name=driver_name,
+            helper_id=tr.helper_id,
+            helper_name=helper_name,
+            status_updates=status_updates,
+            location_updates=location_updates,
+        )
         assignment_rows.append(
             {
                 "trip_id": tr.id,
+                "booking_id": booking.id,
                 "trip_status": tr.status.value if hasattr(tr.status, "value") else str(tr.status),
                 "helper_progress_status": effective_status,
                 "truck": (
@@ -71,6 +163,15 @@ def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
                         "remarks": u.remarks,
                         "photo_url": u.photo_url,
                         "created_at": u.created_at.isoformat(),
+                        "booking_id": booking.id,
+                        "trip_id": tr.id,
+                        "helper_id": u.helper_id or tr.helper_id,
+                        "helper_name": helper_name,
+                        "driver_id": tr.driver_id,
+                        "driver_name": driver_name,
+                        "delivery_status": "en_route",
+                        "latitude": u.latitude,
+                        "longitude": u.longitude,
                     }
                     for u in location_updates
                 ],
@@ -81,9 +182,19 @@ def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
                         "remarks": u.remarks,
                         "photo_url": u.photo_url,
                         "created_at": u.created_at.isoformat(),
+                        "booking_id": booking.id,
+                        "trip_id": tr.id,
+                        "helper_id": u.helper_id or tr.helper_id,
+                        "helper_name": helper_name,
+                        "driver_id": tr.driver_id,
+                        "driver_name": driver_name,
+                        "delivery_status": (u.status or "").strip().lower(),
+                        "latitude": u.latitude,
+                        "longitude": u.longitude,
                     }
                     for u in status_updates
                 ],
+                "timeline_events": timeline_events,
             }
         )
     return assignment_rows

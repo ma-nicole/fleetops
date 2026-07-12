@@ -1,0 +1,6 @@
+{
+  "diesel_php_per_liter": 128.80,
+  "source": "DOE NCR Diesel Common Price (seed)",
+  "as_of": "2026-04-01T00:00:00",
+  "notes": "Bundled fallback when FUEL_PRICE_SOURCE_URL is unset or unreachable. Update via admin refresh or replace this file."
+}

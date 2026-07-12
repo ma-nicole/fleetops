@@ -679,12 +679,14 @@ class MaintenanceRecord(Base):
 
 
 class BookingFreightSettings(Base):
-    """Singleton row (id=1): admin-editable diesel ₱/L and toll only; other formula terms are code constants."""
+    """Singleton row (id=1): diesel ₱/L (+ cache metadata) and flat toll fallback; other formula terms are code constants."""
 
     __tablename__ = "booking_freight_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     diesel_price_php_per_liter: Mapped[float] = mapped_column(Float, nullable=False)
+    diesel_price_source: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    diesel_price_fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     toll_fees_php_per_trip: Mapped[float] = mapped_column(Float, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

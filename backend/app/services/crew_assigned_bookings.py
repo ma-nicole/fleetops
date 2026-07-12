@@ -30,7 +30,8 @@ from app.services.pre_delivery_verification import build_pre_delivery_checklist,
 from app.services.dispatch_operations_center import _display_status
 from app.services.latest_location_display import latest_location_display_for_trip
 
-REQUIRED_EN_ROUTE_LOCATION_UPDATES = 3
+# Unlimited en-route progress updates; 0 means no minimum before dropped_off.
+REQUIRED_EN_ROUTE_LOCATION_UPDATES = 0
 
 
 def _parse_route_waypoints(route_path: str | None) -> list[str]:
@@ -87,6 +88,11 @@ def _merge_timeline(
     status_rows: list[TripStatusUpdate],
     location_rows: list[TripLocationUpdate],
     helper_name_fn,
+    *,
+    booking_id: int,
+    trip_id: int,
+    driver_id: int | None,
+    driver_name: str | None,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for su in status_rows:
@@ -101,6 +107,12 @@ def _merge_timeline(
                 "remarks": su.remarks,
                 "photo_url": su.photo_url,
                 "submitted_by": helper_name_fn(su.helper_id),
+                "booking_id": booking_id,
+                "trip_id": trip_id,
+                "helper_id": su.helper_id,
+                "driver_id": driver_id,
+                "driver_name": driver_name,
+                "delivery_status": code,
                 "evidence_verification_label": su.evidence_verification_label,
                 "evidence_review_required": bool(su.evidence_review_required),
                 "evidence_latitude": su.latitude,
@@ -123,6 +135,12 @@ def _merge_timeline(
                 "photo_url": lu.photo_url,
                 "submitted_by": helper_name_fn(lu.helper_id),
                 "update_index": i,
+                "booking_id": booking_id,
+                "trip_id": trip_id,
+                "helper_id": lu.helper_id,
+                "driver_id": driver_id,
+                "driver_name": driver_name,
+                "delivery_status": "en_route",
                 "evidence_verification_label": lu.evidence_verification_label,
                 "evidence_review_required": bool(lu.evidence_review_required),
                 "evidence_latitude": lu.latitude,
@@ -222,7 +240,15 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
         db.query(VehicleIssueReport).filter(VehicleIssueReport.trip_id == t.id).order_by(VehicleIssueReport.created_at.desc()).all()
     )
 
-    timeline = _merge_timeline(status_rows, location_rows, helper_name_fn)
+    timeline = _merge_timeline(
+        status_rows,
+        location_rows,
+        helper_name_fn,
+        booking_id=t.booking_id,
+        trip_id=t.id,
+        driver_id=t.driver_id,
+        driver_name=t.driver.full_name if getattr(t, "driver", None) else None,
+    )
     proof_urls = _collect_proof_urls(t, status_rows, location_rows)
 
     trip_st = t.status
@@ -314,6 +340,13 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
                 "created_at": u.created_at.isoformat(),
                 "helper_id": u.helper_id,
                 "submitted_by": helper_name_fn(u.helper_id),
+                "booking_id": t.booking_id,
+                "trip_id": t.id,
+                "driver_id": t.driver_id,
+                "driver_name": t.driver.full_name if getattr(t, "driver", None) else None,
+                "delivery_status": "en_route",
+                "latitude": u.latitude,
+                "longitude": u.longitude,
             }
             for u in location_rows
         ],
@@ -327,6 +360,13 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
                 "created_at": u.created_at.isoformat(),
                 "helper_id": u.helper_id,
                 "submitted_by": helper_name_fn(u.helper_id),
+                "booking_id": t.booking_id,
+                "trip_id": t.id,
+                "driver_id": t.driver_id,
+                "driver_name": t.driver.full_name if getattr(t, "driver", None) else None,
+                "delivery_status": (u.status or "").strip().lower(),
+                "latitude": u.latitude,
+                "longitude": u.longitude,
             }
             for u in status_rows
         ],
