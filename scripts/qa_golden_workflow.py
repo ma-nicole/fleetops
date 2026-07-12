@@ -41,6 +41,92 @@ def h(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def free_stuck_live_trips_for_qa() -> int:
+    """QA-only: close leftover non-terminal trips so availability can recover.
+
+    Delivery completion requires POD docs in the product path; prior golden runs can
+    leave crews/trucks busy forever. Force-complete here without changing product APIs.
+    """
+    backend = Path(__file__).resolve().parents[1] / "backend"
+    if str(backend) not in sys.path:
+        sys.path.insert(0, str(backend))
+    from app.db import SessionLocal
+    from app.models.entities import (
+        Trip,
+        TripStatus,
+        TruckAssignment,
+        TruckAssignmentStatus,
+        TruckSlotHold,
+        TruckSlotHoldStatus,
+        User,
+        UserRole,
+    )
+
+    db = SessionLocal()
+    try:
+        open_statuses = [
+            TripStatus.PENDING,
+            TripStatus.ASSIGNED,
+            TripStatus.ACCEPTED,
+            TripStatus.DEPARTED,
+            TripStatus.LOADING,
+            TripStatus.IN_DELIVERY,
+        ]
+        rows = (
+            db.query(Trip)
+            .filter(Trip.status.in_(open_statuses))
+            .order_by(Trip.id.desc())
+            .limit(80)
+            .all()
+        )
+        n = 0
+        for trip in rows:
+            trip.status = TripStatus.COMPLETED
+            n += 1
+        released = (
+            db.query(TruckSlotHold)
+            .filter(
+                TruckSlotHold.hold_status.in_(
+                    [
+                        TruckSlotHoldStatus.ON_HOLD,
+                        TruckSlotHoldStatus.READY_FOR_ASSIGNMENT,
+                        TruckSlotHoldStatus.ASSIGNED,
+                    ]
+                )
+            )
+            .update({"hold_status": TruckSlotHoldStatus.RELEASED}, synchronize_session=False)
+        )
+        ta_done = (
+            db.query(TruckAssignment)
+            .filter(
+                TruckAssignment.assignment_status.in_(
+                    [
+                        TruckAssignmentStatus.ASSIGNED,
+                        TruckAssignmentStatus.FOR_PICKUP,
+                        TruckAssignmentStatus.PICKED_UP,
+                        TruckAssignmentStatus.EN_ROUTE,
+                        TruckAssignmentStatus.DROPPED_OFF,
+                        TruckAssignmentStatus.IN_PROGRESS,
+                    ]
+                )
+            )
+            .update({"assignment_status": TruckAssignmentStatus.COMPLETED}, synchronize_session=False)
+        )
+        crew_reset = (
+            db.query(User)
+            .filter(
+                User.role.in_([UserRole.DRIVER, UserRole.HELPER]),
+                User.availability_status.in_(["assigned", "on_trip", "busy"]),
+            )
+            .update({"availability_status": "available"}, synchronize_session=False)
+        )
+        if n or released or ta_done or crew_reset:
+            db.commit()
+        return n + int(released or 0) + int(ta_done or 0) + int(crew_reset or 0)
+    finally:
+        db.close()
+
+
 def main() -> int:
     client = httpx.Client(timeout=120.0)
     try:
@@ -48,6 +134,9 @@ def main() -> int:
             log("health", False, "backend down")
             return 1
         log("health", True)
+
+        freed = free_stuck_live_trips_for_qa()
+        log("qa_env_free_stuck", True, f"freed_or_released={freed}")
 
         tokens: dict[str, str] = {}
         for role, email in {
@@ -65,8 +154,36 @@ def main() -> int:
         if len(tokens) < 6:
             return 1
 
-        sched = (date.today() + timedelta(days=45)).isoformat()
-        slot = ["08:00", "11:30", "14:00", "17:30"][int(date.today().strftime("%j")) % 4]
+        # Pick first open slot in the next ~3 months so capacity pressure does not false-fail QA.
+        sched = None
+        slot = None
+        for day_offset in range(20, 100, 3):
+            candidate = (date.today() + timedelta(days=day_offset)).isoformat()
+            av = client.get(
+                f"{BASE}/api/bookings/schedule-availability",
+                headers=h(tokens["customer"]),
+                params={
+                    "scheduled_date": candidate,
+                    "cargo_weight_tons": 8,
+                    "pickup_location": "Quezon City, Metro Manila, Philippines",
+                    "dropoff_location": "San Fernando, Pampanga, Philippines",
+                },
+            )
+            if av.status_code != 200:
+                continue
+            body = av.json()
+            slots = body.get("slots") or {}
+            for s in ("08:00", "11:30", "14:00", "17:30"):
+                if slots.get(s) is True:
+                    sched = candidate
+                    slot = s
+                    break
+            if sched:
+                break
+        if not sched or not slot:
+            log("create_booking", False, "no open schedule slot in search window")
+            return 1
+
         r = client.post(
             f"{BASE}/api/bookings/with-documents",
             headers=h(tokens["customer"]),
@@ -135,58 +252,47 @@ def main() -> int:
         )
         log("manager_approve", r2.status_code in (200, 201, 400), f"{r2.status_code} {r2.text[:160]}")
 
-        # Prefer explicitly assignable resources (seed trips may leave crews live-busy).
-        avail = client.get(f"{BASE}/api/dispatch/booking/{bid}/availability", headers=h(tokens["dispatcher"]))
-        truck_id = driver_id = helper_id = None
-        if avail.status_code == 200:
-            body = avail.json()
-            for t in body.get("truck_roster") or []:
+        # Prefer explicitly assignable resources (seed/QA trips may leave crews live-busy).
+        def pick_assignable(av_body: dict) -> dict:
+            payload: dict = {}
+            for t in av_body.get("truck_roster") or []:
                 if t.get("assignable"):
-                    truck_id = t.get("id")
+                    payload["truck_id"] = t.get("id")
                     break
-            for d in body.get("driver_roster") or []:
+            for d in av_body.get("driver_roster") or []:
                 if d.get("assignable"):
-                    driver_id = d.get("id")
+                    payload["driver_id"] = d.get("id")
                     break
-            for hp in body.get("helper_roster") or []:
+            for hp in av_body.get("helper_roster") or []:
                 if hp.get("assignable"):
-                    helper_id = hp.get("id")
+                    payload["helper_id"] = hp.get("id")
                     break
-        assign_payload: dict = {}
-        if truck_id:
-            assign_payload["truck_id"] = truck_id
-        if driver_id:
-            assign_payload["driver_id"] = driver_id
-        if helper_id:
-            assign_payload["helper_id"] = helper_id
+            return payload
 
-        if not driver_id:
-            # Complete one live trip for driver1 to free the crew (seed leftover).
-            trips = client.get(f"{BASE}/api/driver/trips", headers=h(tokens["driver"]))
-            if trips.status_code == 200:
-                for t in trips.json() if isinstance(trips.json(), list) else []:
-                    tid = t.get("id") if isinstance(t, dict) else None
-                    st = (t.get("status") if isinstance(t, dict) else "") or ""
-                    if tid and st not in ("completed", "cancelled"):
-                        client.post(f"{BASE}/api/workflow/job/{tid}/complete", headers=h(tokens["driver"]))
-                        break
+        avail = client.get(f"{BASE}/api/dispatch/booking/{bid}/availability", headers=h(tokens["dispatcher"]))
+        assign_payload: dict = pick_assignable(avail.json()) if avail.status_code == 200 else {}
+
+        if not (
+            assign_payload.get("truck_id")
+            and assign_payload.get("driver_id")
+            and assign_payload.get("helper_id")
+        ):
+            freed = free_stuck_live_trips_for_qa()
             avail = client.get(f"{BASE}/api/dispatch/booking/{bid}/availability", headers=h(tokens["dispatcher"]))
             if avail.status_code == 200:
-                for d in avail.json().get("driver_roster") or []:
-                    if d.get("assignable"):
-                        assign_payload["driver_id"] = d.get("id")
-                        break
-                for t in avail.json().get("truck_roster") or []:
-                    if t.get("assignable"):
-                        assign_payload["truck_id"] = t.get("id")
-                        break
+                assign_payload = pick_assignable(avail.json())
+            log("dispatch_free_stuck_trips", True, f"freed={freed} payload={assign_payload}")
 
         r = client.post(
             f"{BASE}/api/dispatch/{bid}/assign",
             headers=h(tokens["dispatcher"]),
             json=assign_payload,
         )
-        log("dispatch_assign", r.status_code in (200, 201), f"{r.status_code} {r.text[:240]}")
+        log(
+            "dispatch_assign",
+            r.status_code in (200, 201),
+            f"{r.status_code} payload={assign_payload} {r.text[:240]}",
+        )
         trip_id = None
         if r.status_code in (200, 201):
             body = r.json()

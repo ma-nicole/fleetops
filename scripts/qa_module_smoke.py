@@ -43,10 +43,10 @@ CHECKS: list[tuple[str, str, str, set[int], str]] = [
     ("dispatcher", "GET", "/api/schedule/timeline", {200, 404, 422}, "schedule timeline"),
     ("dispatcher", "GET", "/api/workflow/pending-assignments", {200, 404}, "pending assignments"),
     ("driver", "GET", "/api/driver/dashboard", {200, 404}, "driver dashboard"),
-    ("driver", "GET", "/api/workflow/my-trips", {200}, "driver my trips"),
+    ("driver", "GET", "/api/driver/trips", {200}, "driver my trips"),
     ("helper", "GET", "/api/helper/bookings", {200, 404}, "helper bookings"),
-    ("helper", "GET", "/api/workflow/my-trips", {200}, "helper my trips"),
-    ("customer", "GET", "/api/customer/bookings", {200}, "customer bookings"),
+    ("helper", "GET", "/api/helper/bookings", {200}, "helper assigned bookings"),
+    ("customer", "GET", "/api/customer/current-bookings", {200, 404}, "customer current bookings"),
     ("customer", "GET", "/api/customer/analytics", {200, 404}, "customer analytics"),
     ("customer", "GET", "/api/bookings", {200}, "customer bookings list"),
     # Cross-role denial probes

@@ -302,9 +302,32 @@ export default function CustomerPortalDashboard() {
                 )}
               </div>
 
-              <div style={{ display: "grid", gap: "1.25rem", minWidth: 0 }}>
-                <div className="card" style={{ display: "grid", gap: "0.85rem", minWidth: 0 }}>
-                  <h2 style={{ margin: 0 }}>Sites</h2>
+              <div style={{ display: "grid", gap: "1.25rem", minWidth: 0, alignContent: "start" }}>
+                <div
+                  id="customer-sites"
+                  className="card scroll-section"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.85rem",
+                    minWidth: 0,
+                    maxHeight: "min(70vh, 560px)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <h2 style={{ margin: 0, flexShrink: 0 }}>Sites</h2>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "0.85rem",
+                      minHeight: 0,
+                      flex: 1,
+                      overflowY: "auto",
+                      overflowX: "hidden",
+                      paddingRight: "0.25rem",
+                      WebkitOverflowScrolling: "touch",
+                    }}
+                  >
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                     Use separate fields: street, district or village, city or municipality, province, and zip code —
                     the full line is built automatically for bookings and pricing. You need at least {MIN_BOOKING_SITES} sites
@@ -532,6 +555,7 @@ export default function CustomerPortalDashboard() {
                       Add {MIN_BOOKING_SITES - sites.length} more site{MIN_BOOKING_SITES - sites.length === 1 ? "" : "s"} to enable booking
                     </div>
                   )}
+                  </div>
                   </div>
                 </div>
 

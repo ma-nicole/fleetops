@@ -52,9 +52,11 @@ export default function BookingDocumentUploadFields({
   const pickFile = (
     e: React.ChangeEvent<HTMLInputElement>,
     onChange: (file: File | null) => void,
+    errorKey?: string,
   ) => {
     const file = e.target.files?.[0] ?? null;
     onChange(file);
+    if (file && errorKey) onClearError?.(errorKey);
   };
 
   return (
@@ -70,31 +72,71 @@ export default function BookingDocumentUploadFields({
     >
       <div>
         <h3 style={{ margin: "0 0 0.35rem 0", fontSize: "1rem" }}>Required documents</h3>
-        <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-          Upload your Cargo Declaration Sheet and complete the built-in Terms &amp; Agreement with your electronic
-          signature before confirming the booking.
+        <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+          Two steps: (1) choose your Cargo Declaration file, (2) scroll, sign, and accept Terms. Going back in the
+          wizard keeps these selections.
         </p>
       </div>
 
       <div>
-        <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.4rem" }}>
+        <label
+          htmlFor="booking-cargo-declaration"
+          style={{ display: "block", fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.4rem" }}
+        >
           Cargo Declaration Sheet <span style={{ color: "#DC2626" }}>*</span>
         </label>
+        <p style={{ margin: "0 0 0.5rem", fontSize: "0.8rem", color: "#6B7280" }}>
+          JPEG, PNG, or PDF — max 5MB. One file is enough.
+        </p>
         <input
+          id="booking-cargo-declaration"
           type="file"
           accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
           disabled={disabled}
-          onChange={(e) => pickFile(e, onCargoDeclarationChange)}
-          style={errors?.cargo_declaration ? { borderColor: "#F44336" } : undefined}
+          onChange={(e) => pickFile(e, onCargoDeclarationChange, "cargo_declaration")}
+          style={{
+            display: "block",
+            width: "100%",
+            maxWidth: "100%",
+            boxSizing: "border-box",
+            padding: "0.55rem 0.65rem",
+            borderRadius: 8,
+            border: errors?.cargo_declaration ? "1px solid #F44336" : "1px solid #D1D5DB",
+            background: "#fff",
+            font: "inherit",
+          }}
         />
-        {cargoDeclaration && (
-          <p style={{ margin: "0.35rem 0 0 0", fontSize: "0.8rem", color: "#059669" }}>
-            Selected: {cargoDeclaration.name}
+        {cargoDeclaration ? (
+          <p style={{ margin: "0.45rem 0 0 0", fontSize: "0.85rem", color: "#059669", fontWeight: 600 }}>
+            Ready: {cargoDeclaration.name}
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                onCargoDeclarationChange(null);
+                const el = document.getElementById("booking-cargo-declaration") as HTMLInputElement | null;
+                if (el) el.value = "";
+              }}
+              style={{
+                marginLeft: "0.65rem",
+                border: "none",
+                background: "transparent",
+                color: "#991B1B",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                textDecoration: "underline",
+              }}
+            >
+              Remove
+            </button>
           </p>
+        ) : (
+          <p style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", color: "#9CA3AF" }}>No file selected yet.</p>
         )}
-        {errors?.cargo_declaration && (
+        {errors?.cargo_declaration ? (
           <p style={{ color: "#F44336", fontSize: "0.8rem", margin: "0.35rem 0 0 0" }}>{errors.cargo_declaration}</p>
-        )}
+        ) : null}
       </div>
 
       <TermsAgreementPanel

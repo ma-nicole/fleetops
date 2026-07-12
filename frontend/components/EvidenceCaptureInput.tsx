@@ -90,8 +90,11 @@ export default function EvidenceCaptureInput({
         {required ? " (required)" : " (optional)"}
       </span>
       <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", lineHeight: 1.45 }}>
-        Use your device camera for verified proof. Photos are watermarked with FleetOpts, booking/trip ID, timestamp,
-        and GPS coordinates.
+        Tap <strong>Take photo</strong> to capture proof in one step. Photos are watermarked with FleetOpts, booking/trip
+        ID, time, and GPS when available.
+        {allowGalleryFallback
+          ? " Gallery upload is available if the camera is unavailable (marked for manual review)."
+          : ""}
       </p>
 
       <input
@@ -122,14 +125,15 @@ export default function EvidenceCaptureInput({
           disabled={disabled || busy}
           onClick={() => cameraRef.current?.click()}
           style={{
-            padding: "0.55rem 0.9rem",
+            padding: "0.65rem 1.1rem",
             borderRadius: 8,
             border: "none",
             background: "#10B981",
             color: "white",
             fontWeight: 700,
             cursor: disabled || busy ? "not-allowed" : "pointer",
-            fontSize: "0.85rem",
+            fontSize: "0.9rem",
+            minHeight: 42,
           }}
         >
           {busy ? "Processing…" : "Take photo"}
@@ -140,17 +144,17 @@ export default function EvidenceCaptureInput({
             disabled={disabled || busy}
             onClick={() => galleryRef.current?.click()}
             style={{
-              padding: "0.55rem 0.9rem",
+              padding: "0.55rem 0.85rem",
               borderRadius: 8,
-              border: "1px solid #D1D5DB",
-              background: "white",
-              color: "#374151",
-              fontWeight: 600,
+              border: "1px solid #E5E7EB",
+              background: "#F9FAFB",
+              color: "#6B7280",
+              fontWeight: 500,
               cursor: disabled || busy ? "not-allowed" : "pointer",
-              fontSize: "0.85rem",
+              fontSize: "0.8rem",
             }}
           >
-            Upload from gallery (manual review)
+            Use gallery instead
           </button>
         ) : null}
         {value ? (
@@ -176,8 +180,8 @@ export default function EvidenceCaptureInput({
 
       {value ? (
         <div style={{ display: "grid", gap: 6 }}>
-          <p style={{ margin: 0, fontSize: "0.82rem", color: "#374151" }}>
-            Selected: <strong>{value.name}</strong>
+          <p style={{ margin: 0, fontSize: "0.85rem", color: "#065F46", fontWeight: 600 }}>
+            Ready: {value.name}
           </p>
           {metadata ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

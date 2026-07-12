@@ -166,7 +166,7 @@ export default function DigitalSignaturePad({ disabled = false, value = null, on
           Clear signature
         </button>
         <span style={{ fontSize: "0.82rem", color: "#64748B", alignSelf: "center" }}>
-          Sign with finger or mouse, then upload below.
+          Draw with finger or mouse. Clear only if you need to resign.
         </span>
       </div>
     </div>

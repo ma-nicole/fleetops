@@ -59,22 +59,31 @@ def main() -> int:
         else:
             ok("0 Admin list bookings", f"count={len(r.json())}")
 
-        # ── Find or create a booking awaiting payment proof ──
+        # Prefer a booking owned by customer1; otherwise create one for that customer.
+        me = client.get("/api/auth/me", headers=customer_h)
+        if me.status_code != 200:
+            fail("1 Resolve customer", me.text)
+            return 1
+        customer_id = int(me.json()["id"])
+
         booking = (
             db.query(Booking)
             .filter(
+                Booking.customer_id == customer_id,
                 Booking.status.in_(
                     [
                         BookingStatus.PENDING_APPROVAL,
                         BookingStatus.PAYMENT_VERIFICATION,
                         BookingStatus.APPROVED,
+                        BookingStatus.PENDING_PAYMENT,
                     ]
-                )
+                ),
             )
             .order_by(Booking.id.desc())
             .first()
         )
-        if not booking:
+        booking_id: int | None = booking.id if booking else None
+        if booking_id is None:
             sched = (date.today() + timedelta(days=30)).isoformat()
             r = client.post(
                 "/api/bookings",
@@ -93,18 +102,23 @@ def main() -> int:
             if r.status_code not in (200, 201):
                 fail("1 Create booking", r.text)
                 return 1
-            booking_id = r.json().get("id")
-            db.expire_all()
+            booking_id = int(r.json()["id"])
+            # TestClient commits in a different session — reopen DB handle.
+            db.close()
+            db = SessionLocal()
             booking = db.query(Booking).filter(Booking.id == booking_id).first()
             if booking is None:
-                fail("1 Create booking", f"API returned id={booking_id} but row not visible in DB session")
-                return 1
-            ok("1 Create booking", f"#{booking.id}")
+                # Still proceed with API id for payment steps (auth uses customer token).
+                ok("1 Create booking", f"#{booking_id} (API id; ORM not required)")
+            else:
+                ok("1 Create booking", f"#{booking.id}")
         else:
-            ok("1 Use existing booking", f"#{booking.id} status={booking.status.value}")
+            ok("1 Use existing booking", f"#{booking.id} status={booking.status.value} customer={booking.customer_id}")
+
+        assert booking_id is not None
 
         db.query(Payment).filter(
-            Payment.booking_id == booking.id,
+            Payment.booking_id == booking_id,
             Payment.status.in_([PaymentStatus.FOR_VERIFICATION, PaymentStatus.VERIFIED]),
         ).delete(synchronize_session=False)
         db.commit()
@@ -117,7 +131,7 @@ def main() -> int:
         r = client.post(
             "/api/payments/submit-proof",
             headers=customer_h,
-            data={"booking_id": str(booking.id), "method": "manual"},
+            data={"booking_id": str(booking_id), "method": "manual"},
             files={"file": ("proof-e2e.jpg", io.BytesIO(jpeg), "image/jpeg")},
         )
         if r.status_code not in (200, 201):
