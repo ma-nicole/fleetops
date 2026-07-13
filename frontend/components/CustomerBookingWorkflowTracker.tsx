@@ -32,7 +32,8 @@ export default function CustomerBookingWorkflowTracker({ booking, payment = null
         maxWidth: "100%",
         minWidth: 0,
         boxSizing: "border-box",
-        overflow: "hidden",
+        overflowX: "auto",
+        overflowY: "visible",
       }}
     >
       <div

@@ -2940,13 +2940,28 @@ html {
 #customer-tracking {
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
+}
+
+#customer-tracking .customer-tracking-booking-list {
+  max-height: 750px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#customer-tracking .customer-tracking-booking-card {
+  height: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 #customer-tracking .workflow-timeline,
 #customer-tracking .customer-booking-workflow-tracker {
   min-width: 0;
   max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .analytics-structure {

@@ -240,8 +240,6 @@ export default function CustomerPortalDashboard() {
                   flexDirection: "column",
                   gap: "1rem",
                   minWidth: 0,
-                  maxHeight: "min(70vh, 560px)",
-                  overflow: "hidden",
                 }}
               >
                 <div
@@ -266,11 +264,11 @@ export default function CustomerPortalDashboard() {
                   </p>
                 ) : (
                   <div
+                    className="customer-tracking-booking-list"
                     style={{
                       display: "grid",
                       gap: "1rem",
-                      minHeight: 0,
-                      flex: 1,
+                      maxHeight: 750,
                       overflowY: "auto",
                       overflowX: "hidden",
                       paddingRight: "0.25rem",
@@ -281,6 +279,7 @@ export default function CustomerPortalDashboard() {
                       return (
                         <div
                           key={order.id}
+                          className="customer-tracking-booking-card"
                           style={{
                             border: "1px solid var(--border)",
                             borderRadius: "12px",
@@ -290,7 +289,7 @@ export default function CustomerPortalDashboard() {
                             background: "#FAFAFA",
                             minWidth: 0,
                             maxWidth: "100%",
-                            overflow: "hidden",
+                            height: "auto",
                           }}
                         >
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "0.75rem", flexWrap: "wrap" }}>
