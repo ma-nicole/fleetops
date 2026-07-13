@@ -39,6 +39,8 @@ function formatShortDate(iso: string): string {
   }
 }
 
+const TRACKING_PAGE_SIZE = 3;
+
 export default function CustomerPortalDashboard() {
   const { ready, allowed } = useRoleGuard(["customer"]);
   const [activeShipments, setActiveShipments] = useState<CustomerBookingRow[]>([]);
@@ -48,6 +50,7 @@ export default function CustomerPortalDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sites, setSites] = useState<CustomerSite[]>([]);
+  const [trackingPage, setTrackingPage] = useState(0);
   const [newSiteLabel, setNewSiteLabel] = useState("");
   const [newSiteStreet, setNewSiteStreet] = useState("");
   const [newSiteBrgy, setNewSiteBrgy] = useState("");
@@ -162,8 +165,23 @@ export default function CustomerPortalDashboard() {
         ].indexOf(s);
       return rank(a.display_status) - rank(b.display_status);
     });
-    return prioritized.slice(0, 4);
+    return prioritized;
   }, [activeShipments]);
+
+  const trackingPageCount = Math.max(1, Math.ceil(activeShow.length / TRACKING_PAGE_SIZE));
+  const trackingPageSafe = Math.min(trackingPage, trackingPageCount - 1);
+  const trackingPageItems = useMemo(() => {
+    const start = trackingPageSafe * TRACKING_PAGE_SIZE;
+    return activeShow.slice(start, start + TRACKING_PAGE_SIZE);
+  }, [activeShow, trackingPageSafe]);
+
+  useEffect(() => {
+    if (trackingPage !== trackingPageSafe) setTrackingPage(trackingPageSafe);
+  }, [trackingPage, trackingPageSafe]);
+
+  useEffect(() => {
+    setTrackingPage(0);
+  }, [activeShipments.length]);
 
   const txRows = useMemo(
     () =>
@@ -262,71 +280,107 @@ export default function CustomerPortalDashboard() {
                     {EMPTY_SHIPMENTS}
                   </p>
                 ) : (
-                  <div
-                    className="customer-tracking-booking-list"
-                    style={{
-                      display: "grid",
-                      gap: "1rem",
-                      maxHeight: 750,
-                      overflowY: "auto",
-                      overflowX: "hidden",
-                      paddingRight: "0.25rem",
-                      WebkitOverflowScrolling: "touch",
-                    }}
-                  >
-                    {activeShow.map((order) => {
-                      return (
-                        <div
-                          key={order.id}
-                          className="customer-tracking-booking-card"
-                          style={{
-                            border: "1px solid var(--border)",
-                            borderRadius: "12px",
-                            padding: "1rem",
-                            display: "grid",
-                            gap: "0.75rem",
-                            background: "#FAFAFA",
-                            minWidth: 0,
-                            maxWidth: "100%",
-                            height: "auto",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "0.75rem", flexWrap: "wrap" }}>
-                            <div>
-                              <div style={{ fontWeight: "700", marginBottom: "0.25rem" }}>Booking #{order.id}</div>
-                              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Pickup {formatShortDate(`${order.scheduled_date}`)}</div>
+                  <>
+                    <div
+                      className="customer-tracking-booking-list"
+                      style={{
+                        display: "grid",
+                        gap: "1rem",
+                        maxHeight: 750,
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        paddingRight: "0.25rem",
+                        WebkitOverflowScrolling: "touch",
+                      }}
+                    >
+                      {trackingPageItems.map((order) => {
+                        return (
+                          <div
+                            key={order.id}
+                            className="customer-tracking-booking-card"
+                            style={{
+                              border: "1px solid var(--border)",
+                              borderRadius: "12px",
+                              padding: "1rem",
+                              display: "grid",
+                              gap: "0.75rem",
+                              background: "#FAFAFA",
+                              minWidth: 0,
+                              maxWidth: "100%",
+                              height: "auto",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "0.75rem", flexWrap: "wrap" }}>
+                              <div>
+                                <div style={{ fontWeight: "700", marginBottom: "0.25rem" }}>Booking #{order.id}</div>
+                                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Pickup {formatShortDate(`${order.scheduled_date}`)}</div>
+                              </div>
+                              <ShipmentBadge status={customerWorkflowCurrentLabel(order, paymentByBooking.get(order.id) ?? null)} />
                             </div>
-                            <ShipmentBadge status={customerWorkflowCurrentLabel(order, paymentByBooking.get(order.id) ?? null)} />
-                          </div>
-                          <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
-                            <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
-                            <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
-                            <div style={{ marginTop: "0.25rem" }}>
-                              <CustomerBookingAssignmentsList
-                                assignments={order.assignments}
-                                dropoffAddress={order.dropoff_location}
-                                showDeliveryTimeline={false}
-                              />
+                            <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
+                              <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
+                              <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
+                              <div style={{ marginTop: "0.25rem" }}>
+                                <CustomerBookingAssignmentsList
+                                  assignments={order.assignments}
+                                  dropoffAddress={order.dropoff_location}
+                                  showDeliveryTimeline={false}
+                                />
+                              </div>
                             </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem", flexWrap: "wrap", gap: "0.35rem" }}>
+                              <span style={{ color: "var(--text-secondary)" }}>
+                                Payment total <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
+                              </span>
+                              <Link href={`/modules/operations/trips?booking=${order.id}`} style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
+                                Track booking
+                              </Link>
+                            </div>
+                            <CustomerDocumentReviewSection
+                              booking={order}
+                              payment={paymentByBooking.get(order.id) ?? null}
+                              compact
+                              onUpdated={() => void refreshShipments()}
+                            />
                           </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem", flexWrap: "wrap", gap: "0.35rem" }}>
-                            <span style={{ color: "var(--text-secondary)" }}>
-                              Payment total <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
-                            </span>
-                            <Link href={`/modules/operations/trips?booking=${order.id}`} style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
-                              Track booking
-                            </Link>
-                          </div>
-                          <CustomerDocumentReviewSection
-                            booking={order}
-                            payment={paymentByBooking.get(order.id) ?? null}
-                            compact
-                            onUpdated={() => void refreshShipments()}
-                          />
+                        );
+                      })}
+                    </div>
+                    {activeShow.length > TRACKING_PAGE_SIZE ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "0.75rem",
+                          flexWrap: "wrap",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                          Page {trackingPageSafe + 1} of {trackingPageCount} · {activeShow.length} bookings
+                        </span>
+                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                          <button
+                            type="button"
+                            className="quick-action-btn"
+                            disabled={trackingPageSafe <= 0}
+                            onClick={() => setTrackingPage((p) => Math.max(0, p - 1))}
+                          >
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            className="quick-action-btn"
+                            disabled={trackingPageSafe >= trackingPageCount - 1}
+                            onClick={() => setTrackingPage((p) => Math.min(trackingPageCount - 1, p + 1))}
+                          >
+                            Next
+                          </button>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
 
