@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
-import CustomerBookingWorkflowTracker from "@/components/CustomerBookingWorkflowTracker";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
@@ -299,11 +298,6 @@ export default function CustomerPortalDashboard() {
                             </div>
                             <ShipmentBadge status={customerWorkflowCurrentLabel(order, paymentByBooking.get(order.id) ?? null)} />
                           </div>
-                          <CustomerBookingWorkflowTracker
-                            booking={order}
-                            payment={paymentByBooking.get(order.id) ?? null}
-                            compact
-                          />
                           <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
                             <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
                             <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
