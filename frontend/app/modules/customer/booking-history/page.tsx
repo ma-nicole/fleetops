@@ -5,10 +5,10 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
+import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
 import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
-import { customerAssignmentLatestLocation } from "@/lib/customerAssignmentDisplay";
 import { WorkflowApi, type CustomerBookingHistoryRow } from "@/lib/workflowApi";
 
 export default function BookingHistoryPage() {
@@ -161,7 +161,6 @@ export default function BookingHistoryPage() {
                 <p style={{ color: "#666" }}>No bookings in history yet.</p>
               ) : (
                 filteredBookings.map((booking) => {
-                  const sortedAsg = [...(booking.assignments ?? [])].sort((a, b) => a.trip_id - b.trip_id);
                   const cost = Number(booking.actual_cost ?? booking.estimated_cost ?? 0);
                   return (
                     <div
@@ -246,50 +245,14 @@ export default function BookingHistoryPage() {
                             padding: "1rem",
                             marginTop: "1rem",
                           }}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <h4 style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>Details — all assigned trucks</h4>
-                          {sortedAsg.length === 0 ? (
-                            <p style={{ color: "#666666", margin: "0.5rem 0" }}>No trip assignments on file.</p>
-                          ) : (
-                            sortedAsg.map((asg) => {
-                              const st = (asg.helper_progress_status || asg.trip_status || "—").replace(/_/g, " ");
-                              return (
-                                <div
-                                  key={asg.trip_id}
-                                  style={{
-                                    border: "1px solid #FFE0B2",
-                                    borderRadius: "8px",
-                                    padding: "0.75rem",
-                                    marginBottom: "0.65rem",
-                                    background: "rgba(255,255,255,0.6)",
-                                  }}
-                                >
-                                  <p style={{ color: "#1A1A1A", margin: "0 0 0.5rem 0", fontWeight: 700 }}>Trip #{asg.trip_id}</p>
-                                  <p style={{ color: "#666666", margin: "0.35rem 0" }}>
-                                    <strong>Truck:</strong>{" "}
-                                    {asg.truck
-                                      ? `${asg.truck.plate_number ?? asg.truck.code}${
-                                          asg.truck.model_name ? ` — ${asg.truck.model_name}` : ""
-                                        }`
-                                      : "—"}
-                                  </p>
-                                  <p style={{ color: "#666666", margin: "0.35rem 0" }}>
-                                    <strong>Driver:</strong> {asg.driver?.name ?? "—"}
-                                  </p>
-                                  <p style={{ color: "#666666", margin: "0.35rem 0" }}>
-                                    <strong>Helper:</strong> {asg.helper?.name ?? "—"}
-                                  </p>
-                                  <p style={{ color: "#666666", margin: "0.35rem 0" }}>
-                                    <strong>Status:</strong> {st}
-                                  </p>
-                                  <p style={{ color: "#666666", margin: "0.35rem 0" }}>
-                                    <strong>Latest location:</strong>{" "}
-                                    {customerAssignmentLatestLocation(asg, booking.dropoff_location, "—")}
-                                  </p>
-                                </div>
-                              );
-                            })
-                          )}
+                          <CustomerBookingAssignmentsList
+                            assignments={booking.assignments}
+                            dropoffAddress={booking.dropoff_location}
+                            showDeliveryTimeline
+                          />
                           <CustomerDocumentReviewSection
                             booking={booking}
                             onUpdated={(updated) => {

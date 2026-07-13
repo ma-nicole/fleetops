@@ -521,7 +521,11 @@ function TripRecordsPageInner() {
                               </span>
                             ) : null}
                           </div>
-                          <CustomerBookingAssignmentsList assignments={b.assignments} dropoffAddress={b.dropoff_location} />
+                          <CustomerBookingAssignmentsList
+                            assignments={b.assignments}
+                            dropoffAddress={b.dropoff_location}
+                            showDeliveryTimeline
+                          />
                           <CustomerDocumentReviewSection
                             booking={b}
                             payment={pay ?? null}

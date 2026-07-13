@@ -66,11 +66,14 @@ export default function CustomerBookingAssignmentsList({
   assignments,
   dropoffAddress,
   heading = "Assigned trucks",
+  showDeliveryTimeline = true,
 }: {
   assignments: CustomerBookingAssignment[] | null | undefined;
   /** When trips are completed / dropped off, latest location shows this booking drop-off line. */
   dropoffAddress?: string | null;
   heading?: string;
+  /** When false, hide the helper delivery timeline (e.g. compact homepage cards). */
+  showDeliveryTimeline?: boolean;
 }) {
   const sorted = [...(assignments ?? [])].sort((a, b) => (a.trip_id ?? 0) - (b.trip_id ?? 0));
 
@@ -114,17 +117,19 @@ export default function CustomerBookingAssignmentsList({
               <span style={{ color: "var(--text-secondary, #6B7280)" }}>Latest location:</span>{" "}
               {customerAssignmentLatestLocation(asg, dropoffAddress)}
             </div>
-            <div style={{ marginTop: "0.45rem" }}>
-              <div style={{ fontWeight: 700, fontSize: "0.82rem", marginBottom: "0.35rem" }}>Delivery timeline</div>
-              <HelperUpdatesTimeline
-                events={timeline}
-                operationalStatus={asg.helper_progress_status || asg.trip_status || undefined}
-                mediaSrc={mediaSrc}
-                showPending={false}
-                emptyMessage="No delivery timeline updates yet."
-                title={`Trip #${asg.trip_id} delivery timeline`}
-              />
-            </div>
+            {showDeliveryTimeline ? (
+              <div style={{ marginTop: "0.45rem" }}>
+                <div style={{ fontWeight: 700, fontSize: "0.82rem", marginBottom: "0.35rem" }}>Delivery timeline</div>
+                <HelperUpdatesTimeline
+                  events={timeline}
+                  operationalStatus={asg.helper_progress_status || asg.trip_status || undefined}
+                  mediaSrc={mediaSrc}
+                  showPending={false}
+                  emptyMessage="No delivery timeline updates yet."
+                  title={`Trip #${asg.trip_id} delivery timeline`}
+                />
+              </div>
+            ) : null}
           </div>
         );
       })}

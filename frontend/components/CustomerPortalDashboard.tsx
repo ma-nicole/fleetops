@@ -302,7 +302,11 @@ export default function CustomerPortalDashboard() {
                             <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
                             <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
                             <div style={{ marginTop: "0.25rem" }}>
-                              <CustomerBookingAssignmentsList assignments={order.assignments} dropoffAddress={order.dropoff_location} />
+                              <CustomerBookingAssignmentsList
+                                assignments={order.assignments}
+                                dropoffAddress={order.dropoff_location}
+                                showDeliveryTimeline={false}
+                              />
                             </div>
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem", flexWrap: "wrap", gap: "0.35rem" }}>
