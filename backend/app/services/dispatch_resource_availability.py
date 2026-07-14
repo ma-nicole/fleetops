@@ -33,15 +33,17 @@ from app.services.booking_schedule import (
 ResourceKind = Literal["truck", "driver", "helper"]
 ResourceStatus = Literal["available", "assigned", "on_trip", "unavailable"]
 
+# Terminal trip statuses — resources released (Completed / Cancelled).
 _TERMINAL_TRIP: frozenset[TripStatus] = frozenset({TripStatus.COMPLETED, TripStatus.CANCELLED})
+_TERMINAL_TRIP_VALUES: frozenset[str] = frozenset(s.value for s in _TERMINAL_TRIP)
 
 # Pre-execution — badge "Assigned" (still busy / not selectable).
 _ASSIGNED_TRIP_STATUSES: frozenset[TripStatus] = frozenset(
     {TripStatus.PENDING, TripStatus.ASSIGNED}
 )
+_ASSIGNED_TRIP_VALUES: frozenset[str] = frozenset(s.value for s in _ASSIGNED_TRIP_STATUSES)
 
-# In-progress lifecycle — badge "On Trip".
-# Accepted / Departed / Loading / In Delivery map to En Route / Loading / Dest.
+# In-progress lifecycle — badge "On Trip" (Accepted → delivery / proof pending).
 _ON_TRIP_STATUSES: frozenset[TripStatus] = frozenset(
     {
         TripStatus.ACCEPTED,
@@ -50,9 +52,9 @@ _ON_TRIP_STATUSES: frozenset[TripStatus] = frozenset(
         TripStatus.IN_DELIVERY,
     }
 )
+_ON_TRIP_VALUES: frozenset[str] = frozenset(s.value for s in _ON_TRIP_STATUSES)
 
 # Assignment rows that still occupy the resource until Completed / Cancelled.
-# Includes DROPPED_OFF (Arrived Destination / proof pending) so release only after true completion.
 _BUSY_ASSIGNMENT: frozenset[TruckAssignmentStatus] = frozenset(
     {
         TruckAssignmentStatus.ASSIGNED,
@@ -63,6 +65,7 @@ _BUSY_ASSIGNMENT: frozenset[TruckAssignmentStatus] = frozenset(
         TruckAssignmentStatus.DROPPED_OFF,
     }
 )
+_BUSY_ASSIGNMENT_VALUES: frozenset[str] = frozenset(s.value for s in _BUSY_ASSIGNMENT)
 _ON_TRIP_ASSIGNMENT: frozenset[TruckAssignmentStatus] = frozenset(
     {
         TruckAssignmentStatus.FOR_PICKUP,
@@ -72,12 +75,21 @@ _ON_TRIP_ASSIGNMENT: frozenset[TruckAssignmentStatus] = frozenset(
         TruckAssignmentStatus.DROPPED_OFF,
     }
 )
+_ON_TRIP_ASSIGNMENT_VALUES: frozenset[str] = frozenset(s.value for s in _ON_TRIP_ASSIGNMENT)
+_TERMINAL_ASSIGNMENT_VALUES: frozenset[str] = frozenset(
+    {
+        TruckAssignmentStatus.COMPLETED.value,
+        TruckAssignmentStatus.CANCELLED.value,
+    }
+)
 
 # Back-compat alias for tests / imports that still expect this name.
 _NON_TERMINAL_ASSIGNMENT = _BUSY_ASSIGNMENT
 
 _OFF_DUTY_CREW_STATUSES = frozenset({"off_duty", "off-duty", "on_break", "break", "unavailable"})
-_TERMINAL_BOOKING = frozenset(
+
+# Booking no longer occupies resources (Completed / Cancelled / Rejected / related).
+_TERMINAL_BOOKING: frozenset[BookingStatus] = frozenset(
     {
         BookingStatus.COMPLETED,
         BookingStatus.CANCELLED,
@@ -86,6 +98,7 @@ _TERMINAL_BOOKING = frozenset(
         BookingStatus.PAYMENT_REJECTED,
     }
 )
+_TERMINAL_BOOKING_VALUES: frozenset[str] = frozenset(s.value for s in _TERMINAL_BOOKING)
 
 _STATUS_LABELS: dict[ResourceStatus, str] = {
     "available": "Available",
@@ -100,7 +113,20 @@ def resource_status_label(status: ResourceStatus) -> str:
 
 
 def _norm(value: str | None) -> str:
-    return (value or "").strip().lower()
+    return (value or "").strip().lower().replace("-", "_")
+
+
+def _status_token(value: object | None) -> str:
+    """Normalize Enum / string DB values for comparisons (defense against dialect quirks)."""
+    if value is None:
+        return ""
+    if hasattr(value, "value"):
+        return _norm(str(getattr(value, "value")))
+    raw = _norm(str(value))
+    # Tolerate "TripStatus.COMPLETED" / "BookingStatus.completed" style dumps.
+    if "." in raw:
+        raw = raw.rsplit(".", 1)[-1]
+    return raw
 
 
 def _off_duty(status: str | None) -> bool:
@@ -108,55 +134,66 @@ def _off_duty(status: str | None) -> bool:
 
 
 def _truck_operationally_unavailable(truck: Truck) -> bool:
-    return _norm(truck.status) == "maintenance"
+    return _norm(truck.status) in {"maintenance", "in_maintenance"}
+
+
+def _is_terminal_trip_status(status: object | None) -> bool:
+    return _status_token(status) in _TERMINAL_TRIP_VALUES
+
+
+def _is_terminal_booking_status(status: object | None) -> bool:
+    return _status_token(status) in _TERMINAL_BOOKING_VALUES
+
+
+def _is_busy_assignment_status(status: object | None) -> bool:
+    return _status_token(status) in _BUSY_ASSIGNMENT_VALUES
 
 
 def _trip_status_value(trip: Trip) -> str:
-    st = trip.status
-    return st.value if hasattr(st, "value") else str(st)
+    return _status_token(trip.status)
 
 
 def _assignment_status_value(ta: TruckAssignment) -> str:
-    st = ta.assignment_status
-    return st.value if hasattr(st, "value") else str(st)
+    return _status_token(ta.assignment_status)
 
 
-def _coerce_trip_status(status: TripStatus | str | None) -> str:
-    if status is None:
-        return ""
-    return status.value if hasattr(status, "value") else str(status)
+def _trip_is_on_trip(status: object | None) -> bool:
+    return _status_token(status) in _ON_TRIP_VALUES
 
 
-def _coerce_assignment_status(status: TruckAssignmentStatus | str | None) -> str:
-    if status is None:
-        return ""
-    return status.value if hasattr(status, "value") else str(status)
+def _trip_is_assigned_badge(status: object | None) -> bool:
+    return _status_token(status) in _ASSIGNED_TRIP_VALUES
 
 
-def _trip_is_on_trip(status: TripStatus | str | None) -> bool:
-    raw = _coerce_trip_status(status)
-    return raw in {s.value for s in _ON_TRIP_STATUSES}
+def _assignment_is_on_trip(status: object | None) -> bool:
+    return _status_token(status) in _ON_TRIP_ASSIGNMENT_VALUES
 
 
-def _trip_is_assigned_badge(status: TripStatus | str | None) -> bool:
-    raw = _coerce_trip_status(status)
-    return raw in {s.value for s in _ASSIGNED_TRIP_STATUSES}
-
-
-def _assignment_is_on_trip(status: TruckAssignmentStatus | str | None) -> bool:
-    raw = _coerce_assignment_status(status)
-    return raw in {s.value for s in _ON_TRIP_ASSIGNMENT}
+def _ids_equal(left: int | None, right: int | None) -> bool:
+    if left is None or right is None:
+        return False
+    try:
+        return int(left) == int(right)
+    except (TypeError, ValueError):
+        return False
 
 
 def _active_trips(db: Session) -> list[tuple[Trip, Booking]]:
-    """Non-terminal trips on non-terminal bookings — the live resource commitment set."""
+    """Trips on non-terminal bookings only — Python post-filter ignores completed bookings/trips."""
     rows = (
         db.query(Trip, Booking)
         .join(Booking, Booking.id == Trip.booking_id)
-        .filter(~Trip.status.in_(_TERMINAL_TRIP), ~Booking.status.in_(_TERMINAL_BOOKING))
+        .filter(
+            ~Trip.status.in_([s.value for s in _TERMINAL_TRIP]),
+            ~Booking.status.in_([s.value for s in _TERMINAL_BOOKING]),
+        )
         .all()
     )
-    return rows
+    return [
+        (trip, booking)
+        for trip, booking in rows
+        if not _is_terminal_trip_status(trip.status) and not _is_terminal_booking_status(booking.status)
+    ]
 
 
 def _active_assignments(db: Session) -> list[tuple[TruckAssignment, Booking]]:
@@ -164,12 +201,17 @@ def _active_assignments(db: Session) -> list[tuple[TruckAssignment, Booking]]:
         db.query(TruckAssignment, Booking)
         .join(Booking, Booking.id == TruckAssignment.booking_id)
         .filter(
-            TruckAssignment.assignment_status.in_(_BUSY_ASSIGNMENT),
-            ~Booking.status.in_(_TERMINAL_BOOKING),
+            TruckAssignment.assignment_status.in_([s.value for s in _BUSY_ASSIGNMENT]),
+            ~Booking.status.in_([s.value for s in _TERMINAL_BOOKING]),
         )
         .all()
     )
-    return rows
+    return [
+        (ta, booking)
+        for ta, booking in rows
+        if _is_busy_assignment_status(ta.assignment_status)
+        and not _is_terminal_booking_status(booking.status)
+    ]
 
 
 def busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
@@ -196,18 +238,18 @@ def busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
 
 def _trip_on_resource(trip: Trip, kind: ResourceKind, resource_id: int) -> bool:
     if kind == "truck":
-        return trip.truck_id == resource_id
+        return _ids_equal(trip.truck_id, resource_id)
     if kind == "driver":
-        return trip.driver_id == resource_id
-    return trip.helper_id == resource_id
+        return _ids_equal(trip.driver_id, resource_id)
+    return _ids_equal(trip.helper_id, resource_id)
 
 
 def _assignment_on_resource(ta: TruckAssignment, kind: ResourceKind, resource_id: int) -> bool:
     if kind == "truck":
-        return ta.truck_id == resource_id
+        return _ids_equal(ta.truck_id, resource_id)
     if kind == "driver":
-        return ta.driver_id == resource_id
-    return ta.helper_id == resource_id
+        return _ids_equal(ta.driver_id, resource_id)
+    return _ids_equal(ta.helper_id, resource_id)
 
 
 def _global_resource_status(
@@ -548,47 +590,69 @@ def _resource_has_active_commitment(
 
 
 def heal_orphaned_trips_on_terminal_bookings(db: Session) -> int:
-    """Close leftover non-terminal trips when the booking is already Completed / Cancelled / Rejected.
+    """Close leftover non-terminal trips/assignments when the booking is already terminal.
 
-    Root cause of stale On Trip badges: trip row never flipped to completed/cancelled while booking did.
+    Root cause of mass 'On Trip' badges: trips left open after booking Completed/Cancelled/Rejected.
     """
-    orphans = (
+    healed = 0
+    candidates = (
         db.query(Trip, Booking)
         .join(Booking, Booking.id == Trip.booking_id)
-        .filter(~Trip.status.in_(_TERMINAL_TRIP), Booking.status.in_(_TERMINAL_BOOKING))
         .all()
     )
-    healed = 0
-    for trip, booking in orphans:
-        if booking.status in {
-            BookingStatus.CANCELLED,
-            BookingStatus.REJECTED,
-            BookingStatus.EXPIRED,
-            BookingStatus.PAYMENT_REJECTED,
+    for trip, booking in candidates:
+        booking_terminal = _is_terminal_booking_status(booking.status)
+        helper_done = _status_token(getattr(trip, "helper_progress_status", None)) == "completed"
+        trip_open = not _is_terminal_trip_status(trip.status)
+        if not trip_open:
+            continue
+        if not (booking_terminal or helper_done):
+            continue
+
+        if booking_terminal and _status_token(booking.status) in {
+            BookingStatus.CANCELLED.value,
+            BookingStatus.REJECTED.value,
+            BookingStatus.EXPIRED.value,
+            BookingStatus.PAYMENT_REJECTED.value,
         }:
             trip.status = TripStatus.CANCELLED
+            assign_status = TruckAssignmentStatus.CANCELLED
         else:
             trip.status = TripStatus.COMPLETED
             if trip.completed_at is None:
                 trip.completed_at = datetime.utcnow()
+            assign_status = TruckAssignmentStatus.COMPLETED
+
         db.query(TruckAssignment).filter(
             TruckAssignment.booking_id == trip.booking_id,
-            TruckAssignment.truck_id == trip.truck_id,
-            ~TruckAssignment.assignment_status.in_(
-                {TruckAssignmentStatus.COMPLETED, TruckAssignmentStatus.CANCELLED}
-            ),
-        ).update(
-            {
-                "assignment_status": (
-                    TruckAssignmentStatus.CANCELLED
-                    if trip.status == TripStatus.CANCELLED
-                    else TruckAssignmentStatus.COMPLETED
-                )
-            },
-            synchronize_session=False,
-        )
+            ~TruckAssignment.assignment_status.in_(list(_TERMINAL_ASSIGNMENT_VALUES)),
+        ).update({"assignment_status": assign_status}, synchronize_session=False)
         release_trip_resources(db, trip)
         healed += 1
+
+    # Busy assignment rows on terminal bookings with no open trip still reserve crew/trucks.
+    dangling = (
+        db.query(TruckAssignment, Booking)
+        .join(Booking, Booking.id == TruckAssignment.booking_id)
+        .filter(~TruckAssignment.assignment_status.in_(list(_TERMINAL_ASSIGNMENT_VALUES)))
+        .all()
+    )
+    for ta, booking in dangling:
+        if not _is_terminal_booking_status(booking.status):
+            continue
+        ta.assignment_status = (
+            TruckAssignmentStatus.CANCELLED
+            if _status_token(booking.status)
+            in {
+                BookingStatus.CANCELLED.value,
+                BookingStatus.REJECTED.value,
+                BookingStatus.EXPIRED.value,
+                BookingStatus.PAYMENT_REJECTED.value,
+            }
+            else TruckAssignmentStatus.COMPLETED
+        )
+        healed += 1
+
     return healed
 
 
@@ -660,8 +724,9 @@ def build_booking_resource_availability(db: Session, booking: Booking) -> dict[s
     """Full availability payload for dispatcher assignment UI (cards + dropdowns share this)."""
     cfg = app_settings
 
-    # Close orphan trips first so live queries and badges match reality.
-    if heal_orphaned_trips_on_terminal_bookings(db):
+    # Persist orphan/terminal heal so completed bookings stop reserving the fleet.
+    healed = heal_orphaned_trips_on_terminal_bookings(db)
+    if healed:
         db.flush()
 
     trip_rows = _active_trips(db)
@@ -685,7 +750,7 @@ def build_booking_resource_availability(db: Session, booking: Booking) -> dict[s
         .all()
     )
 
-    heal_stale_resource_availability(
+    healed += heal_stale_resource_availability(
         db,
         trucks=trucks,
         drivers=drivers,
@@ -755,6 +820,7 @@ def build_booking_resource_availability(db: Session, booking: Booking) -> dict[s
             for row in helper_roster
             if row["assignable"]
         ],
+        "_healed_rows": healed,
     }
 
 

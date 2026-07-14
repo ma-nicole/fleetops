@@ -189,4 +189,13 @@ def apply_aggregate_booking_status(db: Session, booking: Booking) -> bool:
         db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
             {"hold_status": TruckSlotHoldStatus.RELEASED}
         )
+        from app.services.dispatch_resource_availability import release_trip_resources
+
+        for trip in trips:
+            if want == BookingStatus.CANCELLED and trip.status not in {
+                TripStatus.COMPLETED,
+                TripStatus.CANCELLED,
+            }:
+                trip.status = TripStatus.CANCELLED
+            release_trip_resources(db, trip)
     return True

@@ -876,6 +876,12 @@ def booking_resource_availability(
         raise HTTPException(status_code=404, detail="Booking not found")
     assert_dispatcher_booking_access(db, user, booking.id)
     required = int(booking.required_truck_count or trucks_required_for_cargo(booking.cargo_weight_tons))
+    payload = _available_resources_for_booking(db, booking)
+    healed = int(payload.pop("_healed_rows", 0) or 0)
+    if healed:
+        # Persist orphan trip closes + cleared availability flags so completed bookings
+        # stop reserving the fleet on subsequent requests.
+        db.commit()
     return {
         "booking_id": booking.id,
         "required_truck_count": required,
@@ -884,7 +890,7 @@ def booking_resource_availability(
         "selected_route_option_id": (
             resolve_dispatch_route(db, booking).get("selected_route_option_id")
         ),
-        **_available_resources_for_booking(db, booking),
+        **payload,
     }
 
 

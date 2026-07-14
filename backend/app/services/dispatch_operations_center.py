@@ -126,9 +126,22 @@ def _off_duty(avail: str | None) -> bool:
 
 def _busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
     """Same active-commitment sets as Job Assignment availability (cards + dropdowns)."""
-    from app.services.dispatch_resource_availability import busy_resource_ids
+    from app.services.dispatch_resource_availability import (
+        busy_resource_ids,
+        heal_orphaned_trips_on_terminal_bookings,
+        heal_stale_resource_availability,
+    )
+    from app.models.entities import Truck, User, UserRole
 
+    healed = heal_orphaned_trips_on_terminal_bookings(db)
+    trucks = db.query(Truck).all()
+    drivers = db.query(User).filter(User.role == UserRole.DRIVER).all()
+    helpers = db.query(User).filter(User.role == UserRole.HELPER).all()
+    healed += heal_stale_resource_availability(db, trucks=trucks, drivers=drivers, helpers=helpers)
+    if healed:
+        db.flush()
     return busy_resource_ids(db)
+
 
 
 def build_operations_center_payload(db: Session, viewer: User | None = None) -> dict[str, Any]:
@@ -306,7 +319,19 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
             joinedload(Trip.driver),
             joinedload(Trip.helper),
         )
+        .join(Booking, Booking.id == Trip.booking_id)
         .filter(active_trip_status_filter())
+        .filter(
+            ~Booking.status.in_(
+                [
+                    BookingStatus.COMPLETED,
+                    BookingStatus.CANCELLED,
+                    BookingStatus.REJECTED,
+                    BookingStatus.EXPIRED,
+                    BookingStatus.PAYMENT_REJECTED,
+                ]
+            )
+        )
         .order_by(Trip.updated_at.desc())
         .limit(150)
         .all()
