@@ -16,6 +16,7 @@ import {
   buildInternationalPhone,
   isValidEmail,
   validateAdminInitialPassword,
+  STANDARD_STAFF_INITIAL_PASSWORD,
   validateOptionalInternationalPhone,
   validatePersonNameLoose,
 } from "@/lib/formValidation";
@@ -293,7 +294,7 @@ function CreateUserModal({
   const [role, setRole] = useState<AdminUser["role"]>("customer");
   const [phoneDial, setPhoneDial] = useState(DEFAULT_DIAL_CODE);
   const [phoneNational, setPhoneNational] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(STANDARD_STAFF_INITIAL_PASSWORD);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
@@ -443,10 +444,15 @@ function CreateUserModal({
               setPassword(e.target.value);
               if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined }));
             }}
-            placeholder="6–72 characters"
+            placeholder={STANDARD_STAFF_INITIAL_PASSWORD}
             autoComplete="new-password"
             aria-invalid={!!fieldErrors.password}
+            aria-describedby="create-user-password-hint"
           />
+          <span id="create-user-password-hint" style={{ fontSize: "0.8rem", color: "#6B7280" }}>
+            Standard for all FleetOps users: <strong>{STANDARD_STAFF_INITIAL_PASSWORD}</strong>
+            {" "}(8+ chars, upper, lower, number, special). Change after first login if needed.
+          </span>
           {fieldErrors.password && (
             <span role="alert" style={{ color: "var(--text-error)", fontSize: "0.85rem" }}>{fieldErrors.password}</span>
           )}

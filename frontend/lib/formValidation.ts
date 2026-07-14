@@ -181,12 +181,12 @@ export function validateCustomerPassword(value: string): string | undefined {
   return undefined;
 }
 
-/** Backend admin create user: 6–72. */
+/** Standard initial password for admin-created users (staff + customers). Meets full password policy. */
+export const STANDARD_STAFF_INITIAL_PASSWORD = "FleetOpt@Staff1";
+
+/** Same strength rules as customer signup — applies to all users. */
 export function validateAdminInitialPassword(value: string): string | undefined {
-  if (!value) return "Password is required.";
-  if (value.length < 6) return "Password must be at least 6 characters.";
-  if (value.length > 72) return "Password must be at most 72 characters.";
-  return undefined;
+  return validateCustomerPassword(value);
 }
 
 export function digitsOnly(value: string): string {

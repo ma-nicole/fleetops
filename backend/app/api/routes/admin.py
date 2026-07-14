@@ -4,10 +4,11 @@ import secrets
 import string
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, require_roles
+from app.core.password_policy import validate_password_strength
 from app.db import get_db
 from app.core.config import settings as app_settings
 from app.models.entities import (
@@ -62,7 +63,13 @@ class UserCreatePayload(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=255)
     role: UserRole
     phone: str | None = None
-    password: str = Field(..., min_length=6, max_length=72)
+    password: str = Field(..., min_length=8, max_length=72)
+
+    @field_validator("password")
+    @classmethod
+    def validate_create_password(cls, v: str) -> str:
+        validate_password_strength(v)
+        return v
 
 
 class UserUpdatePayload(BaseModel):
@@ -166,9 +173,14 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Generate a 12-char temp password (letters + digits)
+    # Temporary password meets the same strength policy as signup.
     alphabet = string.ascii_letters + string.digits
-    new_password = "".join(secrets.choice(alphabet) for _ in range(12))
+    specials = "!@#$%&*"
+    raw = [secrets.choice(string.ascii_uppercase), secrets.choice(string.ascii_lowercase), secrets.choice(string.digits), secrets.choice(specials)]
+    raw.extend(secrets.choice(alphabet + specials) for _ in range(8))
+    secrets.SystemRandom().shuffle(raw)
+    new_password = "".join(raw)
+    validate_password_strength(new_password)
     user.password_hash = hash_password(new_password)
     user.failed_login_count = 0
     user.locked_until = None
