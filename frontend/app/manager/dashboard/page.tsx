@@ -180,7 +180,7 @@ export default function ManagerDashboardPage() {
               className="scroll-section"
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
                 gap: "1rem",
               }}
             >
@@ -260,7 +260,7 @@ export default function ManagerDashboardPage() {
             <section
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
                 gap: "1rem",
               }}
             >
@@ -304,7 +304,7 @@ export default function ManagerDashboardPage() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
                     gap: "0.75rem",
                   }}
                 >

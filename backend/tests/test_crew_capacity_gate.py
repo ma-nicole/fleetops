@@ -1,4 +1,4 @@
-"""Unit tests: calendar-overlap crew capacity + dispatcher assignability."""
+"""Unit tests: dispatcher resource availability / assignability."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from app.models.entities import BookingStatus, TripStatus, TruckAssignmentStatus, UserRole
 from app.services.booking_schedule import CrewWindowCapacity
 from app.services.dispatch_resource_availability import (
+    _BUSY_ASSIGNMENT,
     _NON_TERMINAL_ASSIGNMENT,
     _TERMINAL_BOOKING,
     _conflicts_for_resource,
@@ -20,11 +21,14 @@ from app.services.dispatch_resource_availability import (
 )
 
 
-def test_terminal_filters_exclude_completed_and_dropped_off():
+def test_terminal_filters_exclude_completed():
     assert BookingStatus.COMPLETED in _TERMINAL_BOOKING
     assert BookingStatus.PAYMENT_REJECTED in _TERMINAL_BOOKING
-    assert TruckAssignmentStatus.DROPPED_OFF not in _NON_TERMINAL_ASSIGNMENT
+    assert BookingStatus.REJECTED in _TERMINAL_BOOKING
     assert TruckAssignmentStatus.COMPLETED not in _NON_TERMINAL_ASSIGNMENT
+    assert TruckAssignmentStatus.CANCELLED not in _NON_TERMINAL_ASSIGNMENT
+    # Arrived Destination / proof pending still occupies the resource.
+    assert TruckAssignmentStatus.DROPPED_OFF in _BUSY_ASSIGNMENT
 
 
 def test_crew_capacity_message_lists_shortages():
@@ -35,8 +39,8 @@ def test_crew_capacity_message_lists_shortages():
     assert CrewWindowCapacity(2, 2, 2, 1, True).message is None
 
 
-def test_conflicts_ignore_live_busy_when_windows_do_not_overlap():
-    """On-trip resource for Jul 14 must not conflict with a Jul 23 booking window."""
+def test_active_commitment_blocks_even_when_windows_do_not_overlap():
+    """Resource on an active Jul 14 booking cannot be selected for a Jul 23 booking."""
     cfg = SimpleNamespace()
     target = SimpleNamespace(
         id=233,
@@ -87,7 +91,10 @@ def test_conflicts_ignore_live_busy_when_windows_do_not_overlap():
         conflicts = _conflicts_for_resource(
             db, kind="truck", resource_id=1, booking=target, cfg=cfg
         )
-    assert conflicts == []
+    assert len(conflicts) == 1
+    assert conflicts[0]["booking_id"] == 100
+    assert conflicts[0]["live_busy"] is True
+    assert conflicts[0]["calendar_overlap"] is False
 
 
 def test_conflicts_detected_when_windows_overlap():
@@ -163,7 +170,8 @@ def test_evaluate_truck_not_assignable_when_on_trip():
     assert "active trip" in (row["conflict_reason"] or "").lower()
 
 
-def test_evaluate_driver_and_helper_assignable_when_only_assigned_badge():
+def test_evaluate_driver_and_helper_not_assignable_when_assigned():
+    """Assigned badge means another active booking — cannot double-assign."""
     driver = SimpleNamespace(id=10, full_name="Driver A", availability_status="available", role="driver")
     helper = SimpleNamespace(id=11, full_name="Helper A", availability_status="available", role="helper")
     booking = SimpleNamespace(id=233)
@@ -173,13 +181,26 @@ def test_evaluate_driver_and_helper_assignable_when_only_assigned_badge():
         patch("app.services.dispatch_resource_availability._active_trips", return_value=[]),
         patch("app.services.dispatch_resource_availability._active_assignments", return_value=[]),
         patch("app.services.dispatch_resource_availability._global_resource_status", return_value="assigned"),
-        patch("app.services.dispatch_resource_availability._conflicts_for_resource", return_value=[]),
+        patch(
+            "app.services.dispatch_resource_availability._conflicts_for_resource",
+            return_value=[
+                {
+                    "booking_id": 99,
+                    "scheduled_date": "2026-07-14",
+                    "scheduled_time_slot": "08:00",
+                    "live_busy": True,
+                    "calendar_overlap": False,
+                }
+            ],
+        ),
     ):
         d = evaluate_driver_for_booking(db, driver, booking)
         h = evaluate_helper_for_booking(db, helper, booking)
 
-    assert d["assignable"] is True
-    assert h["assignable"] is True
+    assert d["assignable"] is False
+    assert h["assignable"] is False
+    assert d["status"] == "assigned"
+    assert h["status"] == "assigned"
 
 
 def test_global_status_ignores_stale_availability_flag():
@@ -205,6 +226,40 @@ def test_global_status_on_trip_from_live_leg():
         trip_rows=[(trip, booking)],
         assignment_rows=[],
         truck=SimpleNamespace(id=1, status="available", availability_status="assigned"),
+    )
+    assert status == "on_trip"
+
+
+def test_global_status_assigned_from_pending_trip():
+    trip = SimpleNamespace(id=9, truck_id=1, driver_id=None, helper_id=None, status=TripStatus.ASSIGNED)
+    booking = SimpleNamespace(id=50, status=BookingStatus.ASSIGNED)
+    status = _global_resource_status(
+        MagicMock(),
+        kind="truck",
+        resource_id=1,
+        trip_rows=[(trip, booking)],
+        assignment_rows=[],
+        truck=SimpleNamespace(id=1, status="available", availability_status="assigned"),
+    )
+    assert status == "assigned"
+
+
+def test_global_status_on_trip_from_dropped_off_assignment():
+    ta = SimpleNamespace(
+        id=3,
+        truck_id=1,
+        driver_id=10,
+        helper_id=11,
+        assignment_status=TruckAssignmentStatus.DROPPED_OFF,
+    )
+    booking = SimpleNamespace(id=50, status=BookingStatus.OUT_FOR_DELIVERY)
+    status = _global_resource_status(
+        MagicMock(),
+        kind="helper",
+        resource_id=11,
+        trip_rows=[],
+        assignment_rows=[(ta, booking)],
+        user=SimpleNamespace(id=11, availability_status="available"),
     )
     assert status == "on_trip"
 

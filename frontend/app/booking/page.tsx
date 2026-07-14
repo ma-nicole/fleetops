@@ -51,7 +51,7 @@ export default function BookingPage() {
           maxWidth: "900px",
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
           gap: "1rem",
         }}
       >

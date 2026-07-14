@@ -146,7 +146,7 @@ export default function CheckoutPage() {
         Review your booking details and enter shipment information
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "2rem" }}>
         {/* Booking Form */}
         <div>
           {/* Booking Summary */}

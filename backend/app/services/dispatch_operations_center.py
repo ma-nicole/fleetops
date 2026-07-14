@@ -125,22 +125,10 @@ def _off_duty(avail: str | None) -> bool:
 
 
 def _busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
-    rows = (
-        db.query(Trip.truck_id, Trip.driver_id, Trip.helper_id)
-        .filter(active_trip_status_filter())
-        .all()
-    )
-    trucks_b: set[int] = set()
-    drivers_b: set[int] = set()
-    helpers_b: set[int] = set()
-    for tid, did, hid in rows:
-        if tid:
-            trucks_b.add(tid)
-        if did:
-            drivers_b.add(did)
-        if hid:
-            helpers_b.add(hid)
-    return trucks_b, drivers_b, helpers_b
+    """Same active-commitment sets as Job Assignment availability (cards + dropdowns)."""
+    from app.services.dispatch_resource_availability import busy_resource_ids
+
+    return busy_resource_ids(db)
 
 
 def build_operations_center_payload(db: Session, viewer: User | None = None) -> dict[str, Any]:
@@ -294,7 +282,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
     for u in drivers_all:
         if _off_duty(u.availability_status):
             drivers_off_duty += 1
-        elif u.id in drivers_b or _norm(u.availability_status) == "assigned":
+        elif u.id in drivers_b:
             drivers_assigned += 1
         else:
             drivers_available += 1
@@ -305,7 +293,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
     for u in helpers_all:
         if _off_duty(u.availability_status):
             helpers_off_duty += 1
-        elif u.id in helpers_b or _norm(u.availability_status) == "assigned":
+        elif u.id in helpers_b:
             helpers_assigned += 1
         else:
             helpers_available += 1

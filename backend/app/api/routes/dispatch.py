@@ -47,6 +47,7 @@ from app.constants.fleet_capacity import FLEET_TRUCK_COUNT, trucks_required_for_
 from app.core.paths import uploads_subdir
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.dispatch_resource_availability import (
+    _TERMINAL_BOOKING,
     build_booking_resource_availability,
     mark_resources_assigned,
     validate_resource_assignment,
@@ -667,7 +668,11 @@ def fleet_assets(
         db.query(Trip, Truck, User)
         .join(Truck, Truck.id == Trip.truck_id)
         .join(User, User.id == Trip.driver_id)
-        .filter(Trip.status.in_(ACTIVE_TRIP_STATUSES))
+        .join(Booking, Booking.id == Trip.booking_id)
+        .filter(
+            Trip.status.in_(ACTIVE_TRIP_STATUSES),
+            ~Booking.status.in_(_TERMINAL_BOOKING),
+        )
         .all()
     )
     truck_active_driver: dict[int, dict] = {}

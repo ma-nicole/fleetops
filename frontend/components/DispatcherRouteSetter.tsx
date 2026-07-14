@@ -361,7 +361,7 @@ export default function DispatcherRouteSetter({
               style={{ padding: "0.4rem 0.5rem", borderRadius: 6, border: "1px solid #D1D5DB" }}
             />
           </label>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 8 }}>
             <label style={{ display: "grid", gap: 4, fontSize: "0.82rem" }}>
               Distance (km)
               <input

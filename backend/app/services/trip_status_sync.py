@@ -74,17 +74,21 @@ def sync_trip_and_booking_status(
     trip.latest_location = loc
     booking.latest_location = loc
 
+    # Match by booking + truck — crew ids on legacy assignment rows can diverge from the trip.
     db.query(TruckAssignment).filter(
         TruckAssignment.booking_id == trip.booking_id,
         TruckAssignment.truck_id == trip.truck_id,
-        TruckAssignment.driver_id == trip.driver_id,
-        TruckAssignment.helper_id == trip.helper_id,
-    ).update({"assignment_status": STEP_TO_ASSIGNMENT_STATUS[step]})
+    ).update(
+        {"assignment_status": STEP_TO_ASSIGNMENT_STATUS[step]},
+        synchronize_session=False,
+    )
 
     # Multi-truck: booking.status always derived from ALL trips (never COMPLETED from one trip alone).
     apply_aggregate_booking_status(db, booking)
 
     if step in {"completed", "cancelled"}:
+        # Ensure DB sees terminal trip/assignment before release looks for leftover commitments.
+        db.flush()
         release_trip_resources(db, trip)
 
     db.add(

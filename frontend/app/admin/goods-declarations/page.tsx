@@ -262,7 +262,7 @@ export default function AdminGoodsDeclarationsPage() {
 
         {loadError ? <StatusBanner tone="error">{loadError}</StatusBanner> : null}
 
-        <div style={{ overflowX: "auto", background: "#fff", borderRadius: 8, border: "1px solid #E5E7EB" }}>
+        <div className="dense-data-table-wrap" style={{ overflowX: "auto", background: "#fff", borderRadius: 8, border: "1px solid #E5E7EB" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
             <thead>
               <tr style={{ background: "#F9FAFB", textAlign: "left" }}>
@@ -270,7 +270,7 @@ export default function AdminGoodsDeclarationsPage() {
                 <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB" }}>Route / cargo</th>
                 <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB" }}>Document</th>
                 <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB" }}>Review status</th>
-                <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB", minWidth: 300 }}>Action</th>
+                <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB", minWidth: "min(100%, 260px)" }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -517,15 +517,17 @@ export default function AdminGoodsDeclarationsPage() {
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
                             <button
                               type="button"
-                              className="button"
+                              className="button helper-touch-btn"
                               disabled={!approveEnabled}
                               aria-disabled={!approveEnabled}
                               onClick={() => void submitReview(row.booking_id, "approved")}
+                              style={{ minHeight: 44 }}
                             >
                               {reviewBusy ? "Saving…" : "Approve"}
                             </button>
                             <button
                               type="button"
+                              className="helper-touch-btn"
                               disabled={!revisionEnabled}
                               aria-disabled={!revisionEnabled}
                               title={
@@ -538,12 +540,13 @@ export default function AdminGoodsDeclarationsPage() {
                                       : "Select a revision reason first"
                               }
                               onClick={() => void submitReview(row.booking_id, "revision_requested")}
-                              style={actionButtonStyle("revision", revisionEnabled)}
+                              style={{ ...actionButtonStyle("revision", revisionEnabled), minHeight: 44 }}
                             >
                               Request revision
                             </button>
                             <button
                               type="button"
+                              className="helper-touch-btn"
                               disabled={!rejectEnabled}
                               aria-disabled={!rejectEnabled}
                               title={
@@ -554,7 +557,7 @@ export default function AdminGoodsDeclarationsPage() {
                                     : "Select a rejection reason first"
                               }
                               onClick={() => void submitReview(row.booking_id, "rejected")}
-                              style={actionButtonStyle("reject", rejectEnabled)}
+                              style={{ ...actionButtonStyle("reject", rejectEnabled), minHeight: 44 }}
                             >
                               Reject
                             </button>

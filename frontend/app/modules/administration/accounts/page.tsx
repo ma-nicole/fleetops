@@ -114,7 +114,47 @@ export default function AccountsPage() {
         </div>
       ) : (
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}>
+        <div className="admin-accounts-mobile-list" style={{ padding: "0.85rem" }}>
+          {filtered.length === 0 ? (
+            <p style={{ margin: 0, color: "var(--text-secondary)", padding: "0.5rem" }}>No users match your filter.</p>
+          ) : (
+            filtered.map((user) => (
+              <article
+                key={`m-user-${user.id}`}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: 12,
+                  padding: "0.9rem 1rem",
+                  display: "grid",
+                  gap: 6,
+                  background: "#FAFAFA",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <strong style={{ overflowWrap: "anywhere" }}>{user.full_name}</strong>
+                  {user.is_locked ? (
+                    <span style={{ ...statusPill, background: "var(--bg-error)", color: "var(--text-error)", border: "1px solid var(--text-error)" }}>
+                      Locked
+                    </span>
+                  ) : (
+                    <span style={{ ...statusPill, background: "var(--bg-success)", color: "var(--text-success)", border: "1px solid var(--text-success)" }}>
+                      Active
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: "0.88rem", color: "var(--text-secondary)", overflowWrap: "anywhere" }}>
+                  {user.email}
+                </div>
+                <div style={{ fontSize: "0.88rem" }}>Role: <strong>{user.role}</strong></div>
+                <button type="button" style={{ ...actionBtn, minHeight: 44, justifySelf: "start" }} onClick={() => openDetails(user)}>
+                  View details
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+        <div className="admin-accounts-desktop-table dense-data-table-wrap">
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
             <thead>
               <tr style={{ background: "#FAFAFA", borderBottom: "1px solid var(--border)" }}>
@@ -210,9 +250,9 @@ function UserDetailsModal({
       onClick={onClose}
     >
       <div
-        className="card"
+        className="card modal-panel"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "min(480px, 100%)", padding: "1.5rem", display: "grid", gap: "1rem" }}
+        style={{ padding: "1.5rem", display: "grid", gap: "1rem" }}
       >
         <h2 id="user-details-title" style={{ margin: 0 }}>
           User details
@@ -360,8 +400,12 @@ function CreateUserModal({
       }}
       onClick={onClose}
     >
-      <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} noValidate
-        style={{ background: "white", borderRadius: 8, padding: "1.5rem", width: "min(480px, 100%)", display: "grid", gap: "1rem" }}
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        noValidate
+        className="modal-panel"
+        style={{ background: "white", borderRadius: 8, padding: "1.5rem", display: "grid", gap: "1rem" }}
       >
         <h2 id="create-user-title" style={{ margin: 0 }}>Create new user</h2>
 

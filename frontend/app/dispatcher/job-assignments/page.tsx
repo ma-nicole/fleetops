@@ -277,8 +277,8 @@ function DispatcherJobAssignmentsInner() {
           <h1 style={{ margin: 0 }}>Job Assignment</h1>
           <p style={{ color: "#6B7280", marginTop: 4 }}>
             Clear sequence: select a ready booking → assign truck → assign driver → assign helper → create trip.
-            Only schedule-free resources can be selected. Resources marked <strong>On Trip</strong> stay
-            locked until that live trip finishes or the booking is completed/cancelled.
+            Only <strong>Available</strong> resources can be selected. <strong>Assigned</strong> and{" "}
+            <strong>On Trip</strong> resources stay locked until that booking is completed or cancelled.
           </p>
         </header>
 
@@ -438,7 +438,7 @@ function DispatcherJobAssignmentsInner() {
                 }}
               >
                 <div style={{ fontWeight: 700 }}>Resource availability for this booking window</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 12 }}>
                   {(["truck", "driver", "helper"] as const).map((kind) => {
                     const roster =
                       kind === "truck"
@@ -682,7 +682,46 @@ function DispatcherJobAssignmentsInner() {
           <p style={{ color: "#6B7280", marginTop: 0 }}>
             Live board: booking, pickup window, route, truck, driver, helper, trip status, latest location.
           </p>
-          <div style={{ overflowX: "auto", width: "100%", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
+          <div className="job-assignments-mobile-list">
+            {assignments.length === 0 ? (
+              <p style={{ margin: 0, color: "#6B7280" }}>No assignments yet.</p>
+            ) : (
+              assignments.map((a) => (
+                <article
+                  key={`m-trip-${a.trip_id}`}
+                  style={{
+                    border: "1px solid #E5E7EB",
+                    borderRadius: 12,
+                    padding: "0.9rem 1rem",
+                    display: "grid",
+                    gap: 6,
+                    background: "#FAFAFA",
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ overflowWrap: "anywhere" }}>Trip #{a.trip_id}</strong>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#92400E" }}>
+                      {dispatchAssignedTripStatusLabel(a)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "0.88rem", color: "#374151", overflowWrap: "anywhere" }}>
+                    <div>Booking #{a.booking_id} · {a.scheduled_date} {a.scheduled_time_slot}</div>
+                    <div style={{ color: "#6B7280", fontSize: "0.82rem" }}>
+                      {a.pickup_location.slice(0, 48)}… → {a.dropoff_location.slice(0, 48)}…
+                    </div>
+                    <div style={{ color: "#6B7280", fontSize: "0.82rem" }}>
+                      {a.truck_code} · {a.driver_name ?? "—"} / {a.helper_name ?? "—"} · {a.cargo_weight_tons} t
+                    </div>
+                    <div style={{ color: "#6B7280", fontSize: "0.82rem" }}>
+                      Location: {a.latest_location ?? "—"}
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+          <div className="job-assignments-desktop-table dense-data-table-wrap" style={{ width: "100%", maxWidth: "100%" }}>
             <table
               style={{
                 width: "100%",

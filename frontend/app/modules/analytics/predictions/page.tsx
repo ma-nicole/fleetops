@@ -111,7 +111,7 @@ export default function PredictionsPage() {
           <h2 style={{ marginTop: 0 }}>Forecast filters and drilldown</h2>
           <p style={{ color: "#6B7280", marginTop: -4 }}>Change the rollup to drill Year → Quarter → Month → Week → Day.</p>
           <TimeGranularityPicker value={granularity} onChange={setGranularity} disabled={forecastBusy} />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 12, marginTop: 14 }}>
             <Field label="Historical date from"><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={inputStyle} /></Field>
             <Field label="Historical date to"><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={inputStyle} /></Field>
             <Field label="Forecast periods"><input type="number" min={1} max={12} value={horizon} onChange={(e) => setHorizon(Math.max(1, Math.min(12, Number(e.target.value))))} style={inputStyle} /></Field>
@@ -119,7 +119,7 @@ export default function PredictionsPage() {
           </div>
         </section>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 20 }}>
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))", gap: 20 }}>
           <CostPredictionCard
             input={costInput}
             setInput={setCostInput}
@@ -156,7 +156,7 @@ function CostPredictionCard({ input, setInput, result, model, run, busy }: {
   return (
     <article style={card}>
       <h2 style={{ marginTop: 0 }}>Regression-based cost estimation</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: 10 }}>
         {fields.map(([key, label]) => <NumberField key={key} label={label} value={input[key]} onChange={(value) => setInput((prev) => ({ ...prev, [key]: value }))} />)}
         <Field label="Road condition"><select value={input.road_condition} onChange={(e) => setInput((prev) => ({ ...prev, road_condition: e.target.value as typeof prev.road_condition }))} style={inputStyle}><option value="highway">Highway</option><option value="urban">Urban</option><option value="rough">Rough</option></select></Field>
       </div>
@@ -244,6 +244,6 @@ function Kpi({ label, value }: { label: string; value: string | number }) { retu
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label style={{ display: "grid", gap: 4 }}><span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{label}</span>{children}</label>; }
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) { return <Field label={label}><input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} style={inputStyle} /></Field>; }
 function buttonStyle(color: string): CSSProperties { return { padding: "10px 16px", background: color, color: "white", border: 0, borderRadius: 8, fontWeight: 700, cursor: "pointer", width: "100%" }; }
-const kpiGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 };
+const kpiGridStyle: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))", gap: 8 };
 const tableStyle: CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: 13 };
 const cellStyle: CSSProperties = { padding: "8px 10px", borderBottom: "1px solid #E5E7EB", textAlign: "left", verticalAlign: "top" };
