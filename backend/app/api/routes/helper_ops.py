@@ -46,7 +46,8 @@ STATUS_INDEX = {s: i for i, s in enumerate(STATUS_FLOW)}
 
 
 class BookingQrVerifyBody(BaseModel):
-    payload: str = Field(min_length=8, max_length=256)
+    payload: str = Field(min_length=8, max_length=512)
+    method: str = Field(default="scan", max_length=16)
 
 
 class DeliveryVerificationBody(BaseModel):
@@ -393,7 +394,13 @@ def helper_verify_booking_qr(
     if not assigned:
         raise HTTPException(status_code=403, detail="Not assigned to this booking.")
     try:
-        result = verify_booking_qr(db, booking=booking, payload=body.payload, scanner=user)
+        result = verify_booking_qr(
+            db,
+            booking=booking,
+            payload=body.payload,
+            scanner=user,
+            method=body.method,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     db.commit()

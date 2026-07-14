@@ -13,6 +13,29 @@ type Props = {
   onVerified?: () => void;
 };
 
+const BOOKING_QR_RE = /^FLEETOPS-BOOKING(?::|-)(\d+)(?::|-)(.+)$/;
+
+function normalizeDecodedPayload(raw: string): string {
+  let text = (raw || "").trim();
+  if (!text) return "";
+  try {
+    text = decodeURIComponent(text);
+  } catch {
+    /* keep raw */
+  }
+  text = text.replace(/^\ufeff/, "").trim();
+  const idx = text.indexOf("FLEETOPS-BOOKING");
+  if (idx >= 0) text = text.slice(idx);
+  return text.split(/\s/, 1)[0].trim();
+}
+
+function extractBookingId(payload: string): number | null {
+  const m = BOOKING_QR_RE.exec(normalizeDecodedPayload(payload));
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 /** Helper scans customer Booking QR before starting the trip (for_pickup). */
 export default function HelperBookingQrVerify({
   bookingId,
@@ -60,24 +83,44 @@ export default function HelperBookingQrVerify({
     setScanning(false);
   };
 
-  const verifyPayload = async (payload: string) => {
-    const trimmed = payload.trim();
+  const verifyPayload = async (payload: string, method: "camera" | "manual") => {
+    const trimmed = normalizeDecodedPayload(payload);
     if (!trimmed) {
       setErr("Enter or scan the Booking QR payload.");
       return;
     }
+
+    if (trimmed.startsWith("FLEETOPS-DELIVERY")) {
+      setErr("That is the Delivery QR. Scan the Booking helper QR to start the trip.");
+      return;
+    }
+    if (trimmed.startsWith("FLEETOPS-TRIP-")) {
+      setErr("That is a trip receiving QR. Scan the customer Booking helper QR.");
+      return;
+    }
+
+    const decodedBookingId = extractBookingId(trimmed);
+    if (decodedBookingId != null && decodedBookingId !== Number(bookingId)) {
+      setErr(
+        `QR is for Booking #${decodedBookingId}, but this assignment is Booking #${bookingId}.`,
+      );
+      return;
+    }
+
     setBusy(true);
     setErr(null);
     setMsg(null);
     try {
-      const result = await WorkflowApi.helperVerifyBookingQr(bookingId, trimmed);
+      const result = await WorkflowApi.helperVerifyBookingQr(bookingId, trimmed, method);
       setLocalVerified(true);
       setLocalVerifiedAt(result.verified_at);
       setManualQr("");
       setMsg(result.message);
       onVerified?.();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "QR verification failed.");
+      const message =
+        e instanceof ApiError ? e.message : e instanceof Error ? e.message : "QR verification failed.";
+      setErr(message);
     } finally {
       setBusy(false);
     }
@@ -96,7 +139,7 @@ export default function HelperBookingQrVerify({
         { fps: 8, qrbox: { width: 220, height: 220 } },
         async (decoded) => {
           await stopScanner();
-          await verifyPayload(decoded);
+          await verifyPayload(decoded, "camera");
         },
         () => undefined,
       );
@@ -129,8 +172,8 @@ export default function HelperBookingQrVerify({
       <div>
         <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 4 }}>Scan Booking QR before start</div>
         <p style={{ margin: 0, fontSize: "0.82rem", color: "#78350F", lineHeight: 1.45 }}>
-          Ask the customer to show their Booking #{bookingId} QR (issued after payment verification). Scan it or paste
-          the code, then continue to Accepted / en route to pickup.
+          Ask the customer to show their Booking #{bookingId} helper QR (not the Delivery QR). Scan it or paste the
+          code, then continue to Accepted / en route to pickup.
         </p>
       </div>
 
@@ -177,14 +220,14 @@ export default function HelperBookingQrVerify({
           className="input"
           value={manualQr}
           onChange={(e) => setManualQr(e.target.value)}
-          placeholder="FLEETOPS-BOOKING-…"
+          placeholder="FLEETOPS-BOOKING:…"
           disabled={busy}
         />
       </label>
       <button
         type="button"
         disabled={busy || !manualQr.trim()}
-        onClick={() => void verifyPayload(manualQr)}
+        onClick={() => void verifyPayload(manualQr, "manual")}
         style={{
           padding: "0.55rem 0.9rem",
           borderRadius: 8,

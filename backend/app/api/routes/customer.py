@@ -54,8 +54,23 @@ def _repair_and_sync_all(db: Session, customer_id: int) -> None:
 
 def _serialize_booking(db: Session, booking: Booking) -> dict:
     # Backfill credentials for verified legacy bookings that predate the feature.
+    from app.services.booking_qr import ensure_booking_qr_token
+
     had_credentials = bool(booking.delivery_verification_token and booking.delivery_verification_code)
     if ensure_delivery_verification_credentials(db, booking) and not had_credentials:
+        db.commit()
+        db.refresh(booking)
+    # Keep Booking helper QR available whenever payment is already verified.
+    had_booking_qr = bool((booking.booking_qr_token or "").strip())
+    if not had_booking_qr and booking.status not in {
+        BookingStatus.CANCELLED,
+        BookingStatus.REJECTED,
+        BookingStatus.EXPIRED,
+        BookingStatus.PENDING_PAYMENT,
+        BookingStatus.PAYMENT_VERIFICATION,
+        BookingStatus.PAYMENT_REJECTED,
+    }:
+        ensure_booking_qr_token(booking)
         db.commit()
         db.refresh(booking)
     assignments = build_assignments_for_booking(db, booking)

@@ -349,6 +349,7 @@ class Booking(Base):
     booking_qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     booking_qr_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     booking_qr_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    booking_qr_verified_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Customer-owned credential used only for final delivery confirmation. This is
     # intentionally separate from booking_qr_token, which authorizes trip start.
     delivery_verification_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)

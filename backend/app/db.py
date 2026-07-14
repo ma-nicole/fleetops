@@ -165,6 +165,7 @@ def apply_runtime_schema_fixes() -> None:
             ("booking_qr_token", "VARCHAR(64) NULL"),
             ("booking_qr_verified_at", "DATETIME NULL"),
             ("booking_qr_verified_by_id", "INT NULL"),
+            ("booking_qr_verified_method", "VARCHAR(16) NULL"),
             ("delivery_verification_token", "VARCHAR(64) NULL"),
             ("delivery_verification_code", "VARCHAR(16) NULL"),
             ("delivery_verification_created_at", "DATETIME NULL"),

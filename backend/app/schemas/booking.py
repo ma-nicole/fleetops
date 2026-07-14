@@ -153,6 +153,7 @@ class BookingRead(BaseModel):
     booking_qr_ready: bool = False
     booking_qr_verified: bool = False
     booking_qr_verified_at: datetime | None = None
+    booking_qr_verified_method: str | None = None
     cargo_type_category: str | None = None
     cargo_type_admin_notes: str | None = None
     cargo_restricted_flag: bool = False

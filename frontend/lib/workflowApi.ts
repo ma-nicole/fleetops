@@ -985,11 +985,15 @@ export const WorkflowApi = {
       reason_code?: string | null;
     },
   ) => apiPatch<GoodsDeclarationAdminRow>(`/admin/goods-declarations/${bookingId}`, payload),
-  helperVerifyBookingQr: (bookingId: number, payload: string) =>
-    apiPost<{ ok: boolean; already_verified: boolean; booking_id: number; verified_at: string; message: string }>(
-      `/helper/bookings/${bookingId}/verify-qr`,
-      { payload },
-    ),
+  helperVerifyBookingQr: (bookingId: number, payload: string, method: "camera" | "manual" | "scan" = "scan") =>
+    apiPost<{
+      ok: boolean;
+      already_verified: boolean;
+      booking_id: number;
+      verified_at: string;
+      verification_method?: string | null;
+      message: string;
+    }>(`/helper/bookings/${bookingId}/verify-qr`, { payload, method }),
 
   resubmitBookingDocuments: (
     bookingId: number,
