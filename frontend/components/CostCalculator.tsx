@@ -747,7 +747,7 @@ export default function CostCalculator({
 
         {pickedSlot && selectedAvailableTrucks < requiredTrucks && currentStep === "review" && (
           <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: "0.9rem" }}>
-            Not enough trucks available for this schedule. Please choose another date/time.
+            Not enough free trucks, drivers, and helpers for this schedule. Please choose another date/time.
           </p>
         )}
 

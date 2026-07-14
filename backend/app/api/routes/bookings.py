@@ -37,7 +37,11 @@ from app.constants.booking_time_slots import BOOKING_TIME_SLOTS
 from app.constants.fleet_capacity import cargo_exceeds_fleet
 from app.services.booking_freight_knobs import resolve_booking_freight_knobs
 from app.services.booking_capacity import get_available_truck_count
-from app.services.booking_schedule import availability_for_date, available_trucks_by_slot_for_date
+from app.services.booking_schedule import (
+    availability_for_date,
+    available_trucks_by_slot_for_date,
+    crew_capacity_for_window,
+)
 from app.services.route_distance_resolution import resolve_quote_distance_km
 from app.constants.fleet_capacity import trucks_required_for_cargo
 from app.models.entities import TruckSlotHold, TruckSlotHoldStatus
@@ -187,6 +191,21 @@ def _create_booking_record(db: Session, user: User, payload: BookingCreate) -> B
         raise HTTPException(
             status_code=409,
             detail="Not enough trucks available for this schedule. Please choose another date/time.",
+        )
+
+    crew = crew_capacity_for_window(
+        db,
+        payload.scheduled_date,
+        payload.scheduled_time_slot,
+        payload.pickup_location,
+        payload.dropoff_location,
+        required_trucks=required_trucks,
+    )
+    if not crew.can_book:
+        raise HTTPException(
+            status_code=409,
+            detail=crew.message
+            or "Not enough free trucks, drivers, and helpers for this date/time. Please choose another schedule.",
         )
 
     booking = Booking(
@@ -486,43 +505,61 @@ def booking_schedule_availability(
     pickup_location: str = Query(default=""),
     dropoff_location: str = Query(default=""),
 ):
-    """Open slots account for weight and reserved truck-count (overlap when route is known)."""
+    """Open slots require truck-count capacity plus free trucks, drivers, and helpers for the window."""
     required_trucks = trucks_required_for_cargo(cargo_weight_tons)
     has_route = len(pickup_location.strip()) >= 3 and len(dropoff_location.strip()) >= 3
+    pickup = pickup_location.strip() if has_route else ""
+    dropoff = dropoff_location.strip() if has_route else ""
 
     if has_route:
         slots = availability_for_date(
             db,
             scheduled_date,
             cargo_weight_tons,
-            pickup_location.strip(),
-            dropoff_location.strip(),
+            pickup,
+            dropoff,
         )
         available_by_slot = available_trucks_by_slot_for_date(
             db,
             scheduled_date,
-            pickup_location.strip(),
-            dropoff_location.strip(),
+            pickup,
+            dropoff,
         )
-        return BookingScheduleAvailabilityRead(
-            scheduled_date=scheduled_date,
-            slots=slots,
-            required_trucks=required_trucks,
-            available_trucks_by_slot=available_by_slot,
-        )
+    else:
+        slots = {}
+        available_by_slot = {}
+        for slot in BOOKING_TIME_SLOTS:
+            cap = get_available_truck_count(
+                db,
+                scheduled_date,
+                slot,
+                required_trucks=required_trucks,
+                lock_rows=False,
+            )
+            slots[slot] = cap.can_book
+            available_by_slot[slot] = cap.available_trucks
 
-    slots: dict[str, bool] = {}
-    available_by_slot: dict[str, int] = {}
     for slot in BOOKING_TIME_SLOTS:
-        cap = get_available_truck_count(
+        if not slots.get(slot):
+            continue
+        crew = crew_capacity_for_window(
             db,
             scheduled_date,
             slot,
+            pickup or "TBD pickup",
+            dropoff or "TBD dropoff",
             required_trucks=required_trucks,
-            lock_rows=False,
         )
-        slots[slot] = cap.can_book
-        available_by_slot[slot] = cap.available_trucks
+        if not crew.can_book:
+            slots[slot] = False
+        # Expose the limiting free-crew count alongside truck capacity for UI hints.
+        available_by_slot[slot] = min(
+            available_by_slot.get(slot, 0),
+            crew.trucks,
+            crew.drivers,
+            crew.helpers,
+        )
+
     return BookingScheduleAvailabilityRead(
         scheduled_date=scheduled_date,
         slots=slots,

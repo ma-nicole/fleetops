@@ -99,16 +99,18 @@ function validateScheduleFields(ctx: ValidationContext): FormErrors {
       BOOKING_TIME_SLOTS.every((s) => ctx.slotAvailability[s] === false)
     ) {
       errors.scheduled_date =
-        "This date has no open pickup windows for this load — all trucks are in use for the overlapping route times.";
+        "This date has no open pickup windows — not enough free trucks, drivers, and helpers for overlapping route times.";
     }
   }
   if (ctx.date && !ctx.slotsLoading) {
     if (!ctx.pickedSlot) {
       errors.scheduled_time_slot = "Choose a pickup time window.";
     } else if (ctx.slotAvailability[ctx.pickedSlot] === false) {
-      errors.scheduled_time_slot = "That time is no longer available — choose another slot.";
+      errors.scheduled_time_slot =
+        "That time is not available — trucks, drivers, or helpers are fully booked for this window.";
     } else if ((ctx.slotAvailableTrucks[ctx.pickedSlot] ?? 0) < ctx.requiredTrucksFromApi) {
-      errors.scheduled_time_slot = "Not enough trucks available for this schedule. Please choose another date/time.";
+      errors.scheduled_time_slot =
+        "Not enough free trucks, drivers, and helpers for this schedule. Please choose another date/time.";
     }
   }
   return errors;

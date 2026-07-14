@@ -91,7 +91,7 @@ export default function ScheduleStep({
           <span>Pickup time window</span>
           <span
             className="field-help"
-            title="Availability depends on how many trucks are still free when your haul overlaps earlier runs."
+            title="A slot opens only when enough trucks, drivers, and helpers are free for the overlapping trip window."
           >
             ?
           </span>
@@ -122,7 +122,7 @@ export default function ScheduleStep({
                   className={`booking-slot-pill booking-slot-selectable${selected ? " booking-slot-pill--selected" : ""}${taken ? " booking-slot-pill--taken" : ""}`}
                 >
                   {slot}
-                  {taken ? " (fleet full)" : ""}
+                  {taken ? " (unavailable)" : ""}
                 </button>
               );
             })}
@@ -145,13 +145,13 @@ export default function ScheduleStep({
               color: "var(--text-secondary)",
             }}
           >
-            <div>Required trucks: {requiredTrucks}</div>
+            <div>Required trucks / crews: {requiredTrucks}</div>
             <div>
-              Available trucks{pickedSlot ? ` (${pickedSlot})` : ""}: {selectedAvailableTrucks}
+              Free capacity{pickedSlot ? ` (${pickedSlot})` : ""}: {selectedAvailableTrucks}
             </div>
             {pickedSlot && selectedAvailableTrucks < requiredTrucks ? (
               <div style={{ color: "#b91c1c", marginTop: "0.3rem", fontWeight: 600 }}>
-                Not enough trucks available for this time slot.
+                Not enough free trucks, drivers, and helpers for this time slot.
               </div>
             ) : null}
           </div>

@@ -29,7 +29,7 @@ from app.schemas.trip import (
     TripRead, TripStatusUpdate, TripLocationNote, TripAcceptRequest, TripDeliveryProof,
     TripIssueReport, TripIssueRead, ReceivingQrVerifyRequest,
 )
-from app.services.booking_schedule import slot_available
+from app.services.booking_schedule import crew_capacity_for_window, slot_available
 from app.constants.fleet_capacity import cargo_exceeds_fleet, trucks_required_for_cargo
 from app.services.costing import estimate_trip_cost
 from app.services.email_templates import EmailTemplate
@@ -143,6 +143,22 @@ def create_booking_request(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Not enough free trucks for this pickup window and route duration. Pick another slot.",
+        )
+
+    required_trucks = trucks_required_for_cargo(float(booking_data.cargo_weight_tons))
+    crew = crew_capacity_for_window(
+        db,
+        booking_data.scheduled_date,
+        booking_data.scheduled_time_slot,
+        booking_data.pickup_location,
+        booking_data.dropoff_location,
+        required_trucks=required_trucks,
+    )
+    if not crew.can_book:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=crew.message
+            or "Not enough free trucks, drivers, and helpers for this date/time. Pick another slot.",
         )
 
     booking = Booking(

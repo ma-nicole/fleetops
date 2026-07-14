@@ -162,9 +162,9 @@ def _conflicts_for_resource(
     cfg: Settings,
     exclude_booking_id: int | None = None,
 ) -> list[dict[str, Any]]:
+    """Conflicts are calendar-overlap only. Live trips do not block non-overlapping future windows."""
     target_start, target_end = booking_interval_resolved(db, booking, cfg)
     conflicts: list[dict[str, Any]] = []
-    now = datetime.utcnow()
 
     for trip, bk in _active_trips(db):
         if exclude_booking_id is not None and bk.id == exclude_booking_id:
@@ -172,13 +172,9 @@ def _conflicts_for_resource(
         if not _trip_on_resource(trip, kind, resource_id):
             continue
         start, end = trip_interval(db, trip, cfg)
-        # Live execution always blocks assignment, even if the planned window already ended (delays).
-        live_busy = trip.status in _ON_TRIP_STATUSES
-        if not live_busy and not intervals_overlap(target_start, target_end, start, end):
+        if not intervals_overlap(target_start, target_end, start, end):
             continue
-        window_end = end
-        if live_busy and end < now:
-            window_end = now
+        live_busy = trip.status in _ON_TRIP_STATUSES
         conflicts.append(
             {
                 "booking_id": bk.id,
@@ -186,7 +182,7 @@ def _conflicts_for_resource(
                 "scheduled_date": str(bk.scheduled_date),
                 "scheduled_time_slot": bk.scheduled_time_slot,
                 "window_start": start.isoformat(),
-                "window_end": window_end.isoformat(),
+                "window_end": end.isoformat(),
                 "trip_status": _trip_status_value(trip),
                 "source": "trip",
                 "live_busy": live_busy,
@@ -219,37 +215,6 @@ def _conflicts_for_resource(
     return conflicts
 
 
-def _resource_has_active_commitment(
-    *,
-    kind: ResourceKind,
-    resource_id: int,
-    trip_rows: list[tuple[Trip, Booking]],
-    assignment_rows: list[tuple[TruckAssignment, Booking]],
-    exclude_booking_id: int | None = None,
-) -> bool:
-    """True when the resource has any non-terminal trip or pending assignment (any schedule)."""
-    for trip, bk in trip_rows:
-        if exclude_booking_id is not None and bk.id == exclude_booking_id:
-            continue
-        if _trip_on_resource(trip, kind, resource_id):
-            return True
-    for ta, bk in assignment_rows:
-        if exclude_booking_id is not None and bk.id == exclude_booking_id:
-            continue
-        if _assignment_on_resource(ta, kind, resource_id):
-            return True
-    return False
-
-
-def _busy_conflict_reason(kind: ResourceKind, global_status: ResourceStatus) -> str:
-    label = kind.replace("_", " ")
-    if global_status == "on_trip":
-        return f"{label.title()} is currently on an active trip."
-    if global_status == "assigned":
-        return f"{label.title()} already has a pending or active assignment."
-    return f"{label.title()} is not available."
-
-
 def _next_available_at(conflicts: list[dict[str, Any]]) -> str | None:
     if not conflicts:
         return None
@@ -275,20 +240,6 @@ def _conflict_message(kind: ResourceKind, conflicts: list[dict[str, Any]]) -> st
     booking_id = first.get("booking_id")
     slot = first.get("scheduled_time_slot") or "—"
     date_s = first.get("scheduled_date") or "—"
-    # Live in-progress trips block the resource even outside the planned window (delays).
-    if first.get("live_busy") or (
-        first.get("source") == "trip"
-        and first.get("trip_status")
-        in {
-            TripStatus.DEPARTED.value,
-            TripStatus.LOADING.value,
-            TripStatus.IN_DELIVERY.value,
-        }
-    ):
-        return (
-            f"{label} is currently on an active trip for booking #{booking_id} "
-            f"(scheduled {date_s} {slot}) and cannot be reassigned until that trip is completed."
-        )
     return (
         f"{label} is already assigned to booking #{booking_id} "
         f"({date_s} {slot}) with an overlapping schedule."
@@ -347,18 +298,9 @@ def evaluate_truck_for_booking(
     conflict_reason = _conflict_message("truck", conflicts)
     if _truck_operationally_unavailable(truck):
         conflict_reason = "Truck is under maintenance and cannot be assigned."
-    has_active = _resource_has_active_commitment(
-        kind="truck",
-        resource_id=truck.id,
-        trip_rows=trip_rows,
-        assignment_rows=assignment_rows,
-        exclude_booking_id=exclude_booking_id,
-    )
-    if has_active and not conflict_reason:
-        conflict_reason = _busy_conflict_reason("truck", global_status)
+    # Assignable = calendar overlap only (status badge may still show On Trip / Assigned).
     assignable = (
         not conflicts
-        and not has_active
         and not _truck_operationally_unavailable(truck)
         and _norm(truck.status) == "available"
     )
@@ -401,16 +343,7 @@ def evaluate_driver_for_booking(
     conflict_reason = _conflict_message("driver", conflicts)
     if _off_duty(user.availability_status):
         conflict_reason = "Driver is off duty or on break."
-    has_active = _resource_has_active_commitment(
-        kind="driver",
-        resource_id=user.id,
-        trip_rows=trip_rows,
-        assignment_rows=assignment_rows,
-        exclude_booking_id=exclude_booking_id,
-    )
-    if has_active and not conflict_reason:
-        conflict_reason = _busy_conflict_reason("driver", global_status)
-    assignable = not conflicts and not has_active and not _off_duty(user.availability_status)
+    assignable = not conflicts and not _off_duty(user.availability_status)
     return _serialize_resource_row(
         kind="driver",
         resource_id=user.id,
@@ -449,16 +382,7 @@ def evaluate_helper_for_booking(
     conflict_reason = _conflict_message("helper", conflicts)
     if _off_duty(user.availability_status):
         conflict_reason = "Helper is off duty or on break."
-    has_active = _resource_has_active_commitment(
-        kind="helper",
-        resource_id=user.id,
-        trip_rows=trip_rows,
-        assignment_rows=assignment_rows,
-        exclude_booking_id=exclude_booking_id,
-    )
-    if has_active and not conflict_reason:
-        conflict_reason = _busy_conflict_reason("helper", global_status)
-    assignable = not conflicts and not has_active and not _off_duty(user.availability_status)
+    assignable = not conflicts and not _off_duty(user.availability_status)
     return _serialize_resource_row(
         kind="helper",
         resource_id=user.id,

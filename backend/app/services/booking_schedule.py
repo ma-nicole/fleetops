@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -352,3 +353,200 @@ def helper_free_for_booking(
         if intervals_overlap(ns, ne, s, e):
             return False
     return True
+
+
+@dataclass(frozen=True)
+class CrewWindowCapacity:
+    trucks: int
+    drivers: int
+    helpers: int
+    required: int
+    can_book: bool
+
+    @property
+    def message(self) -> str | None:
+        if self.can_book:
+            return None
+        missing: list[str] = []
+        if self.trucks < self.required:
+            missing.append(f"trucks ({self.trucks} free, need {self.required})")
+        if self.drivers < self.required:
+            missing.append(f"drivers ({self.drivers} free, need {self.required})")
+        if self.helpers < self.required:
+            missing.append(f"helpers ({self.helpers} free, need {self.required})")
+        detail = ", ".join(missing) if missing else "crew"
+        return (
+            f"Not enough free trucks, drivers, and helpers for this date/time ({detail}). "
+            "Please choose another schedule."
+        )
+
+
+_OFF_DUTY = frozenset({"off_duty", "off-duty", "on_break", "break", "unavailable"})
+_NON_OP_TRUCK = frozenset({"maintenance", "inactive", "under_maintenance", "in_maintenance"})
+
+
+def _crew_norm(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _resource_free_for_interval(
+    db: Session,
+    *,
+    kind: str,
+    resource_id: int,
+    window_start: datetime,
+    window_end: datetime,
+    cfg: Settings,
+    exclude_booking_id: int | None = None,
+) -> bool:
+    """True when no non-terminal trip/assignment for this resource overlaps the window."""
+    from app.models.entities import (
+        BookingStatus,
+        TruckAssignment,
+        TruckAssignmentStatus,
+    )
+
+    terminal_booking = frozenset(
+        {BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.EXPIRED}
+    )
+    non_terminal_assignment = frozenset(
+        {
+            TruckAssignmentStatus.ASSIGNED,
+            TruckAssignmentStatus.FOR_PICKUP,
+            TruckAssignmentStatus.PICKED_UP,
+            TruckAssignmentStatus.EN_ROUTE,
+            TruckAssignmentStatus.DROPPED_OFF,
+            TruckAssignmentStatus.IN_PROGRESS,
+        }
+    )
+
+    trip_q = db.query(Trip).filter(~Trip.status.in_(_TERMINAL_TRIP))
+    if kind == "truck":
+        trip_q = trip_q.filter(Trip.truck_id == resource_id)
+    elif kind == "driver":
+        trip_q = trip_q.filter(Trip.driver_id == resource_id)
+    else:
+        trip_q = trip_q.filter(Trip.helper_id == resource_id)
+    for tr in trip_q.all():
+        if exclude_booking_id is not None and tr.booking_id == exclude_booking_id:
+            continue
+        s, e = trip_interval(db, tr, cfg)
+        if intervals_overlap(window_start, window_end, s, e):
+            return False
+
+    assign_q = (
+        db.query(TruckAssignment, Booking)
+        .join(Booking, Booking.id == TruckAssignment.booking_id)
+        .filter(
+            TruckAssignment.assignment_status.in_(non_terminal_assignment),
+            ~Booking.status.in_(terminal_booking),
+        )
+    )
+    if kind == "truck":
+        assign_q = assign_q.filter(TruckAssignment.truck_id == resource_id)
+    elif kind == "driver":
+        assign_q = assign_q.filter(TruckAssignment.driver_id == resource_id)
+    else:
+        assign_q = assign_q.filter(TruckAssignment.helper_id == resource_id)
+    for ta, bk in assign_q.all():
+        if exclude_booking_id is not None and bk.id == exclude_booking_id:
+            continue
+        s, e = booking_interval_resolved(db, bk, cfg)
+        if intervals_overlap(window_start, window_end, s, e):
+            return False
+    return True
+
+
+def crew_capacity_for_window(
+    db: Session,
+    scheduled_date: date,
+    time_slot: str,
+    pickup_location: str,
+    dropoff_location: str,
+    *,
+    required_trucks: int,
+    cfg: Settings | None = None,
+    exclude_booking_id: int | None = None,
+) -> CrewWindowCapacity:
+    """Count free trucks/drivers/helpers for a pickup window (calendar overlap only)."""
+    from app.models.entities import Truck, User, UserRole
+
+    cfg = cfg or app_settings
+    need = max(1, int(required_trucks))
+    pickup = (pickup_location or "").strip() or "Unknown pickup"
+    dropoff = (dropoff_location or "").strip() or "Unknown dropoff"
+    try:
+        window_start, window_end = interval_for_pickup_window(
+            scheduled_date, time_slot, pickup, dropoff, cfg
+        )
+    except PreciseDistanceUnavailable:
+        start = _slot_start_on_date(scheduled_date, time_slot)
+        window_start, window_end = start, start + timedelta(hours=MIN_TRIP_DURATION_HOURS)
+
+    trucks = [
+        t
+        for t in db.query(Truck).order_by(Truck.id).all()
+        if _crew_norm(t.status) not in _NON_OP_TRUCK and _crew_norm(t.status) == "available"
+    ]
+    drivers = [
+        u
+        for u in db.query(User).filter(User.role == UserRole.DRIVER).order_by(User.id).all()
+        if _crew_norm(u.availability_status) not in _OFF_DUTY
+    ]
+    helpers = [
+        u
+        for u in db.query(User).filter(User.role == UserRole.HELPER).order_by(User.id).all()
+        if _crew_norm(u.availability_status) not in _OFF_DUTY
+    ]
+
+    free_trucks = sum(
+        1
+        for t in trucks
+        if _resource_free_for_interval(
+            db,
+            kind="truck",
+            resource_id=t.id,
+            window_start=window_start,
+            window_end=window_end,
+            cfg=cfg,
+            exclude_booking_id=exclude_booking_id,
+        )
+    )
+    free_drivers = sum(
+        1
+        for u in drivers
+        if _resource_free_for_interval(
+            db,
+            kind="driver",
+            resource_id=u.id,
+            window_start=window_start,
+            window_end=window_end,
+            cfg=cfg,
+            exclude_booking_id=exclude_booking_id,
+        )
+    )
+    free_helpers = sum(
+        1
+        for u in helpers
+        if _resource_free_for_interval(
+            db,
+            kind="helper",
+            resource_id=u.id,
+            window_start=window_start,
+            window_end=window_end,
+            cfg=cfg,
+            exclude_booking_id=exclude_booking_id,
+        )
+    )
+
+    # Cap truck free count by the booking fleet pool (same abstraction as slot holds).
+    free_trucks = min(free_trucks, fleet_operational_pool_size(db))
+
+    can_book = free_trucks >= need and free_drivers >= need and free_helpers >= need
+    return CrewWindowCapacity(
+        trucks=free_trucks,
+        drivers=free_drivers,
+        helpers=free_helpers,
+        required=need,
+        can_book=can_book,
+    )
