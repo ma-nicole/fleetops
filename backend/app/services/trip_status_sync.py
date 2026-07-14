@@ -50,6 +50,7 @@ def sync_trip_and_booking_status(
     evidence_verification_label: str | None = None,
     evidence_review_required: bool = False,
     evidence_device_captured_at: datetime | None = None,
+    delivery_verified: bool = False,
 ) -> tuple[Trip, Booking]:
     trip = db.query(Trip).filter(Trip.id == trip_id).with_for_update().first()
     if not trip:
@@ -61,6 +62,8 @@ def sync_trip_and_booking_status(
     step = (new_trip_status or "").strip().lower()
     if step not in STEP_TO_TRIP_STATUS:
         raise ValueError(f"Unsupported trip status: {new_trip_status}")
+    if step == "completed" and not delivery_verified:
+        raise ValueError("Customer delivery verification is required before completion.")
 
     trip.helper_progress_status = step
     trip.status = STEP_TO_TRIP_STATUS[step]

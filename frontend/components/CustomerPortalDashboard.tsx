@@ -7,6 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
 import ContactSupportButton from "@/components/ContactSupportButton";
 import CustomerBookingQrCard from "@/components/CustomerBookingQrCard";
+import CustomerDeliveryVerificationCard from "@/components/CustomerDeliveryVerificationCard";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
@@ -243,6 +244,7 @@ export default function CustomerPortalDashboard() {
           <>
             <nav className="tab-pills" aria-label="Jump to portal section">
               <SectionJumpLink targetId="customer-kpis">Overview</SectionJumpLink>
+              <SectionJumpLink targetId="customer-delivery-verification">Delivery Verification</SectionJumpLink>
               <SectionJumpLink targetId="customer-tracking">Tracking</SectionJumpLink>
               <SectionJumpLink targetId="customer-sites">Sites</SectionJumpLink>
               <SectionJumpLink targetId="customer-bookings">Bookings</SectionJumpLink>
@@ -266,6 +268,36 @@ export default function CustomerPortalDashboard() {
                 tone="neutral"
               />
               <KpiCard label="Fulfillment snapshot" value={`${kpis.rate}%`} delta="Completed vs all bookings" trend={kpis.rate >= 90 ? "up" : "flat"} tone={kpis.rate >= 90 ? "success" : "neutral"} />
+            </section>
+
+            <section id="customer-delivery-verification" className="card scroll-section" style={{ display: "grid", gap: "1rem" }}>
+              <div>
+                <h2 style={{ margin: 0 }}>Delivery Verification</h2>
+                <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                  These one-time credentials appear after payment verification and remain available until delivery is confirmed.
+                </p>
+              </div>
+              {activeShow.some((order) => order.delivery_verification_active) ? (
+                <div style={{ display: "grid", gap: "0.85rem", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+                  {activeShow
+                    .filter((order) => order.delivery_verification_active)
+                    .map((order) => (
+                      <CustomerDeliveryVerificationCard
+                        key={order.id}
+                        bookingId={order.id}
+                        payload={order.delivery_verification_qr_payload}
+                        verificationCode={order.delivery_verification_code}
+                        active={order.delivery_verification_active}
+                        used={order.delivery_verification_used}
+                        usedAt={order.delivery_verification_used_at}
+                      />
+                    ))}
+                </div>
+              ) : (
+                <p style={{ margin: 0, color: "var(--text-secondary)" }}>
+                  No active delivery credentials. A QR Code and backup Verification Code will appear here after payment is verified.
+                </p>
+              )}
             </section>
 
             <section className="dashboard-standard-grid">

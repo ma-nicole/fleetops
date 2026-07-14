@@ -320,7 +320,6 @@ export default function CrewAssignedBookingsScreen({
   const [selectedLocation, setSelectedLocation] = useState<SelectedHelperLocation | null>(null);
   const [remarks, setRemarks] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
-  const [deliveryReady, setDeliveryReady] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -359,19 +358,17 @@ export default function CrewAssignedBookingsScreen({
       setMsg(`Only next status is allowed: ${allowed.replace(/_/g, " ")}`);
       return;
     }
+    if (phase === "completed") {
+      setMsg("Use Verify Delivery with the customer's QR Code or backup Verification Code.");
+      return;
+    }
     if (PHOTO_REQUIRED.has(phase) && !photo) {
       setMsg(`Photo proof is required for ${phase.replace(/_/g, " ")}.`);
       return;
     }
-    if (phase === "completed" && !deliveryReady) {
-      setMsg("Upload receiving document, verify QR code, and capture digital signature before completing delivery.");
-      return;
-    }
     if (
       !window.confirm(
-        phase === "completed"
-          ? `Complete delivery for trip #${detail.trip_id}? This will close the leg after proof submission.`
-          : `Save the next milestone as "${phaseLabel(phase)}" for trip #${detail.trip_id}?`,
+        `Save the next milestone as "${phaseLabel(phase)}" for trip #${detail.trip_id}?`,
       )
     ) {
       return;
@@ -475,7 +472,6 @@ export default function CrewAssignedBookingsScreen({
     setSelectedLocation(null);
     setRemarks("");
     setMsg(null);
-    setDeliveryReady(Boolean(r.delivery_receiving?.ready_for_completion));
   };
 
   const detailProofs = detail?.proof_photo_urls ?? [];
@@ -1356,10 +1352,14 @@ export default function CrewAssignedBookingsScreen({
                           bookingId={detail.booking_id}
                           crewName={detail.helper_name ?? detail.driver_name}
                           compact
-                          onReadyChange={setDeliveryReady}
+                          onCompleted={async () => {
+                            setMsg("Delivery verified. The booking is now completed.");
+                            await load();
+                            setDetail(null);
+                          }}
                         />
                       ) : null}
-                      <EvidenceCaptureInput
+                      {phase !== "completed" ? <EvidenceCaptureInput
                         label="Milestone photo"
                         required={PHOTO_REQUIRED.has(phase)}
                         watermarkContext={{
@@ -1374,14 +1374,15 @@ export default function CrewAssignedBookingsScreen({
                           setPhoto(file);
                           setPhotoMeta(meta);
                         }}
-                      />
+                      /> : null}
 
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
                         <button
                           type="button"
-                          disabled={busy || !canUpdate || (phase === "completed" && !deliveryReady)}
+                          disabled={busy || !canUpdate || phase === "completed"}
                           onClick={() => void submitStatus()}
                           style={{
+                            display: phase === "completed" ? "none" : "inline-flex",
                             padding: "0.65rem 1rem",
                             borderRadius: 8,
                             border: "none",

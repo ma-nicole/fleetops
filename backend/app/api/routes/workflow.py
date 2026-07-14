@@ -33,12 +33,10 @@ from app.services.booking_schedule import slot_available
 from app.constants.fleet_capacity import cargo_exceeds_fleet, trucks_required_for_cargo
 from app.services.costing import estimate_trip_cost
 from app.services.email_templates import EmailTemplate
-from app.services.feedback_loop import record_trip_feedback
 from app.services.notifications import send_email_notification
 from app.services.driver_trip_notifications import notify_driver_trip_assigned
 from app.services.trip_crew_allowances import resolve_trip_crew_allowances
 from app.services.delivery_receiving_verification import (
-    assert_delivery_receiving_complete,
     build_delivery_receiving_status,
     ensure_trip_qr_token,
     mark_qr_verified,
@@ -63,7 +61,7 @@ from app.services.dispatch_assignment_readiness import (
     assert_booking_ready_for_dispatch_assignment,
     dispatch_assignment_readiness,
 )
-from app.services.dispatch_resource_availability import release_booking_trips, release_trip_resources
+from app.services.dispatch_resource_availability import release_booking_trips
 from app.services.upload_urls import media_type_for_path
 from app.core.paths import uploads_root
 from app.schemas.analytics import CostPredictionRequest
@@ -753,52 +751,13 @@ def complete_delivery(
     if trip.driver_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    assert_delivery_receiving_complete(trip)
-
-    trip.arrival_delivery_time = datetime.utcnow()
-    trip.completed_at = datetime.utcnow()
-    trip.status = TripStatus.COMPLETED
-    trip.proof_of_delivery = proof.proof_url
-    trip.pod_notes = proof.notes
-
-    booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
-    booking.status = BookingStatus.COMPLETED
-    booking.actual_cost = (
-        trip.toll_cost + trip.fuel_cost + trip.labor_cost
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "delivery_verification_required",
+            "message": "The assigned helper must verify the customer's Delivery QR Code or Verification Code.",
+        },
     )
-
-    from app.services.toll_computation import finalize_trip_toll_on_completion
-
-    finalize_trip_toll_on_completion(db, trip, booking)
-
-    release_trip_resources(db, trip)
-
-    db.commit()
-    db.refresh(trip)
-
-    # Paper Fig 24 — drop predicted vs actual into the feedback store.
-    record_trip_feedback(db, trip)
-
-    # Notify customer with receipt
-    customer = db.query(User).filter(User.id == booking.customer_id).first()
-    if customer:
-        send_email_notification(
-            to_email=customer.email,
-            subject=f"Your delivery is complete (Receipt #{trip_id})",
-            html_body=f"""
-            Your shipment has been delivered!
-            
-            Receipt:
-            - Trip ID: {trip.id}
-            - Distance: {trip.distance_km} km
-            - Cost: ${booking.actual_cost:.2f}
-            
-            Thank you for using our service.
-            """
-        )
-
-    return trip
-
 
 # ============================================================================
 # D. REAL-TIME UPDATES
@@ -823,6 +782,14 @@ def update_trip_status(
 
     if update.status is None:
         raise HTTPException(status_code=422, detail="status is required for update-status")
+    if update.status == TripStatus.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "delivery_verification_required",
+                "message": "Trip completion requires customer delivery verification by the assigned helper.",
+            },
+        )
 
     trip.status = update.status
     trip.updated_at = datetime.utcnow()

@@ -29,6 +29,8 @@ from app.models.entities import (
     Booking,
     BookingStatus,
     DriverProfile,
+    Payment,
+    PaymentStatus,
     Trip,
     Truck,
     User,
@@ -478,6 +480,146 @@ class TestHelperWorkflow:
         )
         assert status_resp.status_code == 200
         assert status_resp.json()["status"] == "picked_up"
+
+    @pytest.mark.parametrize("verification_method", ["qr", "code"])
+    def test_delivery_requires_customer_verification_and_is_single_use(
+        self, client, db, test_users, test_truck, verification_method
+    ):
+        helper = User(
+            email=f"delivery_helper_{verification_method}@example.com",
+            password_hash=hash_password("password"),
+            full_name="Delivery Helper",
+            role=UserRole.HELPER,
+            phone="+63-917-2199",
+        )
+        db.add(helper)
+        db.flush()
+
+        customer = test_users["customer"]
+        driver = test_users["driver"]
+        booking = Booking(
+            customer_id=customer.id,
+            pickup_location="Metro Manila",
+            dropoff_location="Pampanga",
+            service_type="fixed",
+            scheduled_date=datetime.now().date(),
+            scheduled_time_slot="08:00",
+            cargo_weight_tons=10,
+            required_truck_count=1,
+            estimated_cost=500,
+            status=BookingStatus.OUT_FOR_DELIVERY,
+        )
+        db.add(booking)
+        db.flush()
+        db.add(
+            Payment(
+                booking_id=booking.id,
+                customer_id=customer.id,
+                method="gcash",
+                amount=500,
+                status=PaymentStatus.VERIFIED,
+                reference=f"DELIVERY-{verification_method}",
+                paid_at=datetime.now(),
+            )
+        )
+        trip = Trip(
+            booking_id=booking.id,
+            truck_id=test_truck.id,
+            driver_id=driver.id,
+            helper_id=helper.id,
+            route_path="Metro Manila -> Pampanga",
+            distance_km=75,
+            duration_hours=2,
+            status=TripStatus.IN_DELIVERY,
+            helper_progress_status="dropped_off",
+            receiving_document_path="delivery_receiving/test.pdf",
+            receiving_document_uploaded_at=datetime.now(),
+            digital_signature_path="delivery_receiving/test-signature.png",
+            digital_signature_uploaded_at=datetime.now(),
+        )
+        db.add(trip)
+        db.flush()
+
+        customer_token = create_access_token(customer.email, customer.role.value)
+        current = client.get(
+            "/api/customer/current-bookings",
+            headers={"Authorization": f"Bearer {customer_token}"},
+        )
+        assert current.status_code == 200, current.text
+        row = next(item for item in current.json() if item["id"] == booking.id)
+        assert row["delivery_verification_active"] is True
+        assert row["delivery_verification_qr_payload"].startswith("FLEETOPS-DELIVERY:")
+        assert row["delivery_verification_code"]
+
+        helper_token = create_access_token(helper.email, helper.role.value)
+        headers = {"Authorization": f"Bearer {helper_token}"}
+
+        direct = client.post(
+            f"/api/helper/trips/{trip.id}/status",
+            headers=headers,
+            data={"status": "completed"},
+        )
+        assert direct.status_code == 409
+
+        driver_token = create_access_token(driver.email, driver.role.value)
+        driver_direct = client.post(
+            f"/api/workflow/job/{trip.id}/complete",
+            headers={"Authorization": f"Bearer {driver_token}"},
+            json={"proof_url": None, "notes": None},
+        )
+        assert driver_direct.status_code == 409
+
+        invalid = client.post(
+            f"/api/helper/trips/{trip.id}/verify-delivery",
+            headers=headers,
+            json={"method": verification_method, "credential": "INVALID-CREDENTIAL"},
+        )
+        assert invalid.status_code == 400
+
+        credential = (
+            row["delivery_verification_qr_payload"]
+            if verification_method == "qr"
+            else row["delivery_verification_code"]
+        )
+        verified = client.post(
+            f"/api/helper/trips/{trip.id}/verify-delivery",
+            headers=headers,
+            json={"method": verification_method, "credential": credential},
+        )
+        assert verified.status_code == 200, verified.text
+        assert verified.json()["status"] == "completed"
+        assert verified.json()["verification_method"] == verification_method
+
+        db.expire_all()
+        completed_booking = db.query(Booking).filter(Booking.id == booking.id).one()
+        completed_trip = db.query(Trip).filter(Trip.id == trip.id).one()
+        assert completed_booking.status == BookingStatus.COMPLETED
+        assert completed_booking.delivery_verification_used_at is not None
+        assert completed_booking.delivery_verification_used_by_helper_id == helper.id
+        assert completed_trip.status == TripStatus.COMPLETED
+        assert completed_trip.completed_at is not None
+
+        history = client.get(
+            "/api/customer/booking-history",
+            headers={"Authorization": f"Bearer {customer_token}"},
+        )
+        assert history.status_code == 200, history.text
+        history_row = next(item for item in history.json() if item["id"] == booking.id)
+        assert history_row["delivery_verification_used"] is True
+        assert history_row["delivery_verification_qr_payload"] is None
+        assert history_row["delivery_verification_code"] is None
+
+        helper_rows = client.get("/api/helper/bookings", headers=headers)
+        assert helper_rows.status_code == 200, helper_rows.text
+        helper_row = next(item for item in helper_rows.json()["bookings"] if item["trip_id"] == trip.id)
+        assert helper_row["trip_status"] == "completed"
+
+        reused = client.post(
+            f"/api/helper/trips/{trip.id}/verify-delivery",
+            headers=headers,
+            json={"method": verification_method, "credential": credential},
+        )
+        assert reused.status_code == 409
 
     def test_operations_center_vague_addresses_return_warnings_not_400(
         self, client, db, test_users, test_truck

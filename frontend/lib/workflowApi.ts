@@ -139,6 +139,14 @@ export type Booking = {
   booking_qr_ready?: boolean;
   booking_qr_verified?: boolean;
   booking_qr_verified_at?: string | null;
+  delivery_verification_ready?: boolean;
+  delivery_verification_active?: boolean;
+  delivery_verification_used?: boolean;
+  delivery_verification_qr_payload?: string | null;
+  delivery_verification_code?: string | null;
+  delivery_verification_created_at?: string | null;
+  delivery_verification_used_at?: string | null;
+  delivery_verification_method?: "qr" | "code" | null;
   cargo_type_category?: string | null;
   cargo_type_admin_notes?: string | null;
   cargo_restricted_flag?: boolean;
@@ -294,6 +302,16 @@ export type DeliveryReceivingStatus = {
   digital_signature_path: string | null;
   digital_signature_uploaded_at: string | null;
   ready_for_completion: boolean;
+};
+
+export type DeliveryVerificationResult = {
+  booking_id: number;
+  trip_ids: number[];
+  status: "completed";
+  completed_at: string;
+  helper_id: number;
+  verification_method: "qr" | "code";
+  message: string;
 };
 
 export type CrewAssignedBookingRow = {
@@ -1058,6 +1076,8 @@ export const WorkflowApi = {
   },
   verifyReceivingQr: (trip_id: number, scanned_payload: string) =>
     apiPost<DeliveryReceivingStatus>(`/workflow/job/${trip_id}/verify-receiving-qr`, { scanned_payload }),
+  verifyDelivery: (trip_id: number, method: "qr" | "code", credential: string) =>
+    apiPost<DeliveryVerificationResult>(`/helper/trips/${trip_id}/verify-delivery`, { method, credential }),
   uploadDigitalSignature: (trip_id: number, file: File, evidence?: EvidenceCaptureMetadata | null) => {
     const fd = new FormData();
     fd.append("file", file);

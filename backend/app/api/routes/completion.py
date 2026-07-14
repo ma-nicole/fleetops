@@ -272,6 +272,14 @@ def confirm_completion_report(
 
     booking = db.query(Booking).filter(Booking.id == report.booking_id).first()
     if booking and booking.status != BookingStatus.COMPLETED:
+        if booking.delivery_verification_used_at is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "delivery_verification_required",
+                    "message": "The booking cannot be completed until the customer delivery credential is verified.",
+                },
+            )
         booking.status = BookingStatus.COMPLETED
 
     db.commit()

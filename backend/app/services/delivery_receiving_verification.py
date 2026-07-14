@@ -58,7 +58,9 @@ def build_delivery_receiving_status(trip) -> dict[str, Any]:
     has_doc = bool((getattr(trip, "receiving_document_path", None) or "").strip())
     qr_verified = getattr(trip, "receiving_qr_verified_at", None) is not None
     has_sig = bool((getattr(trip, "digital_signature_path", None) or "").strip())
-    ready = has_doc and qr_verified and has_sig
+    # The legacy trip QR is retained for old clients, but final completion now
+    # uses the customer-owned booking Delivery QR/Verification Code.
+    ready = has_doc and has_sig
     return {
         "trip_id": trip.id,
         "receiving_document_uploaded": has_doc,
@@ -74,7 +76,8 @@ def build_delivery_receiving_status(trip) -> dict[str, Any]:
             if getattr(trip, "receiving_qr_verified_at", None)
             else None
         ),
-        "qr_payload": qr_payload(trip.id, token) if token else None,
+        # Never expose an expected verification secret to the crew UI.
+        "qr_payload": None,
         "digital_signature_uploaded": has_sig,
         "digital_signature_path": None,
         "digital_signature_uploaded_at": (
@@ -93,14 +96,12 @@ def assert_delivery_receiving_complete(trip) -> None:
     missing: list[str] = []
     if not status["receiving_document_uploaded"]:
         missing.append("receiving document")
-    if not status["qr_verified"]:
-        missing.append("QR verification")
     if not status["digital_signature_uploaded"]:
         missing.append("digital signature")
     raise HTTPException(
         status_code=400,
         detail=(
-            "Delivery completion requires receiving document upload, QR verification, and digital signature. "
+            "Delivery verification requires a receiving document and digital signature. "
             f"Missing: {', '.join(missing)}."
         ),
     )

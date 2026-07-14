@@ -15,6 +15,8 @@ type DeliveryCompletionPanelProps = {
   bookingId?: number;
   crewName?: string | null;
   onReadyChange?: (ready: boolean) => void;
+  onCompleted?: () => void | Promise<void>;
+  allowVerification?: boolean;
   compact?: boolean;
 };
 
@@ -54,6 +56,8 @@ export default function DeliveryCompletionPanel({
   bookingId,
   crewName,
   onReadyChange,
+  onCompleted,
+  allowVerification = true,
   compact = false,
 }: DeliveryCompletionPanelProps) {
   const scanRegionId = useId().replace(/:/g, "");
@@ -68,7 +72,7 @@ export default function DeliveryCompletionPanel({
   const [signatureMeta, setSignatureMeta] = useState<EvidenceCaptureMetadata | null>(null);
   const [signatureUploadFile, setSignatureUploadFile] = useState<File | null>(null);
   const [signatureUploadMeta, setSignatureUploadMeta] = useState<EvidenceCaptureMetadata | null>(null);
-  const [manualQr, setManualQr] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
   const [scanning, setScanning] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -124,7 +128,7 @@ export default function DeliveryCompletionPanel({
         { fps: 8, qrbox: { width: 220, height: 220 } },
         async (decoded) => {
           await stopScanner();
-          await verifyQr(decoded);
+          await verifyDelivery("qr", decoded);
         },
         () => undefined,
       );
@@ -134,17 +138,16 @@ export default function DeliveryCompletionPanel({
     }
   };
 
-  const verifyQr = async (payload: string) => {
-    setBusy("qr");
+  const verifyDelivery = async (method: "qr" | "code", credential: string) => {
+    setBusy("verify");
     setMsg(null);
     try {
-      const s = await WorkflowApi.verifyReceivingQr(tripId, payload);
-      setStatus(s);
-      onReadyChange?.(s.ready_for_completion);
-      setManualQr("");
-      setMsg("QR verified.");
+      const result = await WorkflowApi.verifyDelivery(tripId, method, credential);
+      setVerificationCode("");
+      setMsg(result.message);
+      await onCompleted?.();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "QR verification failed.");
+      setMsg(e instanceof Error ? e.message : "Delivery verification failed.");
     } finally {
       setBusy(null);
     }
@@ -245,14 +248,14 @@ export default function DeliveryCompletionPanel({
           Delivery completion requirements
         </h3>
         <p style={{ margin: 0, fontSize: "0.84rem", color: "#475569", lineHeight: 1.45 }}>
-          Upload the signed receiving document, verify the trip QR code, and capture the recipient digital signature
-          before marking delivery complete.
+          {allowVerification
+            ? "Upload the receiving document and capture the recipient signature. Then verify the customer's one-time Delivery QR Code or backup Verification Code to complete the booking."
+            : "Upload the receiving document and capture the recipient signature. The assigned helper will complete delivery using the customer's verification credential."}
         </p>
       </div>
 
       <div style={{ display: "grid", gap: 6 }}>
         <CheckRow ok={!!status?.receiving_document_uploaded} label="Receiving document uploaded" />
-        <CheckRow ok={!!status?.qr_verified} label="QR code verified" />
         <CheckRow ok={!!status?.digital_signature_uploaded} label="Digital signature captured" />
       </div>
 
@@ -295,18 +298,16 @@ export default function DeliveryCompletionPanel({
         />
       </section>
 
-      <section style={{ display: "grid", gap: "0.5rem" }}>
-        <strong style={{ fontSize: "0.86rem" }}>2. QR verification</strong>
-        {status?.qr_payload ? (
-          <p style={{ margin: 0, fontSize: "0.78rem", color: "#64748B", wordBreak: "break-all" }}>
-            Expected payload: <code>{status.qr_payload}</code>
-          </p>
-        ) : null}
+      {allowVerification ? <section style={{ display: "grid", gap: "0.5rem", order: 3 }}>
+        <strong style={{ fontSize: "0.86rem" }}>3. Customer delivery verification</strong>
+        <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748B", lineHeight: 1.45 }}>
+          The Verify Delivery controls unlock after the document and signature are saved.
+        </p>
         <div id={scanRegionId} style={{ width: "100%", maxWidth: 320, minHeight: scanning ? 240 : 0 }} />
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           {!scanning ? (
-            <button type="button" className="button" disabled={busy === "qr"} onClick={() => void startScanner()}>
-              Scan QR with camera
+            <button type="button" className="button" disabled={busy === "verify" || !status?.ready_for_completion} onClick={() => void startScanner()}>
+              Scan customer's QR
             </button>
           ) : (
             <button type="button" className="button" style={{ background: "#6B7280" }} onClick={() => void stopScanner()}>
@@ -316,22 +317,24 @@ export default function DeliveryCompletionPanel({
         </div>
         <input
           className="input"
-          placeholder="Or paste scanned QR payload manually"
-          value={manualQr}
-          onChange={(e) => setManualQr(e.target.value)}
+          placeholder="Backup code (for example ABCD-2345)"
+          value={verificationCode}
+          maxLength={16}
+          autoComplete="one-time-code"
+          onChange={(e) => setVerificationCode(e.target.value.toUpperCase())}
         />
         <button
           type="button"
           className="button"
-          disabled={busy === "qr" || !manualQr.trim()}
-          onClick={() => void verifyQr(manualQr.trim())}
+          disabled={busy === "verify" || !status?.ready_for_completion || !verificationCode.trim()}
+          onClick={() => void verifyDelivery("code", verificationCode.trim())}
         >
-          {busy === "qr" ? "Verifying…" : "Verify QR code"}
+          {busy === "verify" ? "Verifying…" : "Verify Delivery"}
         </button>
-      </section>
+      </section> : null}
 
-      <section style={{ display: "grid", gap: "0.5rem" }}>
-        <strong style={{ fontSize: "0.86rem" }}>3. Digital signature</strong>
+      <section style={{ display: "grid", gap: "0.5rem", order: 2 }}>
+        <strong style={{ fontSize: "0.86rem" }}>2. Digital signature</strong>
         {hasSig ? (
           <button
             type="button"

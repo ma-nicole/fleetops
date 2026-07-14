@@ -9,7 +9,6 @@ from secrets import token_hex
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
-from app.constants.fleet_capacity import trucks_required_for_cargo
 from app.core.paths import uploads_subdir
 from app.core.security import require_roles
 from app.db import get_db
@@ -21,13 +20,11 @@ from app.models.entities import (
     TripStatus,
     TripStatusUpdate,
     Truck,
-    TruckAssignment,
-    TruckAssignmentStatus,
     User,
     UserRole,
 )
 from app.services.crew_assigned_bookings import list_crew_assigned_bookings
-from app.services.delivery_receiving_verification import assert_delivery_receiving_complete
+from app.services.delivery_verification import verify_and_complete_delivery
 from app.services.evidence_capture import (
     evaluate_trip_evidence,
     evidence_fields_dict,
@@ -36,7 +33,6 @@ from app.services.evidence_capture import (
 )
 from app.services.pre_delivery_verification import is_delivery_progression_step, pre_delivery_block_detail
 from app.services.trip_status_sync import sync_trip_and_booking_status
-from app.services.dispatch_resource_availability import release_booking_trips, release_trip_resources
 from app.services.booking_qr import verify_booking_qr
 from pydantic import BaseModel, Field
 
@@ -51,6 +47,11 @@ STATUS_INDEX = {s: i for i, s in enumerate(STATUS_FLOW)}
 
 class BookingQrVerifyBody(BaseModel):
     payload: str = Field(min_length=8, max_length=256)
+
+
+class DeliveryVerificationBody(BaseModel):
+    method: str = Field(pattern="^(qr|code)$")
+    credential: str = Field(min_length=4, max_length=512)
 
 
 def _ensure_upload_dir() -> None:
@@ -72,38 +73,6 @@ def _save_photo(trip_id: int, file: UploadFile | None) -> str | None:
         raise HTTPException(status_code=400, detail="Photo too large (max 12 MB)")
     dest.write_bytes(content)
     return f"helper_proofs/{stored_name}"
-
-
-def _sync_booking_completion(db: Session, booking_id: int) -> None:
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
-    if not booking:
-        return
-    need = int(booking.required_truck_count or trucks_required_for_cargo(booking.cargo_weight_tons))
-    done = db.query(Trip).filter(Trip.booking_id == booking_id, Trip.status == TripStatus.COMPLETED).count()
-    if done >= need:
-        booking.status = BookingStatus.COMPLETED
-
-
-def _status_to_assignment_status(status: str) -> TruckAssignmentStatus:
-    mapping = {
-        "for_pickup": TruckAssignmentStatus.FOR_PICKUP,
-        "picked_up": TruckAssignmentStatus.PICKED_UP,
-        "en_route": TruckAssignmentStatus.EN_ROUTE,
-        "dropped_off": TruckAssignmentStatus.DROPPED_OFF,
-        "completed": TruckAssignmentStatus.COMPLETED,
-    }
-    return mapping[status]
-
-
-def _trip_operational_status(status: str) -> TripStatus:
-    mapping = {
-        "for_pickup": TripStatus.ACCEPTED,
-        "picked_up": TripStatus.LOADING,
-        "en_route": TripStatus.IN_DELIVERY,
-        "dropped_off": TripStatus.IN_DELIVERY,
-        "completed": TripStatus.COMPLETED,
-    }
-    return mapping[status]
 
 
 @router.post("/trips/{trip_id}/status")
@@ -193,7 +162,13 @@ async def helper_update_status(
         raise HTTPException(status_code=400, detail="Trip must be dropped_off before completed.")
 
     if step == "completed":
-        assert_delivery_receiving_complete(trip)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "delivery_verification_required",
+                "message": "Use Verify Delivery with the customer's Delivery QR Code or Verification Code.",
+            },
+        )
 
     if is_delivery_progression_step(step) and trip.booking:
         block = pre_delivery_block_detail(db, trip.booking)
@@ -238,9 +213,6 @@ async def helper_update_status(
         evidence_device_captured_at=evidence_eval.device_captured_at if evidence_eval else None,
     )
 
-    if step == "completed":
-        # Release truck and assignment resources immediately for future scheduling.
-        release_trip_resources(db, synced_trip)
     db.commit()
     db.refresh(synced_trip)
     return {
@@ -252,6 +224,24 @@ async def helper_update_status(
         "photo_path": photo_path,
         **(evidence_fields_dict(evidence_eval) if evidence_eval else {}),
     }
+
+
+@router.post("/trips/{trip_id}/verify-delivery")
+def helper_verify_delivery(
+    trip_id: int,
+    body: DeliveryVerificationBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.HELPER)),
+):
+    result = verify_and_complete_delivery(
+        db,
+        trip_id=trip_id,
+        helper_id=user.id,
+        method=body.method,
+        credential=body.credential,
+    )
+    db.commit()
+    return result
 
 
 @router.post("/trips/{trip_id}/location")

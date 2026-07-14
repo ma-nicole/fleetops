@@ -15,6 +15,10 @@ from app.schemas.booking import BookingCustomsUpdate, BookingRead
 from app.services.booking_tracking_payload import build_assignments_for_booking
 from app.services.goods_declaration_review import goods_declaration_review_customer_fields
 from app.services.booking_qr import booking_qr_public_fields
+from app.services.delivery_verification import (
+    delivery_verification_customer_fields,
+    ensure_delivery_verification_credentials,
+)
 from app.services.customer_booking_portal import (
     CUSTOMER_ACTIVE_DISPLAY_STATUSES,
     CUSTOMER_HISTORY_DISPLAY_STATUSES,
@@ -49,6 +53,11 @@ def _repair_and_sync_all(db: Session, customer_id: int) -> None:
 
 
 def _serialize_booking(db: Session, booking: Booking) -> dict:
+    # Backfill credentials for verified legacy bookings that predate the feature.
+    had_credentials = bool(booking.delivery_verification_token and booking.delivery_verification_code)
+    if ensure_delivery_verification_credentials(db, booking) and not had_credentials:
+        db.commit()
+        db.refresh(booking)
     assignments = build_assignments_for_booking(db, booking)
     display = resolve_customer_display_status(booking, assignments)
     label = display_status_label(display)
@@ -58,6 +67,7 @@ def _serialize_booking(db: Session, booking: Booking) -> dict:
         **core,
         **review_fields,
         **booking_qr_public_fields(booking),
+        **delivery_verification_customer_fields(booking),
         "assignments": assignments,
         "display_status": display,
         "display_status_label": label,

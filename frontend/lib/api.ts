@@ -102,6 +102,10 @@ export function parseApiDetail(text: string): string | null {
     if (typeof detail === "string" && detail.trim()) {
       return detail.trim();
     }
+    if (detail && typeof detail === "object") {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) return message.trim();
+    }
     if (Array.isArray(detail)) {
       const parts = detail
         .map((item) => {

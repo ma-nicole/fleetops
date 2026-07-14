@@ -96,6 +96,8 @@ def apply_runtime_schema_fixes() -> None:
 
     if insp.has_table("bookings"):
         bk_cols = {c["name"] for c in insp.get_columns("bookings")}
+        bk_indexes = {idx["name"] for idx in insp.get_indexes("bookings")}
+        bk_foreign_keys = {fk.get("name") for fk in insp.get_foreign_keys("bookings")}
         if "scheduled_time_slot" not in bk_cols:
             if dialect == "mysql":
                 alters.append(
@@ -163,6 +165,12 @@ def apply_runtime_schema_fixes() -> None:
             ("booking_qr_token", "VARCHAR(64) NULL"),
             ("booking_qr_verified_at", "DATETIME NULL"),
             ("booking_qr_verified_by_id", "INT NULL"),
+            ("delivery_verification_token", "VARCHAR(64) NULL"),
+            ("delivery_verification_code", "VARCHAR(16) NULL"),
+            ("delivery_verification_created_at", "DATETIME NULL"),
+            ("delivery_verification_used_at", "DATETIME NULL"),
+            ("delivery_verification_used_by_helper_id", "INT NULL"),
+            ("delivery_verification_method", "VARCHAR(16) NULL"),
         ]
         for col, ddl_suffix in goods_review_cols:
             if col not in bk_cols:
@@ -190,6 +198,21 @@ def apply_runtime_schema_fixes() -> None:
         for col, ddl_suffix in toll_booking_cols:
             if col not in bk_cols:
                 alters.append(f"ALTER TABLE bookings ADD COLUMN {col} {ddl_suffix}")
+        if "uq_bookings_delivery_verification_token" not in bk_indexes:
+            alters.append(
+                "CREATE UNIQUE INDEX uq_bookings_delivery_verification_token "
+                "ON bookings (delivery_verification_token)"
+            )
+        if "uq_bookings_delivery_verification_code" not in bk_indexes:
+            alters.append(
+                "CREATE UNIQUE INDEX uq_bookings_delivery_verification_code "
+                "ON bookings (delivery_verification_code)"
+            )
+        if dialect == "mysql" and "fk_bookings_delivery_verification_helper" not in bk_foreign_keys:
+            alters.append(
+                "ALTER TABLE bookings ADD CONSTRAINT fk_bookings_delivery_verification_helper "
+                "FOREIGN KEY (delivery_verification_used_by_helper_id) REFERENCES users(id)"
+            )
 
     if insp.has_table("trucks"):
         trk_cols = {c["name"] for c in insp.get_columns("trucks")}

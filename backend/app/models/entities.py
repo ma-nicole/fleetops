@@ -349,6 +349,16 @@ class Booking(Base):
     booking_qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     booking_qr_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     booking_qr_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Customer-owned credential used only for final delivery confirmation. This is
+    # intentionally separate from booking_qr_token, which authorizes trip start.
+    delivery_verification_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    delivery_verification_code: Mapped[str | None] = mapped_column(String(16), nullable=True, unique=True)
+    delivery_verification_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    delivery_verification_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    delivery_verification_used_by_helper_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    delivery_verification_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     cargo_type_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     cargo_type_admin_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     cargo_restricted_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

@@ -33,7 +33,7 @@ function nextActionLabel(status: string): string | null {
     case "loading":
       return "Finish loading / outbound";
     case "in_delivery":
-      return "Mark delivery complete";
+      return "Prepare delivery evidence";
     default:
       return null;
   }
@@ -83,14 +83,9 @@ export default function DriverTaskListPage() {
           await WorkflowApi.loadingComplete(trip.id);
           break;
         case "in_delivery":
-          if (!deliveryReady) {
-            setCompletionTrip(trip);
-            setStatusMessage("Complete receiving document, QR verification, and digital signature first.");
-            return;
-          }
-          await WorkflowApi.completeTrip(trip.id);
-          setCompletionTrip(null);
-          break;
+          setCompletionTrip(trip);
+          setStatusMessage("Upload the receiving document and signature. The assigned helper performs final customer verification.");
+          return;
         default:
           return;
       }
@@ -176,9 +171,9 @@ export default function DriverTaskListPage() {
           <div
             className="card"
             style={{
-              background: statusMessage.includes("Complete receiving") ? "rgba(255, 152, 0, 0.12)" : "rgba(76, 175, 80, 0.1)",
-              border: statusMessage.includes("Complete receiving") ? "1px solid #FF9800" : "1px solid #4CAF50",
-              color: statusMessage.includes("Complete receiving") ? "#9A3412" : "#2E7D32",
+              background: statusMessage.includes("assigned helper") ? "rgba(255, 152, 0, 0.12)" : "rgba(76, 175, 80, 0.1)",
+              border: statusMessage.includes("assigned helper") ? "1px solid #FF9800" : "1px solid #4CAF50",
+              color: statusMessage.includes("assigned helper") ? "#9A3412" : "#2E7D32",
               marginBottom: "1rem",
               padding: "0.75rem",
             }}
@@ -190,30 +185,20 @@ export default function DriverTaskListPage() {
         {completionTrip ? (
           <div className="card" style={{ marginBottom: "1.5rem", padding: "1rem" }}>
             <h3 style={{ margin: "0 0 0.75rem", color: "#1A1A1A" }}>
-              Complete delivery — Trip #{completionTrip.id}
+              Delivery evidence — Trip #{completionTrip.id}
             </h3>
             <DeliveryCompletionPanel
               tripId={completionTrip.id}
               bookingId={completionTrip.booking_id}
               onReadyChange={setDeliveryReady}
+              allowVerification={false}
             />
             <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                disabled={!deliveryReady || updatingTripId === completionTrip.id}
-                onClick={() => void runNextStep(completionTrip)}
-                style={{
-                  padding: "0.75rem 1rem",
-                  background: deliveryReady ? "#4CAF50" : "#9CA3AF",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 6,
-                  fontWeight: 600,
-                  cursor: deliveryReady ? "pointer" : "not-allowed",
-                }}
-              >
-                {updatingTripId === completionTrip.id ? "Completing…" : "Mark delivery complete"}
-              </button>
+              <span style={{ color: deliveryReady ? "#166534" : "#92400E", alignSelf: "center", fontWeight: 600 }}>
+                {deliveryReady
+                  ? "Evidence ready. Awaiting customer verification by the assigned helper."
+                  : "Receiving document and signature are still required."}
+              </span>
               <button
                 type="button"
                 onClick={() => {

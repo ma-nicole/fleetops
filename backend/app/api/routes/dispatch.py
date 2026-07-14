@@ -1302,6 +1302,14 @@ def update_trip_status(
     booking = db.query(Booking).filter(Booking.id == trip.booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    if status == BookingStatus.COMPLETED:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "delivery_verification_required",
+                "message": "Booking completion requires customer verification by the assigned helper.",
+            },
+        )
 
     booking.status = status
     db.commit()
