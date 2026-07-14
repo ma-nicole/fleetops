@@ -193,16 +193,33 @@ export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+/** Drop trunk 0 / duplicated country code from the national part before building E.164. */
+export function normalizeNationalDigits(dialCode: string, nationalDigits: string): string {
+  let n = digitsOnly(nationalDigits);
+  const cc = digitsOnly(dialCode);
+  if (!n) return "";
+
+  // User pasted full international into the national field (e.g. 639171234567).
+  if (cc && n.startsWith(cc)) {
+    n = n.slice(cc.length);
+  }
+  // National trunk prefix (PH 09…, UK 07…, etc.) must not sit after +country.
+  if (n.startsWith("0")) {
+    n = n.replace(/^0+/, "");
+  }
+  return n;
+}
+
 export function buildInternationalPhone(dialCode: string, nationalDigits: string): string {
   const cc = digitsOnly(dialCode);
-  const n = digitsOnly(nationalDigits);
+  const n = normalizeNationalDigits(dialCode, nationalDigits);
   if (!n) return "";
   return `+${cc}${n}`;
 }
 
 /** Empty national digits → valid (optional phone). Otherwise E.164-style total length 10–15. */
 export function validateOptionalInternationalPhone(dialCode: string, nationalNumber: string): string | undefined {
-  const n = digitsOnly(nationalNumber);
+  const n = normalizeNationalDigits(dialCode, nationalNumber);
   if (!n) return undefined;
   const opt = getDialCodeOption(dialCode);
   if (opt?.nationalMinDigits && n.length < opt.nationalMinDigits) {
@@ -300,9 +317,10 @@ export function splitInternationalPhone(raw: string): { dial: string; national: 
   for (const opt of sorted) {
     const cc = digitsOnly(opt.dial);
     if (digits.startsWith(cc)) {
-      return { dial: opt.dial, national: digits.slice(cc.length) };
+      // Normalize stored mistakes like +6309… for the national field.
+      return { dial: opt.dial, national: normalizeNationalDigits(opt.dial, digits.slice(cc.length)) };
     }
   }
 
-  return { dial: DEFAULT_DIAL_CODE, national: digits };
+  return { dial: DEFAULT_DIAL_CODE, national: normalizeNationalDigits(DEFAULT_DIAL_CODE, digits) };
 }

@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 
 from app.core.password_policy import validate_password_strength
 from app.models.entities import UserRole
+from app.services.phone_normalize import normalize_e164_phone
 
 
 class UserCreate(BaseModel):
@@ -42,8 +43,10 @@ class UserCreate(BaseModel):
     def validate_phone(cls, v: str | None) -> str | None:
         if v is None:
             return None
-        p = v.strip()
-        if len(p) < 7:
+        p = normalize_e164_phone(v)
+        if p is None:
+            return None
+        if len(p.lstrip("+")) < 7:
             raise ValueError("Phone number seems too short")
         return p
 
@@ -55,6 +58,11 @@ class UserRead(BaseModel):
     company_name: str | None = None
     phone: str | None = None
     role: UserRole
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone_read(cls, v: str | None) -> str | None:
+        return normalize_e164_phone(v) if v else v
 
 
 class UserProfileUpdate(BaseModel):
@@ -84,10 +92,10 @@ class UserProfileUpdate(BaseModel):
     def validate_phone_update(cls, v: str | None) -> str | None:
         if v is None:
             return None
-        p = v.strip()
-        if not p:
+        p = normalize_e164_phone(v)
+        if p is None:
             return None
-        if len(p) < 7:
+        if len(p.lstrip("+")) < 7:
             raise ValueError("Phone number seems too short")
         return p
 

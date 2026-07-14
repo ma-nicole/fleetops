@@ -6,6 +6,7 @@ from typing import Any
 import resend
 
 from app.core.config import settings
+from app.services.phone_normalize import normalize_e164_phone
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ def build_customer_support_email_html(
     safe_msg = html.escape((message or "").strip() or "(No message provided.)")
     safe_name = html.escape(customer_name or "Customer")
     safe_email = html.escape(customer_email or "—")
-    phone = html.escape((customer_phone or "").strip() or "—")
+    phone = html.escape(normalize_e164_phone(customer_phone) or (customer_phone or "").strip() or "—")
     when = html.escape(submitted_at or datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"))
     ticket = f"#{feedback_id}" if feedback_id is not None else "—"
 

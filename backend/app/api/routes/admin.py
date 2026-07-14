@@ -20,6 +20,7 @@ from app.models.entities import (
     UserRole,
 )
 from app.schemas.goods_declaration import GoodsDeclarationReviewRequest, goods_declaration_reason_catalog
+from app.services.phone_normalize import normalize_e164_phone
 from app.services.goods_declaration_review import (
     apply_goods_declaration_review,
     booking_has_goods_declaration,
@@ -90,7 +91,7 @@ def _serialize_user(user: User) -> dict:
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
-        "phone": user.phone,
+        "phone": normalize_e164_phone(user.phone) or user.phone,
         "failed_login_count": user.failed_login_count,
         "is_locked": is_locked,
         "locked_until": user.locked_until.isoformat() if user.locked_until else None,
@@ -123,7 +124,7 @@ def create_user(
         email=payload.email,
         full_name=payload.full_name,
         role=payload.role,
-        phone=payload.phone,
+        phone=normalize_e164_phone(payload.phone),
         password_hash=hash_password(payload.password),
     )
     db.add(user)
@@ -148,7 +149,7 @@ def update_user(
     if payload.role is not None:
         user.role = payload.role
     if payload.phone is not None:
-        user.phone = payload.phone
+        user.phone = normalize_e164_phone(payload.phone)
 
     db.commit()
     db.refresh(user)

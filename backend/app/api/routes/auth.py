@@ -221,7 +221,16 @@ def logout(user: User = Depends(get_current_user)):
 
 
 @router.get("/me", response_model=UserRead)
-def me(user: User = Depends(get_current_user)):
+def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Self-heal stored trunk-zero mistakes (e.g. +6309… → +639…).
+    from app.services.phone_normalize import normalize_e164_phone
+
+    fixed = normalize_e164_phone(user.phone)
+    if user.phone and fixed and fixed != user.phone:
+        user.phone = fixed
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     return user
 
 
