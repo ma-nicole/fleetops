@@ -145,10 +145,16 @@ def _create_feedback(
 
         attachment_url = None
         if attachment_path:
-            # Public path works via Netlify /uploads proxy → Railway (see netlify.toml).
+            # Prefer Railway/backend public URL so Gmail can open screenshots directly.
+            backend = (getattr(app_settings, "backend_public_url", None) or "").strip().rstrip("/")
             front = (getattr(app_settings, "frontend_url", None) or "").strip().rstrip("/")
+            # Skip localhost defaults — they are useless in production emails.
+            if backend and "127.0.0.1" not in backend and "localhost" not in backend.lower():
+                base = backend
+            else:
+                base = front
             rel = f"/uploads/{attachment_path.lstrip('/')}"
-            attachment_url = f"{front}{rel}" if front else rel
+            attachment_url = f"{base}{rel}" if base else rel
 
         submitted = fb.created_at.strftime("%Y-%m-%d %H:%M UTC") if fb.created_at else None
 
