@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import { validateBookingDocumentFile } from "@/components/BookingDocumentUploadFields";
 import {
   canCustomerResubmitDocuments,
@@ -35,18 +35,25 @@ function ReviewStatusBadge({
   label: string;
 }) {
   const s = goodsDeclarationReviewBadgeStyle(status);
+  const attention = status === "revision_requested" || status === "rejected";
   return (
     <span
       style={{
-        display: "inline-block",
-        padding: "0.3rem 0.6rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: attention ? "0.4rem 0.75rem" : "0.3rem 0.6rem",
         borderRadius: 999,
-        fontSize: "0.78rem",
-        fontWeight: 700,
+        fontSize: attention ? "0.82rem" : "0.78rem",
+        fontWeight: 800,
+        letterSpacing: attention ? "0.01em" : undefined,
         background: s.bg,
         color: s.color,
+        border: attention ? `1px solid ${s.color}33` : "none",
+        boxShadow: attention ? "0 1px 2px rgba(0,0,0,0.06)" : undefined,
       }}
     >
+      {attention ? "● " : ""}
       {label}
     </span>
   );
@@ -153,7 +160,7 @@ export default function CustomerDocumentReviewSection({
     }
   }, [booking.id, cargoFile, onUpdated]);
 
-  const boxStyle: React.CSSProperties = compact
+  const boxStyle: CSSProperties = compact
     ? {
         marginTop: "0.65rem",
         padding: "0.65rem 0.75rem",
@@ -171,7 +178,18 @@ export default function CustomerDocumentReviewSection({
       };
 
   return (
-    <div style={boxStyle}>
+    <div
+      style={{
+        ...boxStyle,
+        ...(reviewStatus === "revision_requested" || isRejected
+          ? {
+              border: isRejected ? "1px solid #FCA5A5" : "1px solid #FDBA74",
+              background: isRejected ? "#FEF2F2" : "#FFF7ED",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+            }
+          : {}),
+      }}
+    >
       <div
         style={{
           display: "flex",
@@ -193,8 +211,9 @@ export default function CustomerDocumentReviewSection({
           style={{
             margin: "0 0 0.35rem",
             color: reviewStatus === "revision_requested" || isRejected ? "#9A3412" : "#374151",
-            fontSize: compact ? "0.82rem" : "0.88rem",
-            fontWeight: reviewStatus === "revision_requested" || isRejected ? 600 : 400,
+            fontSize: compact ? "0.85rem" : "0.9rem",
+            fontWeight: reviewStatus === "revision_requested" || isRejected ? 700 : 400,
+            lineHeight: 1.45,
           }}
         >
           {guidance}
@@ -202,9 +221,23 @@ export default function CustomerDocumentReviewSection({
       )}
 
       {remarks && (
-        <p style={{ margin: "0.35rem 0 0", fontSize: compact ? "0.8rem" : "0.85rem", color: "#4B5563" }}>
-          <strong>Reason:</strong> {remarks}
-        </p>
+        <div
+          style={{
+            margin: "0.45rem 0 0",
+            padding: "0.55rem 0.7rem",
+            borderRadius: 8,
+            background: "#FFFFFF",
+            border: "1px solid #E5E7EB",
+            fontSize: compact ? "0.82rem" : "0.88rem",
+            color: "#1F2937",
+            lineHeight: 1.45,
+          }}
+        >
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#6B7280", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Manager remarks
+          </div>
+          {remarks}
+        </div>
       )}
 
       {!compact && !canResubmit && !isRejected && (
@@ -257,7 +290,7 @@ export default function CustomerDocumentReviewSection({
             className="button"
             disabled={busy}
             onClick={() => void submitResubmit()}
-            style={{ justifySelf: "start" }}
+            style={{ justifySelf: "start", minHeight: 44, minWidth: 160 }}
           >
             {busy ? "Uploading…" : "Submit revised declaration"}
           </button>
@@ -266,23 +299,49 @@ export default function CustomerDocumentReviewSection({
 
       {canResubmit && compact && (
         <Link
-          href="/modules/operations/trips"
+          href={`/modules/operations/trips?booking=${booking.id}`}
           style={{
-            display: "inline-block",
-            marginTop: "0.35rem",
-            fontSize: "0.82rem",
-            fontWeight: 600,
-            color: "#B45309",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: "0.55rem",
+            padding: "0.55rem 0.9rem",
+            borderRadius: 8,
+            fontSize: "0.85rem",
+            fontWeight: 700,
+            color: "#fff",
+            background: "#B45309",
+            textDecoration: "none",
+            minHeight: 44,
           }}
         >
-          Upload revised declaration
+          Open booking to resubmit
         </Link>
       )}
 
       {isRejected && (
-        <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#6B7280" }}>
-          Further document uploads are not available for this booking. Contact support if you need assistance.
-        </p>
+        <div style={{ marginTop: "0.65rem", display: "flex", gap: "0.65rem", flexWrap: "wrap", alignItems: "center" }}>
+          <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", flex: "1 1 180px" }}>
+            Further document uploads are not available for this booking. Contact support if you need assistance.
+          </p>
+          <Link
+            href={`/modules/customer/support?booking=${booking.id}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "0.5rem 0.85rem",
+              borderRadius: 8,
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              color: "#991B1B",
+              background: "#FEE2E2",
+              textDecoration: "none",
+              minHeight: 44,
+            }}
+          >
+            Contact support
+          </Link>
+        </div>
       )}
 
       {payment && <PaymentReviewNotice payment={payment} bookingId={booking.id} />}

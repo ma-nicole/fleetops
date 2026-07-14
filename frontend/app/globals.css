@@ -4476,6 +4476,33 @@ html {
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .crew-bookings-mobile-list {
+    display: grid !important;
+  }
+
+  .crew-bookings-desktop-table {
+    display: none !important;
+  }
+
+  .crew-detail-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    padding: 1rem !important;
+  }
+
+  .helper-touch-btn {
+    min-height: 48px !important;
+    width: 100%;
+    font-size: 1rem !important;
+  }
+
+  .helper-touch-input {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
 }
 
 @media (max-width: 480px) {

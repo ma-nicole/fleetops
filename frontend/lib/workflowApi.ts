@@ -986,15 +986,26 @@ export const WorkflowApi = {
       reason_code?: string | null;
     },
   ) => apiPatch<GoodsDeclarationAdminRow>(`/admin/goods-declarations/${bookingId}`, payload),
-  helperVerifyBookingQr: (bookingId: number, payload: string, method: "camera" | "manual" | "scan" = "scan") =>
+  helperVerifyBookingQr: (
+    bookingId: number,
+    payload: string,
+    method: "camera" | "manual" | "scan" = "scan",
+    tripId?: number,
+  ) =>
     apiPost<{
       ok: boolean;
       already_verified: boolean;
       booking_id: number;
+      trip_ids?: number[];
       verified_at: string;
       verification_method?: string | null;
+      completed?: boolean;
       message: string;
-    }>(`/helper/bookings/${bookingId}/verify-qr`, { payload, method }),
+    }>(`/helper/bookings/${bookingId}/verify-qr`, {
+      payload,
+      method,
+      ...(tripId != null ? { trip_id: tripId } : {}),
+    }),
 
   resubmitBookingDocuments: (
     bookingId: number,
@@ -1139,7 +1150,17 @@ export const WorkflowApi = {
     rating: number;
     message?: string;
     category?: string;
-  }) => apiPost("/feedback", payload),
+    screenshot?: File | null;
+  }) => {
+    const fd = new FormData();
+    if (payload.booking_id != null) fd.append("booking_id", String(payload.booking_id));
+    else fd.append("booking_id", "general");
+    fd.append("rating", String(payload.rating));
+    fd.append("category", payload.category || "support");
+    if (payload.message) fd.append("message", payload.message);
+    if (payload.screenshot) fd.append("screenshot", payload.screenshot);
+    return apiPostMultipart("/feedback/with-attachment", fd);
+  },
   listFeedback: () => apiGet("/feedback"),
 
   // Manager

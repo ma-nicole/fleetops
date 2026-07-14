@@ -14,7 +14,6 @@ from app.core.security import require_roles
 from app.db import get_db
 from app.models.entities import (
     Booking,
-    BookingStatus,
     Trip,
     TripLocationUpdate,
     TripStatus,
@@ -46,8 +45,9 @@ STATUS_INDEX = {s: i for i, s in enumerate(STATUS_FLOW)}
 
 
 class BookingQrVerifyBody(BaseModel):
-    payload: str = Field(min_length=8, max_length=512)
+    payload: str = Field(min_length=4, max_length=512)
     method: str = Field(default="scan", max_length=16)
+    trip_id: int | None = None
 
 
 class DeliveryVerificationBody(BaseModel):
@@ -131,29 +131,6 @@ async def helper_update_status(
     if step in {"picked_up", "dropped_off"} and photo is None:
         raise HTTPException(status_code=400, detail=f"{step} requires proof photo.")
 
-    if step == "for_pickup" and trip.booking and getattr(trip.booking, "booking_qr_verified_at", None) is None:
-        # Generate token if payment already verified but QR never materialized.
-        from app.services.booking_qr import ensure_booking_qr_token, booking_qr_public_fields
-
-        if trip.booking.status in {
-            BookingStatus.PAYMENT_VERIFIED,
-            BookingStatus.READY_FOR_ASSIGNMENT,
-            BookingStatus.APPROVED,
-            BookingStatus.ASSIGNED,
-            BookingStatus.ACCEPTED,
-        }:
-            ensure_booking_qr_token(trip.booking)
-            db.commit()
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "message": "Scan the customer Booking QR before starting the trip.",
-                "code": "booking_qr_required",
-                "booking_id": trip.booking_id,
-                **booking_qr_public_fields(trip.booking),
-            },
-        )
-
     enroute_count = (
         db.query(TripLocationUpdate)
         .filter(TripLocationUpdate.trip_id == trip.id, TripLocationUpdate.helper_id == user.id)
@@ -166,8 +143,8 @@ async def helper_update_status(
         raise HTTPException(
             status_code=409,
             detail={
-                "code": "delivery_verification_required",
-                "message": "Use Verify Delivery with the customer's Delivery QR Code or Verification Code.",
+                "code": "booking_completion_qr_required",
+                "message": "Scan the customer's Booking Completion QR (or enter the verification code) to complete the booking.",
             },
         )
 
@@ -382,17 +359,19 @@ def helper_verify_booking_qr(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    booking = db.query(Booking).filter(Booking.id == booking_id).with_for_update().first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     # Helper must be assigned to at least one trip on this booking.
     assigned = (
-        db.query(Trip.id)
+        db.query(Trip)
         .filter(Trip.booking_id == booking_id, Trip.helper_id == user.id)
+        .order_by(Trip.id.asc())
         .first()
     )
     if not assigned:
         raise HTTPException(status_code=403, detail="Not assigned to this booking.")
+    trip_id = body.trip_id or int(assigned.id)
     try:
         result = verify_booking_qr(
             db,
@@ -400,8 +379,11 @@ def helper_verify_booking_qr(
             payload=body.payload,
             scanner=user,
             method=body.method,
+            helper_trip_id=trip_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
     db.commit()
     return result

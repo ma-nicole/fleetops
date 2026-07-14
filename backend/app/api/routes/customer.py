@@ -60,7 +60,7 @@ def _serialize_booking(db: Session, booking: Booking) -> dict:
     if ensure_delivery_verification_credentials(db, booking) and not had_credentials:
         db.commit()
         db.refresh(booking)
-    # Keep Booking helper QR available whenever payment is already verified.
+    # Keep Booking Completion QR available whenever payment is already verified.
     had_booking_qr = bool((booking.booking_qr_token or "").strip())
     if not had_booking_qr and booking.status not in {
         BookingStatus.CANCELLED,

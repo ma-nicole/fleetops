@@ -10,7 +10,7 @@ type Props = {
   compact?: boolean;
 };
 
-/** Customer-facing booking QR for helper verification before trip start. */
+/** Customer-facing Booking Completion QR for helper verification before booking completion. */
 export default function CustomerBookingQrCard({
   bookingId,
   payload,
@@ -30,7 +30,7 @@ export default function CustomerBookingQrCard({
           color: "#6B7280",
         }}
       >
-        Booking QR appears after payment is verified. Show it to the helper before trip start.
+        Booking Completion QR appears after payment is verified. Keep it available for the helper at delivery.
       </div>
     );
   }
@@ -48,13 +48,13 @@ export default function CustomerBookingQrCard({
       }}
     >
       <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#111827", textAlign: "center" }}>
-        Booking #{bookingId} helper QR
+        Booking #{bookingId} Completion QR
       </div>
       <QRCodeSVG value={payload} size={compact ? 128 : 168} level="M" includeMargin />
       <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", textAlign: "center", lineHeight: 1.4 }}>
         {verified
-          ? `Verified${verifiedAt ? ` · ${new Date(verifiedAt).toLocaleString()}` : ""}. Helper may start the trip.`
-          : "Ask your assigned helper to scan this code before starting the trip."}
+          ? `Verified${verifiedAt ? ` · ${new Date(verifiedAt).toLocaleString()}` : ""}. Booking is completed.`
+          : "Show this to your helper at the destination to complete the booking."}
       </p>
       {!verified ? (
         <p

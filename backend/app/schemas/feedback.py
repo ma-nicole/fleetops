@@ -42,6 +42,7 @@ class FeedbackRead(BaseModel):
     category: str
     rating: int
     message: str | None
+    attachment_path: str | None = None
     created_at: datetime
 
     class Config:

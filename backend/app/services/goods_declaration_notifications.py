@@ -73,8 +73,14 @@ def notify_customer_document_review_decision(
         else ""
     )
     next_step = {
-        "revision_requested": "Please open your booking/payment page and upload revised documents.",
-        "rejected": "This booking document review is closed. Please contact FleetOps support if you need assistance.",
+        "revision_requested": (
+            "Please open your booking tracking page and upload revised documents: "
+            f"/modules/operations/trips?booking={booking.id}"
+        ),
+        "rejected": (
+            "This booking document review is closed. Contact FleetOps support if you need assistance: "
+            f"/modules/customer/support?booking={booking.id}"
+        ),
         "approved": "No document action is needed from you. FleetOps will continue processing the booking.",
     }.get(status, "Please check your FleetOps account for the latest booking status.")
 

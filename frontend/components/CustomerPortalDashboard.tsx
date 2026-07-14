@@ -24,7 +24,11 @@ import {
   subscribeSitesChanged,
   type CustomerSite,
 } from "@/lib/customerSites";
-import { WorkflowApi, type CustomerBookingRow, type Payment } from "@/lib/workflowApi";
+import { WorkflowApi, type CustomerBookingHistoryRow, type CustomerBookingRow, type Payment } from "@/lib/workflowApi";
+import {
+  customerDocumentReviewStatusLabel,
+  goodsDeclarationReviewBadgeStyle,
+} from "@/lib/goodsDeclarationReview";
 import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 
@@ -43,17 +47,71 @@ function formatShortDate(iso: string): string {
 }
 
 const TRACKING_PAGE_SIZE = 3;
+const SECTION_PAGE_SIZE = 4;
+
+const PENDING_PAYMENT_STATUSES = new Set([
+  "pending_payment",
+  "payment_verification",
+  "payment_rejected",
+]);
+
+const ONGOING_STATUSES = new Set([
+  "assigned",
+  "approved",
+  "payment_verified",
+  "ready_for_assignment",
+  "for_pickup",
+  "picked_up",
+  "en_route",
+  "out_for_delivery",
+  "dropped_off",
+  "accepted",
+  "loading",
+]);
+
+type DocAlert = {
+  bookingId: number;
+  status: string;
+  label: string;
+  remarks: string;
+};
+
+function collectDocAlerts(rows: Array<CustomerBookingRow | CustomerBookingHistoryRow>): DocAlert[] {
+  const out: DocAlert[] = [];
+  for (const row of rows) {
+    const status = (row.goods_declaration_review_status ?? "").trim().toLowerCase();
+    if (status !== "revision_requested" && status !== "rejected") continue;
+    out.push({
+      bookingId: row.id,
+      status,
+      label: customerDocumentReviewStatusLabel(status, row.goods_declaration_review_status_label),
+      remarks: (row.goods_declaration_review_remarks ?? "").trim(),
+    });
+  }
+  return out;
+}
 
 export default function CustomerPortalDashboard() {
   const { ready, allowed } = useRoleGuard(["customer"]);
   const [activeShipments, setActiveShipments] = useState<CustomerBookingRow[]>([]);
-  const [historyCount, setHistoryCount] = useState(0);
-  const [completedCount, setCompletedCount] = useState(0);
+  const [historyRows, setHistoryRows] = useState<CustomerBookingHistoryRow[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [trackingPage, setTrackingPage] = useState(0);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    pending: true,
+    ongoing: true,
+    completed: false,
+    cancelled: false,
+  });
+  const [sectionPages, setSectionPages] = useState<Record<string, number>>({
+    pending: 0,
+    ongoing: 0,
+    completed: 0,
+    cancelled: 0,
+  });
   const [newSiteLabel, setNewSiteLabel] = useState("");
   const [newSiteStreet, setNewSiteStreet] = useState("");
   const [newSiteBrgy, setNewSiteBrgy] = useState("");
@@ -73,8 +131,7 @@ export default function CustomerPortalDashboard() {
         ]);
         if (!cancelled) {
           setActiveShipments(shipRes.shipments);
-          setHistoryCount(hist.length);
-          setCompletedCount(hist.filter((x) => x.display_status === "completed").length);
+          setHistoryRows(hist);
           setPayments(p);
         }
       } catch (e) {
@@ -140,6 +197,27 @@ export default function CustomerPortalDashboard() {
     };
   }, [ready, allowed, refreshShipments]);
 
+  const historyCount = historyRows.length;
+  const completedCount = useMemo(
+    () => historyRows.filter((x) => x.display_status === "completed").length,
+    [historyRows],
+  );
+
+  const docAlerts = useMemo(
+    () => collectDocAlerts([...activeShipments, ...historyRows]),
+    [activeShipments, historyRows],
+  );
+
+  const bookingBuckets = useMemo(() => {
+    const pendingPayments = activeShipments.filter((b) => PENDING_PAYMENT_STATUSES.has(b.display_status));
+    const ongoing = activeShipments.filter((b) => ONGOING_STATUSES.has(b.display_status));
+    const completed = historyRows.filter((b) => b.display_status === "completed");
+    const cancelled = historyRows.filter((b) =>
+      ["cancelled", "rejected", "expired", "payment_rejected"].includes(b.display_status),
+    );
+    return { pendingPayments, ongoing, completed, cancelled };
+  }, [activeShipments, historyRows]);
+
   const kpis = useMemo(() => {
     const totalOrders = activeShipments.length + historyCount;
     const paid = payments.filter((p) => p.status === "verified");
@@ -166,7 +244,7 @@ export default function CustomerPortalDashboard() {
         return t > now.getTime() - 31 * 86400000;
       }).length,
     };
-  }, [activeShipments.length, historyCount, completedCount, payments]);
+  }, [activeShipments, historyCount, completedCount, payments]);
 
   const activeShow = useMemo(() => {
     const prioritized = [...activeShipments].sort((a, b) => {
@@ -244,11 +322,160 @@ export default function CustomerPortalDashboard() {
           <>
             <nav className="tab-pills" aria-label="Jump to portal section">
               <SectionJumpLink targetId="customer-kpis">Overview</SectionJumpLink>
+              {docAlerts.length > 0 ? (
+                <SectionJumpLink targetId="customer-action-required">
+                  Alerts
+                  <span
+                    style={{
+                      marginLeft: 6,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: 20,
+                      height: 20,
+                      padding: "0 6px",
+                      borderRadius: 999,
+                      background: "#DC2626",
+                      color: "#fff",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {docAlerts.length}
+                  </span>
+                </SectionJumpLink>
+              ) : null}
               <SectionJumpLink targetId="customer-delivery-verification">Delivery Verification</SectionJumpLink>
-              <SectionJumpLink targetId="customer-tracking">Tracking</SectionJumpLink>
+              <SectionJumpLink targetId="customer-tracking">
+                Tracking
+                {docAlerts.length > 0 ? (
+                  <span
+                    aria-hidden
+                    style={{
+                      marginLeft: 6,
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: "#EA580C",
+                      display: "inline-block",
+                    }}
+                  />
+                ) : null}
+              </SectionJumpLink>
+              <SectionJumpLink targetId="customer-booking-sections">Bookings</SectionJumpLink>
               <SectionJumpLink targetId="customer-sites">Sites</SectionJumpLink>
-              <SectionJumpLink targetId="customer-bookings">Bookings</SectionJumpLink>
             </nav>
+
+            {docAlerts.length > 0 ? (
+              <section
+                id="customer-action-required"
+                className="scroll-section"
+                role="region"
+                aria-label="Action required"
+                style={{
+                  border: "1px solid #FDBA74",
+                  borderRadius: 12,
+                  padding: "1rem 1.1rem",
+                  background: "linear-gradient(180deg, #FFF7ED 0%, #FFEDD5 100%)",
+                  display: "grid",
+                  gap: "0.75rem",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: "#9A3412", fontSize: "1.05rem" }}>Action required</h2>
+                    <p style={{ margin: "0.25rem 0 0", color: "#9A3412", fontSize: "0.88rem" }}>
+                      {docAlerts.length} document review update{docAlerts.length === 1 ? "" : "s"} need your attention.
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: 28,
+                      height: 28,
+                      padding: "0 8px",
+                      borderRadius: 999,
+                      background: "#C2410C",
+                      color: "#fff",
+                      fontWeight: 800,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    {docAlerts.length}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gap: "0.65rem" }}>
+                  {docAlerts.map((alert) => {
+                    const badge = goodsDeclarationReviewBadgeStyle(alert.status);
+                    const href =
+                      alert.status === "rejected"
+                        ? `/modules/customer/support?booking=${alert.bookingId}`
+                        : `/modules/operations/trips?booking=${alert.bookingId}`;
+                    return (
+                      <div
+                        key={`doc-alert-${alert.bookingId}-${alert.status}`}
+                        style={{
+                          display: "grid",
+                          gap: "0.45rem",
+                          padding: "0.75rem 0.85rem",
+                          borderRadius: 10,
+                          background: "#fff",
+                          border: "1px solid #FED7AA",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                          <strong style={{ color: "#111827" }}>Booking #{alert.bookingId}</strong>
+                          <span
+                            style={{
+                              padding: "0.25rem 0.55rem",
+                              borderRadius: 999,
+                              fontSize: "0.75rem",
+                              fontWeight: 800,
+                              background: badge.bg,
+                              color: badge.color,
+                            }}
+                          >
+                            {alert.label}
+                          </span>
+                        </div>
+                        {alert.remarks ? (
+                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#374151", lineHeight: 1.45 }}>
+                            <span style={{ fontWeight: 700, color: "#6B7280" }}>Manager remarks: </span>
+                            {alert.remarks.length > 160 ? `${alert.remarks.slice(0, 160)}…` : alert.remarks}
+                          </p>
+                        ) : (
+                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#6B7280" }}>
+                            {alert.status === "rejected"
+                              ? "Document review was rejected. Contact support for help."
+                              : "Revision requested. Open the booking to resubmit documents."}
+                          </p>
+                        )}
+                        <Link
+                          href={href}
+                          style={{
+                            justifySelf: "start",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            minHeight: 40,
+                            padding: "0.45rem 0.85rem",
+                            borderRadius: 8,
+                            background: alert.status === "rejected" ? "#991B1B" : "#C2410C",
+                            color: "#fff",
+                            fontWeight: 700,
+                            fontSize: "0.85rem",
+                            textDecoration: "none",
+                          }}
+                        >
+                          {alert.status === "rejected" ? "Contact support" : "Open booking"}
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             <section
               id="customer-kpis"
@@ -744,6 +971,219 @@ export default function CustomerPortalDashboard() {
                   </Link>
                 </div>
               </div>
+            </section>
+
+            <section
+              id="customer-booking-sections"
+              className="card scroll-section"
+              style={{ display: "grid", gap: "0.85rem" }}
+            >
+              <div>
+                <h2 style={{ margin: 0 }}>Bookings by status</h2>
+                <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+                  Pending payments, ongoing deliveries, and closed bookings are grouped below. Shipment tracking above
+                  stays focused on active movement.
+                </p>
+              </div>
+              {(
+                [
+                  {
+                    key: "pending",
+                    title: "Pending payments",
+                    rows: bookingBuckets.pendingPayments,
+                    empty: "No bookings awaiting payment.",
+                    tone: "#92400E",
+                    bg: "#FFFBEB",
+                  },
+                  {
+                    key: "ongoing",
+                    title: "Ongoing deliveries",
+                    rows: bookingBuckets.ongoing,
+                    empty: "No deliveries in progress.",
+                    tone: "#1E40AF",
+                    bg: "#EFF6FF",
+                  },
+                  {
+                    key: "completed",
+                    title: "Completed deliveries",
+                    rows: bookingBuckets.completed,
+                    empty: "No completed deliveries yet.",
+                    tone: "#166534",
+                    bg: "#ECFDF5",
+                  },
+                  {
+                    key: "cancelled",
+                    title: "Cancelled / Rejected",
+                    rows: bookingBuckets.cancelled,
+                    empty: "No cancelled or rejected bookings.",
+                    tone: "#991B1B",
+                    bg: "#FEF2F2",
+                  },
+                ] as const
+              ).map((section) => {
+                const open = openSections[section.key] ?? false;
+                const page = sectionPages[section.key] ?? 0;
+                const pageCount = Math.max(1, Math.ceil(section.rows.length / SECTION_PAGE_SIZE));
+                const pageSafe = Math.min(page, pageCount - 1);
+                const pageRows = section.rows.slice(
+                  pageSafe * SECTION_PAGE_SIZE,
+                  pageSafe * SECTION_PAGE_SIZE + SECTION_PAGE_SIZE,
+                );
+                return (
+                  <div
+                    key={section.key}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                      background: "#fff",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() =>
+                        setOpenSections((prev) => ({ ...prev, [section.key]: !open }))
+                      }
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        padding: "0.85rem 1rem",
+                        border: "none",
+                        background: section.bg,
+                        color: section.tone,
+                        cursor: "pointer",
+                        textAlign: "left",
+                        minHeight: 48,
+                      }}
+                    >
+                      <span style={{ fontWeight: 800, fontSize: "0.95rem" }}>{section.title}</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 700 }}>
+                        <span
+                          style={{
+                            minWidth: 24,
+                            height: 24,
+                            padding: "0 7px",
+                            borderRadius: 999,
+                            background: "#fff",
+                            color: section.tone,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          {section.rows.length}
+                        </span>
+                        <span aria-hidden>{open ? "▾" : "▸"}</span>
+                      </span>
+                    </button>
+                    {open ? (
+                      <div style={{ padding: "0.85rem 1rem", display: "grid", gap: "0.65rem" }}>
+                        {section.rows.length === 0 ? (
+                          <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "0.88rem" }}>{section.empty}</p>
+                        ) : (
+                          <>
+                            {pageRows.map((row) => (
+                              <div
+                                key={`${section.key}-${row.id}`}
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: "0.75rem",
+                                  flexWrap: "wrap",
+                                  alignItems: "center",
+                                  padding: "0.65rem 0.75rem",
+                                  borderRadius: 8,
+                                  border: "1px solid #E5E7EB",
+                                  background: "#FAFAFA",
+                                }}
+                              >
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontWeight: 700 }}>Booking #{row.id}</div>
+                                  <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: 2 }}>
+                                    {row.pickup_location} → {row.dropoff_location}
+                                  </div>
+                                  <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: 2 }}>
+                                    {formatShortDate(`${row.scheduled_date}`)} ·{" "}
+                                    {customerWorkflowCurrentLabel(row, paymentByBooking.get(row.id) ?? null)}
+                                  </div>
+                                </div>
+                                <Link
+                                  href={`/modules/operations/trips?booking=${row.id}`}
+                                  style={{
+                                    color: "var(--brand-text-strong)",
+                                    fontWeight: 700,
+                                    fontSize: "0.85rem",
+                                    textDecoration: "none",
+                                    minHeight: 40,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  View
+                                </Link>
+                              </div>
+                            ))}
+                            {section.rows.length > SECTION_PAGE_SIZE ? (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  gap: "0.5rem",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                                  Page {pageSafe + 1} of {pageCount}
+                                </span>
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <button
+                                    type="button"
+                                    className="quick-action-btn"
+                                    disabled={pageSafe <= 0}
+                                    onClick={() =>
+                                      setSectionPages((prev) => ({
+                                        ...prev,
+                                        [section.key]: Math.max(0, pageSafe - 1),
+                                      }))
+                                    }
+                                  >
+                                    Previous
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="quick-action-btn"
+                                    disabled={pageSafe >= pageCount - 1}
+                                    onClick={() =>
+                                      setSectionPages((prev) => ({
+                                        ...prev,
+                                        [section.key]: Math.min(pageCount - 1, pageSafe + 1),
+                                      }))
+                                    }
+                                  >
+                                    Next
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <Link
+                href="/modules/customer/booking-history"
+                style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--brand-text-strong)" }}
+              >
+                Open full booking history →
+              </Link>
             </section>
           </>
         )}

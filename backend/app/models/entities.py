@@ -351,7 +351,7 @@ class Booking(Base):
     booking_qr_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     booking_qr_verified_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Customer-owned credential used only for final delivery confirmation. This is
-    # intentionally separate from booking_qr_token, which authorizes trip start.
+    # intentionally separate from booking_qr_token, which authorizes booking completion.
     delivery_verification_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     delivery_verification_code: Mapped[str | None] = mapped_column(String(16), nullable=True, unique=True)
     delivery_verification_created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -944,6 +944,7 @@ class Feedback(Base):
     category: Mapped[str] = mapped_column(String(50), default="service")
     rating: Mapped[int] = mapped_column(Integer, default=5)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

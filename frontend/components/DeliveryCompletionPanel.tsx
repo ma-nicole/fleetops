@@ -249,8 +249,8 @@ export default function DeliveryCompletionPanel({
         </h3>
         <p style={{ margin: 0, fontSize: "0.84rem", color: "#475569", lineHeight: 1.45 }}>
           {allowVerification
-            ? "Upload the receiving document and capture the recipient signature. Then verify the customer's one-time Delivery QR Code or backup Verification Code to complete the booking."
-            : "Upload the receiving document and capture the recipient signature. The assigned helper will complete delivery using the customer's verification credential."}
+            ? "Upload the receiving document and capture the recipient signature. Then scan the customer's Booking Completion QR (or enter the verification code) to complete the booking."
+            : "Upload the receiving document and capture the recipient signature. Then use Booking Completion QR verification to finish the booking."}
         </p>
       </div>
 

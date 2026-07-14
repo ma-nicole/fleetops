@@ -8,8 +8,11 @@ import { WorkflowApi } from "@/lib/workflowApi";
 
 type Props = {
   bookingId: number;
+  tripId?: number | null;
   verified?: boolean;
   verifiedAt?: string | null;
+  enabled?: boolean;
+  lockedHint?: string | null;
   onVerified?: () => void;
 };
 
@@ -55,10 +58,10 @@ function cameraErrorMessage(e: unknown): string {
   const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
   const combined = `${name} ${msg}`.toLowerCase();
   if (combined.includes("notallowed") || combined.includes("permission") || combined.includes("denied")) {
-    return "Camera permission denied. Allow camera access in browser settings, or paste the Booking QR code below.";
+    return "Camera permission denied. Allow camera access in browser settings, or paste the Booking Completion code below.";
   }
   if (combined.includes("notfound") || combined.includes("no camera") || combined.includes("requested device")) {
-    return "No camera found on this device. Paste the Booking QR code below.";
+    return "No camera found on this device. Paste the Booking Completion code below.";
   }
   if (combined.includes("notreadable") || combined.includes("trackstart") || combined.includes("in use")) {
     return "Camera is in use by another app. Close it and try again, or paste the code manually.";
@@ -66,7 +69,7 @@ function cameraErrorMessage(e: unknown): string {
   if (combined.includes("secure") || combined.includes("https")) {
     return "Camera requires HTTPS (or localhost). Open FleetOps over a secure URL, or paste the code manually.";
   }
-  return msg || "Camera QR scan unavailable. Paste the Booking QR code below.";
+  return msg || "Camera QR scan unavailable. Paste the Booking Completion code below.";
 }
 
 async function requestCameraPermission(): Promise<void> {
@@ -91,15 +94,18 @@ async function pickRearCameraId(): Promise<string | MediaTrackConstraints> {
   return rear.id || { facingMode: { ideal: "environment" } };
 }
 
-/** Helper scans customer Booking QR before starting the trip (for_pickup). */
+/** Helper scans customer Booking Completion QR after arrival / POD — final booking confirmation. */
 export default function HelperBookingQrVerify({
   bookingId,
+  tripId = null,
   verified = false,
   verifiedAt = null,
+  enabled = true,
+  lockedHint = null,
   onVerified,
 }: Props) {
   const reactId = useId().replace(/:/g, "");
-  const scanRegionId = `booking-qr-scan-${reactId}`;
+  const scanRegionId = `booking-completion-qr-scan-${reactId}`;
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const verifyingRef = useRef(false);
   const [scanning, setScanning] = useState(false);
@@ -144,20 +150,20 @@ export default function HelperBookingQrVerify({
   }, [stopScanner]);
 
   const verifyPayload = async (payload: string, method: "camera" | "manual") => {
-    if (verifyingRef.current) return;
+    if (verifyingRef.current || !enabled) return;
     const trimmed = normalizeDecodedPayload(payload);
     if (!trimmed) {
-      setErr("Enter or scan the Booking QR payload.");
+      setErr("Enter or scan the Booking Completion QR payload.");
       return;
     }
 
     const lower = trimmed.toLowerCase();
     if (lower.startsWith("fleetops-delivery")) {
-      setErr("That is the Delivery QR. Scan the Booking helper QR to start the trip.");
+      setErr("That is the Delivery QR. Scan the Booking Completion QR to finish the booking.");
       return;
     }
     if (lower.startsWith("fleetops-trip-")) {
-      setErr("That is a trip receiving QR. Scan the customer Booking helper QR.");
+      setErr("That is a trip receiving QR. Scan the customer Booking Completion QR.");
       return;
     }
 
@@ -172,7 +178,12 @@ export default function HelperBookingQrVerify({
     setErr(null);
     setMsg(null);
     try {
-      const result = await WorkflowApi.helperVerifyBookingQr(bookingId, trimmed, method);
+      const result = await WorkflowApi.helperVerifyBookingQr(
+        bookingId,
+        trimmed,
+        method,
+        tripId ?? undefined,
+      );
       setLocalVerified(true);
       setLocalVerifiedAt(result.verified_at);
       setManualQr("");
@@ -189,11 +200,12 @@ export default function HelperBookingQrVerify({
   };
 
   const startScanner = async () => {
+    if (!enabled) return;
     setErr(null);
     setMsg(null);
 
     if (!isSecureCameraContext()) {
-      setErr("Camera requires HTTPS (or localhost). Paste the Booking QR code below.");
+      setErr("Camera requires HTTPS (or localhost). Paste the Booking Completion code below.");
       return;
     }
 
@@ -201,7 +213,6 @@ export default function HelperBookingQrVerify({
       await stopScanner();
       await requestCameraPermission();
       setScanning(true);
-      // Let React paint the scanner container at full height before html5-qrcode mounts into it.
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       });
@@ -248,10 +259,29 @@ export default function HelperBookingQrVerify({
 
   if (localVerified) {
     return (
-      <StatusBanner tone="success" title="Booking QR verified">
-        You may start the trip
+      <StatusBanner tone="success" title="Booking Completion QR verified">
+        Booking marked completed
         {localVerifiedAt ? ` · ${new Date(localVerifiedAt).toLocaleString()}` : ""}.
       </StatusBanner>
+    );
+  }
+
+  if (!enabled) {
+    return (
+      <div
+        style={{
+          border: "1px solid #E5E7EB",
+          borderRadius: 10,
+          padding: "0.85rem 1rem",
+          background: "#F9FAFB",
+          color: "#6B7280",
+          fontSize: "0.85rem",
+          lineHeight: 1.45,
+        }}
+      >
+        {lockedHint ||
+          "Booking Completion QR unlocks after you reach Arrived at Destination and finish delivery proof (receiving document + signature)."}
+      </div>
     );
   }
 
@@ -267,10 +297,10 @@ export default function HelperBookingQrVerify({
       }}
     >
       <div>
-        <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 4 }}>Scan Booking QR before start</div>
+        <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 4 }}>Booking Completion QR</div>
         <p style={{ margin: 0, fontSize: "0.82rem", color: "#78350F", lineHeight: 1.45 }}>
-          Ask the customer to show their Booking #{bookingId} helper QR (not the Delivery QR). Scan it or paste the
-          code, then continue to Accepted / en route to pickup.
+          Ask the customer to show their Booking #{bookingId} Completion QR. Scan it or paste the code to mark the
+          booking completed. Retry is allowed if verification fails.
         </p>
       </div>
 
@@ -292,14 +322,16 @@ export default function HelperBookingQrVerify({
           type="button"
           disabled={busy || scanning}
           onClick={() => void startScanner()}
+          className="helper-touch-btn"
           style={{
-            padding: "0.55rem 0.9rem",
+            padding: "0.65rem 0.9rem",
             borderRadius: 8,
             border: "none",
             background: "#B45309",
             color: "#fff",
             fontWeight: 700,
             cursor: busy || scanning ? "not-allowed" : "pointer",
+            minHeight: 48,
           }}
         >
           {scanning ? "Scanning…" : "Open camera scanner"}
@@ -323,9 +355,11 @@ export default function HelperBookingQrVerify({
       </div>
 
       <label style={{ display: "grid", gap: 6 }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400E" }}>Or paste Booking QR / code</span>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400E" }}>
+          Or paste Booking Completion QR / code
+        </span>
         <input
-          className="input"
+          className="helper-touch-input input"
           value={manualQr}
           onChange={(e) => setManualQr(e.target.value)}
           placeholder="booking=123|code=… or code alone"
@@ -333,14 +367,16 @@ export default function HelperBookingQrVerify({
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
+          style={{ fontSize: 16, minHeight: 44 }}
         />
       </label>
       <button
         type="button"
         disabled={busy || !manualQr.trim()}
         onClick={() => void verifyPayload(manualQr, "manual")}
+        className="helper-touch-btn"
         style={{
-          padding: "0.55rem 0.9rem",
+          padding: "0.65rem 0.9rem",
           borderRadius: 8,
           border: "none",
           background: "#0EA5E9",
@@ -348,9 +384,10 @@ export default function HelperBookingQrVerify({
           fontWeight: 700,
           cursor: busy || !manualQr.trim() ? "not-allowed" : "pointer",
           justifySelf: "start",
+          minHeight: 48,
         }}
       >
-        {busy ? "Verifying…" : "Verify code"}
+        {busy ? "Verifying…" : "Verify & complete"}
       </button>
 
       {msg ? <StatusBanner tone="success">{msg}</StatusBanner> : null}

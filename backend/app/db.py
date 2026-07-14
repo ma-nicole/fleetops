@@ -78,6 +78,11 @@ def apply_runtime_schema_fixes() -> None:
             alters.append("ALTER TABLE feedback MODIFY COLUMN message TEXT NULL")
         else:
             alters.append("ALTER TABLE feedback ALTER COLUMN message TYPE TEXT")
+        if "attachment_path" not in fb_cols:
+            if dialect == "mysql":
+                alters.append("ALTER TABLE feedback ADD COLUMN attachment_path VARCHAR(512) NULL")
+            else:
+                alters.append("ALTER TABLE feedback ADD COLUMN attachment_path VARCHAR(512)")
 
     if insp.has_table("customer_saved_sites"):
         ss_cols = {c["name"] for c in insp.get_columns("customer_saved_sites")}

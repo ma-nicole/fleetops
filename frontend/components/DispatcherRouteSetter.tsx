@@ -1,11 +1,47 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
 import { DispatchApi } from "@/lib/dispatchApi";
 
 const MAP_VERIFY_WARNING =
   "Map location could not be verified. You may continue using manual route details.";
+
+type RouteOpt = Awaited<ReturnType<typeof DispatchApi.getBookingRouteOptions>>["options"][number];
+
+function objectiveLabelsForOptions(options: RouteOpt[]): Map<number, string[]> {
+  const labels = new Map<number, string[]>();
+  if (!options.length) return labels;
+  for (const o of options) labels.set(o.id, []);
+
+  const push = (id: number, label: string) => {
+    const cur = labels.get(id) ?? [];
+    if (!cur.includes(label)) cur.push(label);
+    labels.set(id, cur);
+  };
+
+  const byHours = [...options].sort(
+    (a, b) => (a.duration_hours ?? Number.POSITIVE_INFINITY) - (b.duration_hours ?? Number.POSITIVE_INFINITY),
+  );
+  if (byHours[0]?.duration_hours != null) push(byHours[0].id, "Fastest Route");
+
+  const byKm = [...options].sort((a, b) => a.distance_km - b.distance_km);
+  if (byKm[0]) push(byKm[0].id, "Shortest Distance");
+
+  const byToll = [...options].sort((a, b) => a.toll_cost - b.toll_cost);
+  if (byToll[0]) {
+    push(byToll[0].id, byToll[0].toll_cost <= 0.01 ? "Avoid Toll Roads" : "Lowest Toll Cost");
+  }
+
+  const byTotal = [...options].sort((a, b) => a.total_cost - b.total_cost);
+  if (byTotal[0]) push(byTotal[0].id, "Balanced Route");
+
+  for (const o of options) {
+    const cur = labels.get(o.id) ?? [];
+    if (!cur.length) push(o.id, o.source === "manual" ? "Manual Route" : "Generated Route");
+  }
+  return labels;
+}
 
 export default function DispatcherRouteSetter({
   bookingId,
@@ -16,9 +52,7 @@ export default function DispatcherRouteSetter({
   pickupLocation?: string;
   dropoffLocation?: string;
 }) {
-  const [options, setOptions] = useState<Awaited<ReturnType<typeof DispatchApi.getBookingRouteOptions>>["options"]>(
-    [],
-  );
+  const [options, setOptions] = useState<RouteOpt[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapWarning, setMapWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,6 +67,8 @@ export default function DispatcherRouteSetter({
     toll_cost_php: "",
     notes: "",
   });
+
+  const objectiveById = useMemo(() => objectiveLabelsForOptions(options), [options]);
 
   const applyResponse = (data: Awaited<ReturnType<typeof DispatchApi.getBookingRouteOptions>>) => {
     setOptions(data.options);
@@ -151,8 +187,8 @@ export default function DispatcherRouteSetter({
         <div>
           <strong style={{ color: "#1E3A8A" }}>Route setter</strong>
           <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#4B5563", lineHeight: 1.45 }}>
-            Select an auto-generated route or enter manual route details. Assignment uses the saved route when
-            available.
+            Compare generated routes (fastest, shortest, lowest toll, balanced) or enter manual details. Assignment uses
+            the saved route when available.
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -339,72 +375,150 @@ export default function DispatcherRouteSetter({
         </p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {options.map((opt) => (
-            <label
-              key={opt.id}
-              style={{
-                display: "grid",
-                gap: 4,
-                padding: 10,
-                borderRadius: 8,
-                border: `1px solid ${selectedId === opt.id ? "var(--brand-text)" : "#E5E7EB"}`,
-                background: selectedId === opt.id ? "#EFF6FF" : "#fff",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <input
-                  type="radio"
-                  name={`route-option-${bookingId}`}
-                  checked={selectedId === opt.id}
-                  onChange={() => setSelectedId(opt.id)}
-                />
-                <strong style={{ fontSize: "0.88rem" }}>
-                  {opt.route_name ?? `Option #${opt.rank}`} · {opt.distance_km.toFixed(1)} km
-                  {opt.duration_hours != null ? ` · ${opt.duration_hours.toFixed(1)} h` : ""} · {formatPhp(opt.total_cost)}
-                </strong>
-                {opt.is_selected && (
-                  <span
-                    style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
-                      color: "#047857",
-                      background: "#D1FAE5",
-                      padding: "0.1rem 0.45rem",
-                      borderRadius: 999,
-                    }}
-                  >
-                    Saved
-                  </span>
-                )}
-                {opt.source === "manual" && (
-                  <span
-                    style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
-                      color: "#92400E",
-                      background: "#FEF3C7",
-                      padding: "0.1rem 0.45rem",
-                      borderRadius: 999,
-                    }}
-                  >
-                    Manual
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize: "0.8rem", color: "#4B5563" }}>
-                {opt.path.join(" → ")}
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+              fontSize: "0.72rem",
+              color: "#64748B",
+            }}
+            aria-label="Route objective legend"
+          >
+            {[
+              "Fastest Route",
+              "Shortest Distance",
+              "Lowest Toll Cost",
+              "Avoid Toll Roads",
+              "Balanced Route",
+              "Avoid Heavy Traffic (coming soon)",
+            ].map((label) => (
+              <span
+                key={label}
+                style={{
+                  padding: "0.2rem 0.5rem",
+                  borderRadius: 999,
+                  border: "1px dashed #CBD5E1",
+                  background: label.includes("coming soon") ? "#F8FAFC" : "#fff",
+                  opacity: label.includes("coming soon") ? 0.7 : 1,
+                }}
+              >
+                {label}
               </span>
-              {opt.notes && (
-                <span style={{ fontSize: "0.78rem", color: "#6B7280" }}>
-                  Notes: {opt.notes}
-                </span>
-              )}
-              <span style={{ fontSize: "0.78rem", color: "#6B7280" }}>
-                Fuel {formatPhp(opt.fuel_cost)} · Toll {formatPhp(opt.toll_cost)} · Source {opt.source}
-              </span>
-            </label>
-          ))}
+            ))}
+          </div>
+          {options.map((opt) => {
+            const objectives = objectiveById.get(opt.id) ?? [];
+            return (
+              <label
+                key={opt.id}
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: `1.5px solid ${selectedId === opt.id ? "var(--brand-text)" : "#E5E7EB"}`,
+                  background: selectedId === opt.id ? "#EFF6FF" : "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    type="radio"
+                    name={`route-option-${bookingId}`}
+                    checked={selectedId === opt.id}
+                    onChange={() => setSelectedId(opt.id)}
+                    style={{ marginTop: 4 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0, display: "grid", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <strong style={{ fontSize: "0.9rem" }}>
+                        {opt.route_name ?? `Option #${opt.rank}`}
+                      </strong>
+                      {objectives.map((tag) => (
+                        <span
+                          key={`${opt.id}-${tag}`}
+                          style={{
+                            fontSize: "0.7rem",
+                            fontWeight: 800,
+                            color: "#1E40AF",
+                            background: "#DBEAFE",
+                            padding: "0.12rem 0.45rem",
+                            borderRadius: 999,
+                          }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {opt.is_selected && (
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#047857",
+                            background: "#D1FAE5",
+                            padding: "0.1rem 0.45rem",
+                            borderRadius: 999,
+                          }}
+                        >
+                          Saved
+                        </span>
+                      )}
+                      {opt.source === "manual" && (
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#92400E",
+                            background: "#FEF3C7",
+                            padding: "0.1rem 0.45rem",
+                            borderRadius: 999,
+                          }}
+                        >
+                          Manual
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                        gap: 8,
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      <div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Distance</div>
+                        {opt.distance_km.toFixed(1)} km
+                      </div>
+                      <div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Time</div>
+                        {opt.duration_hours != null ? `${opt.duration_hours.toFixed(1)} h` : "—"}
+                      </div>
+                      <div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Toll</div>
+                        {formatPhp(opt.toll_cost)}
+                      </div>
+                      <div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Fuel</div>
+                        {formatPhp(opt.fuel_cost)}
+                      </div>
+                      <div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Total</div>
+                        {formatPhp(opt.total_cost)}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "0.8rem", color: "#4B5563", lineHeight: 1.4 }}>
+                      <strong>Summary:</strong> {opt.path.join(" → ")}
+                    </span>
+                    {opt.notes ? (
+                      <span style={{ fontSize: "0.78rem", color: "#6B7280" }}>Notes: {opt.notes}</span>
+                    ) : null}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
         </div>
       )}
     </div>

@@ -320,6 +320,11 @@ export default function CrewAssignedBookingsScreen({
   const [selectedLocation, setSelectedLocation] = useState<SelectedHelperLocation | null>(null);
   const [remarks, setRemarks] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [receivingReady, setReceivingReady] = useState(false);
+
+  useEffect(() => {
+    setReceivingReady(false);
+  }, [detail?.trip_id]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -359,7 +364,7 @@ export default function CrewAssignedBookingsScreen({
       return;
     }
     if (phase === "completed") {
-      setMsg("Use Verify Delivery with the customer's QR Code or backup Verification Code.");
+      setMsg("Use Booking Completion QR verification after Arrived at Destination and delivery proof.");
       return;
     }
     if (PHOTO_REQUIRED.has(phase) && !photo) {
@@ -498,8 +503,8 @@ export default function CrewAssignedBookingsScreen({
           upload count.
         </li>
         <li>
-          Before <em>completed</em>: upload receiving document, verify trip QR code, and capture recipient digital
-          signature.
+          Before <em>completed</em>: upload receiving document, capture recipient digital signature, then scan the
+          customer&apos;s Booking Completion QR (or enter the code).
         </li>
       </ul>
     </div>
@@ -566,140 +571,192 @@ export default function CrewAssignedBookingsScreen({
       ) : null}
 
       <div style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden", background: "white" }}>
-        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-          <table style={{ width: "100%", minWidth: isHelper ? 980 : 1680, borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                {!isHelper ? <th style={th}>Trip ID</th> : null}
-                <th style={th}>Booking ID</th>
-                {!isHelper ? <th style={{ ...th, minWidth: 120 }}>Customer / Company</th> : null}
-                <th style={{ ...th, minWidth: 140 }}>Pickup</th>
-                <th style={{ ...th, minWidth: 140 }}>Dropoff</th>
-                <th style={th}>Schedule window</th>
-                <th style={{ ...th, textAlign: "right" }}>Cargo (t)</th>
-                {!isHelper ? <th style={th}>Truck / plate</th> : null}
-                <th style={{ ...th, minWidth: 100 }}>Driver</th>
-                {!isHelper ? <th style={{ ...th, minWidth: 100 }}>Helper</th> : null}
-                <th style={th}>Current status</th>
-                {!isHelper ? <th style={{ ...th, minWidth: 120 }}>Latest location</th> : null}
-                {!isHelper ? <th style={th}>Payment status</th> : null}
-                <th style={th}>{isHelper ? "Your tasks" : "Progress updates"}</th>
-                <th style={{ ...th, textAlign: "center" }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={isHelper ? 9 : 15} style={{ ...td, padding: "1.5rem", color: "#666" }}>
-                    No assigned trips.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => {
-                  const bk = r.booking;
-                  const slug = operationalSlug(r);
-                  const custLine = bk
-                    ? [bk.customer_name || "—", bk.customer_company_name].filter(Boolean).join(" · ")
-                    : "—";
-                  return (
-                    <tr key={r.trip_id}>
-                      {!isHelper ? <td style={{ ...td, fontWeight: 700 }}>#{r.trip_id}</td> : null}
-                      <td style={{ ...td, fontWeight: isHelper ? 700 : undefined }}>#{r.booking_id}</td>
-                      {!isHelper ? (
-                        <td style={td} title={custLine}>
-                          {truncate(custLine, 40)}
-                        </td>
-                      ) : null}
-                      <td style={td} title={bk?.pickup_location}>
-                        {bk ? truncate(bk.pickup_location, 44) : "—"}
-                      </td>
-                      <td style={td} title={bk?.dropoff_location}>
-                        {bk ? truncate(bk.dropoff_location, 44) : "—"}
-                      </td>
-                      <td style={{ ...td, whiteSpace: "nowrap" }}>
-                        {bk ? (
-                          <>
-                            {bk.scheduled_date}
-                            <br />
-                            {bk.scheduled_time_slot}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td style={{ ...td, textAlign: "right" }}>{bk ? String(bk.cargo_weight_tons) : "—"}</td>
-                      {!isHelper ? (
-                        <td style={td} title={truckPlateLine(r)}>
-                          {truncate(truckPlateLine(r), 32)}
-                        </td>
-                      ) : null}
-                      <td style={td} title={r.driver_name || ""}>
-                        {r.driver_name ?? "—"}
-                      </td>
-                      {!isHelper ? (
-                        <td style={td} title={r.helper_name || ""}>
-                          {r.helper_name ?? "—"}
-                        </td>
-                      ) : null}
-                      <td style={td}>
-                        <span style={statusPillStyle(slug)} title={slug}>
-                          {slug}
-                        </span>
-                      </td>
-                      {!isHelper ? (
-                        <td style={td} title={r.latest_location || ""}>
-                          {truncate(r.latest_location || "—", 40)}
-                        </td>
-                      ) : null}
-                      {!isHelper ? (
-                        <td style={{ ...td, whiteSpace: "nowrap", textTransform: "lowercase" }} title={r.payment_status}>
-                          {r.payment_status}
-                        </td>
-                      ) : null}
-                      <td style={td}>
-                        <span
-                          style={{
-                            fontWeight: 700,
-                            fontSize: "0.75rem",
-                            padding: "0.15rem 0.45rem",
-                            borderRadius: 6,
-                            background: "#F1F5F9",
-                            color: "#334155",
-                            border: "1px solid #E2E8F0",
-                          }}
-                          title="En-route progress updates submitted"
-                        >
-                          {isHelper
-                            ? `Locations ${r.location_updates_submitted}`
-                            : `${r.location_updates_submitted} updates`}
-                        </span>
-                      </td>
-                      <td style={{ ...td, textAlign: "center" }}>
-                        <button
-                          type="button"
-                          onClick={() => openDetail(r)}
-                          style={{
-                            padding: "0.45rem 0.65rem",
-                            borderRadius: 6,
-                            border: "1px solid #FF9800",
-                            background: "white",
-                            color: "#E65100",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            fontSize: "0.75rem",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {isHelper ? "Open" : "View"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        {rows.length === 0 ? (
+          <p style={{ margin: 0, padding: "1.5rem", color: "#666" }}>No assigned trips.</p>
+        ) : (
+          <>
+            <div className="crew-bookings-mobile-list" style={{ display: "none", gap: "0.75rem", padding: "0.85rem" }}>
+              {rows.map((r) => {
+                const bk = r.booking;
+                const slug = operationalSlug(r);
+                return (
+                  <article
+                    key={`m-${r.trip_id}`}
+                    style={{
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 12,
+                      padding: "0.9rem 1rem",
+                      display: "grid",
+                      gap: 8,
+                      background: "#FAFAFA",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: "1rem" }}>Booking #{r.booking_id}</strong>
+                      <span style={statusPillStyle(slug)}>{slug}</span>
+                    </div>
+                    <div style={{ fontSize: "0.88rem", color: "#374151", lineHeight: 1.45 }}>
+                      <div>
+                        <span style={{ color: "#6B7280" }}>From:</span> {bk?.pickup_location ?? "—"}
+                      </div>
+                      <div>
+                        <span style={{ color: "#6B7280" }}>To:</span> {bk?.dropoff_location ?? "—"}
+                      </div>
+                      <div style={{ marginTop: 4, color: "#6B7280", fontSize: "0.82rem" }}>
+                        {bk ? `${bk.scheduled_date} · ${bk.scheduled_time_slot}` : "—"}
+                        {isHelper ? ` · Locations ${r.location_updates_submitted}` : null}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openDetail(r)}
+                      style={{
+                        width: "100%",
+                        minHeight: 48,
+                        borderRadius: 10,
+                        border: "none",
+                        background: "#F59E0B",
+                        color: "#fff",
+                        fontWeight: 800,
+                        fontSize: "1rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {isHelper ? "Open booking" : "View booking"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="crew-bookings-desktop-table" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <table style={{ width: "100%", minWidth: isHelper ? 900 : 1400, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    {!isHelper ? <th style={th}>Trip ID</th> : null}
+                    <th style={th}>Booking ID</th>
+                    {!isHelper ? <th style={{ ...th, minWidth: 120 }}>Customer / Company</th> : null}
+                    <th style={{ ...th, minWidth: 140 }}>Pickup</th>
+                    <th style={{ ...th, minWidth: 140 }}>Dropoff</th>
+                    <th style={th}>Schedule window</th>
+                    <th style={{ ...th, textAlign: "right" }}>Cargo (t)</th>
+                    {!isHelper ? <th style={th}>Truck / plate</th> : null}
+                    <th style={{ ...th, minWidth: 100 }}>Driver</th>
+                    {!isHelper ? <th style={{ ...th, minWidth: 100 }}>Helper</th> : null}
+                    <th style={th}>Current status</th>
+                    {!isHelper ? <th style={{ ...th, minWidth: 120 }}>Latest location</th> : null}
+                    {!isHelper ? <th style={th}>Payment status</th> : null}
+                    <th style={th}>{isHelper ? "Your tasks" : "Progress updates"}</th>
+                    <th style={{ ...th, textAlign: "center" }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => {
+                      const bk = r.booking;
+                      const slug = operationalSlug(r);
+                      const custLine = bk
+                        ? [bk.customer_name || "—", bk.customer_company_name].filter(Boolean).join(" · ")
+                        : "—";
+                      return (
+                        <tr key={r.trip_id}>
+                          {!isHelper ? <td style={{ ...td, fontWeight: 700 }}>#{r.trip_id}</td> : null}
+                          <td style={{ ...td, fontWeight: isHelper ? 700 : undefined }}>#{r.booking_id}</td>
+                          {!isHelper ? (
+                            <td style={td} title={custLine}>
+                              {truncate(custLine, 40)}
+                            </td>
+                          ) : null}
+                          <td style={td} title={bk?.pickup_location}>
+                            {bk ? truncate(bk.pickup_location, 44) : "—"}
+                          </td>
+                          <td style={td} title={bk?.dropoff_location}>
+                            {bk ? truncate(bk.dropoff_location, 44) : "—"}
+                          </td>
+                          <td style={{ ...td, whiteSpace: "nowrap" }}>
+                            {bk ? (
+                              <>
+                                {bk.scheduled_date}
+                                <br />
+                                {bk.scheduled_time_slot}
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td style={{ ...td, textAlign: "right" }}>{bk ? String(bk.cargo_weight_tons) : "—"}</td>
+                          {!isHelper ? (
+                            <td style={td} title={truckPlateLine(r)}>
+                              {truncate(truckPlateLine(r), 32)}
+                            </td>
+                          ) : null}
+                          <td style={td} title={r.driver_name || ""}>
+                            {r.driver_name ?? "—"}
+                          </td>
+                          {!isHelper ? (
+                            <td style={td} title={r.helper_name || ""}>
+                              {r.helper_name ?? "—"}
+                            </td>
+                          ) : null}
+                          <td style={td}>
+                            <span style={statusPillStyle(slug)} title={slug}>
+                              {slug}
+                            </span>
+                          </td>
+                          {!isHelper ? (
+                            <td style={td} title={r.latest_location || ""}>
+                              {truncate(r.latest_location || "—", 40)}
+                            </td>
+                          ) : null}
+                          {!isHelper ? (
+                            <td style={{ ...td, whiteSpace: "nowrap", textTransform: "lowercase" }} title={r.payment_status}>
+                              {r.payment_status}
+                            </td>
+                          ) : null}
+                          <td style={td}>
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                fontSize: "0.75rem",
+                                padding: "0.15rem 0.45rem",
+                                borderRadius: 6,
+                                background: "#F1F5F9",
+                                color: "#334155",
+                                border: "1px solid #E2E8F0",
+                              }}
+                              title="En-route progress updates submitted"
+                            >
+                              {isHelper
+                                ? `Locations ${r.location_updates_submitted}`
+                                : `${r.location_updates_submitted} updates`}
+                            </span>
+                          </td>
+                          <td style={{ ...td, textAlign: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => openDetail(r)}
+                              style={{
+                                padding: "0.55rem 0.85rem",
+                                borderRadius: 8,
+                                border: "1px solid #FF9800",
+                                background: "white",
+                                color: "#E65100",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                fontSize: "0.85rem",
+                                whiteSpace: "nowrap",
+                                minHeight: 40,
+                              }}
+                            >
+                              {isHelper ? "Open" : "View"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       {detail ? (
@@ -718,6 +775,7 @@ export default function CrewAssignedBookingsScreen({
           onClick={() => !busy && setDetail(null)}
         >
           <div
+            className="crew-detail-sheet"
             style={{
               background: "white",
               borderRadius: 12,
@@ -726,6 +784,7 @@ export default function CrewAssignedBookingsScreen({
               padding: "1.5rem 1.65rem",
               maxHeight: "92vh",
               overflowY: "auto",
+              overflowX: "hidden",
               boxShadow: "0 12px 40px rgba(0,0,0,0.18)",
             }}
             onClick={(e) => e.stopPropagation()}
@@ -1142,13 +1201,6 @@ export default function CrewAssignedBookingsScreen({
             {variant === "helper" ? (
               <>
                 <hr style={divider} />
-                <HelperBookingQrVerify
-                  bookingId={detail.booking_id}
-                  verified={Boolean(detail.booking_qr_verified)}
-                  verifiedAt={detail.booking_qr_verified_at ?? null}
-                  onVerified={() => void load()}
-                />
-                <div style={{ height: 12 }} />
                 {(() => {
                   const current = workflowPhase(detail, "helper");
                   const allowed = nextPhase(current);
@@ -1159,6 +1211,16 @@ export default function CrewAssignedBookingsScreen({
                       <div style={{ padding: "0.75rem", borderRadius: 8, background: "#ECFDF5", color: "#065F46", fontWeight: 700 }}>
                         Trip completed — no further updates.
                       </div>
+                      {detail.booking_qr_verified ? (
+                        <div style={{ marginTop: 12 }}>
+                          <HelperBookingQrVerify
+                            bookingId={detail.booking_id}
+                            tripId={detail.trip_id}
+                            verified
+                            verifiedAt={detail.booking_qr_verified_at ?? null}
+                          />
+                        </div>
+                      ) : null}
                       <button
                         type="button"
                         disabled={busy}
@@ -1347,17 +1409,29 @@ export default function CrewAssignedBookingsScreen({
                       </label>
 
                       {phase === "completed" || current === "dropped_off" ? (
-                        <DeliveryCompletionPanel
-                          tripId={detail.trip_id}
-                          bookingId={detail.booking_id}
-                          crewName={detail.helper_name ?? detail.driver_name}
-                          compact
-                          onCompleted={async () => {
-                            setMsg("Delivery verified. The booking is now completed.");
-                            await load();
-                            setDetail(null);
-                          }}
-                        />
+                        <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
+                          <DeliveryCompletionPanel
+                            tripId={detail.trip_id}
+                            bookingId={detail.booking_id}
+                            crewName={detail.helper_name ?? detail.driver_name}
+                            allowVerification={false}
+                            compact
+                            onReadyChange={setReceivingReady}
+                          />
+                          <HelperBookingQrVerify
+                            bookingId={detail.booking_id}
+                            tripId={detail.trip_id}
+                            verified={Boolean(detail.booking_qr_verified)}
+                            verifiedAt={detail.booking_qr_verified_at ?? null}
+                            enabled={receivingReady || Boolean(detail.booking_qr_verified)}
+                            lockedHint="Upload the receiving document and digital signature above, then scan the Booking Completion QR to complete the booking."
+                            onVerified={async () => {
+                              setMsg("Booking Completion QR verified. The booking is now completed.");
+                              await load();
+                              setDetail(null);
+                            }}
+                          />
+                        </div>
                       ) : null}
                       {phase !== "completed" ? <EvidenceCaptureInput
                         label="Milestone photo"

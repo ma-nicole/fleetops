@@ -286,6 +286,9 @@ export default function DispatcherDashboard() {
   const [data, setData] = useState<OperationsCenterResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [addressIssuesOpen, setAddressIssuesOpen] = useState(false);
+  const [addressDismissed, setAddressDismissed] = useState(false);
+  const [alertsExpanded, setAlertsExpanded] = useState(false);
 
   const load = useCallback(async () => {
     if (isLoggedIn !== true) {
@@ -368,9 +371,9 @@ export default function DispatcherDashboard() {
 
         {loadError ? <ErrorState message={loadError} onRetry={() => void load()} compact /> : null}
 
-        {data?.address_warnings && data.address_warnings.length > 0 ? (
+        {data?.address_warnings && data.address_warnings.length > 0 && !addressDismissed ? (
           <div
-            role="alert"
+            role="status"
             style={{
               marginBottom: "1rem",
               padding: "0.85rem 1rem",
@@ -381,18 +384,87 @@ export default function DispatcherDashboard() {
               fontSize: "0.875rem",
             }}
           >
-            <strong>Address warnings ({data.address_warnings.length})</strong>
-            <p style={{ margin: "0.35rem 0 0.5rem" }}>
-              These bookings use incomplete addresses and are omitted from map routing. Other data loads normally.
-            </p>
-            <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
-              {data.address_warnings.slice(0, 8).map((w) => (
-                <li key={`${w.booking_id}-${w.trip_id ?? "q"}`}>
-                  Booking #{w.booking_id}
-                  {w.trip_id ? ` · trip #${w.trip_id}` : ""}: {w.message}
-                </li>
-              ))}
-            </ul>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div>
+                <strong style={{ fontSize: "0.95rem" }}>
+                  {data.address_warnings.length} booking
+                  {data.address_warnings.length === 1 ? "" : "s"} require address review
+                </strong>
+                <p style={{ margin: "0.35rem 0 0", lineHeight: 1.45 }}>
+                  Incomplete addresses are omitted from map routing. Other operations data still loads normally.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="quick-action-btn"
+                  aria-expanded={addressIssuesOpen}
+                  onClick={() => setAddressIssuesOpen((v) => !v)}
+                  style={{ minHeight: 36 }}
+                >
+                  {addressIssuesOpen ? "Hide issues" : "Show issues"}
+                </button>
+                <button
+                  type="button"
+                  className="quick-action-btn"
+                  onClick={() => setAddressDismissed(true)}
+                  style={{ minHeight: 36 }}
+                  title="Hide for this session only"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+            {addressIssuesOpen ? (
+              <ul style={{ margin: "0.75rem 0 0", paddingLeft: 0, listStyle: "none", display: "grid", gap: 6 }}>
+                {data.address_warnings.map((w) => (
+                  <li
+                    key={`${w.booking_id}-${w.trip_id ?? "q"}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      padding: "0.5rem 0.65rem",
+                      borderRadius: 8,
+                      background: "#fff",
+                      border: "1px solid #FDE68A",
+                      fontSize: "0.82rem",
+                    }}
+                  >
+                    <span>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          marginRight: 8,
+                          padding: "0.15rem 0.45rem",
+                          borderRadius: 999,
+                          background: "#FEF3C7",
+                          color: "#92400E",
+                          fontWeight: 800,
+                          fontSize: "0.7rem",
+                        }}
+                      >
+                        Address
+                      </span>
+                      Booking #{w.booking_id}
+                      {w.trip_id ? ` · trip #${w.trip_id}` : ""}: {w.message}
+                    </span>
+                    <Link
+                      href={`/dispatcher/job-assignments?booking=${w.booking_id}`}
+                      style={{ fontWeight: 700, color: "#B45309", textDecoration: "none", whiteSpace: "nowrap" }}
+                    >
+                      Open assignment
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ margin: "0.55rem 0 0", fontSize: "0.8rem", color: "#A16207" }}>
+                Showing summary only — expand to review each incomplete address.
+              </p>
+            )}
           </div>
         ) : null}
 
@@ -492,35 +564,75 @@ export default function DispatcherDashboard() {
               {!data?.alerts?.length ? (
                 <p style={{ margin: 0, fontSize: "0.75rem", color: C.textMuted }}>No active alerts.</p>
               ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    maxHeight: 280,
-                    overflowY: "auto",
-                  }}
-                >
-                  {data.alerts.map((a, i) => (
-                    <div
-                      key={`${a.code}-${a.trip_id ?? "x"}-${i}`}
-                      style={{
-                        padding: "0.45rem 0.5rem",
-                        borderRadius: 8,
-                        background: a.severity === "high" ? "rgba(220,38,38,0.06)" : "rgba(217,119,6,0.07)",
-                        border: `1px solid ${a.severity === "high" ? "rgba(220,38,38,0.15)" : "rgba(217,119,6,0.15)"}`,
-                        fontSize: "0.75rem",
-                        lineHeight: 1.4,
-                        color: C.text,
-                      }}
-                    >
-                      <span style={{ fontWeight: 800, fontSize: "0.625rem", color: a.severity === "high" ? C.red : C.amber }}>
-                        {(a.severity || "info").toUpperCase()}
-                      </span>
-                      <span style={{ color: C.textSubtle, fontSize: "0.625rem", marginLeft: 6 }}>{a.code}</span>
-                      <div style={{ marginTop: 3 }}>{a.message}</div>
-                    </div>
-                  ))}
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "0.8rem", fontWeight: 700, color: C.text }}>
+                      {data.alerts.length} active alert{data.alerts.length === 1 ? "" : "s"}
+                      {data.alerts.some((a) => a.severity === "high")
+                        ? ` · ${data.alerts.filter((a) => a.severity === "high").length} high`
+                        : ""}
+                    </span>
+                    {data.alerts.length > 3 ? (
+                      <button
+                        type="button"
+                        className="quick-action-btn"
+                        aria-expanded={alertsExpanded}
+                        onClick={() => setAlertsExpanded((v) => !v)}
+                        style={{ minHeight: 32, fontSize: "0.75rem" }}
+                      >
+                        {alertsExpanded ? "Show less" : "Show all"}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      maxHeight: alertsExpanded ? 420 : 220,
+                      overflowY: "auto",
+                    }}
+                  >
+                    {(alertsExpanded ? data.alerts : data.alerts.slice(0, 3)).map((a, i) => (
+                      <div
+                        key={`${a.code}-${a.trip_id ?? "x"}-${i}`}
+                        style={{
+                          padding: "0.5rem 0.6rem",
+                          borderRadius: 8,
+                          background: a.severity === "high" ? "rgba(220,38,38,0.06)" : "rgba(217,119,6,0.07)",
+                          border: `1px solid ${a.severity === "high" ? "rgba(220,38,38,0.15)" : "rgba(217,119,6,0.15)"}`,
+                          fontSize: "0.75rem",
+                          lineHeight: 1.4,
+                          color: C.text,
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              fontSize: "0.65rem",
+                              padding: "0.12rem 0.4rem",
+                              borderRadius: 999,
+                              background: a.severity === "high" ? "#FEE2E2" : "#FEF3C7",
+                              color: a.severity === "high" ? C.red : C.amber,
+                            }}
+                          >
+                            {(a.severity || "info").toUpperCase()}
+                          </span>
+                          <span style={{ color: C.textSubtle, fontSize: "0.65rem" }}>{a.code}</span>
+                        </div>
+                        <div style={{ marginTop: 4 }}>{a.message}</div>
+                        {a.trip_id ? (
+                          <Link
+                            href={`/dispatcher/job-assignments?trip=${a.trip_id}`}
+                            style={{ display: "inline-block", marginTop: 4, fontWeight: 700, color: C.amber, textDecoration: "none" }}
+                          >
+                            Review trip #{a.trip_id}
+                          </Link>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </Panel>

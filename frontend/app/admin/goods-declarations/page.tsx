@@ -18,7 +18,7 @@ import {
   isGoodsDeclarationReviewLocked,
   type GoodsDeclarationReviewStatus,
 } from "@/lib/goodsDeclarationReview";
-import { ERROR_ANALYTICS_PERMISSION, REMARKS_REQUIRED_REVISION_REJECT } from "@/lib/loadingMessages";
+import { ERROR_ANALYTICS_PERMISSION } from "@/lib/loadingMessages";
 import { useDocumentPreview } from "@/lib/useDocumentPreview";
 import type { GoodsDeclarationAdminRow } from "@/lib/workflowApi";
 import { WorkflowApi } from "@/lib/workflowApi";
@@ -150,12 +150,32 @@ export default function AdminGoodsDeclarationsPage() {
       return next;
     });
 
-    if (needsReason && !reason_code && !remarks) {
+    if (needsReason && !reason_code) {
       setActionErrorByBooking((prev) => ({
         ...prev,
-        [bookingId]: "Select a predefined reason or enter a custom remark.",
+        [bookingId]: "Select a predefined reason for this decision.",
       }));
       return;
+    }
+    if (status === "revision_requested") {
+      const allowed = new Set(catalog.revision.map((r) => r.code));
+      if (!reason_code || !allowed.has(reason_code)) {
+        setActionErrorByBooking((prev) => ({
+          ...prev,
+          [bookingId]: "Select a revision reason. Reject reasons cannot be used with Request revision.",
+        }));
+        return;
+      }
+    }
+    if (status === "rejected") {
+      const allowed = new Set(catalog.rejection.map((r) => r.code));
+      if (!reason_code || !allowed.has(reason_code)) {
+        setActionErrorByBooking((prev) => ({
+          ...prev,
+          [bookingId]: "Select a rejection reason. Revision reasons cannot be used with Reject.",
+        }));
+        return;
+      }
     }
 
     if (!window.confirm(REVIEW_CONFIRM_COPY[status])) {
@@ -273,13 +293,19 @@ export default function AdminGoodsDeclarationsPage() {
                   const storedRemarks = row.goods_declaration_review_remarks ?? "";
                   const remarks = remarksByBooking[row.booking_id] ?? "";
                   const reasonCode = reasonByBooking[row.booking_id] ?? "";
-                  const reasonOrRemarkReady = Boolean(reasonCode || remarks.trim());
+                  const revisionReasonCodes = new Set(catalog.revision.map((r) => r.code));
+                  const rejectionReasonCodes = new Set(catalog.rejection.map((r) => r.code));
+                  const isRevisionReason = Boolean(reasonCode && revisionReasonCodes.has(reasonCode));
+                  const isRejectionReason = Boolean(reasonCode && rejectionReasonCodes.has(reasonCode));
                   const actionError = actionErrorByBooking[row.booking_id];
                   const reviewLockedBySave = busyBookingId !== null;
                   const approveEnabled = canReview && !reviewLockedBySave;
                   const revisionEnabled =
-                    canReview && reasonOrRemarkReady && !reviewLockedBySave && !revisionsExhausted;
-                  const rejectEnabled = canReview && reasonOrRemarkReady && !reviewLockedBySave;
+                    canReview &&
+                    isRevisionReason &&
+                    !reviewLockedBySave &&
+                    !revisionsExhausted;
+                  const rejectEnabled = canReview && isRejectionReason && !reviewLockedBySave;
                   const historyText = (row.goods_declaration_review_remarks_history || "").trim();
                   const reviewEvents = row.review_history ?? [];
 
@@ -466,9 +492,20 @@ export default function AdminGoodsDeclarationsPage() {
                             Decision is being saved. Other actions are locked until this finishes.
                           </p>
                         ) : null}
-                        {canReview && !reasonOrRemarkReady && (
+                        {canReview && !isRevisionReason && !isRejectionReason && (
                           <p role="status" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#6B7280" }}>
-                            {REMARKS_REQUIRED_REVISION_REJECT}
+                            Select a Revision reason to enable Request revision, or a Rejection reason to enable Reject.
+                            Custom remarks alone cannot trigger either action.
+                          </p>
+                        )}
+                        {canReview && isRevisionReason && (
+                          <p role="status" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#9A3412" }}>
+                            Revision reason selected — Reject is disabled.
+                          </p>
+                        )}
+                        {canReview && isRejectionReason && (
+                          <p role="status" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#991B1B" }}>
+                            Rejection reason selected — Request revision is disabled.
                           </p>
                         )}
                         {actionError && (
@@ -495,8 +532,10 @@ export default function AdminGoodsDeclarationsPage() {
                                 revisionsExhausted
                                   ? `Maximum of ${revisionLimit} revisions already used`
                                   : revisionEnabled
-                                    ? "Request revision with reason"
-                                    : REMARKS_REQUIRED_REVISION_REJECT
+                                    ? "Request revision with selected reason"
+                                    : isRejectionReason
+                                      ? "A rejection reason is selected — choose a revision reason instead"
+                                      : "Select a revision reason first"
                               }
                               onClick={() => void submitReview(row.booking_id, "revision_requested")}
                               style={actionButtonStyle("revision", revisionEnabled)}
@@ -507,7 +546,13 @@ export default function AdminGoodsDeclarationsPage() {
                               type="button"
                               disabled={!rejectEnabled}
                               aria-disabled={!rejectEnabled}
-                              title={rejectEnabled ? "Reject with reason" : REMARKS_REQUIRED_REVISION_REJECT}
+                              title={
+                                rejectEnabled
+                                  ? "Reject with selected reason"
+                                  : isRevisionReason
+                                    ? "A revision reason is selected — choose a rejection reason instead"
+                                    : "Select a rejection reason first"
+                              }
                               onClick={() => void submitReview(row.booking_id, "rejected")}
                               style={actionButtonStyle("reject", rejectEnabled)}
                             >
