@@ -127,12 +127,31 @@ def _create_feedback(
 
     try:
         from app.services.notifications import notify_fleetops_customer_feedback
+        from app.core.config import settings as app_settings
 
         admin_emails = [
             str(u.email).strip()
             for u in db.query(User).filter(User.role == UserRole.ADMIN).all()
             if (u.email or "").strip()
         ]
+
+        status_raw = getattr(booking, "status", None) if booking else None
+        booking_status = (
+            status_raw.value if hasattr(status_raw, "value") else (str(status_raw) if status_raw else None)
+        )
+        scheduled = None
+        if booking and getattr(booking, "scheduled_date", None) is not None:
+            scheduled = str(booking.scheduled_date)
+
+        attachment_url = None
+        if attachment_path:
+            # Public path works via Netlify /uploads proxy → Railway (see netlify.toml).
+            front = (getattr(app_settings, "frontend_url", None) or "").strip().rstrip("/")
+            rel = f"/uploads/{attachment_path.lstrip('/')}"
+            attachment_url = f"{front}{rel}" if front else rel
+
+        submitted = fb.created_at.strftime("%Y-%m-%d %H:%M UTC") if fb.created_at else None
+
         notify_fleetops_customer_feedback(
             customer_email=user.email,
             customer_name=user.full_name,
@@ -141,6 +160,16 @@ def _create_feedback(
             rating=payload.rating,
             message=payload.message,
             recipient_emails=admin_emails,
+            feedback_id=int(fb.id),
+            customer_phone=getattr(user, "phone", None),
+            booking_status=booking_status,
+            pickup=getattr(booking, "pickup_location", None) if booking else None,
+            dropoff=getattr(booking, "dropoff_location", None) if booking else None,
+            scheduled_date=scheduled,
+            scheduled_slot=getattr(booking, "scheduled_time_slot", None) if booking else None,
+            estimated_cost=float(booking.estimated_cost) if booking and booking.estimated_cost is not None else None,
+            attachment_url=attachment_url,
+            submitted_at=submitted,
         )
     except Exception:
         logger.warning("Feedback inbox notification failed.", exc_info=True)
