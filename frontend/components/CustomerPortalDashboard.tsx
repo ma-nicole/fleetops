@@ -26,10 +26,6 @@ import {
   type CustomerSite,
 } from "@/lib/customerSites";
 import { WorkflowApi, type CustomerBookingHistoryRow, type CustomerBookingRow, type Payment } from "@/lib/workflowApi";
-import {
-  customerDocumentReviewStatusLabel,
-  goodsDeclarationReviewBadgeStyle,
-} from "@/lib/goodsDeclarationReview";
 import { useHashScrollWhenReady } from "@/lib/useHashScrollWhenReady";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 
@@ -69,28 +65,6 @@ const ONGOING_STATUSES = new Set([
   "accepted",
   "loading",
 ]);
-
-type DocAlert = {
-  bookingId: number;
-  status: string;
-  label: string;
-  remarks: string;
-};
-
-function collectDocAlerts(rows: Array<CustomerBookingRow | CustomerBookingHistoryRow>): DocAlert[] {
-  const out: DocAlert[] = [];
-  for (const row of rows) {
-    const status = (row.goods_declaration_review_status ?? "").trim().toLowerCase();
-    if (status !== "revision_requested" && status !== "rejected") continue;
-    out.push({
-      bookingId: row.id,
-      status,
-      label: customerDocumentReviewStatusLabel(status, row.goods_declaration_review_status_label),
-      remarks: (row.goods_declaration_review_remarks ?? "").trim(),
-    });
-  }
-  return out;
-}
 
 export default function CustomerPortalDashboard() {
   const { ready, allowed } = useRoleGuard(["customer"]);
@@ -205,10 +179,6 @@ export default function CustomerPortalDashboard() {
     [historyRows],
   );
 
-  const docAlerts = useMemo(
-    () => collectDocAlerts([...activeShipments, ...historyRows]),
-    [activeShipments, historyRows],
-  );
   // Red mark tracks unread notifications only — clears after the user views them.
   const alertBadgeCount = notificationUnread;
 
@@ -373,117 +343,6 @@ export default function CustomerPortalDashboard() {
             <div id="customer-notifications" className="scroll-section" style={{ display: "grid", gap: "0.85rem" }}>
               <CustomerNotificationsPanel onUnreadChange={setNotificationUnread} />
             </div>
-
-            {docAlerts.length > 0 ? (
-              <section
-                id="customer-action-required"
-                className="scroll-section"
-                role="region"
-                aria-label="Action required"
-                style={{
-                  border: "1px solid #FDBA74",
-                  borderRadius: 12,
-                  padding: "1rem 1.1rem",
-                  background: "linear-gradient(180deg, #FFF7ED 0%, #FFEDD5 100%)",
-                  display: "grid",
-                  gap: "0.75rem",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-                  <div>
-                    <h2 style={{ margin: 0, color: "#9A3412", fontSize: "1.05rem" }}>Action required</h2>
-                    <p style={{ margin: "0.25rem 0 0", color: "#9A3412", fontSize: "0.88rem" }}>
-                      {docAlerts.length} document review update{docAlerts.length === 1 ? "" : "s"} need your attention.
-                    </p>
-                  </div>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minWidth: 28,
-                      height: 28,
-                      padding: "0 8px",
-                      borderRadius: 999,
-                      background: "#C2410C",
-                      color: "#fff",
-                      fontWeight: 800,
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    {docAlerts.length}
-                  </span>
-                </div>
-                <div style={{ display: "grid", gap: "0.65rem" }}>
-                  {docAlerts.map((alert) => {
-                    const badge = goodsDeclarationReviewBadgeStyle(alert.status);
-                    const href =
-                      alert.status === "rejected"
-                        ? `/modules/customer/support?booking=${alert.bookingId}`
-                        : `/modules/operations/trips?booking=${alert.bookingId}`;
-                    return (
-                      <div
-                        key={`doc-alert-${alert.bookingId}-${alert.status}`}
-                        style={{
-                          display: "grid",
-                          gap: "0.45rem",
-                          padding: "0.75rem 0.85rem",
-                          borderRadius: 10,
-                          background: "#fff",
-                          border: "1px solid #FED7AA",
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                          <strong style={{ color: "#111827" }}>Booking #{alert.bookingId}</strong>
-                          <span
-                            style={{
-                              padding: "0.25rem 0.55rem",
-                              borderRadius: 999,
-                              fontSize: "0.75rem",
-                              fontWeight: 800,
-                              background: badge.bg,
-                              color: badge.color,
-                            }}
-                          >
-                            {alert.label}
-                          </span>
-                        </div>
-                        {alert.remarks ? (
-                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#374151", lineHeight: 1.45 }}>
-                            <span style={{ fontWeight: 700, color: "#6B7280" }}>Manager remarks: </span>
-                            {alert.remarks.length > 160 ? `${alert.remarks.slice(0, 160)}…` : alert.remarks}
-                          </p>
-                        ) : (
-                          <p style={{ margin: 0, fontSize: "0.85rem", color: "#6B7280" }}>
-                            {alert.status === "rejected"
-                              ? "Document review was rejected. Contact support for help."
-                              : "Revision requested. Open the booking to resubmit documents."}
-                          </p>
-                        )}
-                        <Link
-                          href={href}
-                          style={{
-                            justifySelf: "start",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            minHeight: 40,
-                            padding: "0.45rem 0.85rem",
-                            borderRadius: 8,
-                            background: alert.status === "rejected" ? "#991B1B" : "#C2410C",
-                            color: "#fff",
-                            fontWeight: 700,
-                            fontSize: "0.85rem",
-                            textDecoration: "none",
-                          }}
-                        >
-                          {alert.status === "rejected" ? "Contact support" : "Open booking"}
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
 
             <section
               id="customer-kpis"
