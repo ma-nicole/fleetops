@@ -518,9 +518,10 @@ function TripRecordsPageInner() {
                             <div style={{ marginBottom: "0.85rem", display: "grid", gap: "0.65rem" }}>
                               <CustomerBookingQrCard
                                 bookingId={b.id}
-                                payload={b.booking_qr_payload}
-                                verified={Boolean(b.booking_qr_verified)}
-                                verifiedAt={b.booking_qr_verified_at ?? null}
+                                payload={b.delivery_verification_qr_payload || b.booking_qr_payload}
+                                verificationCode={b.delivery_verification_code ?? null}
+                                verified={Boolean(b.booking_qr_verified || b.delivery_verification_used)}
+                                verifiedAt={b.booking_qr_verified_at ?? b.delivery_verification_used_at ?? null}
                                 compact
                               />
                               <ContactSupportButton bookingId={b.id} />

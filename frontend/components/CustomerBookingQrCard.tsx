@@ -5,20 +5,26 @@ import { QRCodeSVG } from "qrcode.react";
 type Props = {
   bookingId: number;
   payload?: string | null;
+  /** Prefer showing the short Delivery Verification code when available. */
+  verificationCode?: string | null;
   verified?: boolean;
   verifiedAt?: string | null;
   compact?: boolean;
 };
 
-/** Customer-facing Booking Completion QR for helper verification before booking completion. */
+/**
+ * Customer confirmation credential for helper completion.
+ * Prefers Delivery Verification payload/code (same as dashboard Delivery Verification section).
+ */
 export default function CustomerBookingQrCard({
   bookingId,
   payload,
+  verificationCode = null,
   verified = false,
   verifiedAt = null,
   compact = false,
 }: Props) {
-  if (!payload) {
+  if (!payload && !verificationCode) {
     return (
       <div
         style={{
@@ -30,7 +36,7 @@ export default function CustomerBookingQrCard({
           color: "#6B7280",
         }}
       >
-        Booking Completion QR appears after payment is verified. Keep it available for the helper at delivery.
+        Delivery Verification appears after payment is verified. Keep the code ready for the helper at delivery.
       </div>
     );
   }
@@ -48,15 +54,32 @@ export default function CustomerBookingQrCard({
       }}
     >
       <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#111827", textAlign: "center" }}>
-        Booking #{bookingId} Completion QR
+        Booking #{bookingId} Delivery Verification
       </div>
-      <QRCodeSVG value={payload} size={compact ? 128 : 168} level="M" includeMargin />
+      {payload ? <QRCodeSVG value={payload} size={compact ? 128 : 168} level="M" includeMargin /> : null}
       <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", textAlign: "center", lineHeight: 1.4 }}>
         {verified
           ? `Verified${verifiedAt ? ` · ${new Date(verifiedAt).toLocaleString()}` : ""}. Booking is completed.`
-          : "Show this to your helper at the destination to complete the booking."}
+          : "Show this QR or read the Verification Code to your helper at the destination."}
       </p>
-      {!verified ? (
+      {!verified && verificationCode ? (
+        <p
+          style={{
+            margin: 0,
+            fontSize: "1rem",
+            color: "#312E81",
+            textAlign: "center",
+            fontWeight: 800,
+            letterSpacing: "0.12em",
+            background: "#EEF2FF",
+            padding: "0.45rem 0.75rem",
+            borderRadius: 8,
+          }}
+        >
+          {verificationCode}
+        </p>
+      ) : null}
+      {!verified && !verificationCode && payload ? (
         <p
           style={{
             margin: 0,
@@ -67,7 +90,7 @@ export default function CustomerBookingQrCard({
             lineHeight: 1.35,
           }}
         >
-          Code for helper paste: {payload}
+          Helper paste: {payload}
         </p>
       ) : null}
     </div>

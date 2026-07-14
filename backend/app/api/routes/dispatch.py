@@ -73,6 +73,7 @@ from app.services.trip_cost_ledger import add_shoulder_cost_entry, build_trip_co
 from app.services.trip_crew_allowances import resolve_trip_crew_allowances
 from app.services.dispatch_route_selection import (
     generate_route_options_for_booking,
+    route_options_meta_from_serialized,
     list_booking_route_options,
     map_verification_warning_for_booking,
     resolve_dispatch_route,
@@ -90,6 +91,31 @@ from app.services.latest_location_display import latest_location_display_for_tri
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 logger = logging.getLogger(__name__)
+
+
+def _route_options_payload(
+    booking: Booking,
+    options: list[dict],
+    *,
+    map_warning: str | None = None,
+    extra: dict | None = None,
+) -> dict:
+    selected = next((o for o in options if o.get("is_selected")), None)
+    meta = route_options_meta_from_serialized(options)
+    body: dict = {
+        "booking_id": booking.id,
+        "pickup_location": booking.pickup_location,
+        "dropoff_location": booking.dropoff_location,
+        "selected_route_option_id": selected["id"] if selected else None,
+        "options": options,
+        "map_verification_warning": map_warning if map_warning is not None else map_verification_warning_for_booking(booking),
+        "alternatives_available": meta["alternatives_available"],
+        "routing_note": meta["routing_note"],
+    }
+    if extra:
+        body.update(extra)
+    return body
+
 
 OPERATIONAL_LOG_UPLOAD_DIR = uploads_subdir("operational_logs")
 OPERATIONAL_LOG_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf", ".img"}
@@ -865,15 +891,7 @@ def booking_route_options(
         raise HTTPException(status_code=404, detail="Booking not found")
     assert_dispatcher_booking_access(db, user, booking.id)
     options = list_booking_route_options(db, booking.id)
-    selected = next((o for o in options if o["is_selected"]), None)
-    return {
-        "booking_id": booking.id,
-        "pickup_location": booking.pickup_location,
-        "dropoff_location": booking.dropoff_location,
-        "selected_route_option_id": selected["id"] if selected else None,
-        "options": options,
-        "map_verification_warning": map_verification_warning_for_booking(booking),
-    }
+    return _route_options_payload(booking, options)
 
 
 @router.post("/booking/{booking_id}/route-options/generate")
@@ -886,17 +904,15 @@ def generate_booking_route_options(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     assert_dispatcher_booking_access(db, user, booking.id)
-    options, map_warning = generate_route_options_for_booking(db, booking)
+    _created, map_warning = generate_route_options_for_booking(db, booking)
     db.commit()
     options = list_booking_route_options(db, booking.id)
-    selected = next((o for o in options if o["is_selected"]), None)
-    return {
-        "booking_id": booking.id,
-        "generated": len(options),
-        "selected_route_option_id": selected["id"] if selected else None,
-        "options": options,
-        "map_verification_warning": map_warning or map_verification_warning_for_booking(booking),
-    }
+    return _route_options_payload(
+        booking,
+        options,
+        map_warning=map_warning or map_verification_warning_for_booking(booking),
+        extra={"generated": len(options)},
+    )
 
 
 @router.patch("/booking/{booking_id}/route-options/select")
@@ -917,12 +933,11 @@ def select_booking_route_option(
     notify_drivers_booking_route_updated(db, booking.id)
     db.commit()
     options = list_booking_route_options(db, booking.id)
-    return {
-        "booking_id": booking.id,
-        "selected_route_option_id": payload.route_option_id,
-        "options": options,
-        "map_verification_warning": map_verification_warning_for_booking(booking),
-    }
+    return _route_options_payload(
+        booking,
+        options,
+        extra={"selected_route_option_id": payload.route_option_id},
+    )
 
 
 @router.post("/booking/{booking_id}/route-options/manual")
@@ -948,13 +963,8 @@ def save_booking_manual_route(
     notify_drivers_booking_route_updated(db, booking.id)
     db.commit()
     options = list_booking_route_options(db, booking.id)
-    selected = next((o for o in options if o["is_selected"]), None)
-    return {
-        "booking_id": booking.id,
-        "selected_route_option_id": selected["id"] if selected else None,
-        "options": options,
-        "map_verification_warning": map_verification_warning_for_booking(booking),
-    }
+    return _route_options_payload(booking, options)
+
 
 
 @router.post("/{booking_id}/assign-batch")

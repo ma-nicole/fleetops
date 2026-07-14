@@ -7,13 +7,16 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models.entities import Booking, Route, RouteOption
-from app.schemas.predict import RouteOptimizeRequest
 from app.constants.fleet_capacity import MIN_TRIP_DURATION_HOURS
-from app.services.prescriptive.routing_astar import optimize_route
-from app.services.route_estimate import MAP_LOCATION_VERIFY_WARNING, estimate_road_distance_km_with_fallback
-from app.services.routing import optimize_route as legacy_optimize_route
 from app.core.config import settings as app_settings
+from app.models.entities import Booking, RouteOption
+from app.services.booking_pricing import pricing_with_toll_matrix
+from app.services.geocoding import geocode_coordinates
+from app.services.road_routing import RoadRouteOption, driving_route_alternatives
+from app.services.route_estimate import MAP_LOCATION_VERIFY_WARNING, estimate_road_distance_km_with_fallback
+from app.services.route_options_quote import travel_hours_for_option
+from app.services.routing import optimize_route as legacy_optimize_route
+from app.services.toll_matrix import DEFAULT_VEHICLE_CLASS
 
 
 def _parse_path_payload(path_json: str | None) -> tuple[list[str], dict[str, Any]]:
@@ -34,16 +37,8 @@ def _parse_path_payload(path_json: str | None) -> tuple[list[str], dict[str, Any
     return [], {}
 
 
-def _departure_hour_from_slot(time_slot: str | None) -> int:
-    raw = (time_slot or "08:00").strip()
-    try:
-        return int(raw.split(":")[0])
-    except (ValueError, IndexError):
-        return 8
-
-
 def _estimate_synthetic_costs(distance_km: float, cargo_weight_tons: float) -> tuple[float, float]:
-    """Lightweight estimates when the road graph has no matching nodes."""
+    """Lightweight estimates when the road graph / toll matrix is unavailable."""
     dist = max(float(distance_km or 0), 1.0)
     weight = max(float(cargo_weight_tons or 0), 0.1)
     fuel = round(dist * 0.32 * 65.0 * (1.0 + min(weight, 42.0) / 84.0), 2)
@@ -51,11 +46,104 @@ def _estimate_synthetic_costs(distance_km: float, cargo_weight_tons: float) -> t
     return fuel, toll
 
 
+def _option_is_near_duplicate(a: RoadRouteOption, b: RoadRouteOption) -> bool:
+    if abs(a.distance_km - b.distance_km) > 0.35:
+        return False
+    a_dur = a.duration_seconds or 0.0
+    b_dur = b.duration_seconds or 0.0
+    if a_dur <= 0 or b_dur <= 0:
+        return True
+    return abs(a_dur - b_dur) <= 90
+
+
+def _merge_distinct_road_options(
+    primary: list[RoadRouteOption],
+    extra: list[RoadRouteOption],
+    *,
+    max_options: int = 3,
+) -> list[RoadRouteOption]:
+    """Keep provider primary alternatives; append preference strategies only when metrics differ."""
+    kept: list[RoadRouteOption] = []
+    for opt in list(primary) + list(extra):
+        if any(_option_is_near_duplicate(opt, prev) for prev in kept):
+            continue
+        kept.append(opt)
+        if len(kept) >= max_options:
+            break
+    return kept
+
+
+def _assign_objective_tags(
+    rows: list[dict[str, Any]],
+    *,
+    alternatives_available: bool,
+) -> list[dict[str, Any]]:
+    """
+    Tag only from real metrics on the persisted set.
+    Single real option → Optimal route (no fake Fastest/Shortest trio).
+    """
+    if not rows:
+        return rows
+    if len(rows) == 1 or not alternatives_available:
+        for row in rows:
+            if row.get("source") == "manual":
+                row["objective_tags"] = ["Manual Route"]
+            elif row.get("source") == "fallback":
+                row["objective_tags"] = ["Fallback estimate"]
+            else:
+                tags = ["Optimal route"]
+                if "avoid_tolls" in str(row.get("provider") or ""):
+                    tags.append("Avoid Toll Roads")
+                row["objective_tags"] = tags
+        return rows
+
+    for row in rows:
+        row["objective_tags"] = []
+
+    def push(idx: int, label: str) -> None:
+        tags = rows[idx].setdefault("objective_tags", [])
+        if label not in tags:
+            tags.append(label)
+
+    by_hours = sorted(
+        range(len(rows)),
+        key=lambda i: float(rows[i].get("duration_hours") or 1e9),
+    )
+    if rows[by_hours[0]].get("duration_hours") is not None:
+        push(by_hours[0], "Fastest Route")
+
+    by_km = sorted(range(len(rows)), key=lambda i: float(rows[i].get("distance_km") or 1e9))
+    push(by_km[0], "Shortest Distance")
+
+    avoid_idxs = [
+        i
+        for i, r in enumerate(rows)
+        if "avoid_tolls" in str(r.get("provider") or "")
+    ]
+    if avoid_idxs:
+        for i in avoid_idxs:
+            push(i, "Avoid Toll Roads")
+    else:
+        by_toll = sorted(range(len(rows)), key=lambda i: float(rows[i].get("toll_cost") or 1e9))
+        push(by_toll[0], "Lowest Toll Cost")
+
+    by_total = sorted(range(len(rows)), key=lambda i: float(rows[i].get("total_cost") or 1e9))
+    push(by_total[0], "Balanced Route")
+
+    for row in rows:
+        if not row.get("objective_tags"):
+            row["objective_tags"] = ["Generated Route"]
+    return rows
+
+
 def serialize_route_option(row: RouteOption) -> dict[str, Any]:
     path, meta = _parse_path_payload(row.path_json)
     source = str(meta.get("source") or "").strip().lower()
     if not source:
         source = "catalog" if row.rank >= 900 else "optimized"
+    objective_tags = meta.get("objective_tags")
+    if not isinstance(objective_tags, list):
+        objective_tags = []
     return {
         "id": row.id,
         "booking_id": row.booking_id,
@@ -63,7 +151,8 @@ def serialize_route_option(row: RouteOption) -> dict[str, Any]:
         "path": path,
         "route_name": meta.get("name"),
         "notes": meta.get("notes"),
-        "duration_hours": float(meta["duration_hours"]) if meta.get("duration_hours") else None,
+        "summary": meta.get("summary"),
+        "duration_hours": float(meta["duration_hours"]) if meta.get("duration_hours") is not None else None,
         "distance_km": float(row.distance_km or 0),
         "fuel_cost": float(row.fuel_cost or 0),
         "toll_cost": float(row.toll_cost or 0),
@@ -72,6 +161,9 @@ def serialize_route_option(row: RouteOption) -> dict[str, Any]:
         "total_cost": float(row.total_cost or 0),
         "is_selected": bool(row.is_selected),
         "source": source,
+        "provider": meta.get("provider"),
+        "objective_tags": [str(t) for t in objective_tags if str(t).strip()],
+        "routing_note": meta.get("routing_note"),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -95,6 +187,34 @@ def list_booking_route_options(db: Session, booking_id: int) -> list[dict[str, A
     return [serialize_route_option(r) for r in rows]
 
 
+def route_options_meta_from_serialized(options: list[dict[str, Any]]) -> dict[str, Any]:
+    """Derive response-level honesty fields from stored option rows."""
+    road = [o for o in options if str(o.get("source") or "") == "road"]
+    fallback = [o for o in options if str(o.get("source") or "") == "fallback"]
+    alternatives_available = len(road) > 1
+    routing_note: str | None = None
+    for o in options:
+        note = o.get("routing_note")
+        if isinstance(note, str) and note.strip():
+            routing_note = note.strip()
+            break
+    if routing_note is None:
+        if fallback and not road:
+            routing_note = (
+                "Provider routing was unavailable for this origin/destination. "
+                "Showing a single estimated fallback path — not multiple real alternatives."
+            )
+        elif len(road) == 1:
+            routing_note = (
+                "Routing engine returned one optimal path for this OD. "
+                "Multiple provider alternatives were not available."
+            )
+    return {
+        "alternatives_available": alternatives_available,
+        "routing_note": routing_note,
+    }
+
+
 def get_selected_route_option(db: Session, booking_id: int) -> RouteOption | None:
     return (
         db.query(RouteOption)
@@ -104,41 +224,7 @@ def get_selected_route_option(db: Session, booking_id: int) -> RouteOption | Non
     )
 
 
-def _catalog_matches(db: Session, booking: Booking) -> list[RouteOption]:
-    pickup = (booking.pickup_location or "").strip().lower()
-    dropoff = (booking.dropoff_location or "").strip().lower()
-    if not pickup or not dropoff:
-        return []
-    rows = db.query(Route).filter(Route.is_active.is_(True)).all()
-    created: list[RouteOption] = []
-    rank = 900
-    for route in rows:
-        o = (route.origin or "").strip().lower()
-        d = (route.destination or "").strip().lower()
-        if not o or not d:
-            continue
-        if (o in pickup or pickup in o) and (d in dropoff or dropoff in d):
-            fuel, toll = _estimate_synthetic_costs(float(route.distance_km or 0), booking.cargo_weight_tons)
-            total = round(fuel + toll + float(route.base_toll or 0), 2)
-            created.append(
-                RouteOption(
-                    booking_id=booking.id,
-                    rank=rank,
-                    path_json=json.dumps([route.origin, route.destination]),
-                    distance_km=float(route.distance_km or 0),
-                    fuel_cost=fuel,
-                    toll_cost=round(float(route.base_toll or 0) + toll, 2),
-                    time_penalty=0.0,
-                    maintenance_penalty=0.0,
-                    total_cost=total,
-                    is_selected=False,
-                )
-            )
-            rank += 1
-    return created
-
-
-def _synthetic_direct_option(booking: Booking) -> RouteOption:
+def _synthetic_direct_option(booking: Booking, *, routing_note: str) -> RouteOption:
     km, _, _ = estimate_road_distance_km_with_fallback(
         booking.pickup_location,
         booking.dropoff_location,
@@ -150,10 +236,21 @@ def _synthetic_direct_option(booking: Booking) -> RouteOption:
         distance = 120.0
     path = route_fb.get("path") or [booking.pickup_location, booking.dropoff_location]
     fuel, toll = _estimate_synthetic_costs(distance, booking.cargo_weight_tons)
+    hours = max(distance / 50.0, MIN_TRIP_DURATION_HOURS)
     return RouteOption(
         booking_id=booking.id,
         rank=1,
-        path_json=json.dumps(path),
+        path_json=json.dumps(
+            {
+                "source": "fallback",
+                "name": "Fallback estimate",
+                "path": path,
+                "duration_hours": round(hours, 2),
+                "objective_tags": ["Fallback estimate"],
+                "routing_note": routing_note,
+                "provider": "fallback",
+            }
+        ),
         distance_km=round(distance, 2),
         fuel_cost=fuel,
         toll_cost=toll,
@@ -164,42 +261,167 @@ def _synthetic_direct_option(booking: Booking) -> RouteOption:
     )
 
 
+def _price_road_option(
+    db: Session,
+    booking: Booking,
+    opt: RoadRouteOption,
+) -> tuple[float, float, float, float]:
+    """Return distance_km, duration_hours, fuel_cost, toll_cost from real km/hours + toll matrix."""
+    hours = travel_hours_for_option(opt)
+    pricing, _toll_meta = pricing_with_toll_matrix(
+        db,
+        pickup_location=booking.pickup_location or "",
+        dropoff_location=booking.dropoff_location or "",
+        cargo_weight_tons=float(booking.cargo_weight_tons or 5),
+        distance_km=float(opt.distance_km),
+        settings=app_settings,
+        vehicle_class=DEFAULT_VEHICLE_CLASS,
+    )
+    fuel = round(float(pricing["diesel_cost_php"]), 2)
+    toll = round(float(pricing["toll_fees_php"]), 2)
+    return round(float(opt.distance_km), 2), round(hours, 2), fuel, toll
+
+
+def _resolve_road_options_for_dispatch(booking: Booking) -> tuple[list[RoadRouteOption], str, str | None]:
+    """
+    Same provider alternatives path as customer quotes, plus optional avoid-tolls preference.
+    Does not invent padding options.
+    """
+    pickup = (booking.pickup_location or "").strip()
+    dropoff = (booking.dropoff_location or "").strip()
+    plat, plon, _pprov = geocode_coordinates(pickup, app_settings)
+    dlat, dlon, _dprov = geocode_coordinates(dropoff, app_settings)
+    if plat is None or plon is None or dlat is None or dlon is None:
+        return [], "unavailable", "Could not geocode pickup/dropoff for provider routing."
+
+    if abs(float(plat) - float(dlat)) < 1e-7 and abs(float(plon) - float(dlon)) < 1e-7:
+        return (
+            [
+                RoadRouteOption(
+                    distance_km=0.0,
+                    duration_seconds=0.0,
+                    provider="same_location",
+                    index=0,
+                    summary=None,
+                )
+            ],
+            "same_location",
+            None,
+        )
+
+    primary, provider = driving_route_alternatives(
+        float(plat),
+        float(plon),
+        float(dlat),
+        float(dlon),
+        app_settings,
+        max_options=3,
+        want_alternatives=True,
+    )
+    if not primary or provider == "unavailable":
+        return [], "unavailable", None
+
+    avoid_opts, _avoid_provider = driving_route_alternatives(
+        float(plat),
+        float(plon),
+        float(dlat),
+        float(dlon),
+        app_settings,
+        max_options=1,
+        want_alternatives=False,
+        avoid_tolls=True,
+    )
+    merged = _merge_distinct_road_options(primary, avoid_opts, max_options=3)
+    return merged, provider, None
+
+
 def generate_route_options_for_booking(db: Session, booking: Booking) -> tuple[list[RouteOption], str | None]:
-    """Build route candidates for dispatcher review. Does not affect assignment until selected."""
+    """
+    Build route candidates for dispatcher review from real road-provider alternatives
+    (same engines as customer quotes). Does not invent synthetic triples for the panel.
+    """
     db.query(RouteOption).filter(RouteOption.booking_id == booking.id).delete()
 
     map_warning: str | None = None
     options: list[RouteOption] = []
-    try:
-        req = RouteOptimizeRequest(
-            origin=(booking.pickup_location or "").strip(),
-            destination=(booking.dropoff_location or "").strip(),
-            weight="cost",
-            cargo_weight_tons=float(booking.cargo_weight_tons or 5),
-            departure_hour=_departure_hour_from_slot(booking.scheduled_time_slot),
-        )
-        response = optimize_route(req, db)
-        if response.candidates:
-            for cand in response.candidates:
-                options.append(
-                    RouteOption(
-                        booking_id=booking.id,
-                        rank=cand.rank,
-                        path_json=json.dumps(cand.path),
-                        distance_km=cand.distance_km,
-                        fuel_cost=cand.fuel_cost,
-                        toll_cost=cand.toll_cost,
-                        time_penalty=cand.time_penalty,
-                        maintenance_penalty=cand.maintenance_penalty,
-                        total_cost=cand.total_cost,
-                        is_selected=cand.rank == response.selected_rank,
-                    )
-                )
-    except Exception:
-        options = []
+    road_opts, provider, geo_note = _resolve_road_options_for_dispatch(booking)
 
-    if not options:
-        options.append(_synthetic_direct_option(booking))
+    if road_opts and provider != "unavailable":
+        alternatives_available = len(road_opts) > 1
+        routing_note = (
+            None
+            if alternatives_available
+            else (
+                "Routing engine returned one optimal path for this OD. "
+                "Multiple provider alternatives were not available."
+            )
+        )
+        priced_meta: list[dict[str, Any]] = []
+        for rank, opt in enumerate(road_opts, start=1):
+            distance, hours, fuel, toll = _price_road_option(db, booking, opt)
+            summary = (opt.summary or "").strip() or None
+            if not alternatives_available:
+                name = "Optimal route"
+            elif rank == 1:
+                name = f"Recommended{f' ({summary})' if summary else ''}"
+            else:
+                name = f"Alternative {rank - 1}{f' ({summary})' if summary else ''}"
+            priced_meta.append(
+                {
+                    "rank": rank,
+                    "name": name,
+                    "summary": summary,
+                    "duration_hours": hours,
+                    "distance_km": distance,
+                    "fuel_cost": fuel,
+                    "toll_cost": toll,
+                    "total_cost": round(fuel + toll, 2),
+                    "provider": opt.provider,
+                    "source": "road",
+                    "path": [
+                        (booking.pickup_location or "").strip(),
+                        (booking.dropoff_location or "").strip(),
+                    ],
+                }
+            )
+        priced_meta = _assign_objective_tags(priced_meta, alternatives_available=alternatives_available)
+        for meta in priced_meta:
+            if routing_note:
+                meta["routing_note"] = routing_note
+            options.append(
+                RouteOption(
+                    booking_id=booking.id,
+                    rank=int(meta["rank"]),
+                    path_json=json.dumps(
+                        {
+                            "source": "road",
+                            "name": meta["name"],
+                            "path": meta["path"],
+                            "summary": meta.get("summary"),
+                            "duration_hours": meta["duration_hours"],
+                            "provider": meta.get("provider"),
+                            "objective_tags": meta.get("objective_tags") or [],
+                            "routing_note": meta.get("routing_note"),
+                        }
+                    ),
+                    distance_km=float(meta["distance_km"]),
+                    fuel_cost=float(meta["fuel_cost"]),
+                    toll_cost=float(meta["toll_cost"]),
+                    time_penalty=0.0,
+                    maintenance_penalty=0.0,
+                    total_cost=float(meta["total_cost"]),
+                    is_selected=int(meta["rank"]) == 1,
+                )
+            )
+    else:
+        # Last-resort single fallback only — never pad with A*/catalog fakes.
+        note = (
+            "Provider routing was unavailable for this origin/destination. "
+            "Showing a single estimated fallback path — not multiple real alternatives."
+        )
+        if geo_note:
+            note = f"{geo_note} {note}"
+        options.append(_synthetic_direct_option(booking, routing_note=note))
         _, verified, warning = estimate_road_distance_km_with_fallback(
             booking.pickup_location,
             booking.dropoff_location,
@@ -207,8 +429,9 @@ def generate_route_options_for_booking(db: Session, booking: Booking) -> tuple[l
         )
         if not verified:
             map_warning = warning or MAP_LOCATION_VERIFY_WARNING
+        elif geo_note:
+            map_warning = geo_note
 
-    options.extend(_catalog_matches(db, booking))
     if options and not any(o.is_selected for o in options):
         options[0].is_selected = True
 
@@ -241,6 +464,8 @@ def save_manual_route_option(
         "path": [(booking.pickup_location or "").strip(), (booking.dropoff_location or "").strip()],
         "notes": (notes or "").strip(),
         "duration_hours": round(float(duration_hours), 2),
+        "objective_tags": ["Manual Route"],
+        "routing_note": "Operator-entered route override (not a provider alternative).",
     }
     option = RouteOption(
         booking_id=booking.id,
@@ -288,6 +513,7 @@ def resolve_dispatch_route(db: Session, booking: Booking) -> dict[str, Any]:
         duration = float(meta.get("duration_hours") or 0)
         if duration <= 0:
             duration = max(distance / 50.0, MIN_TRIP_DURATION_HOURS)
+        source = str(meta.get("source") or "")
         return {
             "path": path,
             "distance_km": distance,
@@ -295,7 +521,7 @@ def resolve_dispatch_route(db: Session, booking: Booking) -> dict[str, Any]:
             "toll_cost": float(selected.toll_cost or 45.0),
             "duration_hours": duration,
             "selected_route_option_id": selected.id,
-            "map_verified": str(meta.get("source") or "") != "manual",
+            "map_verified": source not in ("manual", "fallback"),
         }
 
     km, verified, _ = estimate_road_distance_km_with_fallback(

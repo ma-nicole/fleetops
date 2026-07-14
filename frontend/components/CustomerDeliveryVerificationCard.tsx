@@ -65,7 +65,8 @@ export default function CustomerDeliveryVerificationCard({
       <div style={{ minWidth: 0 }}>
         <strong style={{ color: "#111827" }}>Present this only at the destination</strong>
         <p style={{ color: "#475569", fontSize: "0.86rem", lineHeight: 1.5, margin: "0.4rem 0 0.8rem" }}>
-          Ask the assigned helper to scan this QR after your shipment arrives. If scanning is unavailable, provide the backup code.
+          Give the Verification Code to your helper, or let them scan this QR after the shipment arrives. Either method
+          completes the booking.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <code style={{ padding: "0.55rem 0.7rem", borderRadius: 8, background: "#EEF2FF", color: "#312E81", fontSize: "1.1rem", fontWeight: 800, letterSpacing: "0.12em" }}>

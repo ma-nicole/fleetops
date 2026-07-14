@@ -5,6 +5,7 @@ export type DispatchRouteOption = {
   path: string[];
   route_name?: string | null;
   notes?: string | null;
+  summary?: string | null;
   duration_hours?: number | null;
   distance_km: number;
   fuel_cost: number;
@@ -14,6 +15,9 @@ export type DispatchRouteOption = {
   total_cost: number;
   is_selected: boolean;
   source: string;
+  provider?: string | null;
+  objective_tags?: string[];
+  routing_note?: string | null;
   created_at: string | null;
 };
 
@@ -32,4 +36,6 @@ export type DispatchRouteOptionsResponse = {
   selected_route_option_id: number | null;
   options: DispatchRouteOption[];
   map_verification_warning?: string | null;
+  alternatives_available?: boolean;
+  routing_note?: string | null;
 };

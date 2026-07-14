@@ -10,7 +10,10 @@ Precedence (when enabled and keys set):
 Coordinates: latitude / longitude (EPSG:4326). OSRM URLs use lon,lat order.
 
 ``driving_route_distance_km`` remains the single-route API used by existing callers.
-``driving_route_alternatives`` extends the same providers to return multiple options when available.
+``driving_route_alternatives`` extends the same providers to return multiple options when available
+(Google ``alternatives=true``, ORS ``alternative_routes``, OSRM ``alternatives=2``).
+Pass ``avoid_tolls=True`` for a real preference-strategy call (Google ``avoid=tolls`` / ORS tollways).
+Do not invent padding options when the provider returns only one path.
 """
 
 from __future__ import annotations
@@ -88,6 +91,7 @@ def _google_directions_options(
     api_key: str,
     *,
     alternatives: bool,
+    avoid_tolls: bool = False,
 ) -> list[RoadRouteOption]:
     """Google Maps Platform Directions API — one or more driving routes."""
     key = api_key.strip()
@@ -95,18 +99,22 @@ def _google_directions_options(
         return []
     origin = f"{lat1},{lon1}"
     dest = f"{lat2},{lon2}"
+    params: dict[str, str] = {
+        "origin": origin,
+        "destination": dest,
+        "mode": "driving",
+        "region": "ph",
+        # Prefer a single primary path when avoiding tolls (strategy call).
+        "alternatives": "true" if alternatives and not avoid_tolls else "false",
+        "key": key,
+    }
+    if avoid_tolls:
+        params["avoid"] = "tolls"
     try:
         with httpx.Client(timeout=25.0) as client:
             r = client.get(
                 "https://maps.googleapis.com/maps/api/directions/json",
-                params={
-                    "origin": origin,
-                    "destination": dest,
-                    "mode": "driving",
-                    "region": "ph",
-                    "alternatives": "true" if alternatives else "false",
-                    "key": key,
-                },
+                params=params,
             )
             r.raise_for_status()
             data: dict[str, Any] = r.json()
@@ -125,6 +133,7 @@ def _google_directions_options(
         return []
     routes = data.get("routes") or []
     out: list[RoadRouteOption] = []
+    provider = "google_directions_avoid_tolls" if avoid_tolls else "google_directions"
     for idx, route in enumerate(routes):
         if not isinstance(route, dict):
             continue
@@ -146,7 +155,7 @@ def _google_directions_options(
             RoadRouteOption(
                 distance_km=round(total_m / 1000.0, 2),
                 duration_seconds=round(total_s, 1) if total_s > 0 else None,
-                provider="google_directions",
+                provider=provider,
                 index=idx,
                 summary=str(summary).strip() if summary else None,
             )
@@ -163,13 +172,17 @@ def _ors_route_options(
     profile: str,
     *,
     alternatives: bool,
+    avoid_tolls: bool = False,
 ) -> list[RoadRouteOption]:
     key = api_key.strip()
     if not key:
         return []
     url = f"https://api.openrouteservice.org/v2/directions/{profile}"
     body: dict[str, Any] = {"coordinates": [[lon1, lat1], [lon2, lat2]]}
-    if alternatives:
+    if avoid_tolls:
+        # ORS Directions v2 — avoid tollways when the profile/key supports it.
+        body["options"] = {"avoid_features": ["tollways"]}
+    elif alternatives:
         body["alternative_routes"] = {
             "target_count": 2,
             "share_factor": 0.6,
@@ -186,11 +199,18 @@ def _ors_route_options(
                     "Content-Type": "application/json",
                 },
             )
-            if r.status_code >= 400 and alternatives:
-                # Some profiles/keys reject alternative_routes — retry primary only.
-                logger.warning("OpenRouteService alternatives HTTP %s — retrying primary", r.status_code)
+            if r.status_code >= 400 and (alternatives or avoid_tolls):
+                # Some profiles/keys reject alternative_routes / avoid_features — retry primary only.
+                logger.warning(
+                    "OpenRouteService HTTP %s (alts=%s avoid_tolls=%s) — retrying primary",
+                    r.status_code,
+                    alternatives,
+                    avoid_tolls,
+                )
+                if avoid_tolls:
+                    return []
                 return _ors_route_options(
-                    lat1, lon1, lat2, lon2, api_key, profile, alternatives=False
+                    lat1, lon1, lat2, lon2, api_key, profile, alternatives=False, avoid_tolls=False
                 )
             if r.status_code >= 400:
                 logger.warning("OpenRouteService HTTP %s: %s", r.status_code, r.text[:200])
@@ -200,7 +220,8 @@ def _ors_route_options(
         logger.warning("OpenRouteService request failed: %s", e)
         return []
 
-    provider = "openrouteservice_hgv" if "hgv" in profile else "openrouteservice_car"
+    base_provider = "openrouteservice_hgv" if "hgv" in profile else "openrouteservice_car"
+    provider = f"{base_provider}_avoid_tolls" if avoid_tolls else base_provider
     out: list[RoadRouteOption] = []
 
     features = data.get("features") if isinstance(data, dict) else None
@@ -322,34 +343,45 @@ def driving_route_alternatives(
     *,
     max_options: int = _MAX_ROUTE_OPTIONS,
     want_alternatives: bool = True,
+    avoid_tolls: bool = False,
 ) -> tuple[list[RoadRouteOption], str]:
     """
     Returns (route options, provider_tag). Prefer the same engine precedence as single-route distance.
-    Provider tag matches the engine that produced the options (or unavailable).
+
+    When ``avoid_tolls`` is True, request a single preference-strategy path (Google avoid=tolls /
+    ORS avoid tollways). Do not invent padding options.
     """
     limit = max(1, min(int(max_options or _MAX_ROUTE_OPTIONS), _MAX_ROUTE_OPTIONS))
-    alt = bool(want_alternatives) and limit > 1
+    if avoid_tolls:
+        limit = 1
+    alt = bool(want_alternatives) and limit > 1 and not avoid_tolls
 
     if getattr(settings, "use_google_directions_for_routing", True):
         gkey = effective_google_directions_key(settings)
         if gkey:
-            opts = _google_directions_options(lat1, lon1, lat2, lon2, gkey, alternatives=alt)
+            opts = _google_directions_options(
+                lat1, lon1, lat2, lon2, gkey, alternatives=alt, avoid_tolls=avoid_tolls
+            )
             if opts:
-                return opts[:limit], "google_directions"
+                return opts[:limit], opts[0].provider
 
     key = (getattr(settings, "openrouteservice_api_key", None) or "").strip()
     if key:
-        if getattr(settings, "use_truck_route_profile", True):
-            opts = _ors_route_options(lat1, lon1, lat2, lon2, key, "driving-hgv", alternatives=alt)
+        profiles = (
+            ["driving-hgv", "driving-car"]
+            if getattr(settings, "use_truck_route_profile", True)
+            else ["driving-car"]
+        )
+        for profile in profiles:
+            opts = _ors_route_options(
+                lat1, lon1, lat2, lon2, key, profile, alternatives=alt, avoid_tolls=avoid_tolls
+            )
             if opts:
-                return opts[:limit], "openrouteservice_hgv"
-            opts = _ors_route_options(lat1, lon1, lat2, lon2, key, "driving-car", alternatives=alt)
-            if opts:
-                return opts[:limit], "openrouteservice_car"
-        else:
-            opts = _ors_route_options(lat1, lon1, lat2, lon2, key, "driving-car", alternatives=alt)
-            if opts:
-                return opts[:limit], "openrouteservice_car"
+                return opts[:limit], opts[0].provider
+
+    if avoid_tolls:
+        # OSRM public demo has no reliable toll-avoid preference.
+        return [], "unavailable"
 
     if not getattr(settings, "use_osrm_driving_distance", True):
         return [], "unavailable"

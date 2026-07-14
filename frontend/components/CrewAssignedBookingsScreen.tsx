@@ -364,7 +364,7 @@ export default function CrewAssignedBookingsScreen({
       return;
     }
     if (phase === "completed") {
-      setMsg("Use Booking Completion QR verification after Arrived at Destination and delivery proof.");
+      setMsg("Use customer Delivery Verification (code or QR) after Arrived at Destination and delivery proof.");
       return;
     }
     if (PHOTO_REQUIRED.has(phase) && !photo) {
@@ -504,7 +504,7 @@ export default function CrewAssignedBookingsScreen({
         </li>
         <li>
           Before <em>completed</em>: upload receiving document, capture recipient digital signature, then scan the
-          customer&apos;s Booking Completion QR (or enter the code).
+          customer&apos;s Verification Code or Delivery QR.
         </li>
       </ul>
     </div>
@@ -1424,9 +1424,9 @@ export default function CrewAssignedBookingsScreen({
                             verified={Boolean(detail.booking_qr_verified)}
                             verifiedAt={detail.booking_qr_verified_at ?? null}
                             enabled={receivingReady || Boolean(detail.booking_qr_verified)}
-                            lockedHint="Upload the receiving document and digital signature above, then scan the Booking Completion QR to complete the booking."
+                            lockedHint="Upload the receiving document and digital signature above, then enter the customer's Verification Code (or scan their Delivery QR) to complete the booking."
                             onVerified={async () => {
-                              setMsg("Booking Completion QR verified. The booking is now completed.");
+                              setMsg("Delivery verification succeeded. The booking is now completed.");
                               await load();
                               setDetail(null);
                             }}

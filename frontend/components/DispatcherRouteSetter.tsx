@@ -8,17 +8,39 @@ const MAP_VERIFY_WARNING =
   "Map location could not be verified. You may continue using manual route details.";
 
 type RouteOpt = Awaited<ReturnType<typeof DispatchApi.getBookingRouteOptions>>["options"][number];
+type RouteOptionsData = Awaited<ReturnType<typeof DispatchApi.getBookingRouteOptions>>;
 
-function objectiveLabelsForOptions(options: RouteOpt[]): Map<number, string[]> {
+function objectiveLabelsForOptions(
+  options: RouteOpt[],
+  alternativesAvailable: boolean,
+): Map<number, string[]> {
   const labels = new Map<number, string[]>();
   if (!options.length) return labels;
-  for (const o of options) labels.set(o.id, []);
 
+  // Prefer server tags derived from real provider metrics.
+  const anyServerTags = options.some((o) => (o.objective_tags?.length ?? 0) > 0);
+  if (anyServerTags) {
+    for (const o of options) {
+      labels.set(o.id, [...(o.objective_tags ?? [])]);
+    }
+    return labels;
+  }
+
+  for (const o of options) labels.set(o.id, []);
   const push = (id: number, label: string) => {
     const cur = labels.get(id) ?? [];
     if (!cur.includes(label)) cur.push(label);
     labels.set(id, cur);
   };
+
+  if (options.length === 1 || !alternativesAvailable) {
+    for (const o of options) {
+      if (o.source === "manual") push(o.id, "Manual Route");
+      else if (o.source === "fallback") push(o.id, "Fallback estimate");
+      else push(o.id, "Optimal route");
+    }
+    return labels;
+  }
 
   const byHours = [...options].sort(
     (a, b) => (a.duration_hours ?? Number.POSITIVE_INFINITY) - (b.duration_hours ?? Number.POSITIVE_INFINITY),
@@ -55,6 +77,8 @@ export default function DispatcherRouteSetter({
   const [options, setOptions] = useState<RouteOpt[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mapWarning, setMapWarning] = useState<string | null>(null);
+  const [routingNote, setRoutingNote] = useState<string | null>(null);
+  const [alternativesAvailable, setAlternativesAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,12 +92,17 @@ export default function DispatcherRouteSetter({
     notes: "",
   });
 
-  const objectiveById = useMemo(() => objectiveLabelsForOptions(options), [options]);
+  const objectiveById = useMemo(
+    () => objectiveLabelsForOptions(options, alternativesAvailable),
+    [options, alternativesAvailable],
+  );
 
-  const applyResponse = (data: Awaited<ReturnType<typeof DispatchApi.getBookingRouteOptions>>) => {
+  const applyResponse = (data: RouteOptionsData & { generated?: number }) => {
     setOptions(data.options);
     setSelectedId(data.selected_route_option_id);
     setMapWarning(data.map_verification_warning ?? null);
+    setRoutingNote(data.routing_note ?? null);
+    setAlternativesAvailable(Boolean(data.alternatives_available));
   };
 
   const load = useCallback(async () => {
@@ -87,6 +116,8 @@ export default function DispatcherRouteSetter({
       setOptions([]);
       setSelectedId(null);
       setMapWarning(null);
+      setRoutingNote(null);
+      setAlternativesAvailable(false);
       setError(e instanceof Error ? e.message : "Could not load route options.");
     } finally {
       setLoading(false);
@@ -104,7 +135,12 @@ export default function DispatcherRouteSetter({
     try {
       const data = await DispatchApi.generateBookingRouteOptions(bookingId);
       applyResponse(data);
-      setOkMsg(`Generated ${data.generated} route option(s).`);
+      const n = data.generated ?? data.options.length;
+      if (n === 1 && !data.alternatives_available) {
+        setOkMsg("Generated 1 optimal route (provider did not return multiple alternatives).");
+      } else {
+        setOkMsg(`Generated ${n} provider route option(s).`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate routes.");
     } finally {
@@ -172,6 +208,14 @@ export default function DispatcherRouteSetter({
     }
   };
 
+  const shownTags = useMemo(() => {
+    const tags = new Set<string>();
+    for (const list of objectiveById.values()) {
+      for (const t of list) tags.add(t);
+    }
+    return [...tags];
+  }, [objectiveById]);
+
   return (
     <div
       style={{
@@ -187,8 +231,8 @@ export default function DispatcherRouteSetter({
         <div>
           <strong style={{ color: "#1E3A8A" }}>Route setter</strong>
           <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#4B5563", lineHeight: 1.45 }}>
-            Compare generated routes (fastest, shortest, lowest toll, balanced) or enter manual details. Assignment uses
-            the saved route when available.
+            Provider-backed driving routes for this pickup/dropoff (same engines as customer quotes). Strategy tags only
+            appear when multiple real options differ. Assignment uses the saved route when available.
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -267,6 +311,24 @@ export default function DispatcherRouteSetter({
           }}
         >
           {mapWarning === MAP_VERIFY_WARNING ? mapWarning : `${MAP_VERIFY_WARNING} ${mapWarning}`}
+        </p>
+      )}
+
+      {routingNote && (
+        <p
+          role="status"
+          style={{
+            margin: 0,
+            padding: "8px 10px",
+            borderRadius: 8,
+            background: "#EFF6FF",
+            border: "1px solid #BFDBFE",
+            color: "#1E3A8A",
+            fontSize: "0.85rem",
+            lineHeight: 1.45,
+          }}
+        >
+          {routingNote}
         </p>
       )}
 
@@ -385,27 +447,30 @@ export default function DispatcherRouteSetter({
             }}
             aria-label="Route objective legend"
           >
-            {[
-              "Fastest Route",
-              "Shortest Distance",
-              "Lowest Toll Cost",
-              "Avoid Toll Roads",
-              "Balanced Route",
-              "Avoid Heavy Traffic (coming soon)",
-            ].map((label) => (
+            {shownTags.map((label) => (
               <span
                 key={label}
                 style={{
                   padding: "0.2rem 0.5rem",
                   borderRadius: 999,
                   border: "1px dashed #CBD5E1",
-                  background: label.includes("coming soon") ? "#F8FAFC" : "#fff",
-                  opacity: label.includes("coming soon") ? 0.7 : 1,
+                  background: "#fff",
                 }}
               >
                 {label}
               </span>
             ))}
+            <span
+              style={{
+                padding: "0.2rem 0.5rem",
+                borderRadius: 999,
+                border: "1px dashed #CBD5E1",
+                background: "#F8FAFC",
+                opacity: 0.7,
+              }}
+            >
+              Avoid Heavy Traffic (coming soon)
+            </span>
           </div>
           {options.map((opt) => {
             const objectives = objectiveById.get(opt.id) ?? [];
@@ -478,6 +543,20 @@ export default function DispatcherRouteSetter({
                           Manual
                         </span>
                       )}
+                      {opt.source === "fallback" && (
+                        <span
+                          style={{
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            color: "#9A3412",
+                            background: "#FFEDD5",
+                            padding: "0.1rem 0.45rem",
+                            borderRadius: 999,
+                          }}
+                        >
+                          Fallback
+                        </span>
+                      )}
                     </div>
                     <div
                       style={{
@@ -509,7 +588,12 @@ export default function DispatcherRouteSetter({
                       </div>
                     </div>
                     <span style={{ fontSize: "0.8rem", color: "#4B5563", lineHeight: 1.4 }}>
-                      <strong>Summary:</strong> {opt.path.join(" → ")}
+                      <strong>Summary:</strong>{" "}
+                      {opt.summary?.trim()
+                        ? opt.summary
+                        : opt.path.length
+                          ? opt.path.join(" → ")
+                          : "—"}
                     </span>
                     {opt.notes ? (
                       <span style={{ fontSize: "0.78rem", color: "#6B7280" }}>Notes: {opt.notes}</span>

@@ -501,7 +501,8 @@ export default function CustomerPortalDashboard() {
               <div>
                 <h2 style={{ margin: 0 }}>Delivery Verification</h2>
                 <p style={{ margin: "0.35rem 0 0", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-                  These one-time credentials appear after payment verification and remain available until delivery is confirmed.
+                  Show this QR or read the Verification Code to your helper at the destination to complete the booking.
+                  This is the only credential they need.
                 </p>
               </div>
               {activeShow.some((order) => order.delivery_verification_active) ? (
@@ -601,9 +602,10 @@ export default function CustomerPortalDashboard() {
                               <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
                               <CustomerBookingQrCard
                                 bookingId={order.id}
-                                payload={order.booking_qr_payload}
-                                verified={Boolean(order.booking_qr_verified)}
-                                verifiedAt={order.booking_qr_verified_at ?? null}
+                                payload={order.delivery_verification_qr_payload || order.booking_qr_payload}
+                                verificationCode={order.delivery_verification_code ?? null}
+                                verified={Boolean(order.booking_qr_verified || order.delivery_verification_used)}
+                                verifiedAt={order.booking_qr_verified_at ?? order.delivery_verification_used_at ?? null}
                                 compact
                               />
                               <div style={{ marginTop: "0.25rem" }}>
