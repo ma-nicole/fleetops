@@ -183,16 +183,7 @@ export default function XenditPaymentCard({
               <p className="xendit-payment-card__qr-fallback">
                 Use Pay Now to open the secure Xendit checkout page for {formatPaymentMethodLabel(methodKey)}.
               </p>
-            ) : (
-              <p className="xendit-payment-card__qr-fallback">
-                QR code unavailable.
-                {onRetry ? (
-                  <button type="button" className="xendit-payment-card__link-btn" onClick={onRetry}>
-                    Refresh payment status
-                  </button>
-                ) : null}
-              </p>
-            )}
+            ) : null}
           </div>
 
           <div className="xendit-payment-card__actions">
