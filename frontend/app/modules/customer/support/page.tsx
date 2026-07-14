@@ -16,15 +16,25 @@ const CATEGORIES: Array<{ value: string; label: string }> = [
   { value: "general", label: "General feedback" },
 ];
 
+/** 5 = most urgent. Stored as feedback.rating (1–5) for API compatibility. */
+const SEVERITY_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 5, label: "Critical — blocking / safety" },
+  { value: 4, label: "High — urgent issue" },
+  { value: 3, label: "Medium — needs attention soon" },
+  { value: 2, label: "Low — minor inconvenience" },
+  { value: 1, label: "Info — question or suggestion" },
+];
+
 function CustomerSupportForm() {
   useRoleGuard(["customer"]);
   const searchParams = useSearchParams();
   const formId = useId();
   const errorRef = useRef<HTMLDivElement | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement | null>(null);
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingKey, setBookingKey] = useState("");
-  const [rating, setRating] = useState(5);
+  const [severity, setSeverity] = useState(3);
   const [category, setCategory] = useState("support");
   const [message, setMessage] = useState("");
   const [screenshot, setScreenshot] = useState<File | null>(null);
@@ -32,6 +42,18 @@ function CustomerSupportForm() {
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ booking?: string; message?: string; screenshot?: string }>({});
+
+  const resetForm = () => {
+    setBookingKey("");
+    setSeverity(3);
+    setCategory("support");
+    setMessage("");
+    setScreenshot(null);
+    setFieldErrors({});
+    if (screenshotInputRef.current) {
+      screenshotInputRef.current.value = "";
+    }
+  };
 
   useEffect(() => {
     WorkflowApi.listBookings()
@@ -76,7 +98,7 @@ function CustomerSupportForm() {
     try {
       await WorkflowApi.submitFeedback({
         booking_id,
-        rating,
+        rating: severity,
         category,
         message: message.trim() || undefined,
         screenshot,
@@ -86,8 +108,7 @@ function CustomerSupportForm() {
           ? `Support request for Booking #${booking_id} was submitted.`
           : "Thanks — your feedback has been saved.",
       );
-      setMessage("");
-      setScreenshot(null);
+      resetForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not submit feedback");
     } finally {
@@ -168,19 +189,23 @@ function CustomerSupportForm() {
             </label>
 
             <label style={labelStyle}>
-              <span style={{ fontWeight: 600 }}>Rating</span>
+              <span style={{ fontWeight: 600 }}>Severity</span>
               <select
                 className="input"
                 style={inputTouch}
-                value={rating}
-                onChange={(e) => setRating(Number(e.target.value))}
+                value={severity}
+                onChange={(e) => setSeverity(Number(e.target.value))}
+                aria-describedby={`${formId}-severity-hint`}
               >
-                {[5, 4, 3, 2, 1].map((n) => (
-                  <option key={n} value={n}>
-                    {n} {n === 5 ? "(excellent)" : n === 1 ? "(poor)" : ""}
+                {SEVERITY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
+              <span id={`${formId}-severity-hint`} style={{ fontSize: "0.8rem", color: "#6B7280" }}>
+                Choose how urgent this situation is for operations.
+              </span>
             </label>
 
             <label style={labelStyle}>
@@ -210,6 +235,7 @@ function CustomerSupportForm() {
             <label style={labelStyle}>
               <span style={{ fontWeight: 600 }}>Screenshot (optional)</span>
               <input
+                ref={screenshotInputRef}
                 className="input"
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"

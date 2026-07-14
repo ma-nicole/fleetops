@@ -209,7 +209,8 @@ export default function CustomerPortalDashboard() {
     () => collectDocAlerts([...activeShipments, ...historyRows]),
     [activeShipments, historyRows],
   );
-  const alertBadgeCount = docAlerts.length + notificationUnread;
+  // Red mark tracks unread notifications only — clears after the user views them.
+  const alertBadgeCount = notificationUnread;
 
   const bookingBuckets = useMemo(() => {
     const pendingPayments = activeShipments.filter((b) => PENDING_PAYMENT_STATUSES.has(b.display_status));

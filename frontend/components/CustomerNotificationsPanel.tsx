@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { WorkflowApi, type CustomerNotificationRow } from "@/lib/workflowApi";
 
 function formatWhen(iso: string | null | undefined): string {
@@ -41,6 +41,9 @@ export default function CustomerNotificationsPanel({
   const [expanded, setExpanded] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const viewedClearingRef = useRef(false);
+  const unreadCountRef = useRef(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -48,6 +51,7 @@ export default function CustomerNotificationsPanel({
       const r = await WorkflowApi.customerNotifications({ limit: 20 });
       setRows(r.notifications);
       setUnreadCount(r.unread_count);
+      unreadCountRef.current = r.unread_count;
       onUnreadChange?.(r.unread_count);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load notifications");
@@ -73,7 +77,9 @@ export default function CustomerNotificationsPanel({
     }
   };
 
-  const markAllRead = async () => {
+  const markAllRead = useCallback(async () => {
+    if (unreadCountRef.current <= 0 || viewedClearingRef.current) return;
+    viewedClearingRef.current = true;
     setBusy(true);
     try {
       await WorkflowApi.customerMarkAllNotificationsRead();
@@ -83,8 +89,37 @@ export default function CustomerNotificationsPanel({
       setError(e instanceof Error ? e.message : "Could not mark all read");
     } finally {
       setBusy(false);
+      viewedClearingRef.current = false;
     }
-  };
+  }, [load, onRefresh]);
+
+  // Clear the red unread badge once the user has viewed the notifications panel.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.35);
+        if (visible && expanded && unreadCountRef.current > 0) {
+          void markAllRead();
+        }
+      },
+      { threshold: [0.35] },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded, markAllRead]);
+
+  useEffect(() => {
+    if (expanded && unreadCount > 0) {
+      const el = rootRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const inView = rect.top < window.innerHeight * 0.85 && rect.bottom > 0;
+      if (inView) void markAllRead();
+    }
+  }, [expanded, unreadCount, markAllRead]);
 
   const dismiss = async (id: number) => {
     setBusy(true);
@@ -104,7 +139,12 @@ export default function CustomerNotificationsPanel({
   }
 
   return (
-    <article style={card} className="customer-notifications-panel" aria-label="Customer notifications">
+    <article
+      ref={rootRef}
+      style={card}
+      className="customer-notifications-panel"
+      aria-label="Customer notifications"
+    >
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.65rem", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", flexWrap: "wrap" }}>
           <div>

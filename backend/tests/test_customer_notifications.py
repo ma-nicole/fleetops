@@ -75,6 +75,25 @@ def test_dismiss_hides_notification(db, test_users):
     assert db.query(CustomerNotification).filter_by(id=nid).first().dismissed_at is not None
 
 
+def test_support_clears_document_unread_and_is_already_read(db, test_users):
+    customer = test_users["customer"]
+    booking = _booking(db, customer)
+    notify_customer_document_review(db, booking, status="rejected", remarks="Prohibited cargo")
+    db.flush()
+    assert count_unread_customer_notifications(db, customer.id) == 1
+
+    conf = notify_customer_support_received(
+        db, customer_id=customer.id, booking_id=booking.id, category="support"
+    )
+    db.flush()
+    assert conf.read_at is not None
+    assert count_unread_customer_notifications(db, customer.id) == 0
+    kinds = {n["kind"] for n in list_customer_notifications(db, customer.id)}
+    assert "document_rejected" in kinds
+    assert "support_received" in kinds
+    assert all(n["read"] for n in list_customer_notifications(db, customer.id))
+
+
 def test_approved_does_not_create_notification(db, test_users):
     customer = test_users["customer"]
     booking = _booking(db, customer)

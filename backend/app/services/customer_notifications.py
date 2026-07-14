@@ -72,6 +72,36 @@ def notify_customer_document_review(
     return None
 
 
+def acknowledge_document_notifications_for_booking(
+    db: Session,
+    *,
+    customer_id: int,
+    booking_id: int | None,
+) -> int:
+    """Mark document revision/rejected alerts read after the customer has acted (e.g. contacted support)."""
+    if not booking_id:
+        return 0
+    now = datetime.utcnow()
+    kinds = {
+        CustomerNotificationKind.DOCUMENT_REVISION.value,
+        CustomerNotificationKind.DOCUMENT_REJECTED.value,
+    }
+    rows = (
+        db.query(CustomerNotification)
+        .filter(
+            CustomerNotification.customer_id == customer_id,
+            CustomerNotification.booking_id == int(booking_id),
+            CustomerNotification.kind.in_(kinds),
+            CustomerNotification.read_at.is_(None),
+            CustomerNotification.dismissed_at.is_(None),
+        )
+        .all()
+    )
+    for row in rows:
+        row.read_at = now
+    return len(rows)
+
+
 def notify_customer_support_received(
     db: Session,
     *,
@@ -82,7 +112,11 @@ def notify_customer_support_received(
     """Confirm to the customer that their Contact Support message was received."""
     cat = (category or "support").strip() or "support"
     booking_bit = f" for Booking #{booking_id}" if booking_id else ""
-    return create_customer_notification(
+    # Contacting support acknowledges the related document alert for that booking.
+    acknowledge_document_notifications_for_booking(
+        db, customer_id=customer_id, booking_id=booking_id
+    )
+    row = create_customer_notification(
         db,
         customer_id=customer_id,
         booking_id=booking_id,
@@ -92,6 +126,9 @@ def notify_customer_support_received(
         required_action="No action needed unless you receive a follow-up.",
         link_path="/modules/customer/support" + (f"?booking={booking_id}" if booking_id else ""),
     )
+    # Confirmation should not keep the unread red badge after the user acted.
+    row.read_at = datetime.utcnow()
+    return row
 
 
 def serialize_customer_notification(row: CustomerNotification) -> dict[str, Any]:

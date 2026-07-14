@@ -276,7 +276,7 @@ def _assert_credential_matches(booking: Booking, scanned: str) -> str:
                 expected,
             )
             raise ValueError(
-                f"QR code is for Booking #{qr_booking_id}, but this assignment is Booking #{current_id}."
+                "This QR code does not match the current booking. Ask the customer for the Booking Completion QR for this assignment."
             )
         if qr_token and _safe_compare(qr_token, expected_token):
             logger.info(
@@ -315,7 +315,7 @@ def _assert_credential_matches(booking: Booking, scanned: str) -> str:
             scanned,
         )
         raise ValueError(
-            f"QR code is for Booking #{delivery[0] if delivery else '?'}, but this assignment is Booking #{current_id}."
+            "This QR code does not match the current booking. Ask the customer for the Booking Completion QR for this assignment."
         )
     if delivery_kind in {"delivery_qr_wrong_customer", "delivery_qr_token_mismatch"}:
         logger.warning(

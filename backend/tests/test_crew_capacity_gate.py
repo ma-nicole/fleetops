@@ -6,14 +6,25 @@ from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from app.models.entities import BookingStatus, TripStatus
+from app.models.entities import BookingStatus, TripStatus, TruckAssignmentStatus, UserRole
 from app.services.booking_schedule import CrewWindowCapacity
 from app.services.dispatch_resource_availability import (
+    _NON_TERMINAL_ASSIGNMENT,
+    _TERMINAL_BOOKING,
+    _conflicts_for_resource,
+    _global_resource_status,
     evaluate_driver_for_booking,
     evaluate_helper_for_booking,
     evaluate_truck_for_booking,
-    _conflicts_for_resource,
+    heal_stale_resource_availability,
 )
+
+
+def test_terminal_filters_exclude_completed_and_dropped_off():
+    assert BookingStatus.COMPLETED in _TERMINAL_BOOKING
+    assert BookingStatus.PAYMENT_REJECTED in _TERMINAL_BOOKING
+    assert TruckAssignmentStatus.DROPPED_OFF not in _NON_TERMINAL_ASSIGNMENT
+    assert TruckAssignmentStatus.COMPLETED not in _NON_TERMINAL_ASSIGNMENT
 
 
 def test_crew_capacity_message_lists_shortages():
@@ -57,7 +68,6 @@ def test_conflicts_ignore_live_busy_when_windows_do_not_overlap():
         patch(
             "app.services.dispatch_resource_availability.booking_interval_resolved",
             side_effect=[
-                # target booking window Jul 23
                 (datetime(2026, 7, 23, 14, 0), datetime(2026, 7, 23, 20, 0)),
             ],
         ),
@@ -122,8 +132,8 @@ def test_conflicts_detected_when_windows_overlap():
     assert conflicts[0]["booking_id"] == 100
 
 
-def test_evaluate_truck_assignable_despite_global_on_trip_status():
-    """Badge may show On Trip, but assignable is true when the booking window is free."""
+def test_evaluate_truck_not_assignable_when_on_trip():
+    """Live On Trip blocks assignment even when the calendar window is free."""
     truck = SimpleNamespace(id=1, code="TRK-001", status="available", capacity_tons=30, availability_status="assigned")
     booking = SimpleNamespace(id=233)
     db = MagicMock()
@@ -149,11 +159,11 @@ def test_evaluate_truck_assignable_despite_global_on_trip_status():
         row = evaluate_truck_for_booking(db, truck, booking)
 
     assert row["status"] == "on_trip"
-    assert row["assignable"] is True
-    assert row["conflict_reason"] is None
+    assert row["assignable"] is False
+    assert "active trip" in (row["conflict_reason"] or "").lower()
 
 
-def test_evaluate_driver_and_helper_assignable_without_has_active_block():
+def test_evaluate_driver_and_helper_assignable_when_only_assigned_badge():
     driver = SimpleNamespace(id=10, full_name="Driver A", availability_status="available", role="driver")
     helper = SimpleNamespace(id=11, full_name="Helper A", availability_status="available", role="helper")
     booking = SimpleNamespace(id=233)
@@ -170,3 +180,48 @@ def test_evaluate_driver_and_helper_assignable_without_has_active_block():
 
     assert d["assignable"] is True
     assert h["assignable"] is True
+
+
+def test_global_status_ignores_stale_availability_flag():
+    truck = SimpleNamespace(id=1, status="available", availability_status="assigned")
+    status = _global_resource_status(
+        MagicMock(),
+        kind="truck",
+        resource_id=1,
+        trip_rows=[],
+        assignment_rows=[],
+        truck=truck,
+    )
+    assert status == "available"
+
+
+def test_global_status_on_trip_from_live_leg():
+    trip = SimpleNamespace(id=9, truck_id=1, driver_id=None, helper_id=None, status=TripStatus.IN_DELIVERY)
+    booking = SimpleNamespace(id=50, status=BookingStatus.OUT_FOR_DELIVERY)
+    status = _global_resource_status(
+        MagicMock(),
+        kind="truck",
+        resource_id=1,
+        trip_rows=[(trip, booking)],
+        assignment_rows=[],
+        truck=SimpleNamespace(id=1, status="available", availability_status="assigned"),
+    )
+    assert status == "on_trip"
+
+
+def test_heal_clears_stale_assigned_flags():
+    truck = SimpleNamespace(id=1, status="available", availability_status="assigned")
+    driver = SimpleNamespace(id=10, availability_status="assigned", role=UserRole.DRIVER)
+    helper = SimpleNamespace(id=11, availability_status="assigned", role=UserRole.HELPER)
+    healed = heal_stale_resource_availability(
+        MagicMock(),
+        trucks=[truck],
+        drivers=[driver],
+        helpers=[helper],
+        trip_rows=[],
+        assignment_rows=[],
+    )
+    assert healed == 3
+    assert truck.availability_status == "available"
+    assert driver.availability_status == "available"
+    assert helper.availability_status == "available"

@@ -15,6 +15,10 @@ type Props = {
 
 /** Presentation-only booking stage tracker for customers after payment. */
 export default function CustomerBookingWorkflowTracker({ booking, payment = null, compact = false }: Props) {
+  const reviewStatus = (booking.goods_declaration_review_status || "").trim().toLowerCase();
+  // Rejected docs stop the booking — hide the progress timeline to avoid implying it is still advancing.
+  if (reviewStatus === "rejected") return null;
+
   const steps = buildCustomerBookingWorkflowSteps(booking, payment);
   const currentLabel = customerWorkflowCurrentLabel(booking, payment);
   const doneCount = steps.filter((s) => s.completed).length;

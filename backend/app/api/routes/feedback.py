@@ -128,6 +128,11 @@ def _create_feedback(
     try:
         from app.services.notifications import notify_fleetops_customer_feedback
 
+        admin_emails = [
+            str(u.email).strip()
+            for u in db.query(User).filter(User.role == UserRole.ADMIN).all()
+            if (u.email or "").strip()
+        ]
         notify_fleetops_customer_feedback(
             customer_email=user.email,
             customer_name=user.full_name,
@@ -135,6 +140,7 @@ def _create_feedback(
             category=payload.category,
             rating=payload.rating,
             message=payload.message,
+            recipient_emails=admin_emails,
         )
     except Exception:
         logger.warning("Feedback inbox notification failed.", exc_info=True)

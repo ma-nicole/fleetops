@@ -41,6 +41,23 @@ Starting uvicorn on port 8080...
 
 Save triggers a redeploy. Migrations run automatically on container start via `run_server.py`.
 
+## Contact Support email (Resend)
+
+On the **fleetops** service → **Variables**, add:
+
+| Variable | Value |
+|----------|--------|
+| `RESEND_API_KEY` | Your Resend key (`re_…`) |
+| `FEEDBACK_INBOX_EMAIL` | Admin inbox that should receive support tickets (e.g. `you@gmail.com`) |
+| `EMAIL_FROM` | Sender Resend allows, e.g. `FleetOpt <onboarding@resend.dev>` for testing, or a verified domain |
+
+Notes:
+
+1. If `FEEDBACK_INBOX_EMAIL` is empty, the API still emails every **Admin** user email in the database.
+2. Resend only delivers when `EMAIL_FROM` is an allowed sender (verify your domain in Resend, or use `onboarding@resend.dev` for sandbox tests).
+3. After saving Variables, Railway redeploys — wait for Deployments → Success, then submit Contact Support once to verify.
+4. Never commit the API key to GitHub; set it only in Railway Variables.
+
 ## Verify
 
 | URL | Expected |

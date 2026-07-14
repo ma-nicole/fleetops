@@ -39,12 +39,19 @@ _NON_TERMINAL_ASSIGNMENT: frozenset[TruckAssignmentStatus] = frozenset(
         TruckAssignmentStatus.FOR_PICKUP,
         TruckAssignmentStatus.PICKED_UP,
         TruckAssignmentStatus.EN_ROUTE,
-        TruckAssignmentStatus.DROPPED_OFF,
         TruckAssignmentStatus.IN_PROGRESS,
     }
 )
 _OFF_DUTY_CREW_STATUSES = frozenset({"off_duty", "off-duty", "on_break", "break", "unavailable"})
-_TERMINAL_BOOKING = frozenset({BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.EXPIRED})
+_TERMINAL_BOOKING = frozenset(
+    {
+        BookingStatus.COMPLETED,
+        BookingStatus.CANCELLED,
+        BookingStatus.REJECTED,
+        BookingStatus.EXPIRED,
+        BookingStatus.PAYMENT_REJECTED,
+    }
+)
 
 _STATUS_LABELS: dict[ResourceStatus, str] = {
     "available": "Available",
@@ -145,11 +152,7 @@ def _global_resource_status(
         if _assignment_on_resource(ta, kind, resource_id):
             return "assigned"
 
-    if kind == "truck" and truck is not None and _norm(truck.availability_status) == "assigned":
-        return "assigned"
-    if user is not None and _norm(user.availability_status) == "assigned":
-        return "assigned"
-
+    # Do not trust stale availability_status alone — status comes from live commitments only.
     return "available"
 
 
@@ -295,20 +298,26 @@ def evaluate_truck_for_booking(
     conflicts = _conflicts_for_resource(
         db, kind="truck", resource_id=truck.id, booking=booking, cfg=cfg, exclude_booking_id=exclude_booking_id
     )
+    effective_status: ResourceStatus = (
+        "unavailable" if _truck_operationally_unavailable(truck) else global_status
+    )
     conflict_reason = _conflict_message("truck", conflicts)
     if _truck_operationally_unavailable(truck):
         conflict_reason = "Truck is under maintenance and cannot be assigned."
-    # Assignable = calendar overlap only (status badge may still show On Trip / Assigned).
+    elif effective_status == "on_trip":
+        conflict_reason = conflict_reason or "Truck is currently on an active trip and cannot be assigned."
+    # Calendar free + not live On Trip / maintenance.
     assignable = (
         not conflicts
         and not _truck_operationally_unavailable(truck)
         and _norm(truck.status) == "available"
+        and effective_status != "on_trip"
     )
     return _serialize_resource_row(
         kind="truck",
         resource_id=truck.id,
         name=truck.code,
-        global_status=global_status if not _truck_operationally_unavailable(truck) else "unavailable",
+        global_status=effective_status,
         assignable=assignable,
         conflict_reason=conflict_reason,
         next_available_at=_next_available_at(conflicts),
@@ -340,15 +349,20 @@ def evaluate_driver_for_booking(
     conflicts = _conflicts_for_resource(
         db, kind="driver", resource_id=user.id, booking=booking, cfg=cfg, exclude_booking_id=exclude_booking_id
     )
+    effective_status: ResourceStatus = "unavailable" if _off_duty(user.availability_status) else global_status
     conflict_reason = _conflict_message("driver", conflicts)
     if _off_duty(user.availability_status):
         conflict_reason = "Driver is off duty or on break."
-    assignable = not conflicts and not _off_duty(user.availability_status)
+    elif effective_status == "on_trip":
+        conflict_reason = conflict_reason or "Driver is currently on an active trip and cannot be assigned."
+    assignable = (
+        not conflicts and not _off_duty(user.availability_status) and effective_status != "on_trip"
+    )
     return _serialize_resource_row(
         kind="driver",
         resource_id=user.id,
         name=user.full_name,
-        global_status=global_status if not _off_duty(user.availability_status) else "unavailable",
+        global_status=effective_status,
         assignable=assignable,
         conflict_reason=conflict_reason,
         next_available_at=_next_available_at(conflicts),
@@ -379,19 +393,104 @@ def evaluate_helper_for_booking(
     conflicts = _conflicts_for_resource(
         db, kind="helper", resource_id=user.id, booking=booking, cfg=cfg, exclude_booking_id=exclude_booking_id
     )
+    effective_status: ResourceStatus = "unavailable" if _off_duty(user.availability_status) else global_status
     conflict_reason = _conflict_message("helper", conflicts)
     if _off_duty(user.availability_status):
         conflict_reason = "Helper is off duty or on break."
-    assignable = not conflicts and not _off_duty(user.availability_status)
+    elif effective_status == "on_trip":
+        conflict_reason = conflict_reason or "Helper is currently on an active trip and cannot be assigned."
+    assignable = (
+        not conflicts and not _off_duty(user.availability_status) and effective_status != "on_trip"
+    )
     return _serialize_resource_row(
         kind="helper",
         resource_id=user.id,
         name=user.full_name,
-        global_status=global_status if not _off_duty(user.availability_status) else "unavailable",
+        global_status=effective_status,
         assignable=assignable,
         conflict_reason=conflict_reason,
         next_available_at=_next_available_at(conflicts),
     )
+
+
+def _resource_has_active_commitment(
+    *,
+    kind: ResourceKind,
+    resource_id: int,
+    trip_rows: list[tuple[Trip, Booking]],
+    assignment_rows: list[tuple[TruckAssignment, Booking]],
+) -> bool:
+    for trip, _ in trip_rows:
+        if _trip_on_resource(trip, kind, resource_id):
+            return True
+    for ta, _ in assignment_rows:
+        if _assignment_on_resource(ta, kind, resource_id):
+            return True
+    return False
+
+
+def heal_stale_resource_availability(
+    db: Session,
+    *,
+    trucks: list[Truck],
+    drivers: list[User],
+    helpers: list[User],
+    trip_rows: list[tuple[Trip, Booking]] | None = None,
+    assignment_rows: list[tuple[TruckAssignment, Booking]] | None = None,
+) -> int:
+    """Reset stuck assigned flags when no live trip/assignment remains. Returns rows healed."""
+    trip_rows = trip_rows if trip_rows is not None else _active_trips(db)
+    assignment_rows = assignment_rows if assignment_rows is not None else _active_assignments(db)
+    healed = 0
+
+    for truck in trucks:
+        if _truck_operationally_unavailable(truck):
+            continue
+        busy = _resource_has_active_commitment(
+            kind="truck",
+            resource_id=truck.id,
+            trip_rows=trip_rows,
+            assignment_rows=assignment_rows,
+        )
+        if busy:
+            continue
+        if _norm(truck.availability_status) != "available" or _norm(truck.status) != "available":
+            truck.availability_status = "available"
+            if _norm(truck.status) != "maintenance":
+                truck.status = "available"
+            healed += 1
+
+    for user in drivers:
+        if _off_duty(user.availability_status):
+            continue
+        busy = _resource_has_active_commitment(
+            kind="driver",
+            resource_id=user.id,
+            trip_rows=trip_rows,
+            assignment_rows=assignment_rows,
+        )
+        if busy:
+            continue
+        if _norm(user.availability_status) != "available":
+            user.availability_status = "available"
+            healed += 1
+
+    for user in helpers:
+        if _off_duty(user.availability_status):
+            continue
+        busy = _resource_has_active_commitment(
+            kind="helper",
+            resource_id=user.id,
+            trip_rows=trip_rows,
+            assignment_rows=assignment_rows,
+        )
+        if busy:
+            continue
+        if _norm(user.availability_status) != "available":
+            user.availability_status = "available"
+            healed += 1
+
+    return healed
 
 
 def build_booking_resource_availability(db: Session, booking: Booking) -> dict[str, Any]:
@@ -416,6 +515,15 @@ def build_booking_resource_availability(db: Session, booking: Booking) -> dict[s
         .filter(User.role == UserRole.HELPER)
         .order_by(User.full_name.asc(), User.id.asc())
         .all()
+    )
+
+    heal_stale_resource_availability(
+        db,
+        trucks=trucks,
+        drivers=drivers,
+        helpers=helpers,
+        trip_rows=trip_rows,
+        assignment_rows=assignment_rows,
     )
 
     truck_roster = [
@@ -587,8 +695,10 @@ def release_booking_trips(db: Session, booking_id: int) -> None:
         release_trip_resources(db, trip)
     db.query(TruckAssignment).filter(
         TruckAssignment.booking_id == booking_id,
-        TruckAssignment.assignment_status.in_(_NON_TERMINAL_ASSIGNMENT),
-    ).update({"assignment_status": TruckAssignmentStatus.CANCELLED})
+        ~TruckAssignment.assignment_status.in_(
+            {TruckAssignmentStatus.COMPLETED, TruckAssignmentStatus.CANCELLED}
+        ),
+    ).update({"assignment_status": TruckAssignmentStatus.CANCELLED}, synchronize_session=False)
 
 
 def mark_resources_assigned(db: Session, *, truck: Truck, driver: User, helper: User | None) -> None:

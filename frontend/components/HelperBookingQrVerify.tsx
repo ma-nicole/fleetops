@@ -176,7 +176,9 @@ export default function HelperBookingQrVerify({
 
     const decodedBookingId = extractBookingId(trimmed);
     if (decodedBookingId != null && decodedBookingId !== Number(bookingId)) {
-      setErr(`QR is for Booking #${decodedBookingId}, but this assignment is Booking #${bookingId}.`);
+      setErr(
+        "This QR code does not match the current booking. Ask the customer for the Booking Completion QR for this assignment.",
+      );
       return;
     }
 

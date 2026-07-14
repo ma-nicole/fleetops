@@ -277,8 +277,8 @@ function DispatcherJobAssignmentsInner() {
           <h1 style={{ margin: 0 }}>Job Assignment</h1>
           <p style={{ color: "#6B7280", marginTop: 4 }}>
             Clear sequence: select a ready booking → assign truck → assign driver → assign helper → create trip.
-            Only resources with <strong>no overlapping schedule</strong> for this booking window can be selected
-            (calendar overlap). Status badges may still show Assigned / On Trip from other jobs.
+            Only schedule-free resources can be selected. Resources marked <strong>On Trip</strong> stay
+            locked until that live trip finishes or the booking is completed/cancelled.
           </p>
         </header>
 
