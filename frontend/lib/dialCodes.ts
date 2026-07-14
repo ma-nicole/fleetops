@@ -20,7 +20,7 @@ const NATIONAL_RULES: Partial<
 > = {
   "+63": {
     nationalMinDigits: 10,
-    nationalMaxDigits: 10,
+    nationalMaxDigits: 11, // allow optional trunk 0 while typing; stripped in buildInternationalPhone
     nationalPlaceholder: "9171234567",
   },
   "+1": {

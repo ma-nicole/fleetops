@@ -104,12 +104,15 @@ export default function PhoneInputRow({
         />
       </div>
       <span style={{ fontSize: "0.8rem", color: dark ? "rgba(255,255,255,0.55)" : "#6B7280" }}>
-        Enter your mobile number without the country code.
+        Enter your mobile number without the country code
+        {dialCode === "+63" ? " (optional leading 0 is OK; saved as +63 without the 0)" : ""}.
         {typeof minDigits === "number" && typeof maxDigits === "number" && minDigits === maxDigits
           ? ` (${maxDigits} digits)`
-          : typeof maxDigits === "number"
-            ? ` (up to ${maxDigits} digits)`
-            : ""}
+          : dialCode === "+63"
+            ? " (10 digits after +63)"
+            : typeof maxDigits === "number"
+              ? ` (up to ${maxDigits} digits)`
+              : ""}
         {optional ? " Leave blank if you prefer not to share a phone." : ""}
       </span>
       {error ? (
