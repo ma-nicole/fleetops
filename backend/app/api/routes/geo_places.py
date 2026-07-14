@@ -49,6 +49,7 @@ def search_places(
     limit: int = Query(default=6, ge=1, le=10),
     _: User = Depends(_CREW),
 ):
+    """Search places within Menruz Northern Luzon service area only."""
     rows = search_place_suggestions(q, settings, limit=limit)
     return [PlaceSuggestion(**row) for row in rows]
 
@@ -58,7 +59,14 @@ def geocode_place(
     q: str = Query(..., min_length=3, max_length=400),
     _: User = Depends(_CREW),
 ):
+    from app.services.service_area import is_within_northern_luzon
+
     lat, lon, provider = geocode_coordinates(q, settings)
+    if lat is not None and lon is not None and not is_within_northern_luzon(lat, lon):
+        raise HTTPException(
+            status_code=400,
+            detail="Location is outside Menruz Northern Luzon service area (Ilocos, Cagayan Valley, CAR).",
+        )
     return GeocodeResponse(label=q.strip(), latitude=lat, longitude=lon, provider=provider)
 
 
@@ -68,12 +76,20 @@ def reverse_place(
     lon: float = Query(..., ge=-180, le=180),
     _: User = Depends(_CREW),
 ):
+    from app.services.service_area import is_within_northern_luzon
+
+    if not is_within_northern_luzon(lat, lon):
+        raise HTTPException(
+            status_code=400,
+            detail="Pin is outside Menruz Northern Luzon service area (Ilocos, Cagayan Valley, CAR).",
+        )
     label, provider = reverse_geocode_label(lat, lon, settings)
     return ReverseResponse(label=label, latitude=lat, longitude=lon, provider=provider)
 
 
 @router.get("/ph/regions", response_model=list[AdminAreaItem])
 def ph_regions(_: User = Depends(_CREW)):
+    """Northern Luzon regions only (Menruz service area)."""
     try:
         return [AdminAreaItem(**r) for r in ph_admin_areas.list_regions()]
     except Exception as e:

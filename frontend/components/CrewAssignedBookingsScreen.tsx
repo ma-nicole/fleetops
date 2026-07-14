@@ -13,7 +13,10 @@ import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
 import HelperBookingQrVerify from "@/components/HelperBookingQrVerify";
 import HelperLocationSelector, { type SelectedHelperLocation } from "@/components/HelperLocationSelector";
 import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
-import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
+import {
+  attachGpsToEvidence,
+  type EvidenceCaptureMetadata,
+} from "@/lib/evidenceCapture";
 
 const PHASES = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"] as const;
 type Phase = (typeof PHASES)[number];
@@ -379,12 +382,25 @@ export default function CrewAssignedBookingsScreen({
     setMsg(null);
     const tripId = detail.trip_id;
     try {
+      let evidenceFile = photo;
+      let evidenceMeta = photoMeta;
+      if (evidenceFile && evidenceMeta && (evidenceMeta.latitude == null || evidenceMeta.longitude == null)) {
+        const gpsRetry = await attachGpsToEvidence(evidenceFile, evidenceMeta, {
+          bookingId: detail.booking_id,
+          tripId: detail.trip_id,
+          crewName: detail.helper_name,
+        });
+        evidenceFile = gpsRetry.file;
+        evidenceMeta = gpsRetry.metadata;
+        setPhoto(evidenceFile);
+        setPhotoMeta(evidenceMeta);
+      }
       const fd = new FormData();
       fd.append("status", phase);
       fd.append("location_name", "");
-      if (photo) {
-        fd.append("photo", photo);
-        if (photoMeta) appendEvidenceToFormData(fd, photoMeta);
+      if (evidenceFile) {
+        fd.append("photo", evidenceFile);
+        if (evidenceMeta) appendEvidenceToFormData(fd, evidenceMeta);
       }
       await WorkflowApi.helperSubmitProgress(tripId, fd);
       setMsg("Update saved.");

@@ -265,7 +265,7 @@ export default function HelperLocationSelector({ value, onChange, disabled = fal
         if (!mapRef.current) {
           const center: [number, number] = value
             ? [value.latitude, value.longitude]
-            : [14.5995, 120.9842];
+            : [16.4023, 120.5960]; // Baguio — Northern Luzon default
           mapRef.current = L.map(mapHostRef.current).setView(center, value ? 15 : 11);
           L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             attribution: "&copy; OpenStreetMap",
@@ -283,13 +283,13 @@ export default function HelperLocationSelector({ value, onChange, disabled = fal
                 longitude: lon,
                 source: "map",
               });
-            } catch {
-              applySelection({
-                label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
-                latitude: lat,
-                longitude: lon,
-                source: "map",
-              });
+              setMapError(null);
+            } catch (err) {
+              setMapError(
+                err instanceof Error
+                  ? err.message
+                  : "Pin is outside Menruz Northern Luzon service area.",
+              );
             }
           };
           mapRef.current.on("click", clickHandler);
@@ -346,6 +346,10 @@ export default function HelperLocationSelector({ value, onChange, disabled = fal
 
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
+      <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", lineHeight: 1.45 }}>
+        Menruz serves <strong>Northern Luzon only</strong> (Ilocos Region, Cagayan Valley, and CAR). Other Philippine
+        regions are not available.
+      </p>
       <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
         {tabBtn("search", "Search address")}
         {tabBtn("map", "Pick on map")}
@@ -355,7 +359,7 @@ export default function HelperLocationSelector({ value, onChange, disabled = fal
       {mode === "search" ? (
         <div style={{ display: "grid", gap: "0.55rem" }}>
           <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontSize: "0.85rem", color: "#555" }}>Search Philippine address</span>
+            <span style={{ fontSize: "0.85rem", color: "#555" }}>Search Northern Luzon address</span>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input
                 className="input"

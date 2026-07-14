@@ -277,6 +277,7 @@ export default function DeliveryCompletionPanel({
         ) : null}
         <EvidenceCaptureInput
           label="Receiving document photo"
+          required
           allowPdf
           watermarkContext={{ bookingId, tripId, crewName }}
           uploaderName={crewName}
@@ -296,6 +297,11 @@ export default function DeliveryCompletionPanel({
           disabled={!receivingFile}
           onClick={() => void uploadReceiving()}
         />
+        {!hasDoc ? (
+          <p style={{ margin: 0, fontSize: "0.8rem", color: "#991B1B", fontWeight: 600 }}>
+            Required before Booking Completion QR can be used.
+          </p>
+        ) : null}
       </section>
 
       {allowVerification ? <section style={{ display: "grid", gap: "0.5rem", order: 3 }}>

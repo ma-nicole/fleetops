@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from app.services.service_area import is_northern_luzon_region_code
+
 logger = logging.getLogger(__name__)
 
 PSGC_BASE = "https://psgc.gitlab.io/api"
@@ -33,12 +35,13 @@ def _get_json(path: str) -> Any:
 
 
 def list_regions() -> list[dict[str, str]]:
+    """Regions Menruz serves — Northern Luzon only (Ilocos, Cagayan Valley, CAR)."""
     rows = _get_json("/regions.json")
     out = []
     for row in rows or []:
         code = str(row.get("code") or "").strip()
         name = str(row.get("name") or "").strip()
-        if code and name:
+        if code and name and is_northern_luzon_region_code(code):
             out.append({"code": code, "name": name, "region_name": str(row.get("regionName") or "")})
     return out
 

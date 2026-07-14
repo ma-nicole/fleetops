@@ -23,6 +23,8 @@ import httpx
 
 from app.core.config import Settings
 
+from app.services.service_area import is_within_northern_luzon, label_suggests_northern_luzon
+
 logger = logging.getLogger(__name__)
 
 GEOCODE_CACHE_TTL_S = 24 * 3600
@@ -270,17 +272,26 @@ def geocode_coordinates(address: str, settings: Settings) -> tuple[float | None,
     return None, None, "none"
 
 
+def _passes_service_area(item: dict[str, Any]) -> bool:
+    lat = item.get("latitude")
+    lon = item.get("longitude")
+    if is_within_northern_luzon(lat, lon):
+        return True
+    return label_suggests_northern_luzon(str(item.get("label") or ""))
+
+
 def search_place_suggestions(
     query: str,
     settings: Settings,
     *,
     limit: int = 6,
 ) -> list[dict[str, Any]]:
-    """Return address suggestions with coordinates (Google or Nominatim)."""
+    """Return Northern Luzon address suggestions with coordinates (Google or Nominatim)."""
     a = normalize_address_for_geocode(query)
     if len(a) < 3:
         return []
     limit = max(1, min(int(limit or 6), 10))
+    fetch_limit = min(10, max(limit * 2, limit + 4))
 
     key = _google_geocoding_api_key(settings)
     if key:
@@ -288,12 +299,12 @@ def search_place_suggestions(
             with httpx.Client(timeout=15.0) as client:
                 r = client.get(
                     "https://maps.googleapis.com/maps/api/geocode/json",
-                    params={"address": a, "key": key, "region": "ph"},
+                    params={"address": f"{a}, Northern Luzon, Philippines", "key": key, "region": "ph"},
                 )
                 r.raise_for_status()
                 data = r.json()
                 out: list[dict[str, Any]] = []
-                for row in (data.get("results") or [])[:limit]:
+                for row in (data.get("results") or [])[:fetch_limit]:
                     if not isinstance(row, dict):
                         continue
                     loc = (row.get("geometry") or {}).get("location") or {}
@@ -301,22 +312,24 @@ def search_place_suggestions(
                     label = row.get("formatted_address") or a
                     if lat is None or lng is None:
                         continue
-                    out.append(
-                        {
-                            "label": str(label),
-                            "latitude": float(lat),
-                            "longitude": float(lng),
-                            "provider": "google",
-                        }
-                    )
+                    item = {
+                        "label": str(label),
+                        "latitude": float(lat),
+                        "longitude": float(lng),
+                        "provider": "google",
+                    }
+                    if _passes_service_area(item):
+                        out.append(item)
+                    if len(out) >= limit:
+                        break
                 if out:
                     return out
         except Exception as e:
             logger.warning("Google place search failed: %s", e)
 
     ua = settings.geocoding_user_agent.strip() or "FleetOpt/1.0"
-    bias = ", Philippines"
-    q = a if bias.lower() in a.lower() else f"{a}{bias}"
+    bias = ", Northern Luzon, Philippines"
+    q = a if "philippines" in a.lower() else f"{a}{bias}"
     _respect_nom_throttle()
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -325,30 +338,34 @@ def search_place_suggestions(
                 params={
                     "q": q,
                     "format": "json",
-                    "limit": str(limit),
+                    "limit": str(fetch_limit),
                     "countrycodes": "ph",
                     "addressdetails": "1",
+                    "viewbox": "119.4,19.4,122.6,15.6",
+                    "bounded": "1",
                 },
                 headers={"User-Agent": ua},
             )
             r.raise_for_status()
             rows: list[dict[str, Any]] = r.json()
             out: list[dict[str, Any]] = []
-            for row in rows[:limit]:
+            for row in rows:
                 if not isinstance(row, dict):
                     continue
                 lat, lon = row.get("lat"), row.get("lon")
                 label = row.get("display_name") or a
                 if lat is None or lon is None:
                     continue
-                out.append(
-                    {
-                        "label": str(label),
-                        "latitude": float(lat),
-                        "longitude": float(lon),
-                        "provider": "nominatim",
-                    }
-                )
+                item = {
+                    "label": str(label),
+                    "latitude": float(lat),
+                    "longitude": float(lon),
+                    "provider": "nominatim",
+                }
+                if _passes_service_area(item):
+                    out.append(item)
+                if len(out) >= limit:
+                    break
             return out
     except Exception as e:
         logger.warning("Nominatim place search failed: %s", e)
