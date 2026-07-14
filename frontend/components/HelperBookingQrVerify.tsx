@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import StatusBanner from "@/components/ui/StatusBanner";
 import { ApiError } from "@/lib/api";
@@ -13,7 +13,15 @@ type Props = {
   onVerified?: () => void;
 };
 
-const BOOKING_QR_RE = /^FLEETOPS-BOOKING(?::|-)(\d+)(?::|-)(.+)$/;
+const BOOKING_QR_RE =
+  /^(?:booking\s*=\s*(\d+)\s*\|\s*code\s*=\s*(.+)|FLEETOPS-BOOKING(?::|-)(\d+)(?::|-)(.+))$/i;
+
+function isSecureCameraContext(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.isSecureContext) return true;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
 
 function normalizeDecodedPayload(raw: string): string {
   let text = (raw || "").trim();
@@ -24,16 +32,63 @@ function normalizeDecodedPayload(raw: string): string {
     /* keep raw */
   }
   text = text.replace(/^\ufeff/, "").trim();
-  const idx = text.indexOf("FLEETOPS-BOOKING");
-  if (idx >= 0) text = text.slice(idx);
+  const lower = text.toLowerCase();
+  for (const marker of ["booking=", "fleetops-booking", "fleetops-delivery", "fleetops-trip-"]) {
+    const idx = lower.indexOf(marker);
+    if (idx >= 0) {
+      text = text.slice(idx).trim();
+      break;
+    }
+  }
   return text.split(/\s/, 1)[0].trim();
 }
 
 function extractBookingId(payload: string): number | null {
   const m = BOOKING_QR_RE.exec(normalizeDecodedPayload(payload));
   if (!m) return null;
-  const id = Number(m[1]);
+  const id = Number(m[1] || m[3]);
   return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function cameraErrorMessage(e: unknown): string {
+  const name = e && typeof e === "object" && "name" in e ? String((e as { name?: string }).name) : "";
+  const msg = e instanceof Error ? e.message : typeof e === "string" ? e : "";
+  const combined = `${name} ${msg}`.toLowerCase();
+  if (combined.includes("notallowed") || combined.includes("permission") || combined.includes("denied")) {
+    return "Camera permission denied. Allow camera access in browser settings, or paste the Booking QR code below.";
+  }
+  if (combined.includes("notfound") || combined.includes("no camera") || combined.includes("requested device")) {
+    return "No camera found on this device. Paste the Booking QR code below.";
+  }
+  if (combined.includes("notreadable") || combined.includes("trackstart") || combined.includes("in use")) {
+    return "Camera is in use by another app. Close it and try again, or paste the code manually.";
+  }
+  if (combined.includes("secure") || combined.includes("https")) {
+    return "Camera requires HTTPS (or localhost). Open FleetOps over a secure URL, or paste the code manually.";
+  }
+  return msg || "Camera QR scan unavailable. Paste the Booking QR code below.";
+}
+
+async function requestCameraPermission(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Camera API is not available in this browser.");
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: "environment" } },
+  });
+  stream.getTracks().forEach((t) => t.stop());
+}
+
+async function pickRearCameraId(): Promise<string | MediaTrackConstraints> {
+  const cameras = await Html5Qrcode.getCameras();
+  if (!cameras.length) {
+    return { facingMode: { ideal: "environment" } };
+  }
+  const rear =
+    cameras.find((c) => /back|rear|environment|trás|arrière|rück/i.test(c.label || "")) ||
+    (cameras.length > 1 ? cameras[cameras.length - 1] : cameras[0]);
+  return rear.id || { facingMode: { ideal: "environment" } };
 }
 
 /** Helper scans customer Booking QR before starting the trip (for_pickup). */
@@ -43,8 +98,10 @@ export default function HelperBookingQrVerify({
   verifiedAt = null,
   onVerified,
 }: Props) {
-  const scanRegionId = useId().replace(/:/g, "");
+  const reactId = useId().replace(/:/g, "");
+  const scanRegionId = `booking-qr-scan-${reactId}`;
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const verifyingRef = useRef(false);
   const [scanning, setScanning] = useState(false);
   const [manualQr, setManualQr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,55 +115,59 @@ export default function HelperBookingQrVerify({
     setLocalVerifiedAt(verifiedAt);
   }, [verified, verifiedAt]);
 
-  useEffect(() => {
-    return () => {
-      if (scannerRef.current) {
-        void scannerRef.current.stop().catch(() => undefined);
-        scannerRef.current.clear();
-        scannerRef.current = null;
-      }
-    };
-  }, []);
-
-  const stopScanner = async () => {
-    if (!scannerRef.current) {
+  const stopScanner = useCallback(async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (!scanner) {
       setScanning(false);
       return;
     }
     try {
-      await scannerRef.current.stop();
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
     } catch {
       /* ignore */
     }
-    scannerRef.current.clear();
-    scannerRef.current = null;
+    try {
+      scanner.clear();
+    } catch {
+      /* ignore */
+    }
     setScanning(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      void stopScanner();
+    };
+  }, [stopScanner]);
 
   const verifyPayload = async (payload: string, method: "camera" | "manual") => {
+    if (verifyingRef.current) return;
     const trimmed = normalizeDecodedPayload(payload);
     if (!trimmed) {
       setErr("Enter or scan the Booking QR payload.");
       return;
     }
 
-    if (trimmed.startsWith("FLEETOPS-DELIVERY")) {
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith("fleetops-delivery")) {
       setErr("That is the Delivery QR. Scan the Booking helper QR to start the trip.");
       return;
     }
-    if (trimmed.startsWith("FLEETOPS-TRIP-")) {
+    if (lower.startsWith("fleetops-trip-")) {
       setErr("That is a trip receiving QR. Scan the customer Booking helper QR.");
       return;
     }
 
     const decodedBookingId = extractBookingId(trimmed);
     if (decodedBookingId != null && decodedBookingId !== Number(bookingId)) {
-      setErr(
-        `QR is for Booking #${decodedBookingId}, but this assignment is Booking #${bookingId}.`,
-      );
+      setErr(`QR is for Booking #${decodedBookingId}, but this assignment is Booking #${bookingId}.`);
       return;
     }
 
+    verifyingRef.current = true;
     setBusy(true);
     setErr(null);
     setMsg(null);
@@ -122,6 +183,7 @@ export default function HelperBookingQrVerify({
         e instanceof ApiError ? e.message : e instanceof Error ? e.message : "QR verification failed.";
       setErr(message);
     } finally {
+      verifyingRef.current = false;
       setBusy(false);
     }
   };
@@ -129,23 +191,58 @@ export default function HelperBookingQrVerify({
   const startScanner = async () => {
     setErr(null);
     setMsg(null);
+
+    if (!isSecureCameraContext()) {
+      setErr("Camera requires HTTPS (or localhost). Paste the Booking QR code below.");
+      return;
+    }
+
     try {
       await stopScanner();
-      const scanner = new Html5Qrcode(scanRegionId);
-      scannerRef.current = scanner;
+      await requestCameraPermission();
       setScanning(true);
+      // Let React paint the scanner container at full height before html5-qrcode mounts into it.
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      await new Promise((r) => window.setTimeout(r, 80));
+
+      const el = document.getElementById(scanRegionId);
+      if (!el) {
+        throw new Error("Scanner view is not ready. Try again.");
+      }
+
+      const scanner = new Html5Qrcode(scanRegionId, { verbose: false });
+      scannerRef.current = scanner;
+
+      let cameraConfig: string | MediaTrackConstraints;
+      try {
+        cameraConfig = await pickRearCameraId();
+      } catch {
+        cameraConfig = { facingMode: { ideal: "environment" } };
+      }
+
       await scanner.start(
-        { facingMode: "environment" },
-        { fps: 8, qrbox: { width: 220, height: 220 } },
+        cameraConfig,
+        {
+          fps: 10,
+          qrbox: (viewW, viewH) => {
+            const edge = Math.floor(Math.min(viewW, viewH) * 0.75);
+            return { width: Math.max(edge, 180), height: Math.max(edge, 180) };
+          },
+          aspectRatio: 1,
+          disableFlip: false,
+        },
         async (decoded) => {
+          if (verifyingRef.current) return;
           await stopScanner();
           await verifyPayload(decoded, "camera");
         },
         () => undefined,
       );
     } catch (e) {
-      setScanning(false);
-      setErr(e instanceof Error ? e.message : "Camera QR scan unavailable. Paste the code manually.");
+      await stopScanner();
+      setErr(cameraErrorMessage(e));
     }
   };
 
@@ -177,7 +274,18 @@ export default function HelperBookingQrVerify({
         </p>
       </div>
 
-      <div id={scanRegionId} style={{ width: "100%", maxWidth: 320, margin: "0 auto" }} />
+      <div
+        id={scanRegionId}
+        style={{
+          width: "100%",
+          maxWidth: 360,
+          margin: "0 auto",
+          minHeight: scanning ? 260 : 0,
+          overflow: "hidden",
+          borderRadius: 8,
+          background: scanning ? "#111827" : "transparent",
+        }}
+      />
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
@@ -215,13 +323,16 @@ export default function HelperBookingQrVerify({
       </div>
 
       <label style={{ display: "grid", gap: 6 }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400E" }}>Or paste QR payload</span>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400E" }}>Or paste Booking QR / code</span>
         <input
           className="input"
           value={manualQr}
           onChange={(e) => setManualQr(e.target.value)}
-          placeholder="FLEETOPS-BOOKING:…"
+          placeholder="booking=123|code=… or code alone"
           disabled={busy}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
         />
       </label>
       <button

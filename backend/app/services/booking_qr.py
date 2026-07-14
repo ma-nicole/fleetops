@@ -14,53 +14,75 @@ from app.models.entities import Booking, BookingStatus, Payment, User
 
 logger = logging.getLogger(__name__)
 
-# Canonical form uses colons so token_urlsafe hyphens cannot shift the booking id.
-# Legacy dash form remains accepted for already-issued customer QR images.
-PAYLOAD_PREFIX = "FLEETOPS-BOOKING"
-_LEGACY_DASH_RE = re.compile(r"^FLEETOPS-BOOKING-(\d+)-(.+)$")
-_COLON_RE = re.compile(r"^FLEETOPS-BOOKING:(\d+):(.+)$")
+# Single generated format. Legacy FLEETOPS-* forms are accepted on verify only.
+_PIPE_RE = re.compile(r"^booking\s*=\s*(\d+)\s*\|\s*code\s*=\s*(.+)$", re.IGNORECASE)
+_COLON_RE = re.compile(r"^FLEETOPS-BOOKING:(\d+):(.+)$", re.IGNORECASE)
+_LEGACY_DASH_RE = re.compile(r"^FLEETOPS-BOOKING-(\d+)-(.+)$", re.IGNORECASE)
 
 
-def ensure_booking_qr_token(booking: Booking) -> str:
+def _safe_compare(a: str, b: str) -> bool:
+    if not a or not b or len(a) != len(b):
+        return False
+    return compare_digest(a, b)
+
+
+def ensure_booking_qr_token(booking: Booking, *, payment_status: str | None = None) -> str:
     token = (getattr(booking, "booking_qr_token", None) or "").strip()
+    created = False
     if not token:
-        # token_urlsafe may include '-' and '_'; never includes ':' .
         token = token_urlsafe(16)
         booking.booking_qr_token = token
+        created = True
+    payload = f"booking={int(booking.id)}|code={token}"
+    if created:
+        booking_status = (
+            booking.status.value if hasattr(getattr(booking, "status", None), "value") else getattr(booking, "status", None)
+        )
+        logger.info(
+            "booking_qr_generate Generated QR payload=%s | Booking ID=%s | Verification code present=%s | "
+            "Payment status=%s | Booking status=%s",
+            payload,
+            int(booking.id),
+            True,
+            payment_status,
+            booking_status,
+        )
     return token
 
 
 def booking_qr_payload(booking: Booking) -> str | None:
+    """Canonical payload encoded into the customer Booking QR."""
     token = (getattr(booking, "booking_qr_token", None) or "").strip()
     if not token:
         return None
-    return f"{PAYLOAD_PREFIX}:{int(booking.id)}:{token}"
+    return f"booking={int(booking.id)}|code={token}"
 
 
-def booking_qr_legacy_payload(booking: Booking) -> str | None:
-    """Dash-separated format used by the first Booking QR rollout."""
+def booking_qr_legacy_payloads(booking: Booking) -> list[str]:
     token = (getattr(booking, "booking_qr_token", None) or "").strip()
     if not token:
-        return None
-    return f"{PAYLOAD_PREFIX}-{int(booking.id)}-{token}"
+        return []
+    bid = int(booking.id)
+    return [
+        f"FLEETOPS-BOOKING:{bid}:{token}",
+        f"FLEETOPS-BOOKING-{bid}-{token}",
+    ]
 
 
 def normalize_booking_qr_scan(raw: str) -> str:
-    """Strip wrappers / encoding so scan text matches the generated payload."""
+    """Strip wrappers / encoding so scan text matches a known payload form."""
     text = (raw or "").strip()
     if not text:
         return ""
-    # Cameras / share sheets sometimes wrap or percent-encode the payload.
     text = unquote(text).strip().strip("\ufeff").strip()
-    if "FLEETOPS-BOOKING" in text:
-        idx = text.find("FLEETOPS-BOOKING")
-        text = text[idx:].strip()
-    # Drop trailing junk occasionally appended by scanner apps.
-    for stop in ("\n", "\r", " ", "\t"):
-        if stop in text:
-            # Keep payload continuous until first whitespace.
-            text = text.split(stop, 1)[0]
-    return text.strip()
+    lower = text.lower()
+    for marker in ("booking=", "fleetops-booking", "fleetops-delivery", "fleetops-trip-"):
+        idx = lower.find(marker)
+        if idx >= 0:
+            text = text[idx:].strip()
+            break
+    text = re.split(r"[\s\r\n]+", text, maxsplit=1)[0].strip()
+    return text
 
 
 def parse_booking_qr_payload(raw: str) -> tuple[int, str] | None:
@@ -68,7 +90,7 @@ def parse_booking_qr_payload(raw: str) -> tuple[int, str] | None:
     if not text:
         return None
 
-    for pattern in (_COLON_RE, _LEGACY_DASH_RE):
+    for pattern in (_PIPE_RE, _COLON_RE, _LEGACY_DASH_RE):
         match = pattern.match(text)
         if not match:
             continue
@@ -83,11 +105,25 @@ def parse_booking_qr_payload(raw: str) -> tuple[int, str] | None:
     return None
 
 
+def resolve_scanned_token(*, scanned: str, booking: Booking) -> tuple[int, str] | None:
+    """Parse full QR payload, or accept bare verification code for the current booking."""
+    parsed = parse_booking_qr_payload(scanned)
+    if parsed:
+        return parsed
+    expected_token = (getattr(booking, "booking_qr_token", None) or "").strip()
+    bare = (scanned or "").strip()
+    if expected_token and bare and _safe_compare(bare, expected_token):
+        return int(booking.id), expected_token
+    return None
+
+
 def booking_qr_public_fields(booking: Booking) -> dict:
+    token = (getattr(booking, "booking_qr_token", None) or "").strip() or None
     payload = booking_qr_payload(booking)
     verified = getattr(booking, "booking_qr_verified_at", None)
     return {
         "booking_qr_payload": payload,
+        "booking_qr_code": token,
         "booking_qr_ready": bool(payload),
         "booking_qr_verified": verified is not None,
         "booking_qr_verified_at": verified.isoformat() if verified else None,
@@ -146,7 +182,7 @@ def verify_booking_qr(
     """Validate helper scan of customer booking QR before trip start."""
     scanned = normalize_booking_qr_scan(payload)
     expected = booking_qr_payload(booking)
-    expected_legacy = booking_qr_legacy_payload(booking)
+    expected_legacy = booking_qr_legacy_payloads(booking)
     current_booking_id = int(booking.id)
     booking_status = booking.status.value if hasattr(booking.status, "value") else str(booking.status)
     payment_status = _payment_status_for_booking(db, current_booking_id)
@@ -154,29 +190,30 @@ def verify_booking_qr(
     if method_norm not in {"scan", "camera", "manual", "paste"}:
         method_norm = "scan"
 
-    parsed = parse_booking_qr_payload(scanned)
+    parsed = resolve_scanned_token(scanned=scanned, booking=booking)
     qr_booking_id = int(parsed[0]) if parsed else None
     qr_token = parsed[1] if parsed else None
+    expected_token = (getattr(booking, "booking_qr_token", None) or "").strip()
 
-    logger.debug(
-        "booking_qr_verify Generated QR: %s | Decoded QR: %s | Current Booking: %s | "
-        "Expected Booking: %s | QR booking_id: %s | verification code/token present: %s | "
-        "booking status: %s | payment status: %s",
-        expected,
-        scanned,
-        current_booking_id,
+    logger.info(
+        "booking_qr_verify Current helper booking=%s | QR booking=%s | "
+        "verification code expected=%s | Decoded payload=%s | Expected payload=%s | "
+        "booking_status=%s | payment_status=%s",
         current_booking_id,
         qr_booking_id,
-        bool(qr_token),
+        bool(expected_token),
+        scanned,
+        expected,
         booking_status,
         payment_status,
     )
 
-    if scanned.startswith("FLEETOPS-DELIVERY"):
+    lowered = scanned.lower()
+    if lowered.startswith("fleetops-delivery"):
         raise ValueError(
             "Scanned the Delivery QR. Use the Booking helper QR (issued after payment) to start the trip."
         )
-    if scanned.startswith("FLEETOPS-TRIP-"):
+    if lowered.startswith("fleetops-trip-"):
         raise ValueError(
             "Scanned a trip receiving QR. Use the customer Booking helper QR to start the trip."
         )
@@ -191,20 +228,23 @@ def verify_booking_qr(
 
     if getattr(booking, "booking_qr_verified_at", None) is not None:
         result = _mark_verified(booking, scanner, method=method_norm, already=True)
-        logger.debug("booking_qr_verify Verification Result: already_verified booking_id=%s", current_booking_id)
+        logger.info("booking_qr_verify Verification Result: already_verified booking_id=%s", current_booking_id)
         return result
 
-    if not expected:
+    if not expected or not expected_token:
         raise ValueError("Booking QR is not ready yet. Ask the customer to refresh after payment verification.")
 
-    # Source of truth: full generated payload (canonical or legacy).
-    expected_matches = (
-        compare_digest(scanned, expected)
-        or (expected_legacy is not None and compare_digest(scanned, expected_legacy))
-    )
-    if expected_matches:
+    # Exact match against canonical or previously issued legacy payloads.
+    candidates = [expected, *expected_legacy]
+    if any(_safe_compare(scanned, c) for c in candidates if c):
         result = _mark_verified(booking, scanner, method=method_norm, already=False)
-        logger.debug("booking_qr_verify Verification Result: ok (exact payload match) booking_id=%s", current_booking_id)
+        logger.info("booking_qr_verify Verification Result: ok (exact payload) booking_id=%s", current_booking_id)
+        return result
+
+    # Bare verification code for this booking (manual entry fallback).
+    if _safe_compare(scanned, expected_token):
+        result = _mark_verified(booking, scanner, method=method_norm, already=False)
+        logger.info("booking_qr_verify Verification Result: ok (bare code) booking_id=%s", current_booking_id)
         return result
 
     if not parsed:
@@ -212,19 +252,16 @@ def verify_booking_qr(
 
     if qr_booking_id != current_booking_id:
         logger.warning(
-            "booking_qr_verify Verification Result: mismatch | Generated QR: %s | Decoded QR: %s | "
-            "Current Booking: %s | Expected Booking: %s",
-            expected,
-            scanned,
+            "booking_qr_verify Verification Result: booking id mismatch | current=%s | qr=%s | decoded=%s",
             current_booking_id,
             qr_booking_id,
+            scanned,
         )
         raise ValueError("QR code does not match this booking.")
 
-    expected_token = (getattr(booking, "booking_qr_token", None) or "").strip()
-    if not expected_token or not qr_token or not compare_digest(qr_token, expected_token):
-        raise ValueError("QR code is not valid for this booking.")
+    if not qr_token or not _safe_compare(qr_token, expected_token):
+        raise ValueError("QR verification code does not match this booking.")
 
     result = _mark_verified(booking, scanner, method=method_norm, already=False)
-    logger.debug("booking_qr_verify Verification Result: ok (id+token match) booking_id=%s", current_booking_id)
+    logger.info("booking_qr_verify Verification Result: ok (id+code) booking_id=%s", current_booking_id)
     return result

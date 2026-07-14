@@ -150,6 +150,7 @@ class BookingRead(BaseModel):
     goods_declaration_reviewed_at: datetime | None = None
     goods_declaration_reviewed_by_id: int | None = None
     booking_qr_payload: str | None = None
+    booking_qr_code: str | None = None
     booking_qr_ready: bool = False
     booking_qr_verified: bool = False
     booking_qr_verified_at: datetime | None = None

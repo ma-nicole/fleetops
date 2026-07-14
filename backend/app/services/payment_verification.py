@@ -41,7 +41,7 @@ def mark_payment_and_booking_verified(
         from app.services.booking_qr import ensure_booking_qr_token
         from app.services.delivery_verification import ensure_delivery_verification_credentials
 
-        ensure_booking_qr_token(booking)
+        ensure_booking_qr_token(booking, payment_status=PaymentStatus.VERIFIED.value)
         # Payment logic remains unchanged; this side effect materializes the
         # final customer confirmation credential at the required lifecycle point.
         ensure_delivery_verification_credentials(db, booking, payment_verified=True)

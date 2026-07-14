@@ -56,6 +56,20 @@ export default function CustomerBookingQrCard({
           ? `Verified${verifiedAt ? ` · ${new Date(verifiedAt).toLocaleString()}` : ""}. Helper may start the trip.`
           : "Ask your assigned helper to scan this code before starting the trip."}
       </p>
+      {!verified ? (
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.72rem",
+            color: "#9CA3AF",
+            textAlign: "center",
+            wordBreak: "break-all",
+            lineHeight: 1.35,
+          }}
+        >
+          Code for helper paste: {payload}
+        </p>
+      ) : null}
     </div>
   );
 }

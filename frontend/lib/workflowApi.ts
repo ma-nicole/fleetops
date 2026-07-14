@@ -136,6 +136,7 @@ export type Booking = {
   goods_declaration_reviewed_at?: string | null;
   goods_declaration_reviewed_by_id?: number | null;
   booking_qr_payload?: string | null;
+  booking_qr_code?: string | null;
   booking_qr_ready?: boolean;
   booking_qr_verified?: boolean;
   booking_qr_verified_at?: string | null;
