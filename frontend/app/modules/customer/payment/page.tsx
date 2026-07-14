@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRoleGuard } from "@/lib/useRoleGuard";
+import ContactSupportButton from "@/components/ContactSupportButton";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import LoadingMessage from "@/components/ui/LoadingMessage";
+import StatusBanner from "@/components/ui/StatusBanner";
 import { HYBRID_PAYMENT_METHODS, formatPaymentMethodLabel } from "@/lib/paymentMethodOptions";
 import { isCashPayment, paymentDisplayStatus, transactionReference } from "@/lib/paymentDisplayStatus";
 import { LOADING_AUTH_RESTORE } from "@/lib/loadingMessages";
@@ -76,9 +78,7 @@ export default function CustomerPaymentPage() {
           </p>
         </header>
 
-        {error && (
-          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>{error}</div>
-        )}
+        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 
         <section style={card}>
           <h2 style={{ marginTop: 0 }}>Payment methods</h2>
@@ -171,7 +171,10 @@ export default function CustomerPaymentPage() {
                       background: "#FAFAFA",
                     }}
                   >
-                    <p style={{ margin: "0 0 0.5rem", fontWeight: 700 }}>Booking #{bookingId}</p>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                      <p style={{ margin: 0, fontWeight: 700 }}>Booking #{bookingId}</p>
+                      <ContactSupportButton bookingId={bookingId} style={{ fontSize: "0.82rem", padding: "0.3rem 0.7rem", minHeight: 0 }} />
+                    </div>
                     <CustomerDocumentReviewSection
                       booking={booking}
                       payment={payment ?? null}

@@ -90,8 +90,8 @@ export default function EvidenceCaptureInput({
         {required ? " (required)" : " (optional)"}
       </span>
       <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", lineHeight: 1.45 }}>
-        Tap <strong>Take photo</strong> to capture proof in one step. Photos are watermarked with FleetOpts, booking/trip
-        ID, time, and GPS when available.
+        Tap <strong>Take photo</strong> to open the camera when supported. Photos are watermarked with FleetOpt, booking/trip
+        ID, capture timestamp, and GPS when available.
         {allowGalleryFallback
           ? " Gallery upload is available if the camera is unavailable (marked for manual review)."
           : ""}

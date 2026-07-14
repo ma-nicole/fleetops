@@ -10,3 +10,9 @@
   NODE_VERSION = "20"
   NEXT_PUBLIC_API_URL = "https://fleetops-production-b2b7.up.railway.app/api"
   BACKEND_ORIGIN = "https://fleetops-production-b2b7.up.railway.app"
+
+[[redirects]]
+  from = "/uploads/*"
+  to = "https://fleetops-production-b2b7.up.railway.app/uploads/:splat"
+  status = 200
+  force = true

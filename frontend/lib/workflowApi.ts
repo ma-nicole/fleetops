@@ -130,8 +130,15 @@ export type Booking = {
   goods_declaration_review_status?: string | null;
   goods_declaration_review_status_label?: string | null;
   goods_declaration_review_remarks?: string | null;
+  goods_declaration_review_remarks_history?: string | null;
+  goods_declaration_revision_count?: number;
+  goods_declaration_revision_limit?: number;
   goods_declaration_reviewed_at?: string | null;
   goods_declaration_reviewed_by_id?: number | null;
+  booking_qr_payload?: string | null;
+  booking_qr_ready?: boolean;
+  booking_qr_verified?: boolean;
+  booking_qr_verified_at?: string | null;
   cargo_type_category?: string | null;
   cargo_type_admin_notes?: string | null;
   cargo_restricted_flag?: boolean;
@@ -161,8 +168,22 @@ export type GoodsDeclarationAdminRow = {
   goods_declaration_review_status: string | null;
   goods_declaration_review_status_label: string;
   goods_declaration_review_remarks: string | null;
+  goods_declaration_review_remarks_history?: string | null;
+  goods_declaration_revision_count?: number;
+  goods_declaration_revision_limit?: number;
   goods_declaration_reviewed_at: string | null;
   goods_declaration_reviewed_by_id: number | null;
+  review_history?: Array<{
+    id: number;
+    action: string;
+    reason_code: string | null;
+    remarks: string | null;
+    document_original_filename: string | null;
+    actor_id: number | null;
+    actor_role: string | null;
+    revision_number: number;
+    created_at: string | null;
+  }>;
 };
 
 export type PreDeliveryChecklistItem = {
@@ -308,6 +329,9 @@ export type CrewAssignedBookingRow = {
   pre_delivery_checklist?: PreDeliveryChecklist;
   pre_delivery_ready?: boolean;
   pre_delivery_block_message?: string | null;
+  booking_qr_verified?: boolean;
+  booking_qr_verified_at?: string | null;
+  booking_qr_ready?: boolean;
   timeline_events: CrewTimelineEvent[];
   location_updates: Array<{
     id: number;
@@ -931,10 +955,23 @@ export const WorkflowApi = {
   ) => apiPatch<PreDeliveryChecklist>(`/bookings/${id}/pre-delivery-checklist`, payload),
 
   listGoodsDeclarations: () => apiGet<GoodsDeclarationAdminRow[]>("/admin/goods-declarations"),
+  goodsDeclarationReasonCatalog: () =>
+    apiGet<{ revision: Array<{ code: string; label: string }>; rejection: Array<{ code: string; label: string }> }>(
+      "/admin/goods-declarations/reason-catalog",
+    ),
   reviewGoodsDeclaration: (
     bookingId: number,
-    payload: { status: "approved" | "rejected" | "revision_requested"; remarks?: string | null },
+    payload: {
+      status: "approved" | "rejected" | "revision_requested";
+      remarks?: string | null;
+      reason_code?: string | null;
+    },
   ) => apiPatch<GoodsDeclarationAdminRow>(`/admin/goods-declarations/${bookingId}`, payload),
+  helperVerifyBookingQr: (bookingId: number, payload: string) =>
+    apiPost<{ ok: boolean; already_verified: boolean; booking_id: number; verified_at: string; message: string }>(
+      `/helper/bookings/${bookingId}/verify-qr`,
+      { payload },
+    ),
 
   resubmitBookingDocuments: (
     bookingId: number,

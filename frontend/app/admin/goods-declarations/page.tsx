@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import AdminDocumentViewButton from "@/components/AdminDocumentViewButton";
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
+import StatusBanner from "@/components/ui/StatusBanner";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { ApiError, parseApiDetail } from "@/lib/api";
 import { getEffectiveRole, ROLE_DASHBOARDS, type UserRole } from "@/lib/auth";
@@ -23,6 +24,11 @@ import type { GoodsDeclarationAdminRow } from "@/lib/workflowApi";
 import { WorkflowApi } from "@/lib/workflowApi";
 
 type StatusFilter = "all" | GoodsDeclarationReviewStatus;
+
+type ReasonCatalog = {
+  revision: Array<{ code: string; label: string }>;
+  rejection: Array<{ code: string; label: string }>;
+};
 
 const REVIEW_CONFIRM_COPY: Record<"approved" | "rejected" | "revision_requested", string> = {
   approved:
@@ -87,10 +93,12 @@ export default function AdminGoodsDeclarationsPage() {
     clearError: clearPreviewError,
   } = useDocumentPreview();
   const [rows, setRows] = useState<GoodsDeclarationAdminRow[]>([]);
+  const [catalog, setCatalog] = useState<ReasonCatalog>({ revision: [], rejection: [] });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [busyBookingId, setBusyBookingId] = useState<number | null>(null);
   const [remarksByBooking, setRemarksByBooking] = useState<Record<number, string>>({});
+  const [reasonByBooking, setReasonByBooking] = useState<Record<number, string>>({});
   const [actionErrorByBooking, setActionErrorByBooking] = useState<Record<number, string>>({});
 
   const dashboardHref = useMemo(() => {
@@ -104,8 +112,12 @@ export default function AdminGoodsDeclarationsPage() {
   const refresh = useCallback(async () => {
     setLoadError(null);
     try {
-      const data = await WorkflowApi.listGoodsDeclarations();
+      const [data, reasons] = await Promise.all([
+        WorkflowApi.listGoodsDeclarations(),
+        WorkflowApi.goodsDeclarationReasonCatalog().catch(() => ({ revision: [], rejection: [] })),
+      ]);
       setRows(data);
+      setCatalog(reasons);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
         setLoadError(ERROR_ANALYTICS_PERMISSION);
@@ -129,7 +141,8 @@ export default function AdminGoodsDeclarationsPage() {
     status: "approved" | "rejected" | "revision_requested",
   ) => {
     const remarks = (remarksByBooking[bookingId] ?? "").trim();
-    const needsRemarks = status === "rejected" || status === "revision_requested";
+    const reason_code = (reasonByBooking[bookingId] ?? "").trim() || null;
+    const needsReason = status === "rejected" || status === "revision_requested";
 
     setActionErrorByBooking((prev) => {
       const next = { ...prev };
@@ -137,7 +150,11 @@ export default function AdminGoodsDeclarationsPage() {
       return next;
     });
 
-    if (needsRemarks && !remarks) {
+    if (needsReason && !reason_code && !remarks) {
+      setActionErrorByBooking((prev) => ({
+        ...prev,
+        [bookingId]: "Select a predefined reason or enter a custom remark.",
+      }));
       return;
     }
 
@@ -150,10 +167,16 @@ export default function AdminGoodsDeclarationsPage() {
       const updated = await WorkflowApi.reviewGoodsDeclaration(bookingId, {
         status,
         remarks: remarks || null,
+        reason_code,
       });
       setRows((prev) => prev.map((r) => (r.booking_id === bookingId ? updated : r)));
       if (status === "approved") {
         setRemarksByBooking((prev) => {
+          const next = { ...prev };
+          delete next[bookingId];
+          return next;
+        });
+        setReasonByBooking((prev) => {
           const next = { ...prev };
           delete next[bookingId];
           return next;
@@ -182,8 +205,8 @@ export default function AdminGoodsDeclarationsPage() {
           </Link>
           <h1 style={{ margin: "0.75rem 0 0.25rem", fontSize: "2rem" }}>Declaration of goods review</h1>
           <p style={{ margin: 0, color: "#6B7280", fontSize: "0.95rem" }}>
-            Review uploaded cargo declaration files per booking. Approve, reject, or request revision with remarks.
-            Booking workflow is unchanged — only validation status and remarks are updated.
+            Review uploaded cargo declaration files per booking. Approve, reject, or request revision (max 3) with a
+            predefined reason and optional custom remark. Prior remarks and file versions are retained.
           </p>
         </div>
 
@@ -217,11 +240,7 @@ export default function AdminGoodsDeclarationsPage() {
           </button>
         </div>
 
-        {loadError && (
-          <p role="alert" style={{ margin: 0, color: "#B91C1C" }}>
-            {loadError}
-          </p>
-        )}
+        {loadError ? <StatusBanner tone="error">{loadError}</StatusBanner> : null}
 
         <div style={{ overflowX: "auto", background: "#fff", borderRadius: 8, border: "1px solid #E5E7EB" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
@@ -231,7 +250,7 @@ export default function AdminGoodsDeclarationsPage() {
                 <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB" }}>Route / cargo</th>
                 <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB" }}>Document</th>
                 <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB" }}>Review status</th>
-                <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB", minWidth: 280 }}>Action</th>
+                <th style={{ padding: "0.75rem", borderBottom: "1px solid #E5E7EB", minWidth: 300 }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -248,13 +267,21 @@ export default function AdminGoodsDeclarationsPage() {
                   const canReview = canPerformGoodsDeclarationReview(reviewStatus);
                   const isLocked = isGoodsDeclarationReviewLocked(reviewStatus);
                   const isFinal = isGoodsDeclarationReviewFinal(reviewStatus);
+                  const revisionCount = row.goods_declaration_revision_count ?? 0;
+                  const revisionLimit = row.goods_declaration_revision_limit ?? 3;
+                  const revisionsExhausted = revisionCount >= revisionLimit;
                   const storedRemarks = row.goods_declaration_review_remarks ?? "";
-                  const remarks = remarksByBooking[row.booking_id] ?? storedRemarks;
-                  const remarksReady = remarks.trim().length > 0;
+                  const remarks = remarksByBooking[row.booking_id] ?? "";
+                  const reasonCode = reasonByBooking[row.booking_id] ?? "";
+                  const reasonOrRemarkReady = Boolean(reasonCode || remarks.trim());
                   const actionError = actionErrorByBooking[row.booking_id];
                   const reviewLockedBySave = busyBookingId !== null;
                   const approveEnabled = canReview && !reviewLockedBySave;
-                  const revisionRejectEnabled = canReview && remarksReady && !reviewLockedBySave;
+                  const revisionEnabled =
+                    canReview && reasonOrRemarkReady && !reviewLockedBySave && !revisionsExhausted;
+                  const rejectEnabled = canReview && reasonOrRemarkReady && !reviewLockedBySave;
+                  const historyText = (row.goods_declaration_review_remarks_history || "").trim();
+                  const reviewEvents = row.review_history ?? [];
 
                   return (
                     <tr key={row.booking_id} style={{ borderBottom: "1px solid #F3F4F6", verticalAlign: "top" }}>
@@ -298,11 +325,14 @@ export default function AdminGoodsDeclarationsPage() {
                       </td>
                       <td style={{ padding: "0.75rem" }}>
                         <ReviewStatusBadge status={reviewStatus} />
+                        <p style={{ margin: "0.45rem 0 0", fontSize: "0.78rem", color: "#6B7280" }}>
+                          Revisions used: {revisionCount}/{revisionLimit}
+                        </p>
                         {storedRemarks && (
                           <p style={{ margin: "0.5rem 0 0", fontSize: "0.8rem", color: "#4B5563" }}>
                             {isLocked ? (
                               <>
-                                <span style={{ fontWeight: 600, color: "#9A3412" }}>Revision remarks: </span>
+                                <span style={{ fontWeight: 600, color: "#9A3412" }}>Latest remarks: </span>
                                 {storedRemarks}
                               </>
                             ) : (
@@ -310,9 +340,49 @@ export default function AdminGoodsDeclarationsPage() {
                             )}
                           </p>
                         )}
+                        {historyText ? (
+                          <pre
+                            style={{
+                              margin: "0.5rem 0 0",
+                              fontSize: "0.72rem",
+                              color: "#6B7280",
+                              whiteSpace: "pre-wrap",
+                              fontFamily: "inherit",
+                              maxHeight: 120,
+                              overflow: "auto",
+                            }}
+                          >
+                            {historyText}
+                          </pre>
+                        ) : null}
+                        {reviewEvents.length > 0 ? (
+                          <details style={{ marginTop: 8, fontSize: "0.75rem", color: "#6B7280" }}>
+                            <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+                              Audit trail ({reviewEvents.length})
+                            </summary>
+                            <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem" }}>
+                              {reviewEvents.map((ev) => (
+                                <li key={ev.id} style={{ marginBottom: 4 }}>
+                                  <strong>{ev.action}</strong>
+                                  {ev.actor_role ? ` · ${ev.actor_role}` : ""}
+                                  {ev.actor_id != null ? ` #${ev.actor_id}` : ""}
+                                  {ev.revision_number ? ` · rev ${ev.revision_number}` : ""}
+                                  {ev.created_at ? ` · ${formatDateTime(ev.created_at)}` : ""}
+                                  {ev.remarks ? ` — ${ev.remarks}` : ""}
+                                  {ev.document_original_filename
+                                    ? ` [${ev.document_original_filename}]`
+                                    : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
                         {row.goods_declaration_reviewed_at && (
                           <p style={{ margin: "0.35rem 0 0", fontSize: "0.75rem", color: "#9CA3AF" }}>
                             Reviewed {formatDateTime(row.goods_declaration_reviewed_at)}
+                            {row.goods_declaration_reviewed_by_id != null
+                              ? ` · reviewer #${row.goods_declaration_reviewed_by_id}`
+                              : ""}
                           </p>
                         )}
                         {isLocked && (
@@ -325,93 +395,125 @@ export default function AdminGoodsDeclarationsPage() {
                             Review closed — no further actions.
                           </p>
                         )}
+                        {revisionsExhausted && canReview ? (
+                          <StatusBanner tone="warning" title="Revision limit reached" style={{ marginTop: 8 }}>
+                            Maximum of {revisionLimit} revisions used. Reject or approve only.
+                          </StatusBanner>
+                        ) : null}
                       </td>
                       <td style={{ padding: "0.75rem" }}>
                         {canReview ? (
-                        <div style={{ display: "grid", gap: "0.35rem", marginBottom: "0.5rem" }}>
-                          <label
-                            htmlFor={`goods-decl-remarks-${row.booking_id}`}
-                            style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151" }}
-                          >
-                            Remarks (required for reject / revision)
-                          </label>
-                          <textarea
-                            id={`goods-decl-remarks-${row.booking_id}`}
-                            className="input"
-                            rows={2}
-                            value={remarks}
-                            onChange={(e) => {
-                              setRemarksByBooking((prev) => ({
-                                ...prev,
-                                [row.booking_id]: e.target.value,
-                              }));
-                            }}
-                            maxLength={2000}
-                            placeholder="Notes to customer or internal team"
-                            disabled={reviewLockedBySave}
-                          />
-                        </div>
+                          <div style={{ display: "grid", gap: "0.45rem", marginBottom: "0.5rem" }}>
+                            <label
+                              htmlFor={`goods-decl-reason-${row.booking_id}`}
+                              style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151" }}
+                            >
+                              Predefined reason (revision / reject)
+                            </label>
+                            <select
+                              id={`goods-decl-reason-${row.booking_id}`}
+                              className="input"
+                              value={reasonCode}
+                              disabled={reviewLockedBySave}
+                              onChange={(e) =>
+                                setReasonByBooking((prev) => ({
+                                  ...prev,
+                                  [row.booking_id]: e.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select reason…</option>
+                              <optgroup label="Revision">
+                                {catalog.revision.map((r) => (
+                                  <option key={`rev-${r.code}`} value={r.code}>
+                                    {r.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Rejection">
+                                {catalog.rejection.map((r) => (
+                                  <option key={`rej-${r.code}`} value={r.code}>
+                                    {r.label}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                            <label
+                              htmlFor={`goods-decl-remarks-${row.booking_id}`}
+                              style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151" }}
+                            >
+                              Optional custom remark
+                            </label>
+                            <textarea
+                              id={`goods-decl-remarks-${row.booking_id}`}
+                              className="input"
+                              rows={2}
+                              value={remarks}
+                              onChange={(e) => {
+                                setRemarksByBooking((prev) => ({
+                                  ...prev,
+                                  [row.booking_id]: e.target.value,
+                                }));
+                              }}
+                              maxLength={2000}
+                              placeholder="Additional notes (optional if a reason is selected)"
+                              disabled={reviewLockedBySave}
+                            />
+                          </div>
                         ) : null}
                         {reviewBusy ? (
                           <p role="status" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#1E40AF" }}>
                             Decision is being saved. Other actions are locked until this finishes.
                           </p>
                         ) : null}
-                        {canReview && !remarksReady && (
-                          <p
-                            role="status"
-                            style={{
-                              margin: "0 0 0.5rem",
-                              fontSize: "0.78rem",
-                              color: "#6B7280",
-                            }}
-                          >
+                        {canReview && !reasonOrRemarkReady && (
+                          <p role="status" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#6B7280" }}>
                             {REMARKS_REQUIRED_REVISION_REJECT}
                           </p>
                         )}
                         {actionError && (
-                          <p role="alert" style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", color: "#B91C1C" }}>
+                          <StatusBanner tone="error" style={{ marginBottom: 8 }}>
                             {actionError}
-                          </p>
+                          </StatusBanner>
                         )}
                         {canReview ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                          <button
-                            type="button"
-                            className="button"
-                            disabled={!approveEnabled}
-                            aria-disabled={!approveEnabled}
-                            onClick={() => void submitReview(row.booking_id, "approved")}
-                          >
-                            {reviewBusy ? "Saving…" : "Approve"}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!revisionRejectEnabled}
-                            aria-disabled={!revisionRejectEnabled}
-                            title={
-                              revisionRejectEnabled
-                                ? "Request revision with remarks"
-                                : REMARKS_REQUIRED_REVISION_REJECT
-                            }
-                            onClick={() => void submitReview(row.booking_id, "revision_requested")}
-                            style={actionButtonStyle("revision", revisionRejectEnabled)}
-                          >
-                            Request revision
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!revisionRejectEnabled}
-                            aria-disabled={!revisionRejectEnabled}
-                            title={
-                              revisionRejectEnabled ? "Reject with remarks" : REMARKS_REQUIRED_REVISION_REJECT
-                            }
-                            onClick={() => void submitReview(row.booking_id, "rejected")}
-                            style={actionButtonStyle("reject", revisionRejectEnabled)}
-                          >
-                            Reject
-                          </button>
-                        </div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                            <button
+                              type="button"
+                              className="button"
+                              disabled={!approveEnabled}
+                              aria-disabled={!approveEnabled}
+                              onClick={() => void submitReview(row.booking_id, "approved")}
+                            >
+                              {reviewBusy ? "Saving…" : "Approve"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!revisionEnabled}
+                              aria-disabled={!revisionEnabled}
+                              title={
+                                revisionsExhausted
+                                  ? `Maximum of ${revisionLimit} revisions already used`
+                                  : revisionEnabled
+                                    ? "Request revision with reason"
+                                    : REMARKS_REQUIRED_REVISION_REJECT
+                              }
+                              onClick={() => void submitReview(row.booking_id, "revision_requested")}
+                              style={actionButtonStyle("revision", revisionEnabled)}
+                            >
+                              Request revision
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!rejectEnabled}
+                              aria-disabled={!rejectEnabled}
+                              title={rejectEnabled ? "Reject with reason" : REMARKS_REQUIRED_REVISION_REJECT}
+                              onClick={() => void submitReview(row.booking_id, "rejected")}
+                              style={actionButtonStyle("reject", rejectEnabled)}
+                            >
+                              Reject
+                            </button>
+                          </div>
                         ) : null}
                       </td>
                     </tr>

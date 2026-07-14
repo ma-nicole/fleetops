@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import PaymentMethodInstructions from "@/components/PaymentMethodInstructions";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
+import ContactSupportButton from "@/components/ContactSupportButton";
 import XenditPaymentCard from "@/components/XenditPaymentCard";
 import LoadingMessage from "@/components/ui/LoadingMessage";
+import StatusBanner from "@/components/ui/StatusBanner";
 import SubmitButton from "@/components/ui/SubmitButton";
 import ErrorState from "@/components/ui/ErrorState";
 import { ApiError } from "@/lib/api";
@@ -462,10 +464,15 @@ function BookingPaymentInner() {
       </div>
 
       <h1 style={{ color: "#1A1A1A", marginBottom: "0.5rem" }}>Pay for your booking</h1>
-      <p style={{ color: "#666666", marginBottom: "2rem" }}>
+      <p style={{ color: "#666666", marginBottom: "1rem" }}>
         Choose how you want to pay. Online methods use Xendit checkout and verify automatically. Cash payments are
         confirmed by FleetOps staff — no proof upload required.
       </p>
+      {booking ? (
+        <div style={{ marginBottom: "1.5rem" }}>
+          <ContactSupportButton bookingId={booking.id} />
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "2rem" }}>
         <div style={{ display: "grid", gap: "1.25rem" }}>

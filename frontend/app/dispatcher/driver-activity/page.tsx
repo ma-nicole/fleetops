@@ -8,6 +8,7 @@ import { announce } from "@/lib/useAnnouncer";
 import { DispatchApi, type DispatcherDashboardResponse } from "@/lib/dispatchApi";
 import { WorkflowApi } from "@/lib/workflowApi";
 import { useRoleGuard } from "@/lib/useRoleGuard";
+import StatusBanner from "@/components/ui/StatusBanner";
 
 type BoardAssignment = {
   trip_id: number;
@@ -208,9 +209,7 @@ export default function DriverActivityPage() {
         <p style={{ color: "#666666", margin: "0" }}>Crew roster with live trip assignment context (no mock contacts).</p>
       </div>
 
-      {loadError ? (
-        <div style={{ padding: "1rem", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px" }}>{loadError}</div>
-      ) : null}
+      {loadError ? <StatusBanner tone="error">{loadError}</StatusBanner> : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
         <div

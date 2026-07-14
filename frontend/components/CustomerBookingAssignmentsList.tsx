@@ -1,7 +1,8 @@
 "use client";
 
-import { apiFullUrl } from "@/lib/api";
+import { apiFullUrl, uploadMediaUrl } from "@/lib/api";
 import { customerAssignmentLatestLocation } from "@/lib/customerAssignmentDisplay";
+import { helperProgressLabel } from "@/lib/customerBookingWorkflow";
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
 import type { CrewTimelineEvent, CustomerBookingAssignment } from "@/lib/workflowApi";
 
@@ -12,10 +13,7 @@ function formatTruckLine(t: CustomerBookingAssignment["truck"]): string {
 }
 
 function mediaSrc(url: string): string {
-  const u = (url || "").trim();
-  if (!u) return "";
-  if (/^https?:\/\//i.test(u)) return u;
-  return apiFullUrl(u.startsWith("/") ? u : `/${u}`);
+  return uploadMediaUrl(url) || apiFullUrl(url.startsWith("/") ? url : `/${url}`);
 }
 
 function assignmentTimelineEvents(asg: CustomerBookingAssignment): CrewTimelineEvent[] {
@@ -85,7 +83,7 @@ export default function CustomerBookingAssignmentsList({
     <div style={{ display: "grid", gap: "0.65rem" }}>
       <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary, #111827)" }}>{heading}</div>
       {sorted.map((asg) => {
-        const tripStatus = (asg.helper_progress_status || asg.trip_status || "—").replace(/_/g, " ");
+        const tripStatus = helperProgressLabel(asg.helper_progress_status || asg.trip_status);
         const timeline = assignmentTimelineEvents(asg);
         return (
           <div

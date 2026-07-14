@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFullUrl } from "@/lib/api";
 import { DispatchApi, type TripLogRow, type TripLogTimelineEntry } from "@/lib/dispatchApi";
 import { announce } from "@/lib/useAnnouncer";
+import StatusBanner from "@/components/ui/StatusBanner";
 
 function mediaSrc(url: string): string {
   const u = url.trim();
@@ -104,11 +105,7 @@ export default function TripLogsPage() {
         {loading ? <span style={{ color: "#64748B", fontSize: "0.9rem" }}>Loading…</span> : null}
       </div>
 
-      {err ? (
-        <div role="alert" style={{ padding: "0.85rem 1rem", borderRadius: "8px", background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }}>
-          {err}
-        </div>
-      ) : null}
+      {err ? <StatusBanner tone="error">{err}</StatusBanner> : null}
 
       {!loading && !err && rows.length === 0 ? (
         <div style={{ padding: "2rem", borderRadius: "10px", border: "1px dashed #CBD5E1", color: "#64748B", textAlign: "center" }}>

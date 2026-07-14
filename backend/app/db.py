@@ -156,8 +156,13 @@ def apply_runtime_schema_fixes() -> None:
         goods_review_cols = [
             ("goods_declaration_review_status", "VARCHAR(32) NULL"),
             ("goods_declaration_review_remarks", "VARCHAR(2000) NULL"),
+            ("goods_declaration_review_remarks_history", "TEXT NULL"),
+            ("goods_declaration_revision_count", "INT NOT NULL DEFAULT 0"),
             ("goods_declaration_reviewed_at", "DATETIME NULL"),
             ("goods_declaration_reviewed_by_id", "INT NULL"),
+            ("booking_qr_token", "VARCHAR(64) NULL"),
+            ("booking_qr_verified_at", "DATETIME NULL"),
+            ("booking_qr_verified_by_id", "INT NULL"),
         ]
         for col, ddl_suffix in goods_review_cols:
             if col not in bk_cols:
@@ -774,6 +779,11 @@ def apply_runtime_schema_fixes() -> None:
         from app.models.entities import EvidenceCaptureRecord
 
         EvidenceCaptureRecord.__table__.create(bind=engine, checkfirst=True)
+
+    if not insp.has_table("goods_declaration_review_events"):
+        from app.models.entities import GoodsDeclarationReviewEvent
+
+        GoodsDeclarationReviewEvent.__table__.create(bind=engine, checkfirst=True)
 
 
 def get_db() -> Generator[Session, None, None]:

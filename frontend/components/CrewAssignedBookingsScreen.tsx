@@ -10,6 +10,7 @@ import CrewSchedulingPlotPanel, { schedulingPlotFromCrewRow } from "@/components
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
 import DeliveryCompletionPanel from "@/components/DeliveryCompletionPanel";
 import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
+import HelperBookingQrVerify from "@/components/HelperBookingQrVerify";
 import HelperLocationSelector, { type SelectedHelperLocation } from "@/components/HelperLocationSelector";
 import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
 import type { EvidenceCaptureMetadata } from "@/lib/evidenceCapture";
@@ -1145,6 +1146,13 @@ export default function CrewAssignedBookingsScreen({
             {variant === "helper" ? (
               <>
                 <hr style={divider} />
+                <HelperBookingQrVerify
+                  bookingId={detail.booking_id}
+                  verified={Boolean(detail.booking_qr_verified)}
+                  verifiedAt={detail.booking_qr_verified_at ?? null}
+                  onVerified={() => void load()}
+                />
+                <div style={{ height: 12 }} />
                 {(() => {
                   const current = workflowPhase(detail, "helper");
                   const allowed = nextPhase(current);

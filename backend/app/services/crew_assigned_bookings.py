@@ -284,9 +284,16 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
     pre_delivery_checklist = build_pre_delivery_checklist(db, bk) if bk else None
     pre_delivery_block = pre_delivery_block_detail(db, bk) if bk else None
 
+    from app.services.booking_qr import booking_qr_public_fields
+
+    booking_qr = booking_qr_public_fields(bk) if bk else {}
+
     return {
         "trip_id": t.id,
         "booking_id": t.booking_id,
+        "booking_qr_verified": booking_qr.get("booking_qr_verified", False),
+        "booking_qr_verified_at": booking_qr.get("booking_qr_verified_at"),
+        "booking_qr_ready": booking_qr.get("booking_qr_ready", False),
         "trip_status": trip_status_val,
         "helper_progress_status": (t.helper_progress_status or "for_pickup").strip().lower(),
         "operational_status": op_slug,
@@ -471,6 +478,9 @@ def redact_crew_booking_row_for_helper(row: dict[str, Any]) -> dict[str, Any]:
         "proof_photo_urls": row.get("proof_photo_urls") or [],
         "pre_delivery_ready": row.get("pre_delivery_ready"),
         "pre_delivery_block_message": row.get("pre_delivery_block_message"),
+        "booking_qr_verified": row.get("booking_qr_verified", False),
+        "booking_qr_verified_at": row.get("booking_qr_verified_at"),
+        "booking_qr_ready": row.get("booking_qr_ready", False),
         "booking": _redact_booking_for_helper(row.get("booking")),
     }
 

@@ -3,6 +3,7 @@
 import { apiFullUrl } from "@/lib/api";
 import { WorkflowApi, type DispatchVehicleIssueReportRow } from "@/lib/workflowApi";
 import { announce } from "@/lib/useAnnouncer";
+import StatusBanner from "@/components/ui/StatusBanner";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -112,19 +113,7 @@ export default function ReportedIssuesPage() {
         </p>
       </div>
 
-      {loadError ? (
-        <div
-          style={{
-            padding: "1rem 1.25rem",
-            borderRadius: "8px",
-            background: "#FEF2F2",
-            border: "1px solid #FECACA",
-            color: "#B91C1C",
-          }}
-        >
-          {loadError}
-        </div>
-      ) : null}
+      {loadError ? <StatusBanner tone="error">{loadError}</StatusBanner> : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
         <div

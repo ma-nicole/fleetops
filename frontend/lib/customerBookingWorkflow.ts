@@ -179,6 +179,25 @@ export function buildCustomerBookingWorkflowSteps(
   });
 }
 
+export function helperProgressLabel(status: string | null | undefined): string {
+  const key = (status || "").trim().toLowerCase();
+  const map: Record<string, string> = {
+    for_pickup: "En Route to Pickup",
+    picked_up: "Arrived at Pickup",
+    en_route: "En Route to Destination",
+    out_for_delivery: "En Route to Destination",
+    in_delivery: "En Route to Destination",
+    dropped_off: "Arrived at Destination",
+    completed: "Completed",
+    cancelled: "Cancelled",
+    assigned: "Driver Assigned",
+    accepted: "En Route to Pickup",
+    departed: "En Route to Pickup",
+    loading: "Arrived at Pickup",
+  };
+  return map[key] ?? (key ? key.replace(/_/g, " ") : "—");
+}
+
 export function customerWorkflowCurrentLabel(
   booking: Booking | CustomerBookingRow,
   payment?: Payment | null,

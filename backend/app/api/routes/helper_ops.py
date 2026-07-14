@@ -37,6 +37,8 @@ from app.services.evidence_capture import (
 from app.services.pre_delivery_verification import is_delivery_progression_step, pre_delivery_block_detail
 from app.services.trip_status_sync import sync_trip_and_booking_status
 from app.services.dispatch_resource_availability import release_booking_trips, release_trip_resources
+from app.services.booking_qr import verify_booking_qr
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/helper", tags=["helper"])
 logger = logging.getLogger(__name__)
@@ -45,6 +47,10 @@ UPLOAD_DIR = uploads_subdir("helper_proofs")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".img"}
 STATUS_FLOW = ["for_pickup", "picked_up", "en_route", "dropped_off", "completed"]
 STATUS_INDEX = {s: i for i, s in enumerate(STATUS_FLOW)}
+
+
+class BookingQrVerifyBody(BaseModel):
+    payload: str = Field(min_length=8, max_length=256)
 
 
 def _ensure_upload_dir() -> None:
@@ -154,6 +160,29 @@ async def helper_update_status(
 
     if step in {"picked_up", "dropped_off"} and photo is None:
         raise HTTPException(status_code=400, detail=f"{step} requires proof photo.")
+
+    if step == "for_pickup" and trip.booking and getattr(trip.booking, "booking_qr_verified_at", None) is None:
+        # Generate token if payment already verified but QR never materialized.
+        from app.services.booking_qr import ensure_booking_qr_token, booking_qr_public_fields
+
+        if trip.booking.status in {
+            BookingStatus.PAYMENT_VERIFIED,
+            BookingStatus.READY_FOR_ASSIGNMENT,
+            BookingStatus.APPROVED,
+            BookingStatus.ASSIGNED,
+            BookingStatus.ACCEPTED,
+        }:
+            ensure_booking_qr_token(trip.booking)
+            db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Scan the customer Booking QR before starting the trip.",
+                "code": "booking_qr_required",
+                "booking_id": trip.booking_id,
+                **booking_qr_public_fields(trip.booking),
+            },
+        )
 
     enroute_count = (
         db.query(TripLocationUpdate)
@@ -353,3 +382,29 @@ def helper_list_bookings(
     user: User = Depends(require_roles(UserRole.HELPER)),
 ):
     return {"bookings": list_crew_assigned_bookings(db, user)}
+
+
+@router.post("/bookings/{booking_id}/verify-qr")
+def helper_verify_booking_qr(
+    booking_id: int,
+    body: BookingQrVerifyBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.HELPER)),
+):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    # Helper must be assigned to at least one trip on this booking.
+    assigned = (
+        db.query(Trip.id)
+        .filter(Trip.booking_id == booking_id, Trip.helper_id == user.id)
+        .first()
+    )
+    if not assigned:
+        raise HTTPException(status_code=403, detail="Not assigned to this booking.")
+    try:
+        result = verify_booking_qr(db, booking=booking, payload=body.payload, scanner=user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return result

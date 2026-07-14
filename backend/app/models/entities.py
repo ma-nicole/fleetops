@@ -341,9 +341,14 @@ class Booking(Base):
     cargo_type_validated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     goods_declaration_review_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     goods_declaration_review_remarks: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    goods_declaration_review_remarks_history: Mapped[str | None] = mapped_column(Text, nullable=True)
+    goods_declaration_revision_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     goods_declaration_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     goods_declaration_reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
+    booking_qr_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    booking_qr_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    booking_qr_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     cargo_type_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     cargo_type_admin_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     cargo_restricted_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -370,6 +375,24 @@ class Booking(Base):
     customer: Mapped[User] = relationship(foreign_keys=[customer_id])
     approved_by: Mapped[User | None] = relationship(foreign_keys=[approved_by_id])
     route: Mapped[Route | None] = relationship(foreign_keys=[route_id])
+
+
+class GoodsDeclarationReviewEvent(Base):
+    """Audit trail for goods declaration reviews — preserves prior versions and remarks."""
+
+    __tablename__ = "goods_declaration_review_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(ForeignKey("bookings.id"), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    remarks: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    document_storage_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    document_original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    actor_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    revision_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class JobOrder(Base):

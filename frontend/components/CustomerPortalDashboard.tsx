@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
+import ContactSupportButton from "@/components/ContactSupportButton";
+import CustomerBookingQrCard from "@/components/CustomerBookingQrCard";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
@@ -118,6 +120,24 @@ export default function CustomerPortalDashboard() {
       console.error(e);
     }
   }, []);
+
+  useEffect(() => {
+    if (!ready || !allowed) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshShipments();
+    };
+    const onFocus = () => void refreshShipments();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshShipments();
+    }, 15000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(poll);
+    };
+  }, [ready, allowed, refreshShipments]);
 
   const kpis = useMemo(() => {
     const totalOrders = activeShipments.length + historyCount;
@@ -320,6 +340,13 @@ export default function CustomerPortalDashboard() {
                             <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
                               <div><span style={{ color: "var(--text-secondary)" }}>From:</span> {order.pickup_location}</div>
                               <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
+                              <CustomerBookingQrCard
+                                bookingId={order.id}
+                                payload={order.booking_qr_payload}
+                                verified={Boolean(order.booking_qr_verified)}
+                                verifiedAt={order.booking_qr_verified_at ?? null}
+                                compact
+                              />
                               <div style={{ marginTop: "0.25rem" }}>
                                 <CustomerBookingAssignmentsList
                                   assignments={order.assignments}
@@ -332,9 +359,19 @@ export default function CustomerPortalDashboard() {
                               <span style={{ color: "var(--text-secondary)" }}>
                                 Payment total <strong>{formatPhpWhole(Number(order.estimated_cost))}</strong>
                               </span>
-                              <Link href={`/modules/operations/trips?booking=${order.id}`} style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
-                                Track booking
-                              </Link>
+                              <div style={{ display: "flex", gap: "0.65rem", alignItems: "center", flexWrap: "wrap" }}>
+                                <ContactSupportButton
+                                  bookingId={order.id}
+                                  style={{
+                                    fontSize: "0.82rem",
+                                    padding: "0.35rem 0.75rem",
+                                    minHeight: 0,
+                                  }}
+                                />
+                                <Link href={`/modules/operations/trips?booking=${order.id}`} style={{ color: "var(--brand-text-strong)", textDecoration: "none", fontWeight: 600 }}>
+                                  Track booking
+                                </Link>
+                              </div>
                             </div>
                             <CustomerDocumentReviewSection
                               booking={order}

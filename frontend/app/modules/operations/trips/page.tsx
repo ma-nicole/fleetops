@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
+import CustomerBookingQrCard from "@/components/CustomerBookingQrCard";
 import CustomerBookingWorkflowTracker from "@/components/CustomerBookingWorkflowTracker";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
+import ContactSupportButton from "@/components/ContactSupportButton";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { getDashboardPath, getEffectiveRole, type UserRole } from "@/lib/auth";
 import { APP_LOCALE, APP_TIMEZONE, formatPhpWhole } from "@/lib/appLocale";
@@ -512,6 +514,18 @@ function TripRecordsPageInner() {
                           }}
                         >
                           <CustomerBookingWorkflowTracker booking={b} payment={pay ?? null} />
+                          {isCustomer ? (
+                            <div style={{ marginBottom: "0.85rem", display: "grid", gap: "0.65rem" }}>
+                              <CustomerBookingQrCard
+                                bookingId={b.id}
+                                payload={b.booking_qr_payload}
+                                verified={Boolean(b.booking_qr_verified)}
+                                verifiedAt={b.booking_qr_verified_at ?? null}
+                                compact
+                              />
+                              <ContactSupportButton bookingId={b.id} />
+                            </div>
+                          ) : null}
                           <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#374151", marginBottom: "0.5rem" }}>
                             Trip crews and live status
                             {isCustomerRow(b) ? (

@@ -11,6 +11,7 @@ import BookingCargoWeightDisplay from "@/components/BookingCargoWeightDisplay";
 import BookingDocumentsReview from "@/components/BookingDocumentsReview";
 import BookingTollReviewPanel from "@/components/BookingTollReviewPanel";
 import PreDeliveryVerificationChecklist from "@/components/PreDeliveryVerificationChecklist";
+import StatusBanner from "@/components/ui/StatusBanner";
 
 function OrderDetailsInner() {
   const router = useRouter();
@@ -87,7 +88,7 @@ function OrderDetailsInner() {
         <Link href="/dispatcher/dashboard" style={{ color: "#FF9800", textDecoration: "none", fontWeight: "600" }}>
           ← Back to Dashboard
         </Link>
-        <div style={{ padding: "1rem", background: "#FEE2E2", color: "#991B1B", borderRadius: "8px" }}>{error || "Booking not found."}</div>
+        <StatusBanner tone="error">{error || "Booking not found."}</StatusBanner>
       </div>
     );
   }

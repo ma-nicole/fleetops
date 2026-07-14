@@ -6,6 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Booking, Trip, TripLocationUpdate, TripStatusUpdate, Truck, User
 from app.services.latest_location_display import latest_location_display_for_trip
+from app.services.upload_urls import public_upload_url
+
+
+def _photo_public(path: str | None) -> str | None:
+    """Expose helper proofs as `/uploads/...` when present on disk."""
+    if not path or not str(path).strip():
+        return None
+    pub = public_upload_url(path)
+    if pub:
+        return pub
+    rel = str(path).strip().replace("\\", "/").lstrip("/")
+    if rel.startswith("uploads/"):
+        return f"/{rel}"
+    return f"/uploads/{rel}"
 
 
 def _merge_assignment_timeline(
@@ -32,7 +46,7 @@ def _merge_assignment_timeline(
                 "status": code,
                 "location_name": u.location_name,
                 "remarks": u.remarks,
-                "photo_url": u.photo_url,
+                "photo_url": _photo_public(u.photo_url),
                 "created_at": u.created_at.isoformat(),
                 "booking_id": booking_id,
                 "trip_id": trip_id,
@@ -63,7 +77,7 @@ def _merge_assignment_timeline(
                 "status": "en_route",
                 "location_name": u.location_name,
                 "remarks": u.remarks,
-                "photo_url": u.photo_url,
+                "photo_url": _photo_public(u.photo_url),
                 "created_at": u.created_at.isoformat(),
                 "booking_id": booking_id,
                 "trip_id": trip_id,
@@ -161,7 +175,7 @@ def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
                     {
                         "location_name": u.location_name,
                         "remarks": u.remarks,
-                        "photo_url": u.photo_url,
+                        "photo_url": _photo_public(u.photo_url),
                         "created_at": u.created_at.isoformat(),
                         "booking_id": booking.id,
                         "trip_id": tr.id,
@@ -180,7 +194,7 @@ def build_assignments_for_booking(db: Session, booking: Booking) -> list[dict]:
                         "status": u.status,
                         "location_name": u.location_name,
                         "remarks": u.remarks,
-                        "photo_url": u.photo_url,
+                        "photo_url": _photo_public(u.photo_url),
                         "created_at": u.created_at.isoformat(),
                         "booking_id": booking.id,
                         "trip_id": tr.id,

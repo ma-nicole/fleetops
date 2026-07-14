@@ -63,6 +63,7 @@ from app.services.goods_declaration_review import (
     mark_goods_declaration_resubmitted,
 )
 from app.services.goods_declaration_notifications import notify_reviewers_documents_resubmitted
+from app.services.booking_qr import booking_qr_public_fields
 
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
@@ -71,6 +72,7 @@ router = APIRouter(prefix="/bookings", tags=["bookings"])
 def _booking_read_payload(booking: Booking) -> dict:
     payload = BookingRead.model_validate(booking).model_dump(mode="json")
     payload.update(goods_declaration_review_customer_fields(booking))
+    payload.update(booking_qr_public_fields(booking))
     return payload
 
 
@@ -442,6 +444,25 @@ async def resubmit_booking_documents(
         raise HTTPException(status_code=400, detail="Upload a revised cargo declaration.")
 
     if has_decl and cargo_declaration is not None:
+        # Preserve prior version in audit history before replacing the active file pointer.
+        prior_path = booking.cargo_declaration_storage_path
+        prior_name = booking.cargo_declaration_original_filename
+        if prior_path or prior_name:
+            from app.models.entities import GoodsDeclarationReviewEvent
+
+            db.add(
+                GoodsDeclarationReviewEvent(
+                    booking_id=booking.id,
+                    action="resubmitted",
+                    reason_code=None,
+                    remarks="Customer uploaded a revised goods declaration (previous version retained).",
+                    document_storage_path=prior_path,
+                    document_original_filename=prior_name,
+                    actor_id=user.id,
+                    actor_role=user.role.value if hasattr(user.role, "value") else str(user.role),
+                    revision_number=int(getattr(booking, "goods_declaration_revision_count", 0) or 0),
+                )
+            )
         decl_name, decl_path, decl_at = await save_booking_document(
             booking.id, cargo_declaration, prefix="declaration"
         )

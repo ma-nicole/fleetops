@@ -14,6 +14,7 @@ from app.models.entities import Booking, BookingStatus, TruckSlotHold, TruckSlot
 from app.schemas.booking import BookingCustomsUpdate, BookingRead
 from app.services.booking_tracking_payload import build_assignments_for_booking
 from app.services.goods_declaration_review import goods_declaration_review_customer_fields
+from app.services.booking_qr import booking_qr_public_fields
 from app.services.customer_booking_portal import (
     CUSTOMER_ACTIVE_DISPLAY_STATUSES,
     CUSTOMER_HISTORY_DISPLAY_STATUSES,
@@ -56,6 +57,7 @@ def _serialize_booking(db: Session, booking: Booking) -> dict:
     return {
         **core,
         **review_fields,
+        **booking_qr_public_fields(booking),
         "assignments": assignments,
         "display_status": display,
         "display_status_label": label,

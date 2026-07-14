@@ -18,12 +18,14 @@ from app.models.entities import (
     User,
     UserRole,
 )
-from app.schemas.goods_declaration import GoodsDeclarationReviewRequest
+from app.schemas.goods_declaration import GoodsDeclarationReviewRequest, goods_declaration_reason_catalog
 from app.services.goods_declaration_review import (
     apply_goods_declaration_review,
     booking_has_goods_declaration,
     effective_goods_declaration_review_status,
+    goods_declaration_review_customer_fields,
     goods_declaration_review_label,
+    serialize_review_events,
 )
 from app.services.goods_declaration_notifications import notify_customer_document_review_decision
 from app.services.dispatcher_booking_assignment import assign_booking_dispatcher, job_order_assignment_map
@@ -434,8 +436,9 @@ def remove_truck(
     return {"deleted": True}
 
 
-def _serialize_goods_declaration_row(booking: Booking) -> dict:
+def _serialize_goods_declaration_row(db: Session, booking: Booking) -> dict:
     st = booking.status.value if hasattr(booking.status, "value") else str(booking.status)
+    extra = goods_declaration_review_customer_fields(booking)
     return {
         "booking_id": booking.id,
         "customer_id": booking.customer_id,
@@ -449,16 +452,25 @@ def _serialize_goods_declaration_row(booking: Booking) -> dict:
             booking.cargo_declaration_uploaded_at.isoformat() if booking.cargo_declaration_uploaded_at else None
         ),
         "cargo_declaration_file_url": booking.cargo_declaration_file_url,
-        "goods_declaration_review_status": effective_goods_declaration_review_status(booking),
-        "goods_declaration_review_status_label": goods_declaration_review_label(
-            effective_goods_declaration_review_status(booking)
-        ),
+        "goods_declaration_review_status": extra["goods_declaration_review_status"],
+        "goods_declaration_review_status_label": extra["goods_declaration_review_status_label"],
         "goods_declaration_review_remarks": booking.goods_declaration_review_remarks,
+        "goods_declaration_review_remarks_history": extra.get("goods_declaration_review_remarks_history"),
+        "goods_declaration_revision_count": extra.get("goods_declaration_revision_count", 0),
+        "goods_declaration_revision_limit": extra.get("goods_declaration_revision_limit", 3),
         "goods_declaration_reviewed_at": (
             booking.goods_declaration_reviewed_at.isoformat() if booking.goods_declaration_reviewed_at else None
         ),
         "goods_declaration_reviewed_by_id": booking.goods_declaration_reviewed_by_id,
+        "review_history": serialize_review_events(db, booking.id),
     }
+
+
+@router.get("/goods-declarations/reason-catalog")
+def goods_declaration_reasons(
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    return goods_declaration_reason_catalog()
 
 
 @router.get("/goods-declarations")
@@ -475,7 +487,7 @@ def list_goods_declaration_reviews(
         .order_by(Booking.cargo_declaration_uploaded_at.desc(), Booking.id.desc())
         .all()
     )
-    return [_serialize_goods_declaration_row(b) for b in rows]
+    return [_serialize_goods_declaration_row(db, b) for b in rows]
 
 
 @router.patch("/goods-declarations/{booking_id}")
@@ -491,15 +503,14 @@ def review_goods_declaration(
     if not booking_has_goods_declaration(booking):
         raise HTTPException(status_code=400, detail="This booking has no goods declaration file.")
 
-    if payload.status in {"rejected", "revision_requested"} and not (payload.remarks or "").strip():
-        raise HTTPException(status_code=400, detail="Remarks are required when rejecting or requesting revision.")
-
     try:
         apply_goods_declaration_review(
             booking,
             status=payload.status,
             reviewer=reviewer,
             remarks=payload.remarks,
+            reason_code=payload.reason_code,
+            db=db,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -510,9 +521,9 @@ def review_goods_declaration(
         db,
         booking,
         status=payload.status,
-        remarks=payload.remarks,
+        remarks=booking.goods_declaration_review_remarks,
     )
-    return _serialize_goods_declaration_row(booking)
+    return _serialize_goods_declaration_row(db, booking)
 
 
 def _serialize_cargo_type_validation_row(db: Session, booking: Booking) -> dict:

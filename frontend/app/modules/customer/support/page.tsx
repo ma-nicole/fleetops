@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import StatusBanner from "@/components/ui/StatusBanner";
 import { useRoleGuard } from "@/lib/useRoleGuard";
 import { WorkflowApi, type Booking } from "@/lib/workflowApi";
 
 const BOOKING_GENERAL = "general";
 
-export default function CustomerSupportPage() {
+function CustomerSupportForm() {
   useRoleGuard(["customer"]);
+  const searchParams = useSearchParams();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
-  /** "" = not chosen yet; BOOKING_GENERAL = not tied to a booking; otherwise numeric id as string */
   const [bookingKey, setBookingKey] = useState("");
   const [rating, setRating] = useState(5);
-  const [category, setCategory] = useState("service");
+  const [category, setCategory] = useState("support");
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
@@ -24,6 +26,11 @@ export default function CustomerSupportPage() {
       .then((b) => setBookings(b))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load bookings"));
   }, []);
+
+  useEffect(() => {
+    const q = searchParams.get("booking");
+    if (q && /^\d+$/.test(q)) setBookingKey(q);
+  }, [searchParams]);
 
   const submit = async () => {
     setFieldErrors({});
@@ -50,7 +57,9 @@ export default function CustomerSupportPage() {
         message: message.trim() || undefined,
       });
       setOkMsg(
-        "Thanks — your feedback has been saved. When email is configured for FleetOps, a copy is sent to the operations inbox as well.",
+        booking_id
+          ? `Support request for Booking #${booking_id} was submitted.`
+          : "Thanks — your feedback has been saved.",
       );
       setMessage("");
     } catch (err) {
@@ -69,134 +78,89 @@ export default function CustomerSupportPage() {
     <main style={{ padding: "var(--page-main-padding)", background: "#FAFAFA", minHeight: "100vh" }}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "grid", gap: 16 }}>
         <header>
-          <h1 style={{ margin: 0 }}>Send feedback</h1>
+          <h1 style={{ margin: 0 }}>Contact Support</h1>
           <p style={{ marginTop: 6, color: "#6B7280" }}>
-            Share feedback about a specific booking or anything else (app, billing, service). Ratings and messages are stored
-            securely and can be emailed to FleetOps when your administrator sets up the inbox in the API.
+            Ask about an existing booking or send general feedback. When a booking is selected, its ID is included
+            automatically.
           </p>
         </header>
 
-        {error && (
-          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>{error}</div>
-        )}
-        {okMsg && (
-          <div style={{ background: "#D1FAE5", color: "#047857", padding: 12, borderRadius: 8 }}>{okMsg}</div>
-        )}
+        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
+        {okMsg ? <StatusBanner tone="success">{okMsg}</StatusBanner> : null}
 
         <section style={card}>
-          <label style={{ display: "grid", gap: 4 }}>
-            <span>Related booking (optional)</span>
-            <select
-              value={bookingKey}
-              onChange={(e) => {
-                setBookingKey(e.target.value);
-                if (fieldErrors.booking) setFieldErrors((f) => ({ ...f, booking: undefined }));
-              }}
-              aria-invalid={!!fieldErrors.booking}
-              style={{ padding: 8, border: fieldErrors.booking ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: 6 }}
-            >
-              <option value="">— Select: general or a booking —</option>
-              <option value={BOOKING_GENERAL}>General feedback (not about a specific booking)</option>
-              {bookings.map((b) => (
-                <option key={b.id} value={String(b.id)}>
-                  #{b.id} · {b.pickup_location} → {b.dropoff_location} ({b.status})
-                </option>
-              ))}
-            </select>
-            {fieldErrors.booking && (
-              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
-                {fieldErrors.booking}
-              </span>
-            )}
-          </label>
+          <div style={{ display: "grid", gap: 14 }}>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600 }}>Related booking</span>
+              <select className="input" value={bookingKey} onChange={(e) => setBookingKey(e.target.value)}>
+                <option value="">Select…</option>
+                <option value={BOOKING_GENERAL}>General (no booking)</option>
+                {bookings.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    Booking #{b.id} — {b.pickup_location} → {b.dropoff_location}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.booking ? (
+                <span style={{ color: "#B91C1C", fontSize: "0.85rem" }}>{fieldErrors.booking}</span>
+              ) : null}
+            </label>
 
-          <label style={{ display: "grid", gap: 4, marginTop: 12 }}>
-            <span>Category</span>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              style={{ padding: 8, border: "1px solid #D1D5DB", borderRadius: 6 }}
-            >
-              <option value="service">Overall service</option>
-              <option value="driver">Driver</option>
-              <option value="vehicle">Vehicle</option>
-              <option value="support">Account / help</option>
-              <option value="general">General / other</option>
-            </select>
-          </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600 }}>Category</span>
+              <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+                <option value="support">Support inquiry</option>
+                <option value="service">Service</option>
+                <option value="billing">Billing</option>
+                <option value="app">App / website</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
 
-          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-            <span>Rating ({rating} of 5)</span>
-            <div role="radiogroup" aria-label="Star rating" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {[1, 2, 3, 4, 5].map((star) => {
-                const active = rating >= star;
-                return (
-                  <button
-                    key={star}
-                    type="button"
-                    role="radio"
-                    aria-checked={rating === star}
-                    onClick={() => setRating(star)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: "1.75rem",
-                      lineHeight: 1,
-                      padding: "2px 4px",
-                      color: active ? "#F59E0B" : "#D1D5DB",
-                    }}
-                    title={`${star} star${star === 1 ? "" : "s"}`}
-                  >
-                    ★
-                  </button>
-                );
-              })}
-            </div>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600 }}>Rating</span>
+              <select className="input" value={rating} onChange={(e) => setRating(Number(e.target.value))}>
+                {[5, 4, 3, 2, 1].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600 }}>Message</span>
+              <textarea
+                className="input"
+                rows={5}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                maxLength={2000}
+                placeholder={
+                  bookingKey && bookingKey !== BOOKING_GENERAL
+                    ? `Describe your question about Booking #${bookingKey}…`
+                    : "How can we help?"
+                }
+              />
+              {fieldErrors.message ? (
+                <span style={{ color: "#B91C1C", fontSize: "0.85rem" }}>{fieldErrors.message}</span>
+              ) : null}
+            </label>
+
+            <button type="button" className="button" onClick={() => void submit()}>
+              Submit support request
+            </button>
           </div>
-
-          <label style={{ display: "grid", gap: 4, marginTop: 12 }}>
-            <span>Message (optional)</span>
-            <textarea
-              value={message}
-              onChange={(e) => {
-                setMessage(e.target.value);
-                if (fieldErrors.message) setFieldErrors((f) => ({ ...f, message: undefined }));
-              }}
-              rows={5}
-              maxLength={2000}
-              aria-invalid={!!fieldErrors.message}
-              style={{ padding: 8, border: fieldErrors.message ? "2px solid #DC2626" : "1px solid #D1D5DB", borderRadius: 6 }}
-            />
-            <span style={{ fontSize: "0.8rem", color: message.length > 2000 ? "#DC2626" : "#6B7280" }}>
-              {message.length}/2000
-            </span>
-            {fieldErrors.message && (
-              <span role="alert" style={{ color: "#DC2626", fontSize: "0.85rem" }}>
-                {fieldErrors.message}
-              </span>
-            )}
-          </label>
-
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!bookingKey}
-            style={{
-              marginTop: 14,
-              padding: "10px 16px",
-              background: "#0EA5E9",
-              color: "white",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              cursor: !bookingKey ? "not-allowed" : "pointer",
-            }}
-          >
-            Submit feedback
-          </button>
         </section>
       </div>
     </main>
+  );
+}
+
+export default function CustomerSupportPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading support…</div>}>
+      <CustomerSupportForm />
+    </Suspense>
   );
 }

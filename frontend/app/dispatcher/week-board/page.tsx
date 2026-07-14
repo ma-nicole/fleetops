@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import StatusBanner from "@/components/ui/StatusBanner";
 import { formatTimeShort } from "@/lib/appLocale";
 import {
   WorkflowApi,
@@ -252,9 +253,7 @@ export default function WeekBoardPage() {
           ) : null}
         </div>
 
-        {error && (
-          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: "0.5rem 0.65rem", borderRadius: 8, fontSize: "0.85rem" }}>{error}</div>
-        )}
+        {error ? <StatusBanner tone="error">{error}</StatusBanner> : null}
 
         {loading && !data ? (
           <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748B" }}>Loading timeline…</p>

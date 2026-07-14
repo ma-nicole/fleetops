@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { WorkflowApi, type Booking, type DispatchResourceAvailabilityRow } from "@/lib/workflowApi";
 import { formatDateTime } from "@/lib/appLocale";
 import DispatcherRouteSetter from "@/components/DispatcherRouteSetter";
+import StatusBanner from "@/components/ui/StatusBanner";
 
 type BookingAvailability = {
   booking_id: number;
@@ -319,64 +320,42 @@ function DispatcherJobAssignmentsInner() {
         {loadingBookings ? <p style={{ color: "#6B7280", margin: 0 }}>Loading bookings…</p> : null}
 
         {listError ? (
-          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>
+          <StatusBanner tone="error">
             <strong>Could not load bookings.</strong> {listError}{" "}
             <code style={{ fontSize: "0.85em" }}>/workflow/booking/assignable</code>
-          </div>
+          </StatusBanner>
         ) : null}
 
         {!loadingBookings && !listError && bookings.length === 0 ? (
-          <div
-            role="status"
-            style={{
-              background: "#FFFBEB",
-              border: "1px solid #FCD34D",
-              color: "#92400E",
-              padding: 14,
-              borderRadius: 10,
-              lineHeight: 1.5,
-            }}
-          >
-            <strong>No bookings ready for assignment.</strong> Customers must complete payment proof, goods declaration
-            approval, and admin cargo type validation for the same booking ID before dispatch.
-          </div>
+          <StatusBanner tone="warning" title="No bookings ready to assign">
+            Customers must complete payment proof, goods declaration approval, and admin cargo type validation for the
+            same booking ID before dispatch.
+          </StatusBanner>
         ) : null}
 
         {driverContext ? (
-          <div
-            role="status"
-            style={{
-              background: "#ECFDF5",
-              border: "1px solid #6EE7B7",
-              color: "#065F46",
-              padding: 14,
-              borderRadius: 10,
-              display: "grid",
-              gap: 8,
-            }}
-          >
-            <div style={{ fontWeight: 700 }}>Driver context (from Driver Activity)</div>
+          <StatusBanner tone="success" title="Driver context (from Driver Activity)">
             <div>
               {fromDriverName ? <strong>{fromDriverName}</strong> : null}
               {fromDriverId ? (
-                <span style={{ color: "#047857" }}>
+                <span>
                   {fromDriverName ? " · " : null}
                   {fromDriverId}
                 </span>
               ) : null}
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <div style={{ marginTop: 8 }}>
               <Link href="/dispatcher/job-assignments" style={{ fontWeight: 600, color: "#047857", textDecoration: "underline" }}>
                 Clear driver context
               </Link>
             </div>
-          </div>
+          </StatusBanner>
         ) : null}
 
         {error && (
-          <div style={{ background: "#FEE2E2", color: "#991B1B", padding: 12, borderRadius: 8 }}>{error}</div>
+          <StatusBanner tone="error">{error}</StatusBanner>
         )}
-        {okMsg && <div style={{ background: "#D1FAE5", color: "#047857", padding: 12, borderRadius: 8 }}>{okMsg}</div>}
+        {okMsg && <StatusBanner tone="success">{okMsg}</StatusBanner>}
 
         <section style={card}>
           <label style={{ display: "grid", gap: 4 }}>

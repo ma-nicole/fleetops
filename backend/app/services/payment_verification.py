@@ -38,6 +38,9 @@ def mark_payment_and_booking_verified(
         db.query(TruckSlotHold).filter(TruckSlotHold.booking_id == booking.id).update(
             {"hold_status": TruckSlotHoldStatus.READY_FOR_ASSIGNMENT}
         )
+        from app.services.booking_qr import ensure_booking_qr_token
+
+        ensure_booking_qr_token(booking)
 
     if notify_customer:
         from app.models.entities import User

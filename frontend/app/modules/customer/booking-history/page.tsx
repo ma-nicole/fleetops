@@ -5,6 +5,7 @@ import { useRoleGuard } from "@/lib/useRoleGuard";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import LoadingMessage from "@/components/ui/LoadingMessage";
 import BookingCustomsClearanceSection from "@/components/BookingCustomsClearanceSection";
+import ContactSupportButton from "@/components/ContactSupportButton";
 import CustomerBookingAssignmentsList from "@/components/CustomerBookingAssignmentsList";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
@@ -248,6 +249,9 @@ export default function BookingHistoryPage() {
                           onClick={(e) => e.stopPropagation()}
                         >
                           <h4 style={{ color: "#1A1A1A", margin: "0 0 1rem 0" }}>Details — all assigned trucks</h4>
+                          <div style={{ marginBottom: "0.85rem" }}>
+                            <ContactSupportButton bookingId={booking.id} />
+                          </div>
                           <CustomerBookingAssignmentsList
                             assignments={booking.assignments}
                             dropoffAddress={booking.dropoff_location}

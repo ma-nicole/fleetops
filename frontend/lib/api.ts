@@ -38,15 +38,35 @@ export function apiFullUrl(path: string): string {
     typeof window !== "undefined"
       ? window.location.origin
       : `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
-  /** Backend-served files (see next.config rewrites for `/uploads/*`). */
-  if (p.startsWith("/uploads/")) {
-    return `${origin}${p}`;
+
+  /** Backend-served files under `/uploads/...`. */
+  if (p.startsWith("/uploads/") || p.startsWith("/helper_proofs/") || p.startsWith("/operational_logs/")) {
+    const uploadPath = p.startsWith("/uploads/") ? p : `/uploads${p}`;
+    const base = API_BASE_URL;
+    /** Absolute API host (e.g. Railway) — uploads live on the same origin without `/api`. */
+    if (/^https?:\/\//i.test(base)) {
+      const backendOrigin = base.replace(/\/api\/?$/i, "").replace(/\/+$/, "");
+      return `${backendOrigin}${uploadPath}`;
+    }
+    /** Local Next rewrite to BACKEND_ORIGIN. */
+    return `${origin}${uploadPath}`;
   }
+
   const base = API_BASE_URL;
   if (base.startsWith("/")) {
     return `${origin}${base}${p}`;
   }
   return `${base.replace(/\/+$/, "")}${p}`;
+}
+
+/** Normalize stored upload relative paths to a fetchable `/uploads/...` URL. */
+export function uploadMediaUrl(storagePath: string | null | undefined): string {
+  const u = (storagePath || "").trim();
+  if (!u) return "";
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith("/uploads/")) return apiFullUrl(u);
+  const rel = u.replace(/^\/+/, "");
+  return apiFullUrl(`/uploads/${rel}`);
 }
 
 function getToken(): string | null {

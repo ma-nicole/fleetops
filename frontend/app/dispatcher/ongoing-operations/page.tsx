@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import StatusBanner from "@/components/ui/StatusBanner";
 import { TripBoardDetailModal, type TripBoardRow } from "@/components/TripBoardDetailModal";
 import { formatPhp } from "@/lib/appLocale";
 import { WorkflowApi, type DispatchTripMonitoringBoardResponse } from "@/lib/workflowApi";
@@ -70,11 +71,7 @@ export default function OngoingOperationsPage() {
         ) : null}
       </div>
 
-      {loadError ? (
-        <div role="alert" style={{ padding: "0.85rem 1rem", borderRadius: "8px", background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }}>
-          {loadError}
-        </div>
-      ) : null}
+      {loadError ? <StatusBanner tone="error">{loadError}</StatusBanner> : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem" }}>
         <div
