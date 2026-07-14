@@ -45,18 +45,19 @@ function objectiveLabelsForOptions(
   const byHours = [...options].sort(
     (a, b) => (a.duration_hours ?? Number.POSITIVE_INFINITY) - (b.duration_hours ?? Number.POSITIVE_INFINITY),
   );
-  if (byHours[0]?.duration_hours != null) push(byHours[0].id, "Fastest Route");
-
-  const byKm = [...options].sort((a, b) => a.distance_km - b.distance_km);
-  if (byKm[0]) push(byKm[0].id, "Shortest Distance");
-
-  const byToll = [...options].sort((a, b) => a.toll_cost - b.toll_cost);
-  if (byToll[0]) {
-    push(byToll[0].id, byToll[0].toll_cost <= 0.01 ? "Avoid Toll Roads" : "Lowest Toll Cost");
-  }
+  if (byHours[0]?.duration_hours != null) push(byHours[0].id, "Fastest");
 
   const byTotal = [...options].sort((a, b) => a.total_cost - b.total_cost);
-  if (byTotal[0]) push(byTotal[0].id, "Balanced Route");
+  if (byTotal[0]) push(byTotal[0].id, "Lowest Cost");
+
+  const maxH = Math.max(...options.map((o) => o.duration_hours ?? 0), 1);
+  const maxC = Math.max(...options.map((o) => o.total_cost), 1);
+  const byBalance = [...options].sort((a, b) => {
+    const sa = (a.duration_hours ?? maxH) / maxH + a.total_cost / maxC;
+    const sb = (b.duration_hours ?? maxH) / maxH + b.total_cost / maxC;
+    return sa - sb;
+  });
+  if (byBalance[0]) push(byBalance[0].id, "Balanced");
 
   for (const o of options) {
     const cur = labels.get(o.id) ?? [];
@@ -136,8 +137,16 @@ export default function DispatcherRouteSetter({
       const data = await DispatchApi.generateBookingRouteOptions(bookingId);
       applyResponse(data);
       const n = data.generated ?? data.options.length;
-      if (n === 1 && !data.alternatives_available) {
-        setOkMsg("Generated 1 optimal route (provider did not return multiple alternatives).");
+      if (n >= 3 && data.alternatives_available) {
+        setOkMsg(`Generated ${n} route options. Select one, then Save selection before assigning.`);
+      } else if (n > 1) {
+        setOkMsg(
+          `Generated ${n} distinct route option(s). Select one and Save selection before assigning.`,
+        );
+      } else if (n === 1 && !data.alternatives_available) {
+        setOkMsg(
+          "Generated the best available route (provider did not return multiple alternatives). Save selection before assigning.",
+        );
       } else {
         setOkMsg(`Generated ${n} provider route option(s).`);
       }
@@ -231,8 +240,8 @@ export default function DispatcherRouteSetter({
         <div>
           <strong style={{ color: "#1E3A8A" }}>Route setter</strong>
           <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#4B5563", lineHeight: 1.45 }}>
-            Provider-backed driving routes for this pickup/dropoff (same engines as customer quotes). Strategy tags only
-            appear when multiple real options differ. Assignment uses the saved route when available.
+            Generate up to three provider routes when available, compare costs, then save one selection before assigning
+            crews. If the routing service returns fewer options, the best available path is shown without errors.
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -447,31 +456,42 @@ export default function DispatcherRouteSetter({
             }}
             aria-label="Route objective legend"
           >
-            {shownTags.map((label) => (
+            {(["Fastest", "Lowest Cost", "Balanced"] as const).map((label) => (
               <span
                 key={label}
                 style={{
                   padding: "0.2rem 0.5rem",
                   borderRadius: 999,
-                  border: "1px dashed #CBD5E1",
-                  background: "#fff",
+                  border: shownTags.includes(label) ? "1px solid #93C5FD" : "1px dashed #CBD5E1",
+                  background: shownTags.includes(label) ? "#EFF6FF" : "#fff",
+                  color: shownTags.includes(label) ? "#1E40AF" : "#64748B",
+                  fontWeight: shownTags.includes(label) ? 700 : 500,
                 }}
               >
                 {label}
               </span>
             ))}
-            <span
-              style={{
-                padding: "0.2rem 0.5rem",
-                borderRadius: 999,
-                border: "1px dashed #CBD5E1",
-                background: "#F8FAFC",
-                opacity: 0.7,
-              }}
-            >
-              Avoid Heavy Traffic (coming soon)
-            </span>
+            {shownTags
+              .filter((t) => !["Fastest", "Lowest Cost", "Balanced"].includes(t))
+              .map((label) => (
+                <span
+                  key={label}
+                  style={{
+                    padding: "0.2rem 0.5rem",
+                    borderRadius: 999,
+                    border: "1px dashed #CBD5E1",
+                    background: "#fff",
+                  }}
+                >
+                  {label}
+                </span>
+              ))}
           </div>
+          {options.length > 0 && !options.some((o) => o.is_selected) && selectedId ? (
+            <p style={{ margin: 0, fontSize: "0.8rem", color: "#92400E" }}>
+              A route is highlighted — click <strong>Save selection</strong> so assignment uses it.
+            </p>
+          ) : null}
           {options.map((opt) => {
             const objectives = objectiveById.get(opt.id) ?? [];
             return (
@@ -561,30 +581,34 @@ export default function DispatcherRouteSetter({
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))",
                         gap: 8,
                         fontSize: "0.8rem",
                       }}
                     >
                       <div>
-                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Distance</div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>
+                          Estimated Distance
+                        </div>
                         {opt.distance_km.toFixed(1)} km
                       </div>
                       <div>
-                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Time</div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>
+                          Estimated Travel Time
+                        </div>
                         {opt.duration_hours != null ? `${opt.duration_hours.toFixed(1)} h` : "—"}
                       </div>
                       <div>
-                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Toll</div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>
+                          Estimated Toll Cost
+                        </div>
                         {formatPhp(opt.toll_cost)}
                       </div>
                       <div>
-                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Fuel</div>
+                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>
+                          Estimated Fuel Cost
+                        </div>
                         {formatPhp(opt.fuel_cost)}
-                      </div>
-                      <div>
-                        <div style={{ color: "#6B7280", fontSize: "0.7rem", fontWeight: 700 }}>Total</div>
-                        {formatPhp(opt.total_cost)}
                       </div>
                     </div>
                     <span style={{ fontSize: "0.8rem", color: "#4B5563", lineHeight: 1.4 }}>

@@ -34,14 +34,21 @@ from app.models.entities import (
 
 TERMINAL_TRIP: tuple[TripStatus, ...] = (TripStatus.COMPLETED, TripStatus.CANCELLED)
 
-# In-flight execution (dispatcher board — excludes pending pre-assign and terminal states).
+# In-flight execution (dispatcher board — excludes terminal states only).
+# Keep every assigned/in-progress leg visible until completed or cancelled.
 ACTIVE_EXECUTION: tuple[TripStatus, ...] = (
+    TripStatus.PENDING,
     TripStatus.ASSIGNED,
     TripStatus.ACCEPTED,
     TripStatus.DEPARTED,
     TripStatus.LOADING,
     TripStatus.IN_DELIVERY,
 )
+
+
+def active_trip_status_filter():
+    """SQLAlchemy filter: trip is still in the Assigned Trips / active ops lifecycle."""
+    return ~Trip.status.in_(TERMINAL_TRIP)
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -120,7 +127,7 @@ def _off_duty(avail: str | None) -> bool:
 def _busy_resource_ids(db: Session) -> tuple[set[int], set[int], set[int]]:
     rows = (
         db.query(Trip.truck_id, Trip.driver_id, Trip.helper_id)
-        .filter(Trip.status.in_(ACTIVE_EXECUTION))
+        .filter(active_trip_status_filter())
         .all()
     )
     trucks_b: set[int] = set()
@@ -163,7 +170,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
     )
 
     active_exec_trips = (
-        db.query(Trip).filter(Trip.status.in_(ACTIVE_EXECUTION)).all()
+        db.query(Trip).filter(active_trip_status_filter()).all()
     )
     if blocked:
         active_exec_trips = [t for t in active_exec_trips if t.booking_id not in blocked]
@@ -256,7 +263,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
     busy_ops_trucks = (
         db.query(func.count(func.distinct(Trip.truck_id)))
         .join(Truck, Truck.id == Trip.truck_id)
-        .filter(Trip.status.in_(ACTIVE_EXECUTION), func.lower(Truck.status) == "available")
+        .filter(active_trip_status_filter(), func.lower(Truck.status) == "available")
         .scalar()
         or 0
     )
@@ -311,7 +318,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
             joinedload(Trip.driver),
             joinedload(Trip.helper),
         )
-        .filter(Trip.status.in_(ACTIVE_EXECUTION))
+        .filter(active_trip_status_filter())
         .order_by(Trip.updated_at.desc())
         .limit(150)
         .all()
@@ -508,7 +515,7 @@ def build_operations_center_payload(db: Session, viewer: User | None = None) -> 
 
     dup_drivers = (
         db.query(Trip.driver_id, func.count(Trip.id))
-        .filter(Trip.status.in_(ACTIVE_EXECUTION), Trip.driver_id.isnot(None))
+        .filter(active_trip_status_filter(), Trip.driver_id.isnot(None))
         .group_by(Trip.driver_id)
         .having(func.count(Trip.id) > 1)
         .all()

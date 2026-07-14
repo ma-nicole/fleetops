@@ -18,10 +18,28 @@ def public_upload_url(storage_path: str | None) -> str | None:
     if not storage_path or not str(storage_path).strip():
         return None
     rel = str(storage_path).strip().replace("\\", "/").lstrip("/")
+    if rel.lower().startswith("uploads/"):
+        rel = rel[len("uploads/") :]
     if rel.lower().startswith(SENSITIVE_UPLOAD_PREFIXES):
         return None
     full = uploads_root() / rel
     if not full.is_file():
+        return None
+    return f"/uploads/{rel}"
+
+
+def normalize_upload_path(storage_path: str | None) -> str | None:
+    """
+    Return a browser-fetchable `/uploads/...` path for API payloads.
+    Does not require the file to exist (so redeploys still expose the stored path).
+    Sensitive prefixes remain hidden.
+    """
+    if not storage_path or not str(storage_path).strip():
+        return None
+    rel = str(storage_path).strip().replace("\\", "/").lstrip("/")
+    if rel.lower().startswith("uploads/"):
+        rel = rel[len("uploads/") :]
+    if not rel or rel.lower().startswith(SENSITIVE_UPLOAD_PREFIXES):
         return None
     return f"/uploads/{rel}"
 

@@ -55,7 +55,13 @@ from app.services.dispatch_assignment_readiness import (
     BookingNotReadyForDispatchError,
     assert_booking_ready_for_dispatch_assignment,
 )
-from app.services.dispatch_operations_center import build_operations_center_payload
+from app.services.dispatch_operations_center import (
+    ACTIVE_EXECUTION,
+    TERMINAL_TRIP,
+    _display_status,
+    active_trip_status_filter,
+    build_operations_center_payload,
+)
 from app.services.dispatch_trip_logs import build_trip_logs_payload
 from app.services.evidence_capture import (
     evaluate_trip_evidence,
@@ -145,19 +151,12 @@ def _save_operational_log_attachment(trip_id: int, file: UploadFile | None) -> s
     return f"/uploads/operational_logs/{stored_name}"
 
 
-ACTIVE_TRIP_STATUSES = [
-    TripStatus.PENDING,
-    TripStatus.ASSIGNED,
-    TripStatus.ACCEPTED,
-    TripStatus.DEPARTED,
-    TripStatus.LOADING,
-    TripStatus.IN_DELIVERY,
-]
+ACTIVE_TRIP_STATUSES = list(ACTIVE_EXECUTION)
 
 
 def _bookings_needing_dispatcher_assignment(db: Session, user: User | None = None) -> int:
     """Bookings that can still receive trip legs (paid / approved / partial assign)."""
-    terminal = (TripStatus.COMPLETED, TripStatus.CANCELLED)
+    terminal = TERMINAL_TRIP
     blocked: set[int] = set()
     if user is not None and user.role == UserRole.DISPATCHER:
         blocked = blocked_booking_ids_for_dispatcher(db, user.id)
@@ -734,7 +733,7 @@ def assignments_board(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.DISPATCHER, UserRole.MANAGER, UserRole.ADMIN)),
 ):
-    """Trips already assigned — used for capacity and dispatcher oversight."""
+    """Trips already assigned — visible for all active lifecycle statuses until completed/cancelled."""
     trips = (
         db.query(Trip)
         .options(
@@ -744,9 +743,9 @@ def assignments_board(
             joinedload(Trip.truck),
         )
         .join(Booking, Booking.id == Trip.booking_id)
-        .filter(Trip.status != TripStatus.CANCELLED)
-        .order_by(Booking.scheduled_date.desc(), Trip.id.desc())
-        .limit(200)
+        .filter(active_trip_status_filter())
+        .order_by(Trip.updated_at.desc(), Trip.id.desc())
+        .limit(400)
         .all()
     )
     trips = filter_trips_for_dispatcher(db, user, trips)
@@ -783,10 +782,12 @@ def assignments_board(
             leg_km_cache[bk.id] = booking_pickup_dropoff_distance_km(bk)
         geo_leg_km = leg_km_cache[bk.id]
         display_distance_km = float(geo_leg_km) if geo_leg_km is not None else float(tr.distance_km or 0)
+        operational = _display_status(tr)
         out.append(
             {
                 "trip_id": tr.id,
                 "trip_status": tr.status.value if hasattr(tr.status, "value") else str(tr.status),
+                "operational_status": operational,
                 "booking_id": bk.id,
                 "customer_id": bk.customer_id,
                 "customer_name": cust.full_name if cust else None,
@@ -808,7 +809,9 @@ def assignments_board(
                 "helper_progress_status": helper_status,
                 "distance_km": display_distance_km,
                 "latest_location": loc_display,
-                "last_updated": latest_loc[1].isoformat() if latest_loc and latest_loc[1] else None,
+                "last_updated": latest_loc[1].isoformat() if latest_loc and latest_loc[1] else (
+                    tr.updated_at.isoformat() if tr.updated_at else None
+                ),
             }
         )
     return {"assignments": out}
@@ -904,8 +907,16 @@ def generate_booking_route_options(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     assert_dispatcher_booking_access(db, user, booking.id)
-    _created, map_warning = generate_route_options_for_booking(db, booking)
-    db.commit()
+    try:
+        _created, map_warning = generate_route_options_for_booking(db, booking)
+        db.commit()
+    except Exception:
+        logger.exception("Route option generate failed for booking %s", booking_id)
+        db.rollback()
+        raise HTTPException(
+            status_code=502,
+            detail="Routing service unavailable. Use Manual route to continue assignment.",
+        ) from None
     options = list_booking_route_options(db, booking.id)
     return _route_options_payload(
         booking,

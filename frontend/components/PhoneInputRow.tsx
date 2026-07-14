@@ -61,7 +61,7 @@ export default function PhoneInputRow({
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, 38%) 1fr", gap: 8, alignItems: "stretch" }}>
+      <div className="phone-input-row" style={{ display: "grid", gridTemplateColumns: "minmax(min(100%, 140px), 38%) 1fr", gap: 8, alignItems: "stretch" }}>
         <select
           id={selectId}
           value={dialCode}

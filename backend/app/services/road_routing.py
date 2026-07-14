@@ -92,6 +92,7 @@ def _google_directions_options(
     *,
     alternatives: bool,
     avoid_tolls: bool = False,
+    avoid_highways: bool = False,
 ) -> list[RoadRouteOption]:
     """Google Maps Platform Directions API — one or more driving routes."""
     key = api_key.strip()
@@ -104,12 +105,17 @@ def _google_directions_options(
         "destination": dest,
         "mode": "driving",
         "region": "ph",
-        # Prefer a single primary path when avoiding tolls (strategy call).
-        "alternatives": "true" if alternatives and not avoid_tolls else "false",
+        # Prefer a single primary path when applying avoidance preferences.
+        "alternatives": "true" if alternatives and not avoid_tolls and not avoid_highways else "false",
         "key": key,
     }
+    avoid_parts: list[str] = []
     if avoid_tolls:
-        params["avoid"] = "tolls"
+        avoid_parts.append("tolls")
+    if avoid_highways:
+        avoid_parts.append("highways")
+    if avoid_parts:
+        params["avoid"] = "|".join(avoid_parts)
     try:
         with httpx.Client(timeout=25.0) as client:
             r = client.get(
@@ -133,7 +139,14 @@ def _google_directions_options(
         return []
     routes = data.get("routes") or []
     out: list[RoadRouteOption] = []
-    provider = "google_directions_avoid_tolls" if avoid_tolls else "google_directions"
+    if avoid_tolls and avoid_highways:
+        provider = "google_directions_avoid_tolls_highways"
+    elif avoid_tolls:
+        provider = "google_directions_avoid_tolls"
+    elif avoid_highways:
+        provider = "google_directions_avoid_highways"
+    else:
+        provider = "google_directions"
     for idx, route in enumerate(routes):
         if not isinstance(route, dict):
             continue
@@ -184,7 +197,7 @@ def _ors_route_options(
         body["options"] = {"avoid_features": ["tollways"]}
     elif alternatives:
         body["alternative_routes"] = {
-            "target_count": 2,
+            "target_count": 3,
             "share_factor": 0.6,
             "weight_factor": 1.4,
         }
@@ -344,23 +357,32 @@ def driving_route_alternatives(
     max_options: int = _MAX_ROUTE_OPTIONS,
     want_alternatives: bool = True,
     avoid_tolls: bool = False,
+    avoid_highways: bool = False,
 ) -> tuple[list[RoadRouteOption], str]:
     """
     Returns (route options, provider_tag). Prefer the same engine precedence as single-route distance.
 
-    When ``avoid_tolls`` is True, request a single preference-strategy path (Google avoid=tolls /
-    ORS avoid tollways). Do not invent padding options.
+    When ``avoid_tolls`` / ``avoid_highways`` is True, request a single preference-strategy path.
+    Do not invent padding options.
     """
     limit = max(1, min(int(max_options or _MAX_ROUTE_OPTIONS), _MAX_ROUTE_OPTIONS))
-    if avoid_tolls:
+    preference = bool(avoid_tolls or avoid_highways)
+    if preference:
         limit = 1
-    alt = bool(want_alternatives) and limit > 1 and not avoid_tolls
+    alt = bool(want_alternatives) and limit > 1 and not preference
 
     if getattr(settings, "use_google_directions_for_routing", True):
         gkey = effective_google_directions_key(settings)
         if gkey:
             opts = _google_directions_options(
-                lat1, lon1, lat2, lon2, gkey, alternatives=alt, avoid_tolls=avoid_tolls
+                lat1,
+                lon1,
+                lat2,
+                lon2,
+                gkey,
+                alternatives=alt,
+                avoid_tolls=avoid_tolls,
+                avoid_highways=avoid_highways,
             )
             if opts:
                 return opts[:limit], opts[0].provider
@@ -379,8 +401,8 @@ def driving_route_alternatives(
             if opts:
                 return opts[:limit], opts[0].provider
 
-    if avoid_tolls:
-        # OSRM public demo has no reliable toll-avoid preference.
+    if preference:
+        # OSRM public demo has no reliable toll/highway-avoid preference.
         return [], "unavailable"
 
     if not getattr(settings, "use_osrm_driving_distance", True):

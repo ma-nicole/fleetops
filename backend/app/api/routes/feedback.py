@@ -139,7 +139,23 @@ def _create_feedback(
     except Exception:
         logger.warning("Feedback inbox notification failed.", exc_info=True)
 
+    # In-app confirmation for customer Contact Support / feedback submissions.
+    if user.role == UserRole.CUSTOMER:
+        try:
+            from app.services.customer_notifications import notify_customer_support_received
+
+            notify_customer_support_received(
+                db,
+                customer_id=int(customer_id),
+                booking_id=resolved_booking_id,
+                category=payload.category,
+            )
+            db.commit()
+        except Exception:
+            logger.warning("Customer in-app support notification failed.", exc_info=True)
+
     return fb
+
 
 
 @router.post("", response_model=FeedbackRead)

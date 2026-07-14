@@ -2446,7 +2446,7 @@ html {
 
 .filter-panel__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
   gap: var(--space-3);
 }
 
@@ -3102,7 +3102,7 @@ html {
 
 .bi-comparison-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: var(--space-2);
   margin-bottom: var(--space-3);
 }
@@ -4454,6 +4454,126 @@ html {
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
 }
 
+/* Customer / Helper responsive layout helpers (desktop-safe) */
+.safe-auto-grid-200 {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+
+.safe-auto-grid-300 {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+
+.safe-auto-grid-240 {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.safe-auto-grid-210 {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  align-items: center;
+}
+
+.safe-auto-grid-140 {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+}
+
+.safe-auto-grid-180 {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+
+.booking-qr-wrap {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.booking-qr-wrap svg,
+.booking-qr-svg {
+  max-width: 100%;
+  height: auto !important;
+  display: block;
+}
+
+.row-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.row-kv__label {
+  color: var(--text-secondary);
+  flex: 0 1 auto;
+}
+
+.row-kv__value {
+  font-weight: 600;
+  text-align: right;
+  font-size: 0.9rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.customer-doc-resubmit-btn {
+  justify-self: start;
+  min-height: 44px;
+  min-width: 160px;
+}
+
+.helper-vehicle-status-grid {
+  display: grid;
+  grid-template-columns: 100px 100px 1fr 1fr 120px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.activity-ratings-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.activity-ratings-stars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.customer-payment-mobile-list {
+  display: none;
+  gap: 0.75rem;
+}
+
+.customer-payment-desktop-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.crew-dashboard-proof-img,
+.crew-detail-sheet img {
+  max-width: 100%;
+  height: auto;
+}
+
+.customer-notifications-panel {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   :root {
@@ -4485,6 +4605,14 @@ html {
     display: none !important;
   }
 
+  .customer-payment-mobile-list {
+    display: grid !important;
+  }
+
+  .customer-payment-desktop-table {
+    display: none !important;
+  }
+
   .crew-detail-sheet {
     width: 100% !important;
     max-width: 100% !important;
@@ -4497,16 +4625,72 @@ html {
     min-height: 48px !important;
     width: 100%;
     font-size: 1rem !important;
+    justify-self: stretch !important;
   }
 
   .helper-touch-input {
     font-size: 16px !important;
     min-height: 44px;
   }
+
+  .customer-doc-resubmit-btn {
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
+  }
+
+  .helper-vehicle-status-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .helper-vehicle-status-grid > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
+
+  .activity-ratings-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .activity-ratings-stars span {
+    font-size: 1rem !important;
+  }
+
+  .dashboard-standard-main,
+  .dashboard-standard-inner,
+  .panel-card,
+  .card {
+    max-width: 100%;
+    min-width: 0;
+  }
 }
 
 @media (max-width: 480px) {
   .kpi-grid {
     grid-template-columns: 1fr;
+  }
+
+  .activity-ratings-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .helper-vehicle-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .helper-vehicle-status-grid > :nth-child(n + 3) {
+    grid-column: auto;
+  }
+
+  .row-kv {
+    flex-wrap: wrap;
+  }
+
+  .row-kv__value {
+    text-align: left;
+    width: 100%;
+  }
+
+  .phone-input-row {
+    grid-template-columns: 1fr !important;
   }
 }

@@ -273,6 +273,21 @@ export type DriverTripNotificationRow = {
   created_at: string | null;
 };
 
+export type CustomerNotificationRow = {
+  id: number;
+  booking_id: number | null;
+  kind: "document_revision" | "document_rejected" | "support_received" | string;
+  title: string;
+  message: string;
+  required_action: string;
+  link_path: string;
+  read: boolean;
+  read_at: string | null;
+  dismissed: boolean;
+  dismissed_at: string | null;
+  created_at: string | null;
+};
+
 export type CrewSchedulingPlot = {
   assigned_at: string | null;
   pickup_date: string | null;
@@ -951,6 +966,21 @@ export const WorkflowApi = {
   customerBookingHistory: () => apiGet<CustomerBookingHistoryRow[]>("/customer/booking-history"),
   customerShipmentTracking: () => apiGet<{ shipments: CustomerBookingRow[] }>("/customer/shipment-tracking"),
   customerCancelBooking: (id: number) => apiPatch<{ status: string }>(`/customer/bookings/${id}/cancel`, {}),
+  customerNotifications: (params?: { unread_only?: boolean; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.unread_only) q.set("unread_only", "true");
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiGet<{ notifications: CustomerNotificationRow[]; unread_count: number }>(
+      `/customer/notifications${qs ? `?${qs}` : ""}`,
+    );
+  },
+  customerMarkNotificationRead: (notification_id: number) =>
+    apiPatch<CustomerNotificationRow>(`/customer/notifications/${notification_id}/read`, {}),
+  customerMarkAllNotificationsRead: () =>
+    apiPost<{ marked_read: number }>("/customer/notifications/mark-all-read", {}),
+  customerDismissNotification: (notification_id: number) =>
+    apiPost<CustomerNotificationRow>(`/customer/notifications/${notification_id}/dismiss`, {}),
   customerUpdateBookingCustoms: (
     id: number,
     payload: {
@@ -1265,6 +1295,7 @@ export const WorkflowApi = {
         helper_id: number | null;
         helper_name: string | null;
         helper_progress_status: string | null;
+        operational_status?: string | null;
         distance_km: number;
         latest_location: string | null;
         last_updated: string | null;

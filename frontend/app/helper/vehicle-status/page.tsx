@@ -45,15 +45,13 @@ export default function HelperVehicleStatusPage() {
 
       <div style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden" }}>
         <div
+          className="helper-vehicle-status-grid"
           style={{
-            display: "grid",
-            gridTemplateColumns: "100px 100px 1fr 1fr 120px",
             padding: "0.75rem",
             background: "#F5F5F5",
             fontWeight: 700,
             fontSize: "0.75rem",
             color: "#666",
-            gap: 8,
           }}
         >
           <span>Trip</span>
@@ -72,12 +70,9 @@ export default function HelperVehicleStatusPage() {
             return (
               <div
                 key={t.id}
+                className="helper-vehicle-status-grid"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "100px 100px 1fr 1fr 120px",
                   padding: "0.75rem",
-                  gap: 8,
-                  alignItems: "center",
                   borderTop: i === 0 ? undefined : "1px solid #eee",
                   fontSize: "0.88rem",
                 }}

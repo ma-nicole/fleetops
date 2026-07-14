@@ -103,50 +103,94 @@ export default function CustomerPaymentPage() {
           {payments.length === 0 ? (
             <p style={{ color: "#6B7280" }}>No payments yet.</p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
-                <thead>
-                  <tr style={{ background: "#F3F4F6" }}>
-                    <th style={th}>Booking</th>
-                    <th style={th}>Method</th>
-                    <th style={th}>Status</th>
-                    <th style={th}>Amount</th>
-                    <th style={th}>Transaction ref</th>
-                    <th style={th}>Paid at</th>
-                    <th style={th}>Verified by</th>
-                    <th style={th}>Progress</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((p) => {
-                    const paidAt = p.xendit_paid_at || p.paid_at || p.proof_uploaded_at;
-                    return (
-                      <tr key={p.id}>
-                        <td style={td}>
-                          <Link href={`/booking/payment?bookingId=${p.booking_id}`} style={{ color: "#0EA5E9", fontWeight: 600 }}>
-                            #{p.booking_id}
-                          </Link>
-                        </td>
-                        <td style={td}>{formatPaymentMethodLabel(p.method)}</td>
-                        <td style={{ ...td, fontWeight: 700, color: statusColor(p.status) }}>{paymentDisplayStatus(p)}</td>
-                        <td style={td}>{formatPhpWhole(p.amount)}</td>
-                        <td style={{ ...td, fontSize: "0.85rem", wordBreak: "break-all" }}>{transactionReference(p)}</td>
-                        <td style={td}>{paidAt ? formatDateTime(paidAt) : "—"}</td>
-                        <td style={td}>{isCashPayment(p) && p.verified_by_name ? p.verified_by_name : "—"}</td>
-                        <td style={td}>
-                          <Link
-                            href={`/modules/operations/trips?booking=${p.booking_id}`}
-                            style={{ color: "#92400E", fontWeight: 700, fontSize: "0.85rem" }}
-                          >
-                            Track
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="customer-payment-mobile-list">
+                {payments.map((p) => {
+                  const paidAt = p.xendit_paid_at || p.paid_at || p.proof_uploaded_at;
+                  return (
+                    <article
+                      key={`m-pay-${p.id}`}
+                      style={{
+                        border: "1px solid #E5E7EB",
+                        borderRadius: 12,
+                        padding: "0.9rem 1rem",
+                        display: "grid",
+                        gap: 6,
+                        background: "#FAFAFA",
+                        minWidth: 0,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <Link href={`/booking/payment?bookingId=${p.booking_id}`} style={{ color: "#0EA5E9", fontWeight: 700 }}>
+                          Booking #{p.booking_id}
+                        </Link>
+                        <span style={{ fontWeight: 700, color: statusColor(p.status) }}>{paymentDisplayStatus(p)}</span>
+                      </div>
+                      <div style={{ fontSize: "0.88rem", color: "#374151", overflowWrap: "anywhere" }}>
+                        <div>{formatPaymentMethodLabel(p.method)} · {formatPhpWhole(p.amount)}</div>
+                        <div style={{ color: "#6B7280", fontSize: "0.82rem" }}>
+                          Ref: {transactionReference(p)}
+                        </div>
+                        <div style={{ color: "#6B7280", fontSize: "0.82rem" }}>
+                          {paidAt ? formatDateTime(paidAt) : "—"}
+                          {isCashPayment(p) && p.verified_by_name ? ` · ${p.verified_by_name}` : ""}
+                        </div>
+                      </div>
+                      <Link
+                        href={`/modules/operations/trips?booking=${p.booking_id}`}
+                        style={{ color: "#92400E", fontWeight: 700, fontSize: "0.9rem" }}
+                      >
+                        Track booking
+                      </Link>
+                    </article>
+                  );
+                })}
+              </div>
+              <div className="customer-payment-desktop-table">
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+                  <thead>
+                    <tr style={{ background: "#F3F4F6" }}>
+                      <th style={th}>Booking</th>
+                      <th style={th}>Method</th>
+                      <th style={th}>Status</th>
+                      <th style={th}>Amount</th>
+                      <th style={th}>Transaction ref</th>
+                      <th style={th}>Paid at</th>
+                      <th style={th}>Verified by</th>
+                      <th style={th}>Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map((p) => {
+                      const paidAt = p.xendit_paid_at || p.paid_at || p.proof_uploaded_at;
+                      return (
+                        <tr key={p.id}>
+                          <td style={td}>
+                            <Link href={`/booking/payment?bookingId=${p.booking_id}`} style={{ color: "#0EA5E9", fontWeight: 600 }}>
+                              #{p.booking_id}
+                            </Link>
+                          </td>
+                          <td style={td}>{formatPaymentMethodLabel(p.method)}</td>
+                          <td style={{ ...td, fontWeight: 700, color: statusColor(p.status) }}>{paymentDisplayStatus(p)}</td>
+                          <td style={td}>{formatPhpWhole(p.amount)}</td>
+                          <td style={{ ...td, fontSize: "0.85rem", wordBreak: "break-all" }}>{transactionReference(p)}</td>
+                          <td style={td}>{paidAt ? formatDateTime(paidAt) : "—"}</td>
+                          <td style={td}>{isCashPayment(p) && p.verified_by_name ? p.verified_by_name : "—"}</td>
+                          <td style={td}>
+                            <Link
+                              href={`/modules/operations/trips?booking=${p.booking_id}`}
+                              style={{ color: "#92400E", fontWeight: 700, fontSize: "0.85rem" }}
+                            >
+                              Track
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
 

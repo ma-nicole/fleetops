@@ -63,7 +63,7 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
   });
 
   const StarRating = ({ rating }: { rating: number }) => (
-    <div style={{ display: "flex", gap: "0.25rem" }}>
+    <div className="activity-ratings-stars">
       {[1, 2, 3, 4, 5].map((star) => (
         <span
           key={star}
@@ -91,7 +91,7 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
       <div style={{ padding: "2rem", border: "2px solid #9C27B0", borderRadius: "8px", background: "rgba(156, 39, 176, 0.05)" }}>
         <h2 style={{ color: "#9C27B0", marginBottom: "1.5rem" }}>Overall Performance</h2>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
+        <div className="safe-auto-grid-180" style={{ marginBottom: "2rem" }}>
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>OVERALL RATING</p>
             <p style={{ color: "#9C27B0", fontSize: "2.5rem", fontWeight: "700", margin: "0.5rem 0 0 0" }}>
@@ -125,10 +125,10 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+        <div className="activity-ratings-metrics">
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>SAFETY</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
               <p style={{ color: "#2196F3", fontSize: "1.5rem", fontWeight: "700", margin: "0" }}>
                 {stats.avgSafety}
               </p>
@@ -138,7 +138,7 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
 
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>ON-TIME</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
               <p style={{ color: "#FF9800", fontSize: "1.5rem", fontWeight: "700", margin: "0" }}>
                 {stats.avgOnTime}
               </p>
@@ -148,7 +148,7 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
 
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>PROFESSIONALISM</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
               <p style={{ color: "#4CAF50", fontSize: "1.5rem", fontWeight: "700", margin: "0" }}>
                 {stats.avgProfessionalism}
               </p>
@@ -158,7 +158,7 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
 
           <div>
             <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>CUSTOMER SERVICE</p>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
               <p style={{ color: "#9C27B0", fontSize: "1.5rem", fontWeight: "700", margin: "0" }}>
                 {stats.avgCustomerService}
               </p>
@@ -195,7 +195,7 @@ export default function ActivityRatingsScreen({ dashboardHref }: { dashboardHref
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem", marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "1px solid #E8E8E8" }}>
+              <div className="activity-ratings-metrics" style={{ marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "1px solid #E8E8E8" }}>
                 <div>
                   <p style={{ color: "#999", fontSize: "0.75rem", fontWeight: "600", margin: "0" }}>SAFETY</p>
                   <StarRating rating={rating.safety} />

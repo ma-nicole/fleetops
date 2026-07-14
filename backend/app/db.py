@@ -643,6 +643,54 @@ def apply_runtime_schema_fixes() -> None:
                     )
                 )
 
+    if not insp.has_table("customer_notifications"):
+        dialect = engine.dialect.name
+        with engine.begin() as conn:
+            if dialect == "mysql":
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE customer_notifications (
+                            id INT AUTO_INCREMENT PRIMARY KEY,
+                            customer_id INT NOT NULL,
+                            booking_id INT NULL,
+                            kind VARCHAR(32) NOT NULL,
+                            title VARCHAR(255) NOT NULL DEFAULT '',
+                            message VARCHAR(1000) NOT NULL DEFAULT '',
+                            required_action VARCHAR(512) NOT NULL DEFAULT '',
+                            link_path VARCHAR(255) NOT NULL DEFAULT '',
+                            read_at DATETIME NULL,
+                            dismissed_at DATETIME NULL,
+                            created_at DATETIME NOT NULL,
+                            KEY ix_cn_customer (customer_id),
+                            KEY ix_cn_booking (booking_id),
+                            CONSTRAINT fk_cn_customer FOREIGN KEY (customer_id) REFERENCES users(id),
+                            CONSTRAINT fk_cn_booking FOREIGN KEY (booking_id) REFERENCES bookings(id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                        """
+                    )
+                )
+            else:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE customer_notifications (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            customer_id INTEGER NOT NULL,
+                            booking_id INTEGER,
+                            kind VARCHAR(32) NOT NULL,
+                            title VARCHAR(255) NOT NULL DEFAULT '',
+                            message VARCHAR(1000) NOT NULL DEFAULT '',
+                            required_action VARCHAR(512) NOT NULL DEFAULT '',
+                            link_path VARCHAR(255) NOT NULL DEFAULT '',
+                            read_at DATETIME,
+                            dismissed_at DATETIME,
+                            created_at DATETIME NOT NULL
+                        )
+                        """
+                    )
+                )
+
     # Dispatcher-critical tables (additive — older Railway DBs may lack these)
     from app.models.entities import (
         AdditionalTollEntry,

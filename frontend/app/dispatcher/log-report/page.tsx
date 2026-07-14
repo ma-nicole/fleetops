@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { dispatchAssignedTripStatusLabel, isActiveAssignedTrip } from "@/lib/dispatchAssignedTripStatus";
 import { DispatchApi } from "@/lib/dispatchApi";
 import EvidenceCaptureInput from "@/components/EvidenceCaptureInput";
 import { appendEvidenceToFormData } from "@/lib/evidenceFormData";
@@ -32,8 +33,7 @@ const PRIORITIES: { value: string; label: string }[] = [
 ];
 
 function statusLine(row: AssignmentRow): string {
-  const parts = [row.trip_status, row.helper_progress_status].filter(Boolean) as string[];
-  return parts.map((p) => p.replace(/_/g, " ")).join(" · ") || "—";
+  return dispatchAssignedTripStatusLabel(row);
 }
 
 export default function DispatcherOperationalLogPage() {
@@ -65,8 +65,8 @@ export default function DispatcherOperationalLogPage() {
     setLoadErr(null);
     try {
       const data = await WorkflowApi.dispatchAssignmentsBoard();
-      setRows(data.assignments ?? []);
-      announce(`Loaded ${data.assignments?.length ?? 0} trips for operational log`);
+      setRows((data.assignments ?? []).filter(isActiveAssignedTrip));
+      announce(`Loaded ${(data.assignments ?? []).filter(isActiveAssignedTrip).length} trips for operational log`);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Could not load trips.";
       setLoadErr(msg);

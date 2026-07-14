@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatPhp } from "@/lib/appLocale";
-import { apiFullUrl, ApiError } from "@/lib/api";
+import { apiFullUrl, ApiError, uploadMediaUrl } from "@/lib/api";
 import { WorkflowApi, type CrewAssignedBookingRow } from "@/lib/workflowApi";
 import CrewSchedulingPlotPanel, { schedulingPlotFromCrewRow } from "@/components/CrewSchedulingPlotPanel";
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
@@ -44,10 +44,7 @@ function phaseLabel(phase: Phase): string {
 }
 
 function mediaSrc(url: string): string {
-  const u = url.trim();
-  if (!u) return u;
-  if (u.startsWith("http://") || u.startsWith("https://")) return u;
-  return apiFullUrl(u.startsWith("/") ? u : `/${u}`);
+  return uploadMediaUrl(url) || apiFullUrl(url.startsWith("/") ? url : `/${url}`);
 }
 
 function formatWhen(iso: string): string {
@@ -364,7 +361,7 @@ export default function CrewAssignedBookingsScreen({
       return;
     }
     if (phase === "completed") {
-      setMsg("Use customer Delivery Verification (code or QR) after Arrived at Destination and delivery proof.");
+      setMsg("Use Booking Completion QR verification after Arrived at Destination and delivery proof.");
       return;
     }
     if (PHOTO_REQUIRED.has(phase) && !photo) {
@@ -504,7 +501,7 @@ export default function CrewAssignedBookingsScreen({
         </li>
         <li>
           Before <em>completed</em>: upload receiving document, capture recipient digital signature, then scan the
-          customer&apos;s Verification Code or Delivery QR.
+          customer&apos;s Booking Completion QR (or Manual Verification Code).
         </li>
       </ul>
     </div>
@@ -554,7 +551,7 @@ export default function CrewAssignedBookingsScreen({
       ) : null}
 
       {showSummaryTiles ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: "1.5rem" }}>
           <div style={{ padding: "1.5rem", border: "1px solid #E8E8E8", borderRadius: 8 }}>
             <p style={{ color: "#999", margin: "0 0 0.5rem 0", fontSize: "0.75rem", fontWeight: 600 }}>ASSIGNED TRIPS</p>
             <p style={{ color: "#FF9800", fontSize: "2rem", fontWeight: 700, margin: 0 }}>{rows.length}</p>
@@ -884,7 +881,7 @@ export default function CrewAssignedBookingsScreen({
                           <img
                             src={mediaSrc(ph)}
                             alt="Proof"
-                            style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #E2E8F0" }}
+                            style={{ width: "100%", maxWidth: 160, height: "auto", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: "1px solid #E2E8F0" }}
                           />
                         </a>
                       ),
@@ -894,7 +891,7 @@ export default function CrewAssignedBookingsScreen({
               </>
             ) : (
               <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+            <div className="safe-auto-grid-240">
               <div style={{ padding: "0.85rem 1rem", border: "1px solid #E8E8E8", borderRadius: 10, background: "#FAFAFA" }}>
                 <h3 style={sectionTitle}>Booking &amp; customer</h3>
                 {detail.booking ? (
@@ -953,7 +950,7 @@ export default function CrewAssignedBookingsScreen({
 
             <hr style={divider} />
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
+            <div className="safe-auto-grid-240">
               <div style={{ padding: "0.85rem 1rem", border: "1px solid #E8E8E8", borderRadius: 10 }}>
                 <h3 style={sectionTitle}>Fleet &amp; crew</h3>
                 <div style={{ display: "grid", gap: 6, fontSize: "0.88rem" }}>
@@ -1121,7 +1118,7 @@ export default function CrewAssignedBookingsScreen({
                       <img
                         src={mediaSrc(ph)}
                         alt="Proof"
-                        style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #E2E8F0" }}
+                        style={{ width: "100%", maxWidth: 160, height: "auto", aspectRatio: "1", objectFit: "cover", borderRadius: 8, border: "1px solid #E2E8F0" }}
                       />
                     </a>
                   ),
@@ -1295,6 +1292,7 @@ export default function CrewAssignedBookingsScreen({
                           />
                           <button
                             type="button"
+                            className="helper-touch-btn"
                             disabled={
                               busy ||
                               !canUpdate ||
@@ -1424,9 +1422,9 @@ export default function CrewAssignedBookingsScreen({
                             verified={Boolean(detail.booking_qr_verified)}
                             verifiedAt={detail.booking_qr_verified_at ?? null}
                             enabled={receivingReady || Boolean(detail.booking_qr_verified)}
-                            lockedHint="Upload the receiving document and digital signature above, then enter the customer's Verification Code (or scan their Delivery QR) to complete the booking."
+                            lockedHint="Upload the receiving document and digital signature above, then scan the customer's Booking Completion QR (or paste the Manual Verification Code) to complete the booking."
                             onVerified={async () => {
-                              setMsg("Delivery verification succeeded. The booking is now completed.");
+                              setMsg("Booking Completion QR verified. The booking is now completed.");
                               await load();
                               setDetail(null);
                             }}
@@ -1453,6 +1451,7 @@ export default function CrewAssignedBookingsScreen({
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
                         <button
                           type="button"
+                          className="helper-touch-btn"
                           disabled={busy || !canUpdate || phase === "completed"}
                           onClick={() => void submitStatus()}
                           style={{
@@ -1470,6 +1469,7 @@ export default function CrewAssignedBookingsScreen({
                         </button>
                         <button
                           type="button"
+                          className="helper-touch-btn"
                           disabled={busy}
                           onClick={() => setDetail(null)}
                           style={{

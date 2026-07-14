@@ -79,8 +79,9 @@ def _assign_objective_tags(
     alternatives_available: bool,
 ) -> list[dict[str, Any]]:
     """
-    Tag only from real metrics on the persisted set.
-    Single real option → Optimal route (no fake Fastest/Shortest trio).
+    Tag dispatcher options from real metrics.
+    Multi-option set → Fastest / Lowest Cost / Balanced.
+    Single option → Optimal route (honest fallback when provider returned one path).
     """
     if not rows:
         return rows
@@ -92,8 +93,11 @@ def _assign_objective_tags(
                 row["objective_tags"] = ["Fallback estimate"]
             else:
                 tags = ["Optimal route"]
-                if "avoid_tolls" in str(row.get("provider") or ""):
+                provider = str(row.get("provider") or "")
+                if "avoid_tolls" in provider:
                     tags.append("Avoid Toll Roads")
+                if "avoid_highways" in provider:
+                    tags.append("Avoid Highways")
                 row["objective_tags"] = tags
         return rows
 
@@ -110,30 +114,44 @@ def _assign_objective_tags(
         key=lambda i: float(rows[i].get("duration_hours") or 1e9),
     )
     if rows[by_hours[0]].get("duration_hours") is not None:
-        push(by_hours[0], "Fastest Route")
-
-    by_km = sorted(range(len(rows)), key=lambda i: float(rows[i].get("distance_km") or 1e9))
-    push(by_km[0], "Shortest Distance")
-
-    avoid_idxs = [
-        i
-        for i, r in enumerate(rows)
-        if "avoid_tolls" in str(r.get("provider") or "")
-    ]
-    if avoid_idxs:
-        for i in avoid_idxs:
-            push(i, "Avoid Toll Roads")
-    else:
-        by_toll = sorted(range(len(rows)), key=lambda i: float(rows[i].get("toll_cost") or 1e9))
-        push(by_toll[0], "Lowest Toll Cost")
+        push(by_hours[0], "Fastest")
 
     by_total = sorted(range(len(rows)), key=lambda i: float(rows[i].get("total_cost") or 1e9))
-    push(by_total[0], "Balanced Route")
+    push(by_total[0], "Lowest Cost")
+
+    max_h = max(float(rows[i].get("duration_hours") or 0) for i in range(len(rows))) or 1.0
+    max_c = max(float(rows[i].get("total_cost") or 0) for i in range(len(rows))) or 1.0
+
+    def balance_score(i: int) -> float:
+        h = float(rows[i].get("duration_hours") or max_h) / max_h
+        c = float(rows[i].get("total_cost") or max_c) / max_c
+        return h + c
+
+    by_balance = sorted(range(len(rows)), key=balance_score)
+    push(by_balance[0], "Balanced")
+
+    for i, row in enumerate(rows):
+        provider = str(row.get("provider") or "")
+        if "avoid_tolls" in provider:
+            push(i, "Avoid Toll Roads")
+        if "avoid_highways" in provider:
+            push(i, "Avoid Highways")
 
     for row in rows:
         if not row.get("objective_tags"):
             row["objective_tags"] = ["Generated Route"]
     return rows
+
+
+def _primary_objective_name(tags: list[str], *, summary: str | None, rank: int) -> str:
+    """Pick a clear display name from objective tags."""
+    priority = ("Fastest", "Lowest Cost", "Balanced", "Optimal route", "Fallback estimate", "Manual Route")
+    primary = next((t for t in priority if t in tags), None)
+    if not primary:
+        primary = tags[0] if tags else f"Option {rank}"
+    if summary:
+        return f"{primary} ({summary})"
+    return primary
 
 
 def serialize_route_option(row: RouteOption) -> dict[str, Any]:
@@ -207,7 +225,12 @@ def route_options_meta_from_serialized(options: list[dict[str, Any]]) -> dict[st
         elif len(road) == 1:
             routing_note = (
                 "Routing engine returned one optimal path for this OD. "
-                "Multiple provider alternatives were not available."
+                "Using the best available route (multiple provider alternatives were not available)."
+            )
+        elif 1 < len(road) < 3:
+            routing_note = (
+                f"Routing engine returned {len(road)} distinct path(s). "
+                "Showing the best available alternatives."
             )
     return {
         "alternatives_available": alternatives_available,
@@ -284,8 +307,9 @@ def _price_road_option(
 
 def _resolve_road_options_for_dispatch(booking: Booking) -> tuple[list[RoadRouteOption], str, str | None]:
     """
-    Same provider alternatives path as customer quotes, plus optional avoid-tolls preference.
-    Does not invent padding options.
+    Same provider alternatives path as customer quotes, plus preference strategies
+    (avoid tolls / avoid highways) to reach up to three distinct options when available.
+    Does not invent padded duplicates when the provider cannot supply them.
     """
     pickup = (booking.pickup_location or "").strip()
     dropoff = (booking.dropoff_location or "").strip()
@@ -321,7 +345,8 @@ def _resolve_road_options_for_dispatch(booking: Booking) -> tuple[list[RoadRoute
     if not primary or provider == "unavailable":
         return [], "unavailable", None
 
-    avoid_opts, _avoid_provider = driving_route_alternatives(
+    extras: list[RoadRouteOption] = []
+    avoid_toll_opts, _ = driving_route_alternatives(
         float(plat),
         float(plon),
         float(dlat),
@@ -331,45 +356,71 @@ def _resolve_road_options_for_dispatch(booking: Booking) -> tuple[list[RoadRoute
         want_alternatives=False,
         avoid_tolls=True,
     )
-    merged = _merge_distinct_road_options(primary, avoid_opts, max_options=3)
+    extras.extend(avoid_toll_opts)
+
+    if len(_merge_distinct_road_options(primary, extras, max_options=3)) < 3:
+        avoid_hwy_opts, _ = driving_route_alternatives(
+            float(plat),
+            float(plon),
+            float(dlat),
+            float(dlon),
+            app_settings,
+            max_options=1,
+            want_alternatives=False,
+            avoid_highways=True,
+        )
+        extras.extend(avoid_hwy_opts)
+
+    merged = _merge_distinct_road_options(primary, extras, max_options=3)
     return merged, provider, None
 
 
 def generate_route_options_for_booking(db: Session, booking: Booking) -> tuple[list[RouteOption], str | None]:
     """
     Build route candidates for dispatcher review from real road-provider alternatives
-    (same engines as customer quotes). Does not invent synthetic triples for the panel.
+    (same engines as customer quotes). Falls back to a single estimate when alternatives
+    are unavailable — does not invent synthetic triples.
     """
     db.query(RouteOption).filter(RouteOption.booking_id == booking.id).delete()
 
     map_warning: str | None = None
     options: list[RouteOption] = []
-    road_opts, provider, geo_note = _resolve_road_options_for_dispatch(booking)
+    road_opts: list[RoadRouteOption] = []
+    provider = "unavailable"
+    geo_note: str | None = None
+    try:
+        road_opts, provider, geo_note = _resolve_road_options_for_dispatch(booking)
+    except Exception:
+        # Provider/geocode glitches must not break the route setter UI.
+        road_opts, provider, geo_note = [], "unavailable", "Routing lookup failed unexpectedly."
 
     if road_opts and provider != "unavailable":
         alternatives_available = len(road_opts) > 1
-        routing_note = (
-            None
-            if alternatives_available
-            else (
-                "Routing engine returned one optimal path for this OD. "
-                "Multiple provider alternatives were not available."
+        if alternatives_available and len(road_opts) >= 3:
+            routing_note = None
+        elif alternatives_available:
+            routing_note = (
+                f"Routing engine returned {len(road_opts)} distinct path(s). "
+                "Showing the best available alternatives — additional options were not distinct for this OD."
             )
-        )
+        else:
+            routing_note = (
+                "Routing engine returned one optimal path for this OD. "
+                "Using the best available route (multiple provider alternatives were not available)."
+            )
         priced_meta: list[dict[str, Any]] = []
         for rank, opt in enumerate(road_opts, start=1):
-            distance, hours, fuel, toll = _price_road_option(db, booking, opt)
+            try:
+                distance, hours, fuel, toll = _price_road_option(db, booking, opt)
+            except Exception:
+                hours = travel_hours_for_option(opt)
+                fuel, toll = _estimate_synthetic_costs(float(opt.distance_km), float(booking.cargo_weight_tons or 0))
+                distance = round(float(opt.distance_km), 2)
             summary = (opt.summary or "").strip() or None
-            if not alternatives_available:
-                name = "Optimal route"
-            elif rank == 1:
-                name = f"Recommended{f' ({summary})' if summary else ''}"
-            else:
-                name = f"Alternative {rank - 1}{f' ({summary})' if summary else ''}"
             priced_meta.append(
                 {
                     "rank": rank,
-                    "name": name,
+                    "name": f"Option {rank}",
                     "summary": summary,
                     "duration_hours": hours,
                     "distance_km": distance,
@@ -386,6 +437,11 @@ def generate_route_options_for_booking(db: Session, booking: Booking) -> tuple[l
             )
         priced_meta = _assign_objective_tags(priced_meta, alternatives_available=alternatives_available)
         for meta in priced_meta:
+            meta["name"] = _primary_objective_name(
+                list(meta.get("objective_tags") or []),
+                summary=meta.get("summary"),
+                rank=int(meta["rank"]),
+            )
             if routing_note:
                 meta["routing_note"] = routing_note
             options.append(
@@ -414,10 +470,10 @@ def generate_route_options_for_booking(db: Session, booking: Booking) -> tuple[l
                 )
             )
     else:
-        # Last-resort single fallback only — never pad with A*/catalog fakes.
+        # Last-resort single fallback only — never invent padded triples.
         note = (
             "Provider routing was unavailable for this origin/destination. "
-            "Showing a single estimated fallback path — not multiple real alternatives."
+            "Using the best available estimate — not multiple real alternatives."
         )
         if geo_note:
             note = f"{geo_note} {note}"

@@ -67,3 +67,5 @@ Redeploy Vercel after saving env vars.
 | `/health` OK, `/ready` fails | Check `DATABASE_URL` uses internal `mysql.railway.internal` URL |
 | `'$PORT' is not a valid integer` | Clear Custom Start Command; remove bad `PORT` variable; use Dockerfile + `railway.toml` |
 | Login works locally but not on Vercel | Redeploy Vercel; confirm `NEXT_PUBLIC_API_URL` ends with `/api` |
+| Helper proofs upload OK but images 404 later | Mount a **Railway Volume** at `/app/uploads` (`UPLOADS_ROOT`). Ephemeral disk loses files on redeploy. |
+| Uploads 404 on Netlify | Confirm `netlify.toml` proxies `/uploads/*` to Railway `BACKEND_ORIGIN` |

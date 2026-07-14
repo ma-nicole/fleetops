@@ -144,14 +144,15 @@ export default function GcashQrPaymentSection({
         }}
       >
         <div
+          className="booking-qr-wrap"
           style={{
             padding: "0.75rem",
             background: "#fff",
             border: "2px solid #007cff",
             borderRadius: "12px",
             boxShadow: "0 4px 14px rgba(0, 124, 255, 0.12)",
-            minWidth: 220,
-            minHeight: 220,
+            width: "min(100%, 240px)",
+            minHeight: 180,
             display: "grid",
             placeItems: "center",
           }}
@@ -159,7 +160,7 @@ export default function GcashQrPaymentSection({
           {xenditLoading ? (
             <span style={{ fontSize: "0.85rem", color: "#6B7280" }}>Generating QR…</span>
           ) : useXendit && xenditQrString && isPending ? (
-            <QRCodeSVG value={xenditQrString} size={220} level="M" includeMargin />
+            <QRCodeSVG className="booking-qr-svg" value={xenditQrString} size={220} level="M" includeMargin />
           ) : !useXendit && !qrError ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -167,14 +168,15 @@ export default function GcashQrPaymentSection({
               alt="FleetOps GCash QR code"
               width={220}
               height={220}
-              style={{ display: "block", width: 220, height: 220, objectFit: "contain" }}
+              style={{ display: "block", width: "100%", maxWidth: 220, height: "auto", aspectRatio: "1", objectFit: "contain" }}
               onError={() => setQrError(true)}
             />
           ) : (
             <div
               style={{
-                width: 220,
-                height: 220,
+                width: "100%",
+                maxWidth: 220,
+                aspectRatio: "1",
                 display: "grid",
                 placeItems: "center",
                 textAlign: "center",
@@ -188,7 +190,7 @@ export default function GcashQrPaymentSection({
           )}
         </div>
 
-        <div style={{ minWidth: 180, fontSize: "0.9rem", color: "#374151" }}>
+        <div style={{ minWidth: 0, flex: "1 1 180px", fontSize: "0.9rem", color: "#374151" }}>
           <p style={{ margin: "0 0 0.5rem 0" }}>
             <strong>Amount to pay:</strong>{" "}
             <span style={{ color: "#FF9800", fontWeight: 700 }}>{formatPhp(total)}</span>

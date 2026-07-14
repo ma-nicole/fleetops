@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import logging
 import secrets
 import string
 
@@ -28,6 +29,8 @@ from app.services.goods_declaration_review import (
     serialize_review_events,
 )
 from app.services.goods_declaration_notifications import notify_customer_document_review_decision
+
+logger = logging.getLogger(__name__)
 from app.services.dispatcher_booking_assignment import assign_booking_dispatcher, job_order_assignment_map
 from app.models.entities import JobOrder
 from app.schemas.dispatcher_assignment import DispatcherBookingAssignRequest
@@ -523,6 +526,18 @@ def review_goods_declaration(
         status=payload.status,
         remarks=booking.goods_declaration_review_remarks,
     )
+    try:
+        from app.services.customer_notifications import notify_customer_document_review
+
+        notify_customer_document_review(
+            db,
+            booking,
+            status=payload.status,
+            remarks=booking.goods_declaration_review_remarks,
+        )
+        db.commit()
+    except Exception:
+        logger.warning("Customer in-app document review notification failed.", exc_info=True)
     return _serialize_goods_declaration_row(db, booking)
 
 

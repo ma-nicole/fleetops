@@ -86,7 +86,9 @@ def test_generate_persists_three_real_options_no_astar_padding(resolve_mock, pri
     assert meta["routing_note"] is None
     # Strategy tags only from real multi-option set
     tags = {t for s in serialized for t in s["objective_tags"]}
-    assert "Fastest Route" in tags or "Shortest Distance" in tags
+    assert "Fastest" in tags
+    assert "Lowest Cost" in tags
+    assert "Balanced" in tags
     assert "Avoid Toll Roads" in tags
 
 
@@ -102,10 +104,10 @@ def test_generate_single_option_marks_optimal_not_alternatives(resolve_mock, pri
     assert s["source"] == "road"
     assert s["route_name"] == "Optimal route"
     assert "Optimal route" in s["objective_tags"]
-    assert "Fastest Route" not in s["objective_tags"]
+    assert "Fastest" not in s["objective_tags"]
     meta = route_options_meta_from_serialized([s])
     assert meta["alternatives_available"] is False
-    assert meta["routing_note"] and "one optimal path" in meta["routing_note"].lower()
+    assert meta["routing_note"] and "best available" in meta["routing_note"].lower()
 
 
 @patch("app.services.dispatch_route_selection._synthetic_direct_option")
@@ -175,15 +177,17 @@ def test_resolve_uses_same_alternatives_api_as_customer_quotes(geocode_mock, alt
     alts_mock.side_effect = [
         ([_road(100.0, 7000.0, 0), _road(110.0, 7500.0, 1)], "google_directions"),
         ([_road(100.0, 7000.0, 0, provider="google_directions_avoid_tolls")], "google_directions_avoid_tolls"),
+        ([_road(125.0, 8000.0, 0, provider="google_directions_avoid_highways")], "google_directions_avoid_highways"),
     ]
     opts, provider, note = _resolve_road_options_for_dispatch(_booking())
     assert note is None
     assert provider == "google_directions"
     assert len(opts) >= 1
-    # Primary want_alternatives=True + avoid_tolls strategy call
-    assert alts_mock.call_count == 2
+    # Primary want_alternatives=True + preference strategy calls when needed
+    assert alts_mock.call_count >= 2
     first_kwargs = alts_mock.call_args_list[0].kwargs
     assert first_kwargs.get("want_alternatives") is True
     assert first_kwargs.get("max_options") == 3
     second_kwargs = alts_mock.call_args_list[1].kwargs
     assert second_kwargs.get("avoid_tolls") is True
+    assert len(opts) == 3

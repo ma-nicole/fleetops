@@ -371,7 +371,7 @@ export default function OperationalCrewDashboard() {
         ) : null}
 
         {summary ? (
-          <section id="crew-kpis" className="scroll-section" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+          <section id="crew-kpis" className="scroll-section safe-auto-grid-180" style={{ gap: "1rem" }}>
             <KpiCard label="Today’s assignments" value={a?.total_assigned_today ?? 0} delta="Legs assigned today (UTC)" tone="neutral" />
             <KpiCard label="Active trips" value={a?.active_trips ?? 0} delta="Assigned through dropped off (not completed/cancelled)" tone="neutral" scrollTargetId="crew-trips-table" />
             <KpiCard label="Completed trips" value={a?.completed_legs_total ?? 0} delta={`${a?.completed_today ?? 0} finished today`} tone="neutral" scrollTargetId="crew-history" />
@@ -587,140 +587,197 @@ export default function OperationalCrewDashboard() {
 
         <article id="crew-trips-table" className="panel-card scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Assigned trips (not completed)</h3>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 760 : 1040 }}>
-              <thead>
-                <tr>
-                  {crewRole === "driver" ? <th style={th}>Trip ID</th> : null}
-                  <th style={th}>Booking ID</th>
-                  <th style={th}>Pickup</th>
-                  <th style={th}>Dropoff</th>
-                  <th style={th}>Schedule</th>
-                  <th style={{ ...th, textAlign: "right" }}>Cargo (t)</th>
-                  {crewRole === "driver" ? <th style={th}>Truck</th> : null}
-                  <th style={th}>Driver</th>
-                  {crewRole === "driver" ? <th style={th}>Helper</th> : null}
-                  <th style={th}>Status</th>
-                  {crewRole === "driver" ? <th style={th}>Latest location</th> : null}
-                  <th style={{ ...th, textAlign: "center" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeTrips.length === 0 ? (
-                  <tr>
-                    <td colSpan={crewRole === "helper" ? 8 : 12} style={{ ...td, color: "#64748B" }}>
-                      No active assigned trips.
-                    </td>
-                  </tr>
-                ) : (
-                  activeTrips.map((t) => (
-                    <tr key={t.id}>
-                      {crewRole === "driver" ? <td style={{ ...td, fontWeight: 700 }}>{t.id}</td> : null}
-                      <td style={{ ...td, fontWeight: crewRole === "helper" ? 700 : undefined }}>{t.booking_id}</td>
-                      <td style={td} title={t.booking?.pickup_location}>
-                        {shorten(t.booking?.pickup_location, 48)}
-                      </td>
-                      <td style={td} title={t.booking?.dropoff_location}>
-                        {shorten(t.booking?.dropoff_location, 48)}
-                      </td>
-                      <td style={td}>
-                        {t.booking ? (
-                          <>
-                            {t.booking.scheduled_date}
-                            <br />
-                            {t.booking.scheduled_time_slot}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td style={{ ...td, textAlign: "right" }}>{t.booking ? t.booking.cargo_weight_tons : "—"}</td>
-                      {crewRole === "driver" ? <td style={td}>{t.truck?.code ?? "—"}</td> : null}
-                      <td style={td}>{t.driver_name ?? "—"}</td>
-                      {crewRole === "driver" ? <td style={td}>{t.helper_name ?? "—"}</td> : null}
-                      <td style={td}>
-                        <StatusPill ok={false} slug={statusSlugForRow(t)} />
-                      </td>
-                      {crewRole === "driver" ? (
-                        <td style={td} title={t.latest_location || ""}>
-                          {shorten(t.latest_location, 40)}
-                        </td>
-                      ) : null}
-                      <td style={{ ...td, textAlign: "center" }}>
-                        <button type="button" style={viewBtnStyle} onClick={() => setDetailTrip(t)}>
-                          {crewRole === "helper" ? "Open" : "View details"}
-                        </button>
-                      </td>
+          {activeTrips.length === 0 ? (
+            <p style={{ margin: 0, color: "#64748B" }}>No active assigned trips.</p>
+          ) : (
+            <>
+              <div className="crew-bookings-mobile-list" style={{ display: "none", gap: "0.75rem" }}>
+                {activeTrips.map((t) => (
+                  <article
+                    key={`m-active-${t.id}`}
+                    style={{
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 12,
+                      padding: "0.9rem 1rem",
+                      display: "grid",
+                      gap: 8,
+                      background: "#FAFAFA",
+                      minWidth: 0,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: "1rem" }}>Booking #{t.booking_id}</strong>
+                      <StatusPill ok={false} slug={statusSlugForRow(t)} />
+                    </div>
+                    <div style={{ fontSize: "0.88rem", color: "#374151", lineHeight: 1.45, overflowWrap: "anywhere" }}>
+                      <div>
+                        <span style={{ color: "#6B7280" }}>From:</span> {t.booking?.pickup_location ?? "—"}
+                      </div>
+                      <div>
+                        <span style={{ color: "#6B7280" }}>To:</span> {t.booking?.dropoff_location ?? "—"}
+                      </div>
+                      <div style={{ marginTop: 4, color: "#6B7280", fontSize: "0.82rem" }}>
+                        {t.booking ? `${t.booking.scheduled_date} · ${t.booking.scheduled_time_slot}` : "—"}
+                      </div>
+                    </div>
+                    <button type="button" className="helper-touch-btn" style={viewBtnStyle} onClick={() => setDetailTrip(t)}>
+                      {crewRole === "helper" ? "Open booking" : "View details"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+              <div className="crew-bookings-desktop-table" style={{ overflowX: "auto" }}>
+                <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 760 : 1040 }}>
+                  <thead>
+                    <tr>
+                      {crewRole === "driver" ? <th style={th}>Trip ID</th> : null}
+                      <th style={th}>Booking ID</th>
+                      <th style={th}>Pickup</th>
+                      <th style={th}>Dropoff</th>
+                      <th style={th}>Schedule</th>
+                      <th style={{ ...th, textAlign: "right" }}>Cargo (t)</th>
+                      {crewRole === "driver" ? <th style={th}>Truck</th> : null}
+                      <th style={th}>Driver</th>
+                      {crewRole === "driver" ? <th style={th}>Helper</th> : null}
+                      <th style={th}>Status</th>
+                      {crewRole === "driver" ? <th style={th}>Latest location</th> : null}
+                      <th style={{ ...th, textAlign: "center" }}>Action</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {activeTrips.map((t) => (
+                      <tr key={t.id}>
+                        {crewRole === "driver" ? <td style={{ ...td, fontWeight: 700 }}>{t.id}</td> : null}
+                        <td style={{ ...td, fontWeight: crewRole === "helper" ? 700 : undefined }}>{t.booking_id}</td>
+                        <td style={td} title={t.booking?.pickup_location}>
+                          {shorten(t.booking?.pickup_location, 48)}
+                        </td>
+                        <td style={td} title={t.booking?.dropoff_location}>
+                          {shorten(t.booking?.dropoff_location, 48)}
+                        </td>
+                        <td style={td}>
+                          {t.booking ? (
+                            <>
+                              {t.booking.scheduled_date}
+                              <br />
+                              {t.booking.scheduled_time_slot}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td style={{ ...td, textAlign: "right" }}>{t.booking ? t.booking.cargo_weight_tons : "—"}</td>
+                        {crewRole === "driver" ? <td style={td}>{t.truck?.code ?? "—"}</td> : null}
+                        <td style={td}>{t.driver_name ?? "—"}</td>
+                        {crewRole === "driver" ? <td style={td}>{t.helper_name ?? "—"}</td> : null}
+                        <td style={td}>
+                          <StatusPill ok={false} slug={statusSlugForRow(t)} />
+                        </td>
+                        {crewRole === "driver" ? (
+                          <td style={td} title={t.latest_location || ""}>
+                            {shorten(t.latest_location, 40)}
+                          </td>
+                        ) : null}
+                        <td style={{ ...td, textAlign: "center" }}>
+                          <button type="button" style={viewBtnStyle} onClick={() => setDetailTrip(t)}>
+                            {crewRole === "helper" ? "Open" : "View details"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </article>
 
         <article id="crew-history" className="panel-card scroll-section" style={{ ...card }}>
           <h3 style={{ margin: "0 0 0.75rem", fontSize: "1.05rem", fontWeight: 800 }}>Recent trip history (completed)</h3>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 640 : 880 }}>
-              <thead>
-                <tr>
-                  {crewRole === "driver" ? <th style={th}>Trip ID</th> : null}
-                  <th style={th}>Booking ID</th>
-                  <th style={th}>{crewRole === "helper" ? "Route" : "Route"}</th>
-                  <th style={th}>Schedule</th>
-                  {crewRole === "driver" ? (
-                    <>
-                      <th style={{ ...th, textAlign: "right" }}>Distance</th>
-                      <th style={{ ...th, textAlign: "right" }}>Fuel cost</th>
-                    </>
-                  ) : null}
-                  <th style={th}>Status</th>
-                  <th style={th}>Completed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyCompleted.length === 0 ? (
-                  <tr>
-                    <td colSpan={crewRole === "helper" ? 5 : 8} style={{ ...td, color: "#64748B" }}>
-                      No completed trips yet.
-                    </td>
-                  </tr>
-                ) : (
-                  historyCompleted.map((t) => (
-                    <tr key={t.id}>
-                      {crewRole === "driver" ? <td style={{ ...td, fontWeight: 700 }}>{t.id}</td> : null}
-                      <td style={td}>{t.booking_id}</td>
-                      <td style={td} title={formatRouteLabel(t)}>
-                        {formatRouteLabel(t)}
-                      </td>
-                      <td style={td}>
-                        {t.booking ? (
-                          <>
-                            {t.booking.scheduled_date}
-                            <br />
-                            {t.booking.scheduled_time_slot}
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
+          {historyCompleted.length === 0 ? (
+            <p style={{ margin: 0, color: "#64748B" }}>No completed trips yet.</p>
+          ) : (
+            <>
+              <div className="crew-bookings-mobile-list" style={{ display: "none", gap: "0.75rem" }}>
+                {historyCompleted.map((t) => (
+                  <article
+                    key={`m-hist-${t.id}`}
+                    style={{
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 12,
+                      padding: "0.9rem 1rem",
+                      display: "grid",
+                      gap: 6,
+                      background: "#FAFAFA",
+                      minWidth: 0,
+                    }}
+                  >
+                    <strong>Booking #{t.booking_id}</strong>
+                    <div style={{ fontSize: "0.88rem", color: "#374151", overflowWrap: "anywhere" }}>
+                      {formatRouteLabel(t)}
+                    </div>
+                    <div style={{ fontSize: "0.82rem", color: "#6B7280" }}>
+                      {t.booking ? `${t.booking.scheduled_date} · ${t.booking.scheduled_time_slot}` : "—"}
+                      {t.completed_at ? ` · Done ${formatDateTime(t.completed_at)}` : ""}
+                    </div>
+                    <StatusPill ok slug={statusSlugForRow(t)} />
+                  </article>
+                ))}
+              </div>
+              <div className="crew-bookings-desktop-table" style={{ overflowX: "auto" }}>
+                <table style={{ ...tableBase, minWidth: crewRole === "helper" ? 640 : 880 }}>
+                  <thead>
+                    <tr>
+                      {crewRole === "driver" ? <th style={th}>Trip ID</th> : null}
+                      <th style={th}>Booking ID</th>
+                      <th style={th}>Route</th>
+                      <th style={th}>Schedule</th>
                       {crewRole === "driver" ? (
                         <>
-                          <td style={{ ...td, textAlign: "right" }}>{t.distance_km} km</td>
-                          <td style={{ ...td, textAlign: "right" }}>{formatPhpWhole(t.fuel_cost || 0)}</td>
+                          <th style={{ ...th, textAlign: "right" }}>Distance</th>
+                          <th style={{ ...th, textAlign: "right" }}>Fuel cost</th>
                         </>
                       ) : null}
-                      <td style={td}>
-                        <StatusPill ok slug={statusSlugForRow(t)} />
-                      </td>
-                      <td style={td}>{t.completed_at ? formatDateTime(t.completed_at) : "—"}</td>
+                      <th style={th}>Status</th>
+                      <th style={th}>Completed</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {historyCompleted.map((t) => (
+                      <tr key={t.id}>
+                        {crewRole === "driver" ? <td style={{ ...td, fontWeight: 700 }}>{t.id}</td> : null}
+                        <td style={td}>{t.booking_id}</td>
+                        <td style={td} title={formatRouteLabel(t)}>
+                          {formatRouteLabel(t)}
+                        </td>
+                        <td style={td}>
+                          {t.booking ? (
+                            <>
+                              {t.booking.scheduled_date}
+                              <br />
+                              {t.booking.scheduled_time_slot}
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        {crewRole === "driver" ? (
+                          <>
+                            <td style={{ ...td, textAlign: "right" }}>{t.distance_km} km</td>
+                            <td style={{ ...td, textAlign: "right" }}>{formatPhpWhole(t.fuel_cost || 0)}</td>
+                          </>
+                        ) : null}
+                        <td style={td}>
+                          <StatusPill ok slug={statusSlugForRow(t)} />
+                        </td>
+                        <td style={td}>{t.completed_at ? formatDateTime(t.completed_at) : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </article>
 
         <section className="panel-card" style={{ ...card, display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -796,8 +853,10 @@ export default function OperationalCrewDashboard() {
               padding: "1.35rem",
               maxHeight: "88vh",
               overflowY: "auto",
+              overflowX: "hidden",
               boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
             }}
+            className="crew-detail-sheet"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ marginTop: 0 }}>{crewRole === "helper" ? `Booking #${detailTrip.booking_id}` : `Trip #${detailTrip.id}`}</h2>

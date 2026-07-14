@@ -50,7 +50,10 @@ export default function OngoingOperationsPage() {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const operations = board?.active_assignments ?? [];
+  const operations = (board?.active_assignments ?? []).filter((row) => {
+    const ts = (row.trip_status || "").toLowerCase();
+    return ts !== "completed" && ts !== "cancelled";
+  });
   const summary = board?.summary;
 
   return (

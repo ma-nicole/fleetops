@@ -287,10 +287,9 @@ export default function CustomerDocumentReviewSection({
           )}
           <button
             type="button"
-            className="button"
+            className="button customer-doc-resubmit-btn"
             disabled={busy}
             onClick={() => void submitResubmit()}
-            style={{ justifySelf: "start", minHeight: 44, minWidth: 160 }}
           >
             {busy ? "Uploading…" : "Submit revised declaration"}
           </button>

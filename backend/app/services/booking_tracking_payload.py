@@ -6,20 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Booking, Trip, TripLocationUpdate, TripStatusUpdate, Truck, User
 from app.services.latest_location_display import latest_location_display_for_trip
-from app.services.upload_urls import public_upload_url
 
 
 def _photo_public(path: str | None) -> str | None:
-    """Expose helper proofs as `/uploads/...` when present on disk."""
-    if not path or not str(path).strip():
-        return None
-    pub = public_upload_url(path)
-    if pub:
-        return pub
-    rel = str(path).strip().replace("\\", "/").lstrip("/")
-    if rel.startswith("uploads/"):
-        return f"/{rel}"
-    return f"/uploads/{rel}"
+    """Expose helper proofs as `/uploads/...` for frontend media helpers."""
+    from app.services.upload_urls import normalize_upload_path
+
+    return normalize_upload_path(path)
 
 
 def _merge_assignment_timeline(

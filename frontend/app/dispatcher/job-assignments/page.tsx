@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { WorkflowApi, type Booking, type DispatchResourceAvailabilityRow } from "@/lib/workflowApi";
 import { formatDateTime } from "@/lib/appLocale";
+import { dispatchAssignedTripStatusLabel, isActiveAssignedTrip } from "@/lib/dispatchAssignedTripStatus";
 import DispatcherRouteSetter from "@/components/DispatcherRouteSetter";
 import StatusBanner from "@/components/ui/StatusBanner";
 
@@ -72,6 +73,7 @@ function rosterConflictMessage(
 type AssignmentRow = {
   trip_id: number;
   trip_status: string;
+  operational_status?: string | null;
   booking_id: number;
   pickup_location: string;
   dropoff_location: string;
@@ -120,7 +122,7 @@ function DispatcherJobAssignmentsInner() {
         WorkflowApi.dispatchAssignmentsBoard().catch(() => null),
       ]);
       setBookings(list);
-      setAssignments(board?.assignments ?? []);
+      setAssignments((board?.assignments ?? []).filter(isActiveAssignedTrip));
       setBookingId((prev) => {
         if (list.length === 0) return 0;
         if (prev && list.some((b) => b.id === prev)) return prev;
@@ -726,8 +728,8 @@ function DispatcherJobAssignmentsInner() {
                       <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.truck_code}</td>
                       <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.driver_name ?? "—"}</td>
                       <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.helper_name ?? "—"}</td>
-                      <td style={{ padding: 8, textTransform: "capitalize", overflowWrap: "anywhere" }}>
-                        {(a.helper_progress_status || a.trip_status || "—").replace(/_/g, " ")}
+                      <td style={{ padding: 8, overflowWrap: "anywhere" }}>
+                        {dispatchAssignedTripStatusLabel(a)}
                       </td>
                       <td style={{ padding: 8, overflowWrap: "anywhere" }}>{a.latest_location ?? "—"}</td>
                     </tr>

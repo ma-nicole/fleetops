@@ -28,6 +28,7 @@ from app.services.booking_road_distance import booking_pickup_dropoff_distance_k
 from app.services.demo_booking_filter import is_demo_placeholder_booking
 from app.services.pre_delivery_verification import build_pre_delivery_checklist, pre_delivery_block_detail
 from app.services.dispatch_operations_center import _display_status
+from app.services.upload_urls import normalize_upload_path
 from app.services.latest_location_display import latest_location_display_for_trip
 
 # Unlimited en-route progress updates; 0 means no minimum before dropped_off.
@@ -105,7 +106,7 @@ def _merge_timeline(
                 "title": code,
                 "detail": (su.location_name or "").strip(),
                 "remarks": su.remarks,
-                "photo_url": su.photo_url,
+                "photo_url": normalize_upload_path(su.photo_url),
                 "submitted_by": helper_name_fn(su.helper_id),
                 "booking_id": booking_id,
                 "trip_id": trip_id,
@@ -132,7 +133,7 @@ def _merge_timeline(
                 "title": f"Update #{i} — {loc}" if loc else f"Update #{i}",
                 "detail": loc,
                 "remarks": lu.remarks,
-                "photo_url": lu.photo_url,
+                "photo_url": normalize_upload_path(lu.photo_url),
                 "submitted_by": helper_name_fn(lu.helper_id),
                 "update_index": i,
                 "booking_id": booking_id,
@@ -157,11 +158,11 @@ def _merge_timeline(
 def _collect_proof_urls(trip: Trip, status_rows: list[TripStatusUpdate], location_rows: list[TripLocationUpdate]) -> list[str]:
     seen: list[str] = []
     for u in status_rows + location_rows:
-        url = (u.photo_url or "").strip()
+        url = normalize_upload_path(u.photo_url)
         if url and url not in seen:
             seen.append(url)
     for path in (trip.proof_of_delivery or "", trip.helper_last_proof_path or ""):
-        p = path.strip()
+        p = normalize_upload_path(path)
         if p and p not in seen:
             seen.append(p)
     return seen
@@ -343,7 +344,7 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
                 "id": u.id,
                 "location_name": u.location_name,
                 "remarks": u.remarks,
-                "photo_url": u.photo_url,
+                "photo_url": normalize_upload_path(u.photo_url),
                 "created_at": u.created_at.isoformat(),
                 "helper_id": u.helper_id,
                 "submitted_by": helper_name_fn(u.helper_id),
@@ -363,7 +364,7 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
                 "status": u.status,
                 "location_name": u.location_name,
                 "remarks": u.remarks,
-                "photo_url": u.photo_url,
+                "photo_url": normalize_upload_path(u.photo_url),
                 "created_at": u.created_at.isoformat(),
                 "helper_id": u.helper_id,
                 "submitted_by": helper_name_fn(u.helper_id),
@@ -407,7 +408,7 @@ def serialize_crew_booking_row(db: Session, t: Trip, paid_map: dict[int, float])
             {
                 "location_name": u.location_name,
                 "remarks": u.remarks,
-                "photo_url": u.photo_url,
+                "photo_url": normalize_upload_path(u.photo_url),
                 "created_at": u.created_at.isoformat(),
             }
             for u in reversed(location_rows[-5:])

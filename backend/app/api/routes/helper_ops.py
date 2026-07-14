@@ -382,8 +382,24 @@ def helper_verify_booking_qr(
             helper_trip_id=trip_id,
         )
     except ValueError as exc:
+        logger.warning(
+            "helper_verify_booking_qr FAIL endpoint=/helper/bookings/%s/verify-qr "
+            "current_booking=%s helper=%s trip_id=%s payload=%s detail=%s",
+            booking_id,
+            booking_id,
+            user.id,
+            trip_id,
+            (body.payload or "")[:256],
+            str(exc),
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except HTTPException:
         raise
+    logger.info(
+        "helper_verify_booking_qr OK endpoint=/helper/bookings/%s/verify-qr booking=%s result=%s",
+        booking_id,
+        booking_id,
+        result.get("message"),
+    )
     db.commit()
     return result

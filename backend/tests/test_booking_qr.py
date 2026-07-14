@@ -156,7 +156,7 @@ def test_verify_rejects_other_booking_id():
     db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
     scanner = SimpleNamespace(id=9)
     b = _booking(id=231)
-    with pytest.raises(ValueError, match="does not match this booking"):
+    with pytest.raises(ValueError, match="Booking #999"):
         verify_booking_qr(db, booking=b, payload="booking=999|code=AbCdEfGhIjKl-MnOpQr", scanner=scanner)
 
 

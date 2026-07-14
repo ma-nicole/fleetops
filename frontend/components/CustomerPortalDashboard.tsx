@@ -9,6 +9,7 @@ import ContactSupportButton from "@/components/ContactSupportButton";
 import CustomerBookingQrCard from "@/components/CustomerBookingQrCard";
 import CustomerDeliveryVerificationCard from "@/components/CustomerDeliveryVerificationCard";
 import CustomerDocumentReviewSection from "@/components/CustomerDocumentReviewSection";
+import CustomerNotificationsPanel from "@/components/CustomerNotificationsPanel";
 import KpiCard from "@/components/KpiCard";
 import SectionJumpLink from "@/components/ui/SectionJumpLink";
 import AsyncDataView from "@/components/ui/AsyncDataView";
@@ -98,6 +99,7 @@ export default function CustomerPortalDashboard() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notificationUnread, setNotificationUnread] = useState(0);
   const [sites, setSites] = useState<CustomerSite[]>([]);
   const [trackingPage, setTrackingPage] = useState(0);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
@@ -207,6 +209,7 @@ export default function CustomerPortalDashboard() {
     () => collectDocAlerts([...activeShipments, ...historyRows]),
     [activeShipments, historyRows],
   );
+  const alertBadgeCount = docAlerts.length + notificationUnread;
 
   const bookingBuckets = useMemo(() => {
     const pendingPayments = activeShipments.filter((b) => PENDING_PAYMENT_STATUSES.has(b.display_status));
@@ -322,8 +325,8 @@ export default function CustomerPortalDashboard() {
           <>
             <nav className="tab-pills" aria-label="Jump to portal section">
               <SectionJumpLink targetId="customer-kpis">Overview</SectionJumpLink>
-              {docAlerts.length > 0 ? (
-                <SectionJumpLink targetId="customer-action-required">
+              {alertBadgeCount > 0 ? (
+                <SectionJumpLink targetId="customer-notifications">
                   Alerts
                   <span
                     style={{
@@ -341,14 +344,14 @@ export default function CustomerPortalDashboard() {
                       fontWeight: 800,
                     }}
                   >
-                    {docAlerts.length}
+                    {alertBadgeCount}
                   </span>
                 </SectionJumpLink>
               ) : null}
               <SectionJumpLink targetId="customer-delivery-verification">Delivery Verification</SectionJumpLink>
               <SectionJumpLink targetId="customer-tracking">
                 Tracking
-                {docAlerts.length > 0 ? (
+                {alertBadgeCount > 0 ? (
                   <span
                     aria-hidden
                     style={{
@@ -356,7 +359,7 @@ export default function CustomerPortalDashboard() {
                       width: 8,
                       height: 8,
                       borderRadius: 999,
-                      background: "#EA580C",
+                      background: "#DC2626",
                       display: "inline-block",
                     }}
                   />
@@ -365,6 +368,10 @@ export default function CustomerPortalDashboard() {
               <SectionJumpLink targetId="customer-booking-sections">Bookings</SectionJumpLink>
               <SectionJumpLink targetId="customer-sites">Sites</SectionJumpLink>
             </nav>
+
+            <div id="customer-notifications" className="scroll-section" style={{ display: "grid", gap: "0.85rem" }}>
+              <CustomerNotificationsPanel onUnreadChange={setNotificationUnread} />
+            </div>
 
             {docAlerts.length > 0 ? (
               <section
@@ -479,12 +486,7 @@ export default function CustomerPortalDashboard() {
 
             <section
               id="customer-kpis"
-              className="scroll-section"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                gap: "1rem",
-              }}
+              className="scroll-section safe-auto-grid-200"
             >
               <KpiCard label="Active bookings" value={kpis.activeCount} delta={`${kpis.inTransit} in motion · ${kpis.pendingPickup} pre-dispatch`} tone="neutral" scrollTargetId="customer-tracking" />
               <KpiCard label="Total orders" value={kpis.totalOrders} delta={`${kpis.thisMonth} in last ~31 days`} tone="neutral" />
@@ -506,7 +508,7 @@ export default function CustomerPortalDashboard() {
                 </p>
               </div>
               {activeShow.some((order) => order.delivery_verification_active) ? (
-                <div style={{ display: "grid", gap: "0.85rem", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+                <div className="safe-auto-grid-300">
                   {activeShow
                     .filter((order) => order.delivery_verification_active)
                     .map((order) => (
@@ -602,17 +604,17 @@ export default function CustomerPortalDashboard() {
                               <div><span style={{ color: "var(--text-secondary)" }}>To:</span> {order.dropoff_location}</div>
                               <CustomerBookingQrCard
                                 bookingId={order.id}
-                                payload={order.delivery_verification_qr_payload || order.booking_qr_payload}
-                                verificationCode={order.delivery_verification_code ?? null}
-                                verified={Boolean(order.booking_qr_verified || order.delivery_verification_used)}
-                                verifiedAt={order.booking_qr_verified_at ?? order.delivery_verification_used_at ?? null}
+                                payload={order.booking_qr_payload}
+                                verificationCode={order.booking_qr_code ?? null}
+                                verified={Boolean(order.booking_qr_verified)}
+                                verifiedAt={order.booking_qr_verified_at ?? null}
                                 compact
                               />
                               <div style={{ marginTop: "0.25rem" }}>
                                 <CustomerBookingAssignmentsList
                                   assignments={order.assignments}
                                   dropoffAddress={order.dropoff_location}
-                                  showDeliveryTimeline={false}
+                                  showDeliveryTimeline
                                 />
                               </div>
                             </div>
@@ -808,13 +810,7 @@ export default function CustomerPortalDashboard() {
                       placeholder="e.g. Main warehouse"
                     />
 
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                        gap: "0.45rem",
-                      }}
-                    >
+                    <div className="safe-auto-grid-140">
                       <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-secondary)", marginTop: "0.2rem", gridColumn: "1 / -1" }}>
                         Street
                         <input
@@ -1215,9 +1211,9 @@ function ShipmentBadge({ status }: { status: string }) {
 
 function RowKv({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center" }}>
-      <span style={{ color: "var(--text-secondary)" }}>{label}</span>
-      <span style={{ fontWeight: 600, textAlign: "right", fontSize: "0.9rem" }}>{value}</span>
+    <div className="row-kv">
+      <span className="row-kv__label">{label}</span>
+      <span className="row-kv__value">{value}</span>
     </div>
   );
 }

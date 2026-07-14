@@ -49,7 +49,6 @@ function normalizeDecodedPayload(raw: string): string {
 function extractBookingId(payload: string): number | null {
   const m = BOOKING_QR_RE.exec(normalizeDecodedPayload(payload));
   if (!m) return null;
-  // Groups: pipe (1), legacy booking (3), delivery (5)
   const id = Number(m[1] || m[3] || m[5]);
   return Number.isFinite(id) && id > 0 ? id : null;
 }
@@ -153,6 +152,17 @@ export default function HelperBookingQrVerify({
   const verifyPayload = async (payload: string, method: "camera" | "manual") => {
     if (verifyingRef.current || !enabled) return;
     const trimmed = normalizeDecodedPayload(payload);
+    // Temporary client diagnostic logging
+    // eslint-disable-next-line no-console
+    console.info("[booking_qr_scan]", {
+      method,
+      raw: payload,
+      decoded: trimmed,
+      currentBooking: bookingId,
+      qrBooking: extractBookingId(trimmed),
+      endpoint: `/helper/bookings/${bookingId}/verify-qr`,
+    });
+
     if (!trimmed) {
       setErr("Enter or scan the Booking Completion QR payload.");
       return;
@@ -160,7 +170,7 @@ export default function HelperBookingQrVerify({
 
     const lower = trimmed.toLowerCase();
     if (lower.startsWith("fleetops-trip-")) {
-      setErr("That is a trip receiving QR. Use the customer's Delivery Verification QR or Verification Code.");
+      setErr("That is a trip receiving QR. Scan the customer Booking Completion QR.");
       return;
     }
 
@@ -181,6 +191,8 @@ export default function HelperBookingQrVerify({
         method,
         tripId ?? undefined,
       );
+      // eslint-disable-next-line no-console
+      console.info("[booking_qr_scan] VERIFICATION_RESULT=ok", result);
       setLocalVerified(true);
       setLocalVerifiedAt(result.verified_at);
       setManualQr("");
@@ -189,6 +201,8 @@ export default function HelperBookingQrVerify({
     } catch (e) {
       const message =
         e instanceof ApiError ? e.message : e instanceof Error ? e.message : "QR verification failed.";
+      // eslint-disable-next-line no-console
+      console.warn("[booking_qr_scan] VERIFICATION_RESULT=rejected", { message, decoded: trimmed, bookingId });
       setErr(message);
     } finally {
       verifyingRef.current = false;
@@ -256,7 +270,7 @@ export default function HelperBookingQrVerify({
 
   if (localVerified) {
     return (
-      <StatusBanner tone="success" title="Delivery verification completed">
+      <StatusBanner tone="success" title="Booking Completion QR verified">
         Booking marked completed
         {localVerifiedAt ? ` · ${new Date(localVerifiedAt).toLocaleString()}` : ""}.
       </StatusBanner>
@@ -277,7 +291,7 @@ export default function HelperBookingQrVerify({
         }}
       >
         {lockedHint ||
-          "Customer verification unlocks after you reach Arrived at Destination and finish delivery proof (receiving document + signature)."}
+          "Booking Completion QR unlocks after you reach Arrived at Destination and finish delivery proof (receiving document + signature)."}
       </div>
     );
   }
@@ -294,48 +308,12 @@ export default function HelperBookingQrVerify({
       }}
     >
       <div>
-        <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 4 }}>Customer delivery verification</div>
+        <div style={{ fontWeight: 700, color: "#92400E", marginBottom: 4 }}>Booking Completion QR</div>
         <p style={{ margin: 0, fontSize: "0.82rem", color: "#78350F", lineHeight: 1.45 }}>
-          Ask the customer for Booking #{bookingId} Verification Code (XXXX-XXXX) from their dashboard — preferred.
-          You may also scan their Delivery Verification QR. Retry is allowed if verification fails.
+          Ask the customer to show their Booking #{bookingId} Completion QR. Scan it, or paste the Manual Verification
+          Code / full payload. Same verification logic is used for both. Retry is allowed if verification fails.
         </p>
       </div>
-
-      <label style={{ display: "grid", gap: 6 }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400E" }}>
-          Verification Code (preferred)
-        </span>
-        <input
-          className="helper-touch-input input"
-          value={manualQr}
-          onChange={(e) => setManualQr(e.target.value)}
-          placeholder="XXXX-XXXX"
-          disabled={busy}
-          autoComplete="off"
-          autoCapitalize="characters"
-          spellCheck={false}
-          style={{ fontSize: 16, minHeight: 44, letterSpacing: "0.08em", fontWeight: 700 }}
-        />
-      </label>
-      <button
-        type="button"
-        disabled={busy || !manualQr.trim()}
-        onClick={() => void verifyPayload(manualQr, "manual")}
-        className="helper-touch-btn"
-        style={{
-          padding: "0.65rem 0.9rem",
-          borderRadius: 8,
-          border: "none",
-          background: "#0EA5E9",
-          color: "#fff",
-          fontWeight: 700,
-          cursor: busy || !manualQr.trim() ? "not-allowed" : "pointer",
-          justifySelf: "start",
-          minHeight: 48,
-        }}
-      >
-        {busy ? "Verifying…" : "Verify & complete"}
-      </button>
 
       <div
         id={scanRegionId}
@@ -359,20 +337,21 @@ export default function HelperBookingQrVerify({
           style={{
             padding: "0.65rem 0.9rem",
             borderRadius: 8,
-            border: "1px solid #F59E0B",
-            background: "#fff",
-            color: "#92400E",
+            border: "none",
+            background: "#B45309",
+            color: "#fff",
             fontWeight: 700,
             cursor: busy || scanning ? "not-allowed" : "pointer",
             minHeight: 48,
           }}
         >
-          {scanning ? "Scanning…" : "Optional: scan Delivery QR"}
+          {scanning ? "Scanning…" : "Open camera scanner"}
         </button>
         {scanning ? (
           <button
             type="button"
             onClick={() => void stopScanner()}
+            className="helper-touch-btn"
             style={{
               padding: "0.55rem 0.9rem",
               borderRadius: 8,
@@ -386,6 +365,42 @@ export default function HelperBookingQrVerify({
           </button>
         ) : null}
       </div>
+
+      <label style={{ display: "grid", gap: 6 }}>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#92400E" }}>
+          Manual Verification Code (fallback)
+        </span>
+        <input
+          className="helper-touch-input input"
+          value={manualQr}
+          onChange={(e) => setManualQr(e.target.value)}
+          placeholder="booking=123|code=… or code alone"
+          disabled={busy}
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          style={{ fontSize: 16, minHeight: 44 }}
+        />
+      </label>
+      <button
+        type="button"
+        disabled={busy || !manualQr.trim()}
+        onClick={() => void verifyPayload(manualQr, "manual")}
+        className="helper-touch-btn"
+        style={{
+          padding: "0.65rem 0.9rem",
+          borderRadius: 8,
+          border: "none",
+          background: "#0EA5E9",
+          color: "#fff",
+          fontWeight: 700,
+          cursor: busy || !manualQr.trim() ? "not-allowed" : "pointer",
+          justifySelf: "start",
+          minHeight: 48,
+        }}
+      >
+        {busy ? "Verifying…" : "Verify & complete"}
+      </button>
 
       {msg ? <StatusBanner tone="success">{msg}</StatusBanner> : null}
       {err ? <StatusBanner tone="error">{err}</StatusBanner> : null}

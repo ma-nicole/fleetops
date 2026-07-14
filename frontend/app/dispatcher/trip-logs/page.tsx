@@ -3,16 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { apiFullUrl } from "@/lib/api";
+import { apiFullUrl, uploadMediaUrl } from "@/lib/api";
 import { DispatchApi, type TripLogRow, type TripLogTimelineEntry } from "@/lib/dispatchApi";
 import { announce } from "@/lib/useAnnouncer";
 import StatusBanner from "@/components/ui/StatusBanner";
 
 function mediaSrc(url: string): string {
-  const u = url.trim();
-  if (!u) return u;
-  if (u.startsWith("http://") || u.startsWith("https://")) return u;
-  return apiFullUrl(u.startsWith("/") ? u : `/${u}`);
+  return uploadMediaUrl(url) || apiFullUrl(url.startsWith("/") ? url : `/${url}`);
 }
 
 function kindAccent(kind: TripLogTimelineEntry["kind"]): { border: string; dot: string; label: string } {

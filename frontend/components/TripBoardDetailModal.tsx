@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { APP_LOCALE, APP_TIMEZONE, formatPhp } from "@/lib/appLocale";
-import { apiFullUrl } from "@/lib/api";
+import { apiFullUrl, uploadMediaUrl } from "@/lib/api";
 import HelperUpdatesTimeline from "@/components/HelperUpdatesTimeline";
 import { WorkflowApi, type CrewTimelineEvent, type DispatchTripMonitoringAssignment } from "@/lib/workflowApi";
 
@@ -189,7 +189,7 @@ export function TripBoardDetailModal({ row, onClose }: Props) {
                 <HelperUpdatesTimeline
                   events={timelineEvents}
                   operationalStatus={assignment?.helper_progress_status || row.helper_progress_status || undefined}
-                  mediaSrc={(url) => apiFullUrl(url.startsWith("/") ? url : `/${url}`)}
+                  mediaSrc={(url) => uploadMediaUrl(url) || apiFullUrl(url.startsWith("/") ? url : `/${url}`)}
                   showPending={false}
                   emptyMessage="No delivery timeline updates yet."
                   title="Delivery timeline"

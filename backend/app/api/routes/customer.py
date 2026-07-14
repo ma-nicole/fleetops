@@ -238,3 +238,64 @@ def customer_analytics(
         },
         "customer_role_analytics": build_customer_role_analytics(db, filters, customer=user),
     }
+
+
+@router.get("/notifications")
+def customer_notifications(
+    unread_only: bool = False,
+    limit: int = 30,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    """In-app alerts for document review decisions and support confirmations."""
+    from app.services.customer_notifications import (
+        count_unread_customer_notifications,
+        list_customer_notifications,
+    )
+
+    rows = list_customer_notifications(db, user.id, unread_only=unread_only, limit=limit)
+    unread_count = count_unread_customer_notifications(db, user.id)
+    return {"notifications": rows, "unread_count": unread_count}
+
+
+@router.patch("/notifications/{notification_id}/read")
+def customer_mark_notification_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    from app.services.customer_notifications import mark_customer_notification_read
+
+    row = mark_customer_notification_read(db, user.id, notification_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    db.commit()
+    return row
+
+
+@router.post("/notifications/mark-all-read")
+def customer_mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    from app.services.customer_notifications import mark_all_customer_notifications_read
+
+    count = mark_all_customer_notifications_read(db, user.id)
+    db.commit()
+    return {"marked_read": count}
+
+
+@router.post("/notifications/{notification_id}/dismiss")
+def customer_dismiss_notification(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.CUSTOMER)),
+):
+    from app.services.customer_notifications import dismiss_customer_notification
+
+    row = dismiss_customer_notification(db, user.id, notification_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    db.commit()
+    return row
+

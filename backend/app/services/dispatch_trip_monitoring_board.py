@@ -20,7 +20,10 @@ from app.models.entities import (
 from app.services.booking_paid_amount import paid_verified_amount_by_booking_ids
 from app.services.booking_road_distance import booking_pickup_dropoff_distance_km
 from app.services.booking_status_aggregate import aggregate_customer_display_from_trips
-from app.services.dispatch_operations_center import _display_status
+from app.services.dispatch_operations_center import (
+    _display_status,
+    active_trip_status_filter,
+)
 from app.services.latest_location_display import latest_location_display_for_trip
 from app.services.dispatcher_booking_assignment import filter_trips_for_dispatcher
 
@@ -112,7 +115,7 @@ def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200, v
     active_legs = (
         int(
             db.query(func.count(Trip.id))
-            .filter(~Trip.status.in_((TripStatus.COMPLETED, TripStatus.CANCELLED)))
+            .filter(active_trip_status_filter())
             .scalar()
             or 0
         )
@@ -135,7 +138,7 @@ def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200, v
     )
 
     trips_for_buckets = (
-        db.query(Trip).filter(~Trip.status.in_((TripStatus.COMPLETED, TripStatus.CANCELLED))).all()
+        db.query(Trip).filter(active_trip_status_filter()).all()
     )
     if viewer is not None:
         trips_for_buckets = filter_trips_for_dispatcher(db, viewer, trips_for_buckets)
@@ -159,8 +162,8 @@ def build_trip_monitoring_board_payload(db: Session, *, list_limit: int = 200, v
             joinedload(Trip.truck),
         )
         .join(Booking, Booking.id == Trip.booking_id)
-        .filter(Trip.status != TripStatus.CANCELLED)
-        .order_by(Trip.updated_at.desc())
+        .filter(active_trip_status_filter())
+        .order_by(Trip.updated_at.desc(), Trip.id.desc())
         .limit(max(list_limit, 400))
         .all()
     )

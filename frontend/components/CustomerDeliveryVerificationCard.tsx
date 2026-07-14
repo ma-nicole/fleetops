@@ -47,19 +47,23 @@ export default function CustomerDeliveryVerificationCard({
 
   return (
     <article
+      className="safe-auto-grid-210"
       style={{
         border: "1px solid #C7D2FE",
         borderRadius: 12,
         padding: "1rem",
         background: "#fff",
-        display: "grid",
-        gap: "0.9rem",
-        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-        alignItems: "center",
       }}
     >
-      <div style={{ display: "grid", justifyItems: "center", gap: 6 }}>
-        <QRCodeSVG value={payload} size={145} level="M" includeMargin aria-label={`Delivery QR for booking ${bookingId}`} />
+      <div className="booking-qr-wrap" style={{ display: "grid", justifyItems: "center", gap: 6 }}>
+        <QRCodeSVG
+          className="booking-qr-svg"
+          value={payload}
+          size={145}
+          level="M"
+          includeMargin
+          aria-label={`Delivery QR for booking ${bookingId}`}
+        />
         <span style={{ fontSize: "0.76rem", color: "#64748B" }}>Booking #{bookingId}</span>
       </div>
       <div style={{ minWidth: 0 }}>

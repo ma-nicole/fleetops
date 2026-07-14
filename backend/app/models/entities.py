@@ -1053,6 +1053,30 @@ class DriverTripNotification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class CustomerNotificationKind(str, Enum):
+    DOCUMENT_REVISION = "document_revision"
+    DOCUMENT_REJECTED = "document_rejected"
+    SUPPORT_RECEIVED = "support_received"
+
+
+class CustomerNotification(Base):
+    """In-app alerts for customers (document review decisions, support confirmations)."""
+
+    __tablename__ = "customer_notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    booking_id: Mapped[int | None] = mapped_column(ForeignKey("bookings.id"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    message: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
+    required_action: Mapped[str] = mapped_column(String(512), default="")
+    link_path: Mapped[str] = mapped_column(String(255), default="")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class TollPlazaStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
