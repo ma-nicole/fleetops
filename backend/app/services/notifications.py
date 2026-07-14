@@ -19,7 +19,7 @@ def send_email_notification(
 ) -> bool:
     """Send email notification via Resend"""
     if not settings.resend_api_key:
-        logger.info("Email delivery skipped: RESEND_API_KEY is not configured.")
+        logger.warning("Email delivery skipped: RESEND_API_KEY is not configured.")
         return False
 
     try:
@@ -33,9 +33,30 @@ def send_email_notification(
         if reply_to and reply_to.strip():
             payload["reply_to"] = reply_to.strip()
         response = resend.Emails.send(payload)
-        return bool(response.get("id"))
-    except Exception:
-        logger.exception("Email delivery failed via provider.")
+        ok = bool(response and response.get("id"))
+        if ok:
+            logger.info(
+                "Email sent via Resend id=%s to=%s from=%s subject=%s",
+                response.get("id"),
+                to_email,
+                settings.email_from,
+                subject,
+            )
+        else:
+            logger.warning(
+                "Resend returned no message id for to=%s from=%s response=%s",
+                to_email,
+                settings.email_from,
+                response,
+            )
+        return ok
+    except Exception as exc:
+        logger.exception(
+            "Email delivery failed via Resend to=%s from=%s error=%s",
+            to_email,
+            settings.email_from,
+            exc,
+        )
         return False
 
 

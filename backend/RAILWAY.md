@@ -48,8 +48,10 @@ On the **fleetops** service → **Variables**, add:
 | Variable | Value |
 |----------|--------|
 | `RESEND_API_KEY` | Your Resend key (`re_…`) |
-| `FEEDBACK_INBOX_EMAIL` | Admin inbox that should receive support tickets (e.g. `you@gmail.com`) |
-| `EMAIL_FROM` | Sender Resend allows, e.g. `FleetOpt <onboarding@resend.dev>` for testing, or a verified domain |
+| `FEEDBACK_INBOX_EMAIL` | Your Gmail (or ops inbox) that should receive tickets |
+| `EMAIL_FROM` | **Must use a verified Resend domain**, e.g. `FleetOpt <noreply@deliverexapp.com>` |
+
+Do **not** use `notifications@fleetopt.com` unless that domain is verified in Resend — sends will fail silently from the customer’s point of view.
 
 Notes:
 
