@@ -8,8 +8,8 @@ import {
   type EvidenceWatermarkContext,
   attachGpsToEvidence,
   captureDeviceGeolocationDetailed,
-  ensureGpsBeforeCapture,
   prepareEvidenceFile,
+  prefetchDeviceGeolocation,
   startGeolocationWatch,
   stopGeolocationWatch,
 } from "@/lib/evidenceCapture";
@@ -43,20 +43,22 @@ export default function EvidenceCaptureInput({
   allowPdf = false,
 }: Props) {
   const id = useId();
+  const cameraId = `${id}-camera`;
+  const galleryId = `${id}-gallery`;
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [gpsBusy, setGpsBusy] = useState(false);
-  const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gpsReadyHint, setGpsReadyHint] = useState<string | null>(null);
 
   const pdfAccept = allowPdf ? ",.pdf,application/pdf" : "";
   const fullAccept = `${accept}${pdfAccept}`;
   const missingGps = Boolean(value && metadata && (metadata.latitude == null || metadata.longitude == null));
 
   useEffect(() => {
+    // Warm GPS while the helper is reading the form — does not block camera.
     startGeolocationWatch();
+    prefetchDeviceGeolocation();
     return () => stopGeolocationWatch();
   }, []);
 
@@ -85,51 +87,51 @@ export default function EvidenceCaptureInput({
       const { file: prepared, metadata: meta } = await prepareEvidenceFile(file, source, watermarkContext, uploaderName);
       onCapture(prepared, meta);
       if (meta.latitude == null || meta.longitude == null) {
-        const detail = await captureDeviceGeolocationDetailed({ allowCache: true });
+        // Best-effort second try; never blocks saving the photo.
+        const detail = await captureDeviceGeolocationDetailed({ allowCache: true, forceRefresh: true });
+        if (detail.coords) {
+          const attached = await attachGpsToEvidence(prepared, meta, watermarkContext);
+          if (!attached.errorMessage) {
+            onCapture(attached.file, attached.metadata);
+            return;
+          }
+        }
         if (detail.errorMessage) setError(detail.errorMessage);
-      } else {
-        setGpsReadyHint(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not process photo.");
       onCapture(null, null);
     } finally {
       setBusy(false);
+      // Allow re-selecting the same photo next time.
+      if (cameraRef.current) cameraRef.current.value = "";
+      if (galleryRef.current) galleryRef.current.value = "";
     }
   };
 
-  const openCamera = async () => {
+  /**
+   * Critical: open the file/camera picker in the same synchronous tap turn.
+   * Awaiting GPS first breaks the user-gesture chain on Android Chrome / in-app browsers,
+   * so the camera never opens ("Location ready… Opening camera…" stuck).
+   */
+  const openCamera = () => {
+    if (disabled || busy) return;
     setError(null);
-    setLocating(true);
-    setGpsReadyHint(null);
-    try {
-      // Must finish GPS before opening the camera — Android cancels in-flight requests otherwise.
-      const gps = await ensureGpsBeforeCapture();
-      if (gps.coords) {
-        setGpsReadyHint(
-          `Location ready (${gps.coords.latitude.toFixed(5)}, ${gps.coords.longitude.toFixed(5)}). Opening camera…`,
-        );
-      } else {
-        setError(
-          (gps.errorMessage || "GPS not ready.") +
-            " You can still take the photo, then tap Retry GPS after allowing location.",
-        );
-      }
-    } finally {
-      setLocating(false);
-    }
-    cameraRef.current?.click();
+    prefetchDeviceGeolocation();
+    const el = cameraRef.current;
+    if (!el) return;
+    el.value = "";
+    el.click();
   };
 
-  const openGallery = async () => {
+  const openGallery = () => {
+    if (disabled || busy) return;
     setError(null);
-    setLocating(true);
-    try {
-      await ensureGpsBeforeCapture();
-    } finally {
-      setLocating(false);
-    }
-    galleryRef.current?.click();
+    prefetchDeviceGeolocation();
+    const el = galleryRef.current;
+    if (!el) return;
+    el.value = "";
+    el.click();
   };
 
   const retryGps = async () => {
@@ -143,7 +145,6 @@ export default function EvidenceCaptureInput({
         return;
       }
       onCapture(result.file, result.metadata);
-      setGpsReadyHint(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not retry GPS.");
     } finally {
@@ -154,12 +155,11 @@ export default function EvidenceCaptureInput({
   const clear = () => {
     onCapture(null, null);
     setError(null);
-    setGpsReadyHint(null);
     if (cameraRef.current) cameraRef.current.value = "";
     if (galleryRef.current) galleryRef.current.value = "";
   };
 
-  const buttonBusy = disabled || busy || locating;
+  const controlsDisabled = disabled || busy;
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
@@ -168,8 +168,9 @@ export default function EvidenceCaptureInput({
         {required ? " (required)" : " (optional)"}
       </span>
       <p style={{ margin: 0, fontSize: "0.8rem", color: "#6B7280", lineHeight: 1.45 }}>
-        Tap <strong>Take photo</strong> — the app gets GPS first (allow location when prompted), then opens the camera.
-        Photos are watermarked with FleetOpt, booking/trip ID, timestamp, and GPS.
+        Tap <strong>Take photo</strong> to open the camera. Location is captured in the background when permitted
+        (allow Location for this site if prompted). Photos are watermarked with FleetOpt, booking/trip ID, timestamp,
+        and GPS when available.
         {allowGalleryFallback
           ? " Gallery upload is available if the camera is unavailable (marked for manual review)."
           : ""}
@@ -177,50 +178,63 @@ export default function EvidenceCaptureInput({
 
       <input
         ref={cameraRef}
-        id={`${id}-camera`}
+        id={cameraId}
         type="file"
         accept={fullAccept}
         capture="environment"
-        disabled={buttonBusy}
+        disabled={controlsDisabled}
         style={{ display: "none" }}
         onChange={(e) => void processFile(e.target.files?.[0], "camera")}
       />
       {allowGalleryFallback ? (
         <input
           ref={galleryRef}
-          id={`${id}-gallery`}
+          id={galleryId}
           type="file"
           accept={fullAccept}
-          disabled={buttonBusy}
+          disabled={controlsDisabled}
           style={{ display: "none" }}
           onChange={(e) => void processFile(e.target.files?.[0], "gallery")}
         />
       ) : null}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button
-          type="button"
-          disabled={buttonBusy}
-          onClick={() => void openCamera()}
+        {/* Native label + sync click keeps the mobile camera gesture valid. */}
+        <label
+          htmlFor={cameraId}
+          onClick={(e) => {
+            if (controlsDisabled) {
+              e.preventDefault();
+              return;
+            }
+            prefetchDeviceGeolocation();
+            // Some WebViews ignore htmlFor after capture= — also force click.
+            e.preventDefault();
+            openCamera();
+          }}
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
             padding: "0.65rem 1.1rem",
             borderRadius: 8,
             border: "none",
             background: "#10B981",
             color: "white",
             fontWeight: 700,
-            cursor: buttonBusy ? "not-allowed" : "pointer",
+            cursor: controlsDisabled ? "not-allowed" : "pointer",
             fontSize: "0.9rem",
             minHeight: 42,
+            opacity: controlsDisabled ? 0.7 : 1,
           }}
         >
-          {locating ? "Getting GPS…" : busy ? "Processing…" : "Take photo"}
-        </button>
+          {busy ? "Processing…" : "Take photo"}
+        </label>
         {allowGalleryFallback ? (
           <button
             type="button"
-            disabled={buttonBusy}
-            onClick={() => void openGallery()}
+            disabled={controlsDisabled}
+            onClick={openGallery}
             style={{
               padding: "0.55rem 0.85rem",
               borderRadius: 8,
@@ -228,7 +242,7 @@ export default function EvidenceCaptureInput({
               background: "#F9FAFB",
               color: "#6B7280",
               fontWeight: 500,
-              cursor: buttonBusy ? "not-allowed" : "pointer",
+              cursor: controlsDisabled ? "not-allowed" : "pointer",
               fontSize: "0.8rem",
             }}
           >
@@ -238,7 +252,7 @@ export default function EvidenceCaptureInput({
         {value ? (
           <button
             type="button"
-            disabled={busy || gpsBusy || locating}
+            disabled={busy || gpsBusy}
             onClick={clear}
             style={{
               padding: "0.55rem 0.75rem",
@@ -255,10 +269,6 @@ export default function EvidenceCaptureInput({
           </button>
         ) : null}
       </div>
-
-      {gpsReadyHint ? (
-        <p style={{ margin: 0, fontSize: "0.78rem", color: "#065F46" }}>{gpsReadyHint}</p>
-      ) : null}
 
       {value ? (
         <div style={{ display: "grid", gap: 6 }}>
@@ -277,7 +287,7 @@ export default function EvidenceCaptureInput({
                   <span style={{ fontSize: "0.75rem", color: "#B45309", fontWeight: 700 }}>GPS not captured</span>
                   <button
                     type="button"
-                    disabled={gpsBusy || busy || locating}
+                    disabled={gpsBusy || busy}
                     onClick={() => void retryGps()}
                     style={{
                       padding: "0.35rem 0.7rem",
@@ -299,7 +309,8 @@ export default function EvidenceCaptureInput({
           ) : null}
           {missingGps ? (
             <p style={{ margin: 0, fontSize: "0.78rem", color: "#92400E", lineHeight: 1.4 }}>
-              Allow <strong>Location</strong> for this site, turn on phone Location, then tap <strong>Retry GPS</strong>.
+              Photo is saved. To attach GPS: allow Location for this site, then tap <strong>Retry GPS</strong>. You can
+              still Save milestone without GPS if needed.
             </p>
           ) : null}
         </div>
