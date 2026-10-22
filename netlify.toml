@@ -8,11 +8,18 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_PUBLIC_API_URL = "https://fleetops-production-b2b7.up.railway.app/api"
-  BACKEND_ORIGIN = "https://fleetops-production-b2b7.up.railway.app"
+  # Keep browser API requests same-origin; Netlify proxies them to Render.
+  NEXT_PUBLIC_API_URL = "/api-proxy"
+  BACKEND_ORIGIN = "https://fleetops-f1jg.onrender.com"
+
+[[redirects]]
+  from = "/api-proxy/*"
+  to = "https://fleetops-f1jg.onrender.com/api/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/uploads/*"
-  to = "https://fleetops-production-b2b7.up.railway.app/uploads/:splat"
+  to = "https://fleetops-f1jg.onrender.com/uploads/:splat"
   status = 200
   force = true
